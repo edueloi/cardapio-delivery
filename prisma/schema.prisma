@@ -23,8 +23,64 @@ model Tenant {
   products   Product[]
   orders     Order[]
   cashRegisters CashRegister[]
+  inventoryCategories InventoryCategory[]
+  inventoryItems      InventoryItem[]
 
   @@map("tenants")
+}
+
+model InventoryCategory {
+  id        String   @id @default(cuid())
+  name      String
+  tenantId  String   @map("tenant_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  items  InventoryItem[]
+
+  @@map("inventory_categories")
+}
+
+model InventoryItem {
+  id              String    @id @default(cuid())
+  tenantId        String    @map("tenant_id")
+  categoryId      String?   @map("category_id")
+  code            String?   // Product code
+  name            String
+  brand           String?   // Brand
+  purchasePrice   Float?    @map("purchase_price")
+  sellingPrice    Float?    @map("selling_price")
+  quantity        Float     @default(0)
+  minStock        Float?    @map("min_stock")
+  unit            String?   // kg, g, un, cm, ml
+  weight          String?   // Specific weight/measure e.g. "500g"
+  usage           String    @default("SALE") // SALE (external), INTERNAL
+  purchaseDate    DateTime? @map("purchase_date")
+  expirationDate  DateTime? @map("expiration_date")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  tenant   Tenant            @relation(fields: [tenantId], references: [id])
+  category InventoryCategory? @relation(fields: [categoryId], references: [id])
+  movements StockMovement[]
+  products  Product[]
+  variants  ProductVariant[]
+
+  @@map("inventory_items")
+}
+
+model StockMovement {
+  id          String   @id @default(cuid())
+  itemId      String   @map("item_id")
+  type        String   // IN, OUT
+  quantity    Float
+  reason      String?  // SALE, PURCHASE, EXPIRATION, LOSS, MANUAL
+  orderId     String?  @map("order_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  item InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@map("stock_movements")
 }
 
 model CashRegister {
@@ -78,9 +134,11 @@ model Product {
   tenantId    String   @map("tenant_id")
   available   Boolean  @default(true)
   createdAt   DateTime @default(now()) @map("created_at")
+  inventoryItemId String? @map("inventory_item_id")
 
   category  Category    @relation(fields: [categoryId], references: [id])
   tenant    Tenant      @relation(fields: [tenantId], references: [id])
+  inventoryItem InventoryItem? @relation(fields: [inventoryItemId], references: [id])
   variants  ProductVariant[]
   items     OrderItem[]
 
@@ -93,8 +151,10 @@ model ProductVariant {
   name        String // e.g. "300ml", "500ml", "Inteira", "Meia"
   description String?
   price       Float
+  inventoryItemId String? @map("inventory_item_id")
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem? @relation(fields: [inventoryItemId], references: [id])
 
   @@map("product_variants")
 }

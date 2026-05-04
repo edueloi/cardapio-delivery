@@ -6,6 +6,8 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
 import { PrismaClient } from "@prisma/client";
+import multer from "multer";
+import fs from "fs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -19,8 +21,27 @@ const io = new Server(httpServer, {
   },
 });
 
+// Ensure uploads directory exists
+const uploadDir = path.join(process.cwd(), "uploads");
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  },
+});
+const upload = multer({ storage });
+
 app.use(cors());
 app.use(express.json());
+// Serve static files from uploads
+app.use("/uploads", express.static(uploadDir));
 
 // Socket.io for Real-time Notifications
 io.on("connection", (socket) => {
@@ -37,6 +58,11 @@ io.on("connection", (socket) => {
 });
 
 // API Routes
+app.post("/api/upload", upload.single("file"), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+  res.json({ url: `/uploads/${req.file.filename}` });
+});
+
 // 1. Get Tenant Info
 app.get("/api/tenants/:slug", async (req, res) => {
   const { slug } = req.params;
@@ -156,6 +182,32 @@ app.patch("/api/orders/:id/status", async (req, res) => {
       }
     });
 
+    // Stock Deduction Logic: Deduct when order moves to PREPARING
+    if (status === "PREPARING") {
+      for (const item of order.items) {
+        let invId = item.productVariantId 
+          ? (await prisma.productVariant.findUnique({ where: { id: item.productVariantId } }))?.inventoryItemId
+          : item.product.inventoryItemId;
+
+        if (invId) {
+          await prisma.inventoryItem.update({
+            where: { id: invId },
+            data: { 
+              quantity: { decrement: item.quantity },
+              movements: {
+                create: {
+                  type: "OUT",
+                  quantity: item.quantity,
+                  reason: "SALE",
+                  orderId: order.id
+                }
+              }
+            }
+          });
+        }
+      }
+    }
+
     // Notify Customer (Simulated Bot Notification or UI Update)
     io.to(`tenant-${order.tenantId}`).emit("order-status-updated", order);
 
@@ -239,6 +291,41 @@ app.post("/api/products", async (req, res) => {
     res.json(product);
   } catch (error) {
     res.status(500).json({ error: "Failed to create product" });
+  }
+});
+
+app.patch("/api/products/:id", async (req, res) => {
+  const { id } = req.params;
+  const { name, description, price, imageUrl, variants } = req.body;
+  try {
+    // We update the product and replace all variants for simplicity
+    const product = await prisma.$transaction(async (tx) => {
+      // Delete existing variants
+      await tx.productVariant.deleteMany({ where: { productId: id } });
+
+      // Update product
+      return await tx.product.update({
+        where: { id },
+        data: {
+          name,
+          description,
+          price: parseFloat(price),
+          imageUrl,
+          variants: variants ? {
+            create: variants.map((v: any) => ({
+              name: v.name,
+              price: parseFloat(v.price),
+              description: v.description
+            }))
+          } : undefined
+        },
+        include: { variants: true }
+      });
+    });
+    res.json(product);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to update product" });
   }
 });
 
@@ -454,6 +541,136 @@ app.get("/api/tenants/:slug/customer-orders/:phone", async (req, res) => {
     res.json(orders);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch customer orders" });
+  }
+});
+
+// --- Inventory API ---
+app.get("/api/tenants/:slug/inventory", async (req, res) => {
+  const { slug } = req.params;
+  try {
+    const tenant = await prisma.tenant.findUnique({ where: { slug } });
+    if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+
+    const items = await prisma.inventoryItem.findMany({
+      where: { tenantId: tenant.id },
+      include: { category: true },
+      orderBy: { name: 'asc' }
+    });
+    res.json(items);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch inventory" });
+  }
+});
+
+app.post("/api/inventory/categories", async (req, res) => {
+  const { name, tenantId } = req.body;
+  try {
+    const category = await prisma.inventoryCategory.create({
+      data: { name, tenantId }
+    });
+    res.json(category);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to create inventory category" });
+  }
+});
+
+app.get("/api/tenants/:slug/inventory/categories", async (req, res) => {
+  const { slug } = req.params;
+  try {
+    const tenant = await prisma.tenant.findUnique({ where: { slug } });
+    if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+    const categories = await prisma.inventoryCategory.findMany({
+      where: { tenantId: tenant.id },
+      orderBy: { name: 'asc' }
+    });
+    res.json(categories);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch inventory categories" });
+  }
+});
+
+app.post("/api/inventory/items", async (req, res) => {
+  const { tenantId, name, code, brand, purchasePrice, sellingPrice, quantity, minStock, unit, weight, usage, expirationDate, purchaseDate, categoryId } = req.body;
+  try {
+    const item = await prisma.inventoryItem.create({
+      data: {
+        tenantId,
+        name,
+        code,
+        brand,
+        purchasePrice: purchasePrice ? parseFloat(purchasePrice) : null,
+        sellingPrice: sellingPrice ? parseFloat(sellingPrice) : null,
+        quantity: parseFloat(quantity || 0),
+        minStock: minStock ? parseFloat(minStock) : null,
+        unit,
+        weight,
+        usage: usage || "SALE",
+        expirationDate: expirationDate ? new Date(expirationDate) : null,
+        purchaseDate: purchaseDate ? new Date(purchaseDate) : null,
+        categoryId,
+        movements: quantity && parseFloat(quantity) > 0 ? {
+          create: {
+            type: "IN",
+            quantity: parseFloat(quantity),
+            reason: "MANUAL"
+          }
+        } : undefined
+      }
+    });
+    res.json(item);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to create inventory item" });
+  }
+});
+
+app.patch("/api/inventory/items/:id", async (req, res) => {
+  const { id } = req.params;
+  const { name, code, brand, purchasePrice, sellingPrice, quantity, minStock, unit, weight, usage, expirationDate, purchaseDate, categoryId } = req.body;
+  try {
+    const existing = await prisma.inventoryItem.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ error: "Item not found" });
+
+    const newQty = parseFloat(quantity || 0);
+    const diff = newQty - existing.quantity;
+
+    const item = await prisma.inventoryItem.update({
+      where: { id },
+      data: {
+        name,
+        code,
+        brand,
+        purchasePrice: purchasePrice ? parseFloat(purchasePrice) : null,
+        sellingPrice: sellingPrice ? parseFloat(sellingPrice) : null,
+        quantity: newQty,
+        minStock: minStock ? parseFloat(minStock) : null,
+        unit,
+        weight,
+        usage,
+        expirationDate: expirationDate ? new Date(expirationDate) : null,
+        purchaseDate: purchaseDate ? new Date(purchaseDate) : null,
+        categoryId,
+        movements: diff !== 0 ? {
+          create: {
+            type: diff > 0 ? "IN" : "OUT",
+            quantity: Math.abs(diff),
+            reason: "MANUAL"
+          }
+        } : undefined
+      }
+    });
+    res.json(item);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to update inventory item" });
+  }
+});
+
+app.delete("/api/inventory/items/:id", async (req, res) => {
+  try {
+    await prisma.inventoryItem.delete({ where: { id: req.params.id } });
+    res.sendStatus(200);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to delete item" });
   }
 });
 
