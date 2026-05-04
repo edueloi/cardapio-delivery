@@ -10,20 +10,25 @@ import {
   Utensils, 
   ChevronLeft,
   Info,
+  Search,
   MessageSquare,
   CreditCard,
   Wallet,
   Banknote,
   Truck,
   Store,
-  MapPin
+  MapPin,
+  Clock,
+  History,
+  ShoppingBag
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import socket from "../lib/socket";
-import { Tenant, Product, Order } from "../types";
+import { Tenant, Product, Order, ProductVariant } from "../types";
 
 interface CartItem {
   product: Product;
+  variant?: ProductVariant;
   quantity: number;
   notes: string;
 }
@@ -33,13 +38,36 @@ export default function MenuView() {
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isOrdersOpen, setIsOrdersOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [customerOrders, setCustomerOrders] = useState<Order[]>([]);
+
+  const fetchCustomerOrders = async () => {
+    const savedPhone = localStorage.getItem(`customer_phone_${slug}`);
+    if (!savedPhone) return;
+    
+    try {
+      const res = await fetch(`/api/tenants/${slug}/customer-orders/${savedPhone}`);
+      const data = await res.json();
+      setCustomerOrders(data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    if (isOrdersOpen) {
+      fetchCustomerOrders();
+    }
+  }, [isOrdersOpen, slug]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
   const [productNotes, setProductNotes] = useState("");
   const [productQuantity, setProductQuantity] = useState(1);
   const [loading, setLoading] = useState(true);
   const [orderSent, setOrderSent] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const sectionRefs = useRef<{ [key: string]: HTMLElement | null }>({});
 
@@ -55,13 +83,30 @@ export default function MenuView() {
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
 
   useEffect(() => {
+    const savedName = localStorage.getItem(`customer_name_${slug}`);
+    const savedPhone = localStorage.getItem(`customer_phone_${slug}`);
+    if (savedName || savedPhone) {
+      setForm(f => ({ ...f, name: savedName || "", phone: savedPhone || "" }));
+    }
+  }, [slug]);
+
+  useEffect(() => {
     fetch(`/api/tenants/${slug}`)
       .then(res => res.json())
       .then(data => {
+        if (data.error) {
+          setTenant(null);
+          setLoading(false);
+          return;
+        }
         setTenant(data);
         if (data.categories?.length > 0) {
           setActiveCategory(data.categories[0]?.id || "");
         }
+        setLoading(false);
+      })
+      .catch(() => {
+        setTenant(null);
         setLoading(false);
       });
 
@@ -100,6 +145,7 @@ export default function MenuView() {
 
   const openProduct = (product: Product) => {
     setSelectedProduct(product);
+    setSelectedVariant(product.variants && product.variants.length > 0 ? product.variants[0] : null);
     setProductNotes("");
     setProductQuantity(1);
   };
@@ -110,12 +156,14 @@ export default function MenuView() {
     setCart(prev => {
       const newItem: CartItem = {
         product: selectedProduct,
+        variant: selectedVariant || undefined,
         quantity: productQuantity,
         notes: productNotes
       };
       return [...prev, newItem];
     });
     setSelectedProduct(null);
+    setSelectedVariant(null);
   };
 
   const updateCartQuantity = (index: number, delta: number) => {
@@ -134,7 +182,10 @@ export default function MenuView() {
     setCart(prev => prev.filter((_, i) => i !== index));
   };
 
-  const total = cart.reduce((acc, item) => acc + item.product.price * item.quantity, 0);
+  const total = cart.reduce((acc, item) => {
+    const price = item.variant ? item.variant.price : item.product.price;
+    return acc + price * item.quantity;
+  }, 0);
 
   const handleCheckout = async () => {
     if (!form.name || !form.phone) return alert("Preencha nome e telefone!");
@@ -149,6 +200,7 @@ export default function MenuView() {
       tenantId: tenant?.id,
       items: cart.map(item => ({
         productId: item.product.id,
+        productVariantId: item.variant?.id,
         quantity: item.quantity,
         notes: item.notes
       }))
@@ -162,6 +214,8 @@ export default function MenuView() {
       });
       if (res.ok) {
         const order = await res.json();
+        localStorage.setItem(`customer_name_${slug}`, form.name);
+        localStorage.setItem(`customer_phone_${slug}`, form.phone);
         setActiveOrder(order);
         setOrderSent(true);
         setCart([]);
@@ -246,13 +300,54 @@ export default function MenuView() {
                Delivery & Balcão
             </div>
           </div>
+
+          {/* Action buttons */}
+          <div className="flex gap-4 mt-8">
+            <button 
+              onClick={() => setIsOrdersOpen(true)}
+              className="flex-1 bg-white border border-slate-200 p-4 rounded-2xl flex flex-col items-center gap-2 hover:bg-slate-50 transition-colors shadow-sm group"
+            >
+               <History className="w-5 h-5 text-blue-600 group-hover:scale-110 transition-transform" />
+               <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Meus Pedidos</span>
+            </button>
+            <div className="flex-1 bg-white border border-slate-200 p-4 rounded-2xl flex flex-col items-center gap-2 shadow-sm">
+               <Info className="w-5 h-5 text-slate-400" />
+               <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Info Loja</span>
+            </div>
+          </div>
+          <div className="relative mt-8 group">
+            <div className="absolute inset-0 bg-blue-600/5 rounded-2xl blur-xl opacity-0 group-focus-within:opacity-100 transition-opacity" />
+            <div className="relative">
+              <input 
+                type="text"
+                placeholder="Buscar no cardápio..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-12 pr-10 text-sm font-medium focus:outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-600 transition-all placeholder:text-slate-300 shadow-sm"
+              />
+              <Search className="w-5 h-5 text-slate-300 absolute left-4 top-1/2 -translate-y-1/2 group-focus-within:text-blue-500 transition-colors" />
+              {searchQuery && (
+                <button 
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 p-1.5 hover:bg-slate-200 rounded-full transition-colors"
+                >
+                  <X className="w-4 h-4 text-slate-400" />
+                </button>
+              )}
+            </div>
+          </div>
         </motion.div>
       </header>
 
       {/* Sticky Category Bar */}
       <nav className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-100 shadow-sm overflow-x-auto no-scrollbar py-3 px-4">
         <div className="flex gap-2 max-w-lg mx-auto">
-          {tenant.categories?.map(cat => (
+          {tenant.categories?.filter(cat => 
+            !searchQuery || cat.products.some(p => 
+              p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+              p.description?.toLowerCase().includes(searchQuery.toLowerCase())
+            )
+          ).map(cat => (
             <button
               key={`nav-cat-${cat.id}`}
               onClick={() => scrollToCategory(cat.id)}
@@ -269,62 +364,99 @@ export default function MenuView() {
       </nav>
 
       {/* Menu Sections with Horizontal Images */}
-      <div className="max-w-lg mx-auto px-4 mt-8 space-y-12">
-        {tenant.categories?.map((category, catIdx) => (
-          <motion.section 
-            key={`cat-section-${category.id}`} 
-            id={category.id}
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 0.5, delay: catIdx * 0.1 }}
-            ref={el => { sectionRefs.current[category.id] = el; }}
-            className="scroll-mt-32"
-          >
-            <div className="flex items-center gap-4 mb-6">
-              <h2 className="text-lg font-black text-[#0F172A] uppercase tracking-tight">
-                {category.name}
-              </h2>
-              <div className="flex-1 h-px bg-slate-200/50" />
-            </div>
+      <div className="max-w-lg mx-auto px-4 mt-8 space-y-12 min-h-[400px]">
+        {(() => {
+          const filteredCategories = tenant.categories?.map(cat => ({
+            ...cat,
+            products: cat.products.filter(p => 
+              p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+              p.description?.toLowerCase().includes(searchQuery.toLowerCase())
+            )
+          })).filter(cat => cat.products.length > 0);
 
-            <div className="grid gap-5">
-              {category.products.map((product, pIdx) => (
-                <motion.div
-                  key={product.id}
-                  onClick={() => openProduct(product)}
-                  initial={{ opacity: 0, x: -10 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: pIdx * 0.05 }}
-                  whileHover={{ y: -4, boxShadow: "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)" }}
-                  whileTap={{ scale: 0.96 }}
-                  className="bg-white rounded-2xl shadow-sm flex items-start p-4 gap-4 border border-slate-100 hover:border-blue-200 transition-all cursor-pointer group"
+          if (searchQuery && filteredCategories?.length === 0) {
+            return (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="flex flex-col items-center justify-center py-20 text-center"
+              >
+                <div className="p-6 bg-slate-100 rounded-full text-slate-300 mb-4">
+                  <Search className="w-10 h-10" />
+                </div>
+                <h3 className="text-lg font-black text-slate-800 tracking-tight">Nenhum resultado</h3>
+                <p className="text-slate-400 text-sm max-w-[240px] mt-2 font-medium">
+                  Não encontramos nada para "<span className="text-slate-600">{searchQuery}</span>". Tente outros termos.
+                </p>
+                <button 
+                  onClick={() => setSearchQuery("")}
+                  className="mt-6 text-blue-600 font-black text-xs uppercase tracking-widest hover:bg-blue-50 px-6 py-3 rounded-xl transition-colors"
                 >
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-bold text-slate-800 text-sm group-hover:text-blue-600 transition-colors truncate">{product.name}</h3>
-                    <p className="text-[10px] text-slate-400 mt-1 line-clamp-2 font-medium leading-relaxed">{product.description}</p>
-                    <div className="mt-3 text-blue-600 font-extrabold text-sm tracking-tight flex items-center gap-2">
-                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(product.price)}
-                        <motion.div 
-                          initial={{ opacity: 0, scale: 0.5 }}
-                          whileInView={{ opacity: 1, scale: 1 }}
-                          className="w-1.5 h-1.5 rounded-full bg-blue-100" 
-                        />
+                  Limpar Busca
+                </button>
+              </motion.div>
+            );
+          }
+
+          return filteredCategories?.map((category, catIdx) => (
+            <motion.section 
+              key={`cat-section-${category.id}`} 
+              id={category.id}
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-100px" }}
+              transition={{ duration: 0.5, delay: catIdx * 0.1 }}
+              ref={el => { sectionRefs.current[category.id] = el; }}
+              className="scroll-mt-32"
+            >
+              <div className="flex items-center gap-4 mb-6">
+                <h2 className="text-lg font-black text-[#0F172A] uppercase tracking-tight">
+                  {category.name}
+                </h2>
+                <div className="flex-1 h-px bg-slate-200/50" />
+              </div>
+
+              <div className="grid gap-5">
+                {category.products.map((product, pIdx) => (
+                  <motion.div
+                    key={product.id}
+                    onClick={() => openProduct(product)}
+                    initial={{ opacity: 0, x: -10 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: pIdx * 0.05 }}
+                    whileHover={{ y: -4, boxShadow: "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)" }}
+                    whileTap={{ scale: 0.96 }}
+                    className="bg-white rounded-2xl shadow-sm flex items-start p-4 gap-4 border border-slate-100 hover:border-blue-200 transition-all cursor-pointer group"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-bold text-slate-800 text-sm group-hover:text-blue-600 transition-colors truncate">{product.name}</h3>
+                      <p className="text-[10px] text-slate-400 mt-1 line-clamp-2 font-medium leading-relaxed">{product.description}</p>
+                      <div className="mt-3 text-blue-600 font-extrabold text-sm tracking-tight flex items-center gap-2">
+                          {product.variants && product.variants.length > 0 
+                            ? `A partir de R$ ${Math.min(...product.variants.map(v => v.price)).toFixed(2)}`
+                            : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(product.price)
+                          }
+                          <motion.div 
+                            initial={{ opacity: 0, scale: 0.5 }}
+                            whileInView={{ opacity: 1, scale: 1 }}
+                            className="w-1.5 h-1.5 rounded-full bg-blue-100" 
+                          />
+                      </div>
                     </div>
-                  </div>
-                  <div className="relative shrink-0 overflow-hidden rounded-xl bg-slate-50 border border-slate-100 w-20 h-20">
-                    <img 
-                      src={product.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200'} 
-                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-115" 
-                      alt={product.name} 
-                    />
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </motion.section>
-        ))}
+                    <div className="relative shrink-0 overflow-hidden rounded-xl bg-slate-50 border border-slate-100 w-20 h-20">
+                      <img 
+                        src={product.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200'} 
+                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-115" 
+                        alt={product.name} 
+                      />
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.section>
+          ));
+        })()}
       </div>
 
       {/* Floating Action Bar / Order Tracking */}
@@ -450,9 +582,36 @@ export default function MenuView() {
                    <p className="text-slate-500 text-sm leading-relaxed">{selectedProduct.description}</p>
                 </div>
 
+                {selectedProduct.variants && selectedProduct.variants.length > 0 && (
+                  <div className="space-y-3">
+                     <div className="text-slate-400 font-bold uppercase text-[10px] tracking-widest px-1">Selecione o Tamanho</div>
+                     <div className="grid grid-cols-1 gap-2">
+                        {selectedProduct.variants.map((v) => (
+                          <button
+                            key={v.id}
+                            onClick={() => setSelectedVariant(v)}
+                            className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${
+                              selectedVariant?.id === v.id 
+                                ? 'border-blue-600 bg-blue-50/50' 
+                                : 'border-slate-100 bg-white hover:border-slate-200'
+                            }`}
+                          >
+                            <div className="flex flex-col items-start">
+                              <span className={`text-sm font-bold ${selectedVariant?.id === v.id ? 'text-blue-700' : 'text-slate-700'}`}>{v.name}</span>
+                              {v.description && <span className="text-[10px] text-slate-400">{v.description}</span>}
+                            </div>
+                            <span className={`text-sm font-black ${selectedVariant?.id === v.id ? 'text-blue-600' : 'text-slate-900'}`}>
+                              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v.price)}
+                            </span>
+                          </button>
+                        ))}
+                     </div>
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between py-4 border-y border-slate-100">
                     <span className="text-2xl font-black text-blue-600">
-                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(selectedProduct.price)}
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(selectedVariant ? selectedVariant.price : selectedProduct.price)}
                     </span>
                     <div className="flex items-center gap-4 bg-slate-50 p-2 rounded-2xl border border-slate-100">
                        <button 
@@ -493,7 +652,7 @@ export default function MenuView() {
                   className="w-full bg-[#0F172A] text-white p-5 rounded-[24px] font-black flex items-center justify-between group shadow-xl shadow-slate-200"
                 >
                   <span className="group-active:scale-95 transition-transform">Adicionar ao Carrinho</span>
-                  <span>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(selectedProduct.price * productQuantity)}</span>
+                  <span>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((selectedVariant ? selectedVariant.price : selectedProduct.price) * productQuantity)}</span>
                 </motion.button>
               </div>
             </motion.div>
@@ -518,73 +677,239 @@ export default function MenuView() {
               exit={{ x: "100%" }}
               className="absolute top-0 right-0 h-full w-full max-w-md bg-white shadow-2xl flex flex-col"
             >
-              <div className="p-8 border-b border-slate-100 flex items-center gap-4">
-                 <button onClick={() => setIsCartOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
-                    <ChevronLeft className="w-6 h-6" />
-                 </button>
-                 <h2 className="text-2xl font-black text-[#0F172A]">Meu Pedido</h2>
+              <div className="p-8 border-b border-slate-100 flex items-center justify-between gap-4 bg-white sticky top-0 z-10">
+                 <div className="flex items-center gap-4">
+                    <button onClick={() => setIsCartOpen(false)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
+                        <ChevronLeft className="w-6 h-6" />
+                    </button>
+                    <h2 className="text-2xl font-black text-[#0F172A] tracking-tight">Meu Pedido</h2>
+                 </div>
+                 {cart.length > 0 && (
+                   <button 
+                    onClick={() => setCart([])}
+                    className="text-[10px] font-black uppercase text-red-400 hover:text-red-500 transition-colors tracking-widest px-3 py-1 bg-red-50 rounded-full"
+                   >
+                     Limpar Tudo
+                   </button>
+                 )}
               </div>
 
-              <div className="flex-1 overflow-y-auto p-8 space-y-6">
-                {cart.map((item, idx) => (
-                  <div key={idx} className="flex gap-4 p-4 bg-slate-50 rounded-3xl border border-slate-100 relative group">
-                    <img src={item.product.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200'} className="w-16 h-16 rounded-2xl object-cover" alt="item" />
-                    <div className="flex-1">
-                      <div className="flex justify-between items-start">
-                        <h4 className="font-bold text-slate-800 text-sm">{item.product.name}</h4>
-                        <button onClick={() => removeFromCart(idx)} className="text-slate-300 hover:text-red-500 p-1">
-                           <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                      <div className="flex items-center justify-between mt-2">
-                        <p className="text-blue-600 font-bold text-xs">
-                           {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.product.price * item.quantity)}
-                        </p>
-                        <div className="flex items-center gap-3 bg-white px-2 py-1 rounded-xl shadow-sm border border-slate-100">
-                           <button onClick={() => updateCartQuantity(idx, -1)} className="text-slate-400">
-                             <Minus className="w-3 h-3" />
-                           </button>
-                           <span className="text-xs font-black w-4 text-center">{item.quantity}</span>
-                           <button onClick={() => updateCartQuantity(idx, 1)} className="text-slate-400">
-                             <Plus className="w-3 h-3" />
-                           </button>
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                <AnimatePresence mode="popLayout">
+                  {cart.map((item, idx) => (
+                    <motion.div 
+                      key={`${item.product.id}-${idx}`} 
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
+                      layout
+                      className="p-5 bg-white rounded-[32px] border border-slate-100 shadow-sm space-y-4 group relative overflow-hidden transition-all hover:border-blue-100"
+                    >
+                      <div className="flex gap-4">
+                        <div className="relative shrink-0">
+                          <img 
+                            src={item.product.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200'} 
+                            className="w-24 h-24 rounded-3xl object-cover shadow-sm border-2 border-white" 
+                            alt="item" 
+                          />
+                          <motion.button 
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() => removeFromCart(idx)} 
+                            className="absolute -top-2 -left-2 w-8 h-8 bg-white text-red-500 rounded-full shadow-lg border border-slate-100 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:bg-red-50"
+                          >
+                            <X className="w-4 h-4" />
+                          </motion.button>
+                        </div>
+                        
+                        <div className="flex-1 min-w-0 flex flex-col justify-between py-1">
+                          <div>
+                            <div className="flex justify-between items-start gap-2">
+                              <h4 className="font-black text-[#0F172A] text-base leading-tight truncate">{item.product.name}</h4>
+                            </div>
+                            {item.variant && (
+                              <span className="mt-1 inline-block px-2 py-0.5 bg-blue-50 text-blue-600 text-[9px] font-black uppercase tracking-widest rounded-full">
+                                {item.variant.name}
+                              </span>
+                            )}
+                          </div>
+                          
+                          <div className="flex items-center justify-between mt-4">
+                            <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-2xl border border-slate-100/50 shadow-inner">
+                              <motion.button 
+                                whileTap={{ scale: 0.9 }}
+                                onClick={() => updateCartQuantity(idx, -1)} 
+                                className={`w-8 h-8 bg-white rounded-xl shadow-sm flex items-center justify-center text-slate-400 hover:text-blue-600 transition-colors ${item.quantity === 1 ? 'opacity-30' : ''}`}
+                              >
+                                <Minus className="w-4 h-4" />
+                              </motion.button>
+                              <span className="text-sm font-black w-8 text-center text-slate-800 tabular-nums">{item.quantity}</span>
+                              <motion.button 
+                                whileTap={{ scale: 0.9 }}
+                                onClick={() => updateCartQuantity(idx, 1)} 
+                                className="w-8 h-8 bg-white rounded-xl shadow-sm flex items-center justify-center text-slate-400 hover:text-blue-600 transition-colors"
+                              >
+                                <Plus className="w-4 h-4" />
+                              </motion.button>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-lg font-black text-blue-600 tracking-tighter block">
+                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((item.variant ? item.variant.price : item.product.price) * item.quantity)}
+                              </span>
+                            </div>
+                          </div>
                         </div>
                       </div>
+
                       {item.notes && (
-                        <p className="text-[10px] text-orange-400 mt-2 bg-orange-50/50 p-2 rounded-lg italic font-medium">
-                           " {item.notes} "
-                        </p>
+                        <div className="bg-slate-50/80 rounded-2xl p-3 border border-slate-100/50 flex gap-3 items-start">
+                          <MessageSquare className="w-4 h-4 text-slate-300 mt-0.5 shrink-0" />
+                          <p className="text-[11px] text-slate-500 font-medium italic leading-relaxed">
+                            "{item.notes}"
+                          </p>
+                        </div>
                       )}
-                    </div>
-                  </div>
-                ))}
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
 
                 {cart.length === 0 && (
-                  <div className="flex flex-col items-center justify-center py-20 text-center opacity-30">
-                     <ShoppingCart className="w-16 h-16 mb-4" />
-                     <p className="font-bold uppercase tracking-widest text-xs">Seu carrinho está vazio</p>
-                  </div>
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="flex flex-col items-center justify-center py-24 text-center"
+                  >
+                     <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mb-6 text-slate-200">
+                        <ShoppingCart className="w-10 h-10" />
+                     </div>
+                     <h3 className="text-lg font-black text-slate-800 tracking-tight">Carrinho Vazio</h3>
+                     <p className="text-slate-400 text-sm max-w-[200px] mt-2 font-medium">Você ainda não adicionou nenhuma delícia ao seu pedido.</p>
+                     <button 
+                      onClick={() => setIsCartOpen(false)}
+                      className="mt-8 text-blue-600 font-black text-xs uppercase tracking-widest hover:underline"
+                     >
+                        Ver Cardápio
+                     </button>
+                  </motion.div>
                 )}
               </div>
 
               {cart.length > 0 && (
-                <div className="p-8 border-t border-slate-100 space-y-4">
-                  <div className="flex justify-between items-center text-slate-400 uppercase font-black text-[10px] tracking-widest">
-                     <span>Subtotal</span>
-                     <span>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(total)}</span>
+                <div className="p-8 border-t border-slate-100 space-y-6 bg-white shrink-0 shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.1)]">
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center text-slate-400 uppercase font-black text-[10px] tracking-widest">
+                       <span>Subtotal</span>
+                       <span className="text-slate-600 font-bold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(total)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-slate-400 uppercase font-black text-[10px] tracking-widest">
+                       <span>Taxa de Entrega</span>
+                       <span className="text-green-500 font-bold">Grátis</span>
+                    </div>
+                    <div className="pt-3 border-t border-slate-50 flex justify-between items-center text-[#0F172A] font-black text-2xl tracking-tighter">
+                       <span>Total</span>
+                       <span className="text-blue-600">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(total)}</span>
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center text-[#0F172A] font-black text-2xl">
-                     <span>Total</span>
-                     <span>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(total)}</span>
-                  </div>
-                  <button
+                  
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
                     onClick={() => { setIsCartOpen(false); setIsCheckoutOpen(true); }}
-                    className="w-full bg-[#0F172A] text-white p-5 rounded-[24px] font-black text-lg shadow-xl shadow-blue-900/10 hover:scale-[1.02] active:scale-95 transition-all"
+                    className="w-full bg-[#0F172A] text-white p-5 rounded-[24px] font-black text-sm uppercase tracking-widest shadow-xl shadow-blue-900/10 hover:bg-slate-800 transition-all flex items-center justify-center gap-3"
                   >
-                    Escolher Entrega e Pagamento
-                  </button>
+                    <span>Finalizar Pedido</span>
+                    <Send className="w-4 h-4 text-blue-400" />
+                  </motion.button>
                 </div>
               )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* My Orders Panel */}
+      <AnimatePresence>
+        {isOrdersOpen && (
+          <div className="fixed inset-0 z-[120] overflow-hidden">
+             <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsOrdersOpen(false)}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "100%" }}
+              className="absolute top-0 right-0 h-full w-full max-w-md bg-white shadow-2xl flex flex-col"
+            >
+              <div className="p-8 border-b border-slate-100 flex items-center gap-4 bg-white sticky top-0 z-10 shrink-0">
+                 <button onClick={() => setIsOrdersOpen(false)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
+                    <ChevronLeft className="w-6 h-6" />
+                 </button>
+                 <h2 className="text-2xl font-black text-[#0F172A] tracking-tight">Meus Pedidos</h2>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                {customerOrders.length > 0 ? (
+                  customerOrders.map((order) => (
+                    <motion.div 
+                      key={order.id}
+                      className="p-5 bg-white rounded-3xl border border-slate-100 shadow-sm space-y-4"
+                    >
+                      <div className="flex justify-between items-start">
+                        <div>
+                           <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Pedido #{order.id.slice(-4).toUpperCase()}</div>
+                           <div className="text-xs font-bold text-slate-600">
+                             {new Date(order.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit' })}
+                           </div>
+                        </div>
+                        <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                          order.status === 'PENDING' ? 'bg-amber-100 text-amber-700' :
+                          order.status === 'PREPARING' ? 'bg-blue-100 text-blue-700' :
+                          order.status === 'SHIPPED' ? 'bg-orange-100 text-orange-700' :
+                          order.status === 'DELIVERED' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-700'
+                        }`}>
+                          {order.status === 'PENDING' ? 'Pendente' :
+                           order.status === 'PREPARING' ? 'Preparo' :
+                           order.status === 'SHIPPED' ? 'Saiu' :
+                           order.status === 'DELIVERED' ? 'Entregue' : 'Cancelado'}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        {order.items?.map((item, idx) => (
+                           <div key={idx} className="flex justify-between text-xs font-medium text-slate-500">
+                              <span>{item.quantity}x {item.product?.name}</span>
+                              <span>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.price * item.quantity)}</span>
+                           </div>
+                        ))}
+                      </div>
+
+                      <div className="pt-3 border-t border-slate-50 flex justify-between items-center">
+                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total</span>
+                        <span className="text-sm font-black text-blue-600">
+                          {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(order.total)}
+                        </span>
+                      </div>
+                    </motion.div>
+                  ))
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-20 text-center opacity-40">
+                     <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-6">
+                        <ShoppingBag className="w-8 h-8 text-slate-300" />
+                     </div>
+                     <h3 className="text-lg font-black text-slate-800 tracking-tight">Sem Pedidos</h3>
+                     <p className="text-slate-400 text-sm max-w-[200px] mt-2 font-medium">Você ainda não realizou nenhum pedido por aqui.</p>
+                  </div>
+                )}
+              </div>
+              <div className="p-8 border-t border-slate-100 bg-slate-50 shrink-0">
+                 <p className="text-[9px] text-center text-slate-400 font-bold uppercase tracking-[0.2em]">
+                    Dados associados ao telefone: {localStorage.getItem(`customer_phone_${slug}`)}
+                 </p>
+              </div>
             </motion.div>
           </div>
         )}

@@ -15,7 +15,12 @@ import {
   Info,
   CircleDollarSign,
   TrendingUp,
-  Wallet
+  Wallet,
+  History,
+  Calendar,
+  ArrowUpRight,
+  ArrowDownRight,
+  Monitor
 } from "lucide-react";
 import socket from "../lib/socket";
 import { Order, Tenant, CashRegister } from "../types";
@@ -34,12 +39,20 @@ export default function Dashboard() {
     fetch(`/api/tenants/${slug}`)
       .then(res => res.json())
       .then(data => {
+        if (data.error) {
+          setTenant(null);
+          setLoading(false);
+          return;
+        }
         setTenant(data);
         socket.emit("join-tenant", data.id);
         fetchOrders(data.id);
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch(() => {
+        setTenant(null);
+        setLoading(false);
+      });
   };
 
   useEffect(() => {
@@ -47,12 +60,12 @@ export default function Dashboard() {
 
     // Real-time listeners
     socket.on("new-order", (newOrder: Order) => {
-      setOrders(prev => [newOrder, ...prev]);
+      setOrders(prev => Array.isArray(prev) ? [newOrder, ...prev] : [newOrder]);
       new Audio('/notification.mp3').play().catch(() => {}); // Optional sound
     });
 
     socket.on("order-status-updated", (updatedOrder: Order) => {
-      setOrders(prev => prev.map(o => o.id === updatedOrder.id ? updatedOrder : o));
+      setOrders(prev => Array.isArray(prev) ? prev.map(o => o.id === updatedOrder.id ? updatedOrder : o) : []);
     });
 
     return () => {
@@ -64,7 +77,14 @@ export default function Dashboard() {
   const fetchOrders = (tenantId: string) => {
     fetch(`/api/admin/${tenantId}/orders`)
       .then(res => res.json())
-      .then(data => setOrders(data));
+      .then(data => {
+        if (Array.isArray(data)) {
+          setOrders(data);
+        } else {
+          setOrders([]);
+        }
+      })
+      .catch(() => setOrders([]));
   };
 
   const updateStatus = async (orderId: string, status: string) => {
@@ -224,6 +244,16 @@ export default function Dashboard() {
             </span>
           </div>
           <div className="flex items-center gap-6">
+            <Link 
+              to={`/${slug}/display`}
+              target="_blank"
+              className="text-slate-400 hover:text-indigo-600 transition-colors flex items-center gap-2 group"
+            >
+               <span className="text-xs font-bold uppercase tracking-widest group-hover:underline">Painel TV</span>
+               <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center border border-slate-200">
+                  <Monitor className="w-4 h-4" />
+               </div>
+            </Link>
             <Link 
               to={`/${slug}`}
               className="text-slate-400 hover:text-blue-600 transition-colors flex items-center gap-2 group"
@@ -494,7 +524,14 @@ function OrdersList({ filteredOrders, updateStatus }: { filteredOrders: Order[],
                           {order.items?.map((item, itIdx) => (
                             <div key={`${order.id}-item-${itIdx}`} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
                                <div className="flex justify-between items-start">
-                                  <span className="text-sm font-bold text-slate-800">{item.quantity}x {item.product?.name}</span>
+                                  <div className="flex flex-col">
+                                     <span className="text-sm font-bold text-slate-800">{item.quantity}x {item.product?.name}</span>
+                                     {item.productVariantId && (
+                                        <span className="text-[10px] text-blue-600 font-black uppercase tracking-tighter">
+                                           Tamanho Selecionado
+                                        </span>
+                                     )}
+                                  </div>
                                   <span className="text-xs font-medium text-slate-400">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.price * item.quantity)}</span>
                                </div>
                                {item.notes && (
@@ -688,7 +725,13 @@ function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, refresh
 function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, refresh: () => void }) {
   const [newCategory, setNewCategory] = useState("");
   const [addingProductTo, setAddingProductTo] = useState<string | null>(null);
-  const [prodForm, setProdForm] = useState({ name: "", description: "", price: "", imageUrl: "" });
+  const [prodForm, setProdForm] = useState({ 
+    name: "", 
+    description: "", 
+    price: "", 
+    imageUrl: "",
+    variants: [] as { name: string, price: string, description: string }[]
+  });
 
   const addCategory = async () => {
     if (!newCategory) return;
@@ -708,7 +751,7 @@ function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, refresh: (
       body: JSON.stringify({ ...prodForm, categoryId, tenantId: tenant?.id, available: true })
     });
     setAddingProductTo(null);
-    setProdForm({ name: "", description: "", price: "", imageUrl: "" });
+    setProdForm({ name: "", description: "", price: "", imageUrl: "", variants: [] });
     refresh();
   };
 
@@ -716,6 +759,27 @@ function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, refresh: (
     if (!confirm("Excluir produto?")) return;
     await fetch(`/api/products/${id}`, { method: 'DELETE' });
     refresh();
+  };
+
+  const addVariantField = () => {
+    setProdForm(prev => ({
+      ...prev,
+      variants: [...prev.variants, { name: "", price: "", description: "" }]
+    }));
+  };
+
+  const removeVariantField = (index: number) => {
+    setProdForm(prev => ({
+      ...prev,
+      variants: prev.variants.filter((_, i) => i !== index)
+    }));
+  };
+
+  const updateVariantField = (index: number, field: string, value: string) => {
+    setProdForm(prev => ({
+      ...prev,
+      variants: prev.variants.map((v, i) => i === index ? { ...v, [field]: value } : v)
+    }));
   };
 
   return (
@@ -766,6 +830,39 @@ function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, refresh: (
                     className="w-full bg-white border p-3 rounded-xl text-xs mb-4"
                     rows={2}
                   />
+
+                  {/* Variants Section */}
+                  <div className="mb-4">
+                     <div className="flex justify-between items-center mb-2 px-1">
+                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Tamanhos / Variantes (Opcional)</span>
+                        <button 
+                          onClick={addVariantField}
+                          className="text-blue-600 font-bold text-[10px] uppercase hover:underline"
+                        >
+                          + Add Tamanho
+                        </button>
+                     </div>
+                     <div className="space-y-3">
+                        {prodForm.variants.map((v, idx) => (
+                           <div key={`new-var-${idx}`} className="flex gap-2 items-start bg-white p-3 rounded-xl border border-slate-200">
+                              <input 
+                                type="text" placeholder="Nome (ex: 500ml)" 
+                                value={v.name} onChange={e => updateVariantField(idx, 'name', e.target.value)}
+                                className="flex-1 bg-slate-50 border p-2 rounded-lg text-[10px] font-bold"
+                              />
+                              <input 
+                                type="text" placeholder="Preço" 
+                                value={v.price} onChange={e => updateVariantField(idx, 'price', e.target.value)}
+                                className="w-20 bg-slate-50 border p-2 rounded-lg text-[10px] font-bold"
+                              />
+                              <button onClick={() => removeVariantField(idx)} className="p-2 text-slate-300 hover:text-red-500">
+                                 <X className="w-4 h-4" />
+                              </button>
+                           </div>
+                        ))}
+                     </div>
+                  </div>
+
                   <div className="flex justify-end gap-3">
                      <button onClick={() => setAddingProductTo(null)} className="text-slate-400 font-bold text-xs uppercase px-4">Cancelar</button>
                      <button onClick={() => addProduct(cat.id)} className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold text-xs uppercase">Salvar</button>
@@ -781,7 +878,12 @@ function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, refresh: (
                      </div>
                      <div>
                         <p className="text-sm font-bold text-slate-800">{prod.name}</p>
-                        <p className="text-[10px] text-slate-400 font-medium">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(prod.price)}</p>
+                        <p className="text-[10px] text-slate-400 font-medium">
+                          {prod.variants && prod.variants.length > 0 
+                            ? `${prod.variants.length} variações` 
+                            : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(prod.price)
+                          }
+                        </p>
                      </div>
                   </div>
                   <button onClick={() => deleteProduct(prod.id)} className="text-red-400 hover:text-red-600 p-2">
@@ -804,6 +906,7 @@ function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, refresh: (
 function FinancePanel({ slug, tenant }: { slug: string, tenant: Tenant }) {
   const [summary, setSummary] = useState<{ daily: number, dailyCount: number, weekly: number, monthly: number } | null>(null);
   const [currentCash, setCurrentCash] = useState<CashRegister & { expectedBalance?: number } | null>(null);
+  const [history, setHistory] = useState<CashRegister[]>([]);
   const [showOpenModal, setShowOpenModal] = useState(false);
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -811,14 +914,17 @@ function FinancePanel({ slug, tenant }: { slug: string, tenant: Tenant }) {
   const fetchFinanceData = async () => {
     setLoading(true);
     try {
-      const [sumRes, cashRes] = await Promise.all([
+      const [sumRes, cashRes, historyRes] = await Promise.all([
         fetch(`/api/tenants/${slug}/finance-summary`),
-        fetch(`/api/tenants/${slug}/cash/current`)
+        fetch(`/api/tenants/${slug}/cash/current`),
+        fetch(`/api/tenants/${slug}/cash/history`)
       ]);
       const sumData = await sumRes.json();
       const cashData = await cashRes.json();
+      const historyData = await historyRes.json();
       setSummary(sumData);
       setCurrentCash(cashData);
+      setHistory(historyData);
     } catch (err) {
       console.error(err);
     } finally {
@@ -837,104 +943,221 @@ function FinancePanel({ slug, tenant }: { slug: string, tenant: Tenant }) {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:scale-110 transition-transform">
+               <TrendingUp className="w-24 h-24 text-blue-600" />
+            </div>
             <div className="flex items-center justify-between mb-4">
                <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
                   <TrendingUp className="w-5 h-5" />
                </div>
                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Ganhos Hoje</span>
             </div>
-            <div className="text-2xl font-black text-slate-800">
+            <div className="text-3xl font-black text-slate-800 tracking-tight">
                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(summary?.daily || 0)}
             </div>
-            <div className="text-[10px] text-slate-400 mt-1 font-bold">{summary?.dailyCount || 0} pedidos concluídos</div>
+            <div className="text-[10px] text-slate-400 mt-1 font-bold uppercase tracking-wide">
+               {summary?.dailyCount || 0} pedidos concluídos
+            </div>
          </div>
 
-         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:scale-110 transition-transform">
+               <Calendar className="w-24 h-24 text-indigo-600" />
+            </div>
             <div className="flex items-center justify-between mb-4">
                <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
-                  <TrendingUp className="w-5 h-5" />
+                  <Calendar className="w-5 h-5" />
                </div>
                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Na Semana</span>
             </div>
-            <div className="text-2xl font-black text-slate-800">
+            <div className="text-3xl font-black text-slate-800 tracking-tight">
                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(summary?.weekly || 0)}
             </div>
-            <div className="text-[10px] text-slate-400 mt-1 font-bold">Últimos 7 dias</div>
+            <div className="text-[10px] text-slate-400 mt-1 font-bold uppercase tracking-wide">Últimos 7 dias</div>
          </div>
 
-         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:scale-110 transition-transform">
+               <CircleDollarSign className="w-24 h-24 text-emerald-600" />
+            </div>
             <div className="flex items-center justify-between mb-4">
                <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
-                  <TrendingUp className="w-5 h-5" />
+                  <CircleDollarSign className="w-5 h-5" />
                </div>
                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">No Mês</span>
             </div>
-            <div className="text-2xl font-black text-slate-800">
+            <div className="text-3xl font-black text-slate-800 tracking-tight">
                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(summary?.monthly || 0)}
             </div>
-            <div className="text-[10px] text-slate-400 mt-1 font-bold">{new Date().toLocaleString('pt-BR', { month: 'long' })}</div>
+            <div className="text-[10px] text-slate-400 mt-1 font-bold uppercase tracking-wide">
+              {new Date().toLocaleString('pt-BR', { month: 'long' })}
+            </div>
          </div>
       </div>
 
       {/* Cash Register Control */}
-      <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm transition-all hover:shadow-md">
-         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-            <div className="flex gap-4 items-center">
-               <div className={`p-4 rounded-2xl ${currentCash ? 'bg-green-50 text-green-600' : 'bg-slate-50 text-slate-400'}`}>
-                  <Wallet className="w-8 h-8" />
-               </div>
-               <div>
-                  <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Fluxo de Caixa</h3>
-                  <div className="flex items-center gap-2">
-                     <div className={`w-2 h-2 rounded-full ${currentCash ? 'bg-green-500 animate-pulse' : 'bg-slate-300'}`}></div>
-                     <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
-                        {currentCash ? 'Caixa Aberto' : 'Caixa Fechado'}
-                     </span>
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden border-b-4 border-b-blue-600">
+         <div className="p-8">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+               <div className="flex gap-5 items-center">
+                  <div className={`p-5 rounded-[22px] ${currentCash ? 'bg-green-50 text-green-600 shadow-inner' : 'bg-slate-50 text-slate-300'}`}>
+                     <Wallet className="w-10 h-10" />
+                  </div>
+                  <div>
+                     <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Status do Caixa</h3>
+                     <div className="flex items-center gap-2 mt-1">
+                        <div className={`w-2.5 h-2.5 rounded-full ${currentCash ? 'bg-green-500 animate-pulse' : 'bg-slate-300'}`}></div>
+                        <span className="text-xs font-black text-slate-500 uppercase tracking-widest">
+                           {currentCash ? 'Aberto no momento' : 'Fechado'}
+                        </span>
+                     </div>
                   </div>
                </div>
+
+               <div className="flex gap-3 w-full md:w-auto">
+                  {!currentCash ? (
+                  <button 
+                     onClick={() => setShowOpenModal(true)}
+                     className="w-full md:w-auto bg-blue-600 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-100 active:scale-95 transition-all"
+                  >
+                     Abrir Caixa
+                  </button>
+                  ) : (
+                  <button 
+                     onClick={() => setShowCloseModal(true)}
+                     className="w-full md:w-auto bg-red-600 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-red-100 active:scale-95 transition-all"
+                  >
+                     Fechar Caixa
+                  </button>
+                  )}
+               </div>
             </div>
 
-            <div className="flex gap-3">
-               {!currentCash ? (
-                 <button 
-                  onClick={() => setShowOpenModal(true)}
-                  className="bg-blue-600 text-white px-8 py-3 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-blue-200 active:scale-95 transition-all"
-                 >
-                    Abrir Caixa
-                 </button>
-               ) : (
-                 <button 
-                  onClick={() => setShowCloseModal(true)}
-                  className="bg-red-600 text-white px-8 py-3 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-red-200 active:scale-95 transition-all"
-                 >
-                    Fechar Caixa
-                 </button>
-               )}
+            {currentCash && (
+            <div className="mt-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 p-6 bg-slate-50 rounded-2xl border border-slate-100">
+               <div>
+                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Início da Sessão</p>
+                  <p className="text-sm font-black text-slate-800">
+                     {new Date(currentCash.openedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                  <p className="text-[10px] text-slate-400 mt-1 font-bold uppercase tracking-tighter">Hoje</p>
+               </div>
+               <div>
+                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1 text-slate-400">Fundo de Troco</p>
+                  <p className="text-sm font-black text-slate-800">
+                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(currentCash.openingBalance)}
+                  </p>
+                  <p className="text-[10px] text-slate-400 mt-1 font-bold uppercase tracking-tighter">Saldo Inicial</p>
+               </div>
+               <div>
+                  <p className="text-[10px] font-black uppercase text-blue-600 tracking-widest mb-1">Vendas em Dinheiro</p>
+                  <p className="text-sm font-black text-blue-700">
+                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((currentCash.expectedBalance || 0) - currentCash.openingBalance)}
+                  </p>
+                  <p className="text-[10px] text-blue-400 mt-1 font-bold uppercase tracking-tighter">Registrado no Sistema</p>
+               </div>
+               <div className="border-l-2 border-white pl-8">
+                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Total Esperado</p>
+                  <p className="text-lg font-black text-blue-600 leading-none">
+                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(currentCash.expectedBalance || 0)}
+                  </p>
+                  <p className="text-[10px] text-slate-400 mt-1 font-bold uppercase tracking-tighter">Esperado na Gaveta</p>
+               </div>
             </div>
+            )}
+         </div>
+      </div>
+
+      {/* History List */}
+      <div className="space-y-4">
+         <div className="flex items-center gap-3 px-1">
+            <History className="w-5 h-5 text-slate-400" />
+            <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Últimos Fechamentos</h3>
          </div>
 
-         {currentCash && (
-           <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 pt-8 border-t border-slate-100">
-              <div>
-                 <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Abertura</p>
-                 <p className="text-sm font-bold text-slate-800">
-                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(currentCash.openingBalance)}
-                 </p>
-                 <p className="text-[10px] text-slate-400 mt-0.5">Iniciado às {new Date(currentCash.openedAt).toLocaleTimeString()}</p>
-              </div>
-              <div>
-                 <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Expectativa em Dinheiro</p>
-                 <p className="text-sm font-black text-blue-600">
-                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(currentCash.expectedBalance || 0)}
-                 </p>
-                 <p className="text-[10px] text-slate-400 mt-0.5">Vendas em espécie + saldo inicial</p>
-              </div>
-           </div>
-         )}
+         <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden">
+            {history.length > 0 ? (
+               <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                     <thead>
+                        <tr className="bg-slate-50/50 border-b border-slate-100">
+                           <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Data / Hora</th>
+                           <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Entrada/Saída</th>
+                           <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Diferença</th>
+                           <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Status</th>
+                        </tr>
+                     </thead>
+                     <tbody className="divide-y divide-slate-50">
+                        {history.map((cash) => {
+                           const diff = (cash.closingBalance || 0) - (cash.expectedBalance || 0);
+                           return (
+                              <tr key={cash.id} className="hover:bg-slate-50/50 transition-colors">
+                                 <td className="px-6 py-5">
+                                    <div className="text-sm font-bold text-slate-700">
+                                       {new Date(cash.openedAt).toLocaleDateString()}
+                                    </div>
+                                    <div className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">
+                                       {new Date(cash.openedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} → {cash.closedAt ? new Date(cash.closedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '...'}
+                                    </div>
+                                 </td>
+                                 <td className="px-6 py-5">
+                                    <div className="flex gap-4">
+                                       <div>
+                                          <p className="text-[9px] text-slate-400 uppercase font-black tracking-tighter">Iniciou com</p>
+                                          <p className="text-xs font-bold text-slate-600">
+                                             {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cash.openingBalance)}
+                                          </p>
+                                       </div>
+                                       <div>
+                                          <p className="text-[9px] text-slate-400 uppercase font-black tracking-tighter">Retirou</p>
+                                          <p className="text-xs font-black text-slate-800">
+                                             {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cash.closingBalance || 0)}
+                                          </p>
+                                       </div>
+                                    </div>
+                                 </td>
+                                 <td className="px-6 py-5">
+                                    {Math.abs(diff) < 0.01 ? (
+                                       <span className="text-[10px] font-black px-3 py-1 bg-green-50 text-green-600 rounded-full uppercase tracking-widest">Bateu Certinho</span>
+                                    ) : (
+                                       <div className="flex items-center gap-2">
+                                          {diff > 0 ? (
+                                             <div className="p-1.5 bg-green-50 text-green-600 rounded-lg">
+                                                <ArrowUpRight className="w-3 h-3" />
+                                             </div>
+                                          ) : (
+                                             <div className="p-1.5 bg-red-50 text-red-600 rounded-lg">
+                                                <ArrowDownRight className="w-3 h-3" />
+                                             </div>
+                                          )}
+                                          <span className={`text-sm font-black ${diff > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                             {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Math.abs(diff))}
+                                          </span>
+                                       </div>
+                                    )}
+                                 </td>
+                                 <td className="px-6 py-5 text-right pr-12">
+                                     <button className="text-[10px] font-black uppercase text-blue-600 hover:underline tracking-widest">Ver Notas</button>
+                                 </td>
+                              </tr>
+                           );
+                        })}
+                     </tbody>
+                  </table>
+               </div>
+            ) : (
+               <div className="p-12 text-center">
+                  <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-200">
+                     <History className="w-8 h-8" />
+                  </div>
+                  <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">Nenhum histórico disponível</p>
+               </div>
+            )}
+         </div>
       </div>
 
       {showOpenModal && (

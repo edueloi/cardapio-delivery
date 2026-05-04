@@ -8,6 +8,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import MenuView from './pages/MenuView';
 import Dashboard from './pages/Dashboard';
 
+import PublicDashboard from './pages/PublicDashboard';
+
 function AnimatedRoutes() {
   const location = useLocation();
   
@@ -27,6 +29,12 @@ function AnimatedRoutes() {
               <Dashboard />
             </motion.div>
           } 
+        />
+
+        {/* Public Display Panel */}
+        <Route 
+          path="/:slug/display" 
+          element={<PublicDashboard />} 
         />
 
         {/* Customer Menu */}

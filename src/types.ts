@@ -23,6 +23,15 @@ export interface Product {
   imageUrl?: string;
   categoryId: string;
   available: boolean;
+  variants?: ProductVariant[];
+}
+
+export interface ProductVariant {
+  id: string;
+  productId: string;
+  name: string;
+  description?: string;
+  price: number;
 }
 
 export interface Order {
@@ -43,6 +52,7 @@ export interface Order {
 export interface OrderItem {
   id: string;
   productId: string;
+  productVariantId?: string;
   quantity: number;
   price: number;
   notes?: string;

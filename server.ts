@@ -47,7 +47,10 @@ app.get("/api/tenants/:slug", async (req, res) => {
         categories: {
           include: {
             products: {
-              where: { available: true }
+              where: { available: true },
+              include: {
+                variants: true
+              }
             }
           }
         }
@@ -76,13 +79,26 @@ app.post("/api/orders", async (req, res) => {
     const orderItemsData = [];
 
     for (const item of items) {
-      const product = await prisma.product.findUnique({ where: { id: item.productId } });
+      const product = await prisma.product.findUnique({ 
+        where: { id: item.productId },
+        include: { variants: true }
+      });
+      
       if (product) {
-        total += product.price * item.quantity;
+        let itemPrice = product.price;
+        if (item.productVariantId) {
+          const variant = product.variants.find(v => v.id === item.productVariantId);
+          if (variant) {
+            itemPrice = variant.price;
+          }
+        }
+
+        total += itemPrice * item.quantity;
         orderItemsData.push({
           productId: item.productId,
+          productVariantId: item.productVariantId || null,
           quantity: item.quantity,
-          price: product.price,
+          price: itemPrice,
           notes: item.notes || null,
         });
       }
@@ -199,7 +215,7 @@ app.post("/api/categories", async (req, res) => {
 });
 
 app.post("/api/products", async (req, res) => {
-  const { name, description, price, imageUrl, categoryId, tenantId } = req.body;
+  const { name, description, price, imageUrl, categoryId, tenantId, variants } = req.body;
   try {
     const product = await prisma.product.create({
       data: { 
@@ -209,8 +225,16 @@ app.post("/api/products", async (req, res) => {
         imageUrl, 
         categoryId, 
         tenantId,
-        available: true 
-      }
+        available: true,
+        variants: variants ? {
+          create: variants.map((v: any) => ({
+            name: v.name,
+            price: parseFloat(v.price),
+            description: v.description
+          }))
+        } : undefined
+      },
+      include: { variants: true }
     });
     res.json(product);
   } catch (error) {
@@ -386,6 +410,50 @@ app.post("/api/tenants/:slug/cash/close", async (req, res) => {
     res.json(closedCash);
   } catch (error) {
     res.status(500).json({ error: "Failed to close cash" });
+  }
+});
+
+app.get("/api/tenants/:slug/cash/history", async (req, res) => {
+  const { slug } = req.params;
+  try {
+    const tenant = await prisma.tenant.findUnique({ where: { slug } });
+    if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+
+    const history = await prisma.cashRegister.findMany({
+      where: { tenantId: tenant.id, status: 'CLOSED' },
+      orderBy: { openedAt: 'desc' },
+      take: 20
+    });
+    res.json(history);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch cash history" });
+  }
+});
+
+app.get("/api/tenants/:slug/customer-orders/:phone", async (req, res) => {
+  const { slug, phone } = req.params;
+  try {
+    const tenant = await prisma.tenant.findUnique({ where: { slug } });
+    if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+
+    const orders = await prisma.order.findMany({
+      where: { 
+        tenantId: tenant.id,
+        customerPhone: phone
+      },
+      include: {
+        items: {
+          include: {
+            product: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20
+    });
+    res.json(orders);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch customer orders" });
   }
 });
 
