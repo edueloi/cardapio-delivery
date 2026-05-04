@@ -1,0 +1,121 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Tenant {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  logoUrl     String?
+  whatsapp    String?
+  address     String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  users      User[]
+  categories Category[]
+  products   Product[]
+  orders     Order[]
+  cashRegisters CashRegister[]
+
+  @@map("tenants")
+}
+
+model CashRegister {
+  id              String    @id @default(cuid())
+  tenantId        String    @map("tenant_id")
+  openedAt        DateTime  @default(now()) @map("opened_at")
+  closedAt        DateTime? @map("closed_at")
+  openingBalance  Float     @map("opening_balance")
+  closingBalance  Float?    @map("closing_balance")
+  expectedBalance Float?    @map("expected_balance")
+  status          String    @default("OPEN") // OPEN, CLOSED
+  notes           String?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@map("cash_registers")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  role      String   @default("PROFESSIONAL") // ADMIN, PROFESSIONAL
+  tenantId  String   @map("tenant_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@map("users")
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String
+  tenantId  String   @map("tenant_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  products Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  price       Float
+  imageUrl    String?
+  categoryId  String   @map("category_id")
+  tenantId    String   @map("tenant_id")
+  available   Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  category Category    @relation(fields: [categoryId], references: [id])
+  tenant   Tenant      @relation(fields: [tenantId], references: [id])
+  items    OrderItem[]
+
+  @@map("products")
+}
+
+model Order {
+  id           String   @id @default(cuid())
+  customerName String   @map("customer_name")
+  customerPhone String  @map("customer_phone")
+  address      String?
+  status       String   @default("PENDING") // PENDING, PREPARING, SHIPPED, DELIVERED, CANCELLED
+  orderType    String   @default("DELIVERY") @map("order_type")
+  paymentMethod String  @default("CASH") @map("payment_method")
+  paymentDetail String? @map("payment_detail")
+  total        Float
+  tenantId     String   @map("tenant_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant      @relation(fields: [tenantId], references: [id])
+  items  OrderItem[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String @id @default(cuid())
+  orderId   String @map("order_id")
+  productId String @map("product_id")
+  quantity  Int
+  price     Float
+  notes     String? // User observations (remover cebola, etc)
+
+  order   Order   @relation(fields: [orderId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("order_items")
+}
