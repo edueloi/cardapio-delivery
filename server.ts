@@ -845,6 +845,28 @@ app.post("/api/categories", requireAuth, async (req, res) => {
   }
 });
 
+app.patch("/api/categories/:id", requireAuth, async (req, res) => {
+  const { name } = req.body;
+  try {
+    const category = await prisma.category.update({
+      where: { id: req.params.id },
+      data: { name },
+    });
+    res.json(category);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to update category" });
+  }
+});
+
+app.delete("/api/categories/:id", requireAuth, async (req, res) => {
+  try {
+    await prisma.category.delete({ where: { id: req.params.id } });
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to delete category" });
+  }
+});
+
 app.post("/api/products", requireAuth, async (req, res) => {
   const { name, description, price, imageUrl, categoryId, tenantId, variants } = req.body;
   const tenant = await requireTenantById(req, res, tenantId);

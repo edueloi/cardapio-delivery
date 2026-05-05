@@ -490,16 +490,20 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
 }
 
 export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, refresh: () => void }) {
-  const [newCategory, setNewCategory] = useState("");
-  const [addingProductTo, setAddingProductTo] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [selectedCat, setSelectedCat] = useState<string>("all");
+
+  // Category modal
+  const [catModal, setCatModal] = useState<{ open: boolean; editing: { id: string; name: string } | null }>({ open: false, editing: null });
+  const [catName, setCatName] = useState("");
+  const [catSaving, setCatSaving] = useState(false);
+
+  // Product modal
+  const [prodModal, setProdModal] = useState<{ open: boolean; categoryId: string | null }>({ open: false, categoryId: null });
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
-  const [prodForm, setProdForm] = useState({ 
-    name: "", 
-    description: "", 
-    price: "", 
-    imageUrl: "",
-    inventoryItemId: "",
+  const [prodForm, setProdForm] = useState({
+    name: "", description: "", price: "", imageUrl: "", inventoryItemId: "",
     variants: [] as { name: string, price: string, description: string, inventoryItemId: string }[]
   });
 
@@ -508,52 +512,73 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
       apiFetch(`/api/tenants/${tenant.slug}/inventory`)
         .then(res => res.json())
         .then(data => setInventoryItems(data))
-        .catch(err => console.error(err));
+        .catch(() => {});
     }
   }, [tenant]);
 
-  const addCategory = async () => {
-    if (!newCategory) return;
-    await apiFetch('/api/categories', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newCategory, tenantId: tenant?.id })
-    });
-    setNewCategory("");
+  const openNewCategory = () => { setCatName(""); setCatModal({ open: true, editing: null }); };
+  const openEditCategory = (cat: { id: string; name: string }) => { setCatName(cat.name); setCatModal({ open: true, editing: cat }); };
+  const closeCatModal = () => setCatModal({ open: false, editing: null });
+
+  const saveCategory = async () => {
+    if (!catName.trim()) return;
+    setCatSaving(true);
+    try {
+      if (catModal.editing) {
+        await apiFetch(`/api/categories/${catModal.editing.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: catName.trim() })
+        });
+      } else {
+        await apiFetch('/api/categories', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: catName.trim(), tenantId: tenant?.id })
+        });
+      }
+      refresh();
+      closeCatModal();
+    } finally {
+      setCatSaving(false);
+    }
+  };
+
+  const deleteCategory = async (id: string) => {
+    if (!confirm("Excluir categoria e todos os produtos dela?")) return;
+    await apiFetch(`/api/categories/${id}`, { method: 'DELETE' });
+    if (selectedCat === id) setSelectedCat("all");
     refresh();
   };
 
-  const addProduct = async (categoryId: string) => {
-    const url = editingProduct ? `/api/products/${editingProduct.id}` : '/api/products';
-    const method = editingProduct ? 'PATCH' : 'POST';
-    
-    await apiFetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...prodForm, categoryId, tenantId: tenant?.id, available: true })
-    });
-    setAddingProductTo(null);
+  const openNewProduct = (categoryId: string) => {
     setEditingProduct(null);
     setProdForm({ name: "", description: "", price: "", imageUrl: "", inventoryItemId: "", variants: [] });
-    refresh();
+    setProdModal({ open: true, categoryId });
   };
 
-  const startEditing = (prod: any) => {
+  const openEditProduct = (prod: any) => {
     setEditingProduct(prod);
-    setAddingProductTo(prod.categoryId);
     setProdForm({
-      name: prod.name,
-      description: prod.description || "",
-      price: String(prod.price),
-      imageUrl: prod.imageUrl || "",
-      inventoryItemId: prod.inventoryItemId || "",
-      variants: prod.variants?.map((v: any) => ({
-        name: v.name,
-        price: String(v.price),
-        description: v.description || "",
-        inventoryItemId: v.inventoryItemId || ""
-      })) || []
+      name: prod.name, description: prod.description || "", price: String(prod.price),
+      imageUrl: prod.imageUrl || "", inventoryItemId: prod.inventoryItemId || "",
+      variants: prod.variants?.map((v: any) => ({ name: v.name, price: String(v.price), description: v.description || "", inventoryItemId: v.inventoryItemId || "" })) || []
     });
+    setProdModal({ open: true, categoryId: prod.categoryId });
+  };
+
+  const closeProdModal = () => { setProdModal({ open: false, categoryId: null }); setEditingProduct(null); };
+
+  const saveProduct = async () => {
+    if (!prodForm.name || !prodModal.categoryId) return;
+    const url = editingProduct ? `/api/products/${editingProduct.id}` : '/api/products';
+    await apiFetch(url, {
+      method: editingProduct ? 'PATCH' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...prodForm, categoryId: prodModal.categoryId, tenantId: tenant?.id, available: true })
+    });
+    refresh();
+    closeProdModal();
   };
 
   const deleteProduct = async (id: string) => {
@@ -562,206 +587,240 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
     refresh();
   };
 
-  const addVariantField = () => {
-    setProdForm(prev => ({
-      ...prev,
-      variants: [...prev.variants, { name: "", price: "", description: "", inventoryItemId: "" }]
-    }));
-  };
+  const addVariantField = () => setProdForm(prev => ({ ...prev, variants: [...prev.variants, { name: "", price: "", description: "", inventoryItemId: "" }] }));
+  const removeVariantField = (i: number) => setProdForm(prev => ({ ...prev, variants: prev.variants.filter((_, idx) => idx !== i) }));
+  const updateVariantField = (i: number, field: string, value: string) => setProdForm(prev => ({ ...prev, variants: prev.variants.map((v, idx) => idx === i ? { ...v, [field]: value } : v) }));
 
-  const removeVariantField = (index: number) => {
-    setProdForm(prev => ({
-      ...prev,
-      variants: prev.variants.filter((_, i) => i !== index)
-    }));
-  };
+  const categories = tenant?.categories || [];
+  const visibleCategories = categories
+    .filter(cat => selectedCat === "all" || cat.id === selectedCat)
+    .map(cat => ({
+      ...cat,
+      products: (cat.products || []).filter(p =>
+        !search || p.name.toLowerCase().includes(search.toLowerCase())
+      )
+    }))
+    .filter(cat => !search || cat.products.length > 0);
 
-  const updateVariantField = (index: number, field: string, value: string) => {
-    setProdForm(prev => ({
-      ...prev,
-      variants: prev.variants.map((v, i) => i === index ? { ...v, [field]: value } : v)
-    }));
-  };
+  const fmt = (n: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
 
   return (
-    <div className="space-y-6">
-      <ContentCard className="flex flex-col gap-3 sm:flex-row sm:items-end">
-        <Input
-          label="Nova Categoria"
-          placeholder="Ex: Marmitas"
-          value={newCategory}
-          onChange={(e) => setNewCategory(e.target.value)}
-          wrapperClassName="flex-1"
-        />
-        <Button onClick={addCategory} iconLeft={<Plus className="w-4 h-4" />} className="w-full sm:w-auto">
-          Adicionar Categoria
-        </Button>
-      </ContentCard>
+    <div className="space-y-4">
 
-      {tenant.categories?.length > 0 ? tenant.categories.map(cat => (
-        <div key={cat.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="p-4 border-b border-slate-100 flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center bg-slate-50/50">
-             <h3 className="font-black text-slate-800 uppercase tracking-widest text-xs">{cat.name}</h3>
-             <button 
-                onClick={() => setAddingProductTo(addingProductTo === cat.id ? null : cat.id)}
-                className="text-blue-600 font-bold text-xs hover:underline"
-              >
-               + Adicionar Produto
-             </button>
-          </div>
-          
-          <div className="p-4 space-y-3">
-             {addingProductTo === cat.id && (
-               <div className="bg-slate-50 p-4 rounded-xl border-2 border-dashed border-slate-200 mb-4 animate-in fade-in slide-in-from-top-2">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                    <input 
-                      type="text" placeholder="Nome do item" 
-                      value={prodForm.name} onChange={e => setProdForm({...prodForm, name: e.target.value})}
-                      className="bg-white border p-3 rounded-xl text-xs font-bold"
-                    />
-                    <input 
-                      type="text" placeholder="Preço base (em R$)" 
-                      value={prodForm.price} onChange={e => setProdForm({...prodForm, price: e.target.value})}
-                      className="bg-white border p-3 rounded-xl text-xs font-bold"
-                    />
-                  </div>
-
-                  <div className="mb-4">
-                    <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2 px-1 text-blue-600">Vincular ao Estoque (opcional)</label>
-                    <select 
-                      value={prodForm.inventoryItemId}
-                      onChange={e => setProdForm({...prodForm, inventoryItemId: e.target.value})}
-                      className="w-full bg-white border p-3 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Nenhum item de estoque vinculado</option>
-                      {inventoryItems.map(item => (
-                        <option key={item.id} value={item.id}>{item.name} ({item.quantity} {item.unit} em estoque)</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="mb-4">
-                    <ImageUploader 
-                      label="Foto do Produto"
-                      value={prodForm.imageUrl}
-                      onChange={(val) => setProdForm({...prodForm, imageUrl: val})}
-                      description="Fotos de alta qualidade convertem mais vendas."
-                    />
-                  </div>
-
-                  <textarea 
-                    placeholder="Descrição do item..." 
-                    value={prodForm.description} onChange={e => setProdForm({...prodForm, description: e.target.value})}
-                    className="w-full bg-white border p-3 rounded-xl text-xs mb-4"
-                    rows={2}
-                  />
-
-                  {/* Variants Section */}
-                  <div className="mb-4">
-                     <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center mb-2 px-1">
-                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Tamanhos / Variantes (Opcional)</span>
-                        <button 
-                          onClick={addVariantField}
-                          className="text-blue-600 font-bold text-[10px] uppercase hover:underline"
-                        >
-                          + Add Tamanho
-                        </button>
-                     </div>
-                     <div className="space-y-3">
-                        {prodForm.variants.map((v, idx) => (
-                           <div key={`new-var-${idx}`} className="bg-white p-4 rounded-xl border border-slate-200 space-y-3">
-                              <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
-                                 <input 
-                                   type="text" placeholder="Nome (ex: 500ml)" 
-                                   value={v.name} onChange={e => updateVariantField(idx, 'name', e.target.value)}
-                                   className="flex-1 bg-slate-50 border p-2 rounded-lg text-[10px] font-bold min-w-0"
-                                 />
-                                 <input 
-                                   type="text" placeholder="Preço" 
-                                   value={v.price} onChange={e => updateVariantField(idx, 'price', e.target.value)}
-                                   className="w-full sm:w-20 bg-slate-50 border p-2 rounded-lg text-[10px] font-bold"
-                                 />
-                                 <button onClick={() => removeVariantField(idx)} className="p-2 text-slate-300 hover:text-red-500">
-                                    <X className="w-4 h-4" />
-                                 </button>
-                              </div>
-                              <select 
-                                 value={v.inventoryItemId}
-                                 onChange={e => updateVariantField(idx, 'inventoryItemId', e.target.value)}
-                                 className="w-full bg-slate-100/50 border p-2 rounded-lg text-[10px] font-bold"
-                              >
-                                 <option value="">Nenhum item vinculado</option>
-                                 {inventoryItems.map(item => (
-                                   <option key={item.id} value={item.id}>{item.name}</option>
-                                 ))}
-                              </select>
-                           </div>
-                        ))}
-                     </div>
-                  </div>
-
-                     <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-                     <button onClick={() => {
-                        setAddingProductTo(null);
-                        setEditingProduct(null);
-                        setProdForm({ name: "", description: "", price: "", imageUrl: "", inventoryItemId: "", variants: [] });
-                     }} className="w-full sm:w-auto text-slate-400 font-bold text-xs uppercase px-4 py-3">Cancelar</button>
-                     <button onClick={() => addProduct(cat.id)} className="w-full sm:w-auto bg-blue-600 text-white px-6 py-3 rounded-lg font-bold text-xs uppercase">
-                        {editingProduct ? 'Atualizar' : 'Salvar'}
-                     </button>
-                  </div>
-               </div>
-             )}
-
-             {cat.products?.map(prod => (
-               <div key={prod.id} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-3 bg-white border border-slate-100 rounded-xl">
-                  <div className="flex gap-4 items-center min-w-0">
-                     <div className="w-12 h-12 bg-slate-50 rounded-lg overflow-hidden border">
-                        <img src={prod.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100'} className="w-full h-full object-cover" />
-                     </div>
-                     <div>
-                        <p className="text-sm font-bold text-slate-800">{prod.name}</p>
-                        <p className="text-[10px] text-slate-400 font-medium">
-                          {prod.variants && prod.variants.length > 0 
-                            ? `${prod.variants.length} variações • Desde ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Math.min(...prod.variants.map((v: any) => v.price)))}`
-                            : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(prod.price)
-                          }
-                        </p>
-                     </div>
-                  </div>
-                  <div className="flex justify-end gap-2 w-full sm:w-auto">
-                     <button onClick={() => startEditing(prod)} className="text-blue-500 hover:text-blue-700 p-2 text-[10px] font-black uppercase tracking-widest">
-                        Editar
-                     </button>
-                     <button onClick={() => deleteProduct(prod.id)} className="text-red-400 hover:text-red-600 p-2 text-[10px] font-black uppercase tracking-widest">
-                        Excluir
-                     </button>
-                  </div>
-               </div>
-             ))}
-          </div>
+      {/* Toolbar */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        {/* Category filter dropdown */}
+        <div className="relative flex-1">
+          <select
+            value={selectedCat}
+            onChange={e => setSelectedCat(e.target.value)}
+            className="w-full appearance-none bg-white border border-zinc-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400 pr-8"
+          >
+            <option value="all">Todas as categorias ({categories.length})</option>
+            {categories.map(cat => (
+              <option key={cat.id} value={cat.id}>{cat.name} ({cat.products?.length || 0})</option>
+            ))}
+          </select>
+          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </span>
         </div>
-      )) : (
-        <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-8 sm:p-12 text-center flex flex-col items-center gap-4">
+
+        {/* Search */}
+        <div className="relative flex-1">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.6"/><path d="M10 10L12.5 12.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+          </span>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar produto..."
+            className="w-full bg-white border border-zinc-200 rounded-xl pl-9 pr-4 py-2.5 text-sm font-bold text-slate-700 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
+          />
+        </div>
+
+        <Button onClick={openNewCategory} iconLeft={<Plus className="w-4 h-4" />} className="shrink-0 w-full sm:w-auto">
+          Nova Categoria
+        </Button>
+      </div>
+
+      {/* Empty state */}
+      {categories.length === 0 && (
+        <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-10 text-center flex flex-col items-center gap-4">
           <Utensils className="w-12 h-12 text-slate-300" />
           <div>
             <p className="text-slate-700 font-black text-base">Comece criando uma categoria</p>
             <p className="text-slate-400 text-sm mt-1 max-w-xs mx-auto">
-              Categorias organizam seu cardápio — ex: <span className="font-bold">Pastéis</span>, <span className="font-bold">Bebidas</span>, <span className="font-bold">Sobremesas</span>. Depois de criar uma, você adiciona os produtos dentro dela.
+              Categorias organizam seu cardápio — ex: <span className="font-bold">Pastéis</span>, <span className="font-bold">Bebidas</span>, <span className="font-bold">Sobremesas</span>. Depois disso você adiciona os produtos dentro de cada uma.
             </p>
           </div>
-          <button
-            onClick={() => {
-              const input = document.querySelector<HTMLInputElement>('input[placeholder="Ex: Marmitas"]');
-              input?.focus();
-            }}
-            className="mt-1 inline-flex items-center gap-2 bg-[#C9A227] hover:bg-[#A8841C] text-white text-sm font-black px-5 py-2.5 rounded-xl transition-colors"
-          >
-            <Plus className="w-4 h-4" />
+          <Button onClick={openNewCategory} iconLeft={<Plus className="w-4 h-4" />}>
             Adicionar primeira categoria
-          </button>
+          </Button>
         </div>
       )}
+
+      {/* Category + product list */}
+      {visibleCategories.map(cat => (
+        <div key={cat.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          {/* Category header */}
+          <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/60 flex items-center justify-between gap-3">
+            <h3 className="font-black text-slate-800 uppercase tracking-widest text-xs">{cat.name}
+              <span className="ml-2 text-zinc-400 font-bold normal-case tracking-normal">{cat.products?.length || 0} itens</span>
+            </h3>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => openNewProduct(cat.id)}
+                className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest text-[#C9A227] hover:text-[#A8841C] px-2 py-1.5 rounded-lg hover:bg-amber-50 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" /> Produto
+              </button>
+              <button
+                onClick={() => openEditCategory(cat)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
+                title="Editar categoria"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Products */}
+          <div className="divide-y divide-slate-50">
+            {cat.products?.length === 0 && (
+              <div className="px-4 py-6 text-center">
+                <p className="text-xs text-slate-400 font-medium">Nenhum produto ainda.</p>
+                <button onClick={() => openNewProduct(cat.id)} className="mt-2 text-xs font-black text-[#C9A227] hover:underline">
+                  + Adicionar produto
+                </button>
+              </div>
+            )}
+            {cat.products?.map(prod => (
+              <div key={prod.id} className="flex items-center gap-3 px-4 py-3">
+                <div className="w-12 h-12 bg-slate-100 rounded-xl overflow-hidden shrink-0">
+                  {prod.imageUrl
+                    ? <img src={prod.imageUrl} className="w-full h-full object-cover" />
+                    : <div className="w-full h-full flex items-center justify-center text-slate-300"><Utensils className="w-5 h-5" /></div>
+                  }
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-slate-800 truncate">{prod.name}</p>
+                  <p className="text-xs text-slate-400 font-medium">
+                    {prod.variants?.length > 0
+                      ? `${prod.variants.length} variações • desde ${fmt(Math.min(...prod.variants.map((v: any) => v.price)))}`
+                      : fmt(prod.price)
+                    }
+                  </p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button onClick={() => openEditProduct(prod)} className="p-2 text-slate-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors">
+                    <Settings className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => deleteProduct(prod.id)} className="p-2 text-slate-300 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      {/* Search no result */}
+      {search && visibleCategories.length === 0 && categories.length > 0 && (
+        <div className="text-center py-10 text-slate-400 text-sm font-medium">
+          Nenhum produto encontrado para "<span className="font-bold">{search}</span>"
+        </div>
+      )}
+
+      {/* Modal: categoria */}
+      <Modal
+        isOpen={catModal.open}
+        onClose={closeCatModal}
+        title={catModal.editing ? "Editar categoria" : "Nova categoria"}
+        size="sm"
+        mobileStyle="bottom-sheet"
+        footer={
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            {catModal.editing && (
+              <Button variant="ghost" className="text-red-500 hover:bg-red-50 sm:mr-auto" onClick={() => { closeCatModal(); deleteCategory(catModal.editing!.id); }}>
+                Excluir categoria
+              </Button>
+            )}
+            <Button variant="outline" onClick={closeCatModal}>Cancelar</Button>
+            <Button onClick={saveCategory} loading={catSaving}>{catModal.editing ? "Salvar" : "Criar categoria"}</Button>
+          </div>
+        }
+      >
+        <div className="p-4 sm:p-5">
+          <Input
+            label="Nome da categoria"
+            placeholder="Ex: Pastéis, Bebidas, Sobremesas..."
+            value={catName}
+            onChange={e => setCatName(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && saveCategory()}
+            autoFocus
+          />
+          <p className="text-xs text-slate-400 mt-2">Categorias agrupam os produtos no cardápio do cliente.</p>
+        </div>
+      </Modal>
+
+      {/* Modal: produto */}
+      <Modal
+        isOpen={prodModal.open}
+        onClose={closeProdModal}
+        title={editingProduct ? "Editar produto" : "Novo produto"}
+        size="lg"
+        mobileStyle="fullscreen"
+        footer={
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="outline" onClick={closeProdModal}>Cancelar</Button>
+            <Button onClick={saveProduct}>{editingProduct ? "Salvar alterações" : "Adicionar produto"}</Button>
+          </div>
+        }
+      >
+        <div className="p-4 sm:p-5 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input label="Nome do produto" placeholder="Ex: Pastel de carne" value={prodForm.name} onChange={e => setProdForm({ ...prodForm, name: e.target.value })} />
+            <Input label="Preço base (R$)" placeholder="0,00" value={prodForm.price} onChange={e => setProdForm({ ...prodForm, price: e.target.value })} />
+          </div>
+          <Input label="Descrição (opcional)" placeholder="Ingredientes, detalhes..." value={prodForm.description} onChange={e => setProdForm({ ...prodForm, description: e.target.value })} />
+
+          <ImageUploader label="Foto do produto" value={prodForm.imageUrl} onChange={val => setProdForm({ ...prodForm, imageUrl: val })} description="Fotos de alta qualidade convertem mais vendas." />
+
+          {inventoryItems.length > 0 && (
+            <div>
+              <label className="block text-[11px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Vincular ao estoque (opcional)</label>
+              <select value={prodForm.inventoryItemId} onChange={e => setProdForm({ ...prodForm, inventoryItemId: e.target.value })}
+                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
+                <option value="">Sem vínculo de estoque</option>
+                {inventoryItems.map(item => <option key={item.id} value={item.id}>{item.name} ({item.quantity} {item.unit})</option>)}
+              </select>
+            </div>
+          )}
+
+          {/* Variantes */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">Tamanhos / Variantes</span>
+              <button onClick={addVariantField} className="text-xs font-black text-[#C9A227] hover:underline">+ Adicionar</button>
+            </div>
+            <div className="space-y-2">
+              {prodForm.variants.map((v, idx) => (
+                <div key={idx} className="flex gap-2 items-center">
+                  <input placeholder="Nome (ex: 500ml)" value={v.name} onChange={e => updateVariantField(idx, 'name', e.target.value)}
+                    className="flex-1 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 min-w-0" />
+                  <input placeholder="R$" value={v.price} onChange={e => updateVariantField(idx, 'price', e.target.value)}
+                    className="w-20 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                  <button onClick={() => removeVariantField(idx)} className="p-2 text-slate-300 hover:text-red-500 shrink-0">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
