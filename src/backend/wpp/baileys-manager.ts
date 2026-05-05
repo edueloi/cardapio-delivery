@@ -27,7 +27,7 @@ interface ActiveSession {
 
 // Conversation state per customer
 interface ConvState {
-  step: "idle" | "menu" | "waiting_order";
+  step: "idle" | "menu" | "waiting_order" | "waiting_human_info";
   lastMessageAt: number;
   lastBotAt: number;
   pausedUntil?: number; // timestamp until bot stays silent
@@ -37,7 +37,7 @@ const sessions = new Map<string, ActiveSession>();
 const convStates = new Map<string, ConvState>(); // key: tenantId:phone
 const sendingLocks = new Map<string, Promise<void>>();
 const SESSIONS_DIR = path.join(process.cwd(), "wpp-sessions");
-const CONV_TIMEOUT_MS = 10 * 60 * 1000; // 10 min idle resets conversation
+const CONV_TIMEOUT_MS = 25 * 60 * 1000; // 25 min idle resets conversation
 
 // ─── Business hours helpers ───────────────────────────────────────────────────
 
@@ -420,20 +420,15 @@ async function handleIncomingMessage(tenantId: string, remoteJid: string, text: 
   };
 
   const sendHuman = async () => {
-    const rawOwnerPhone = tenant.whatsapp || "";
-    const cleanOwnerPhone = rawOwnerPhone.replace(/\D/g, "");
-    const ownerWaLink = cleanOwnerPhone ? `https://wa.me/${cleanOwnerPhone.startsWith("55") ? cleanOwnerPhone : `55${cleanOwnerPhone}`}` : null;
-    
-    let clientMsg = `👋 *Entendido! Um atendente humano foi acionado e falará com você em breve.*`;
-    if (ownerWaLink) clientMsg += `\n\nSe tiver pressa, clique aqui:\n👉 ${ownerWaLink}`;
-    await send(clientMsg, 1500);
-
-    setConvState(tenantId, phone, { step: "idle", pausedUntil: Date.now() + (60 * 60 * 1000) });
-
-    if (cleanOwnerPhone) {
-      const notifyMsg = `📢 *ATENDIMENTO SOLICITADO*\nO cliente *${phone}* quer falar com um humano.\n\n🔗 Clique para atender:\nhttps://wa.me/${phone}`;
-      await sendMessage(tenantId, cleanOwnerPhone, notifyMsg);
-    }
+    await send(
+      `🤝 *Para agilizar seu atendimento, por favor me informe em uma única mensagem:*\n\n` +
+      `👤 *Seu Nome:*\n` +
+      `📞 *Telefone para Contato:*\n` +
+      `📝 *Assunto / Dúvida:*\n\n` +
+      `_Assim que você enviar, um atendente humano irá assumir._`,
+      1500
+    );
+    setConvState(tenantId, phone, { step: "waiting_human_info" });
   };
 
   const sendExit = async () => {
@@ -442,6 +437,29 @@ async function handleIncomingMessage(tenantId: string, remoteJid: string, text: 
   };
 
   const intent = detectIntent(normalized);
+
+  // ── Step: coletando dados para o humano ───────────────────────────────────
+  if (conv.step === "waiting_human_info") {
+    const rawOwnerPhone = tenant.whatsapp || "";
+    const cleanOwnerPhone = rawOwnerPhone.replace(/\D/g, "");
+    
+    // Responde ao cliente
+    await send(`✅ *Obrigado! Seus dados foram enviados. Aguarde um instante que já vamos te chamar.*`, 1200);
+    
+    // Pausa o robô (Estilo Glow-Cut)
+    setConvState(tenantId, phone, { step: "idle", pausedUntil: Date.now() + (60 * 60 * 1000) });
+
+    // Notifica o dono com os detalhes enviados
+    if (cleanOwnerPhone) {
+      const notifyMsg = `🚨 *NOVO CHAMADO DE ATENDIMENTO*\n\n` +
+        `📱 *Cliente:* ${phone}\n` +
+        `📋 *Dados Informados:* \n"${text}"\n\n` +
+        `🔗 *Clique para atender agora:* \nhttps://wa.me/${phone}`;
+      
+      await sendMessage(tenantId, cleanOwnerPhone, notifyMsg);
+    }
+    return;
+  }
 
   if (conv.step === "menu") {
     if (normalized === "1") { await sendOrderInfo(); return; }
