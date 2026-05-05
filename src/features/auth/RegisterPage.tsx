@@ -8,9 +8,10 @@ import { getRequestedDashboardSlug, resolvePostAuthPath } from "./authRedirect";
 type RegisterMode = "create" | "claim";
 
 function toSlug(value: string): string {
+  if (!value) return "";
   return value
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, "")
     .trim()
@@ -178,7 +179,7 @@ export default function RegisterPage() {
                 onChange={(event) => handleSlugChange(event.target.value)}
                 placeholder="Ex: pastelaria-do-edu"
                 error={slugError || (mode === "create" && error ? error : undefined)}
-                hint={!slugError && form.establishmentSlug ? `localhost:3000/${form.establishmentSlug}` : undefined}
+                hint={!slugError && form.establishmentSlug ? `${window.location.host}/${form.establishmentSlug}` : undefined}
               />
             </div>
           ) : (
