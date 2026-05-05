@@ -107,12 +107,66 @@ function greeting(): string {
 
 // ─── Phone / JID helpers ─────────────────────────────────────────────────────
 
-function normalizePhone(phone: string): string {
+function normalizePhoneDigits(phone: string): string {
   const digits = String(phone || "").replace(/\D/g, "");
   return digits.startsWith("55") ? digits : `55${digits}`;
 }
-function phoneToJid(phone: string): string { return `${normalizePhone(phone)}@s.whatsapp.net`; }
-function jidToPhone(jid: string): string { return jid.replace(/@.*/, "").replace(/:\d+$/, ""); }
+
+function getBrazilPhoneVariants(phone: string): string[] {
+  const normalized = normalizePhoneDigits(phone);
+  const variants = new Set<string>([normalized]);
+
+  if (normalized.startsWith("55")) {
+    const country = normalized.slice(0, 2);
+    const ddd = normalized.slice(2, 4);
+    const number = normalized.slice(4);
+
+    // If it has 9 digits and starts with 9 (e.g., 55 11 988887777)
+    if (number.length === 9 && number.startsWith("9")) {
+      variants.add(`${country}${ddd}${number.slice(1)}`);
+    }
+
+    // If it has 8 digits (e.g., 55 11 88887777)
+    if (number.length === 8) {
+      variants.add(`${country}${ddd}9${number}`);
+    }
+  }
+
+  return Array.from(variants);
+}
+
+function normalizePhone(phone: string): string {
+  return normalizePhoneDigits(phone);
+}
+
+function phoneToJid(phone: string): string { 
+  return `${normalizePhone(phone)}@s.whatsapp.net`; 
+}
+
+function jidToPhone(jid: string): string { 
+  const phone = jid.replace(/@.*/, "").replace(/:[0-9]+$/, ""); 
+  
+  // Auto-fix Brazilian 9th digit for display/storage if it's a known mobile DDD
+  // This helps matching what users expect to see
+  if (phone.startsWith("55") && phone.length === 12) {
+    const ddd = parseInt(phone.slice(2, 4));
+    // Brazilian mobile DDDs are 11-99. 
+    // Historically, only 11-28 had the 9th digit issue in WhatsApp JIDs
+    if (ddd >= 11 && ddd <= 99) {
+      return `55${ddd}9${phone.slice(4)}`;
+    }
+  }
+  
+  return phone;
+}
+
+function jidMatchesPhone(jid: string, phone: string): boolean {
+  const jidPhone = jidToPhone(jid);
+  const variants = getBrazilPhoneVariants(phone);
+  const jidVariants = getBrazilPhoneVariants(jidPhone);
+  
+  return variants.some(v => jidVariants.includes(v));
+}
 
 // ─── Logger ──────────────────────────────────────────────────────────────────
 
@@ -142,10 +196,11 @@ function broadcast(tenantId: string) {
 }
 
 async function updateDb(tenantId: string, status: WppStatus, phone: string | null, qrCode: string | null) {
+  console.log(`[Baileys][${tenantId}] Updating DB: status=${status}, phone=${phone}`);
   await prisma.wppInstance.updateMany({
     where: { tenantId },
     data: { status, phone, qrCode: status === "connected" ? null : qrCode, isActive: status === "connected" },
-  }).catch(() => undefined);
+  }).catch((err) => console.error(`[Baileys][${tenantId}] DB Update Error:`, err));
 }
 
 function extractMessageText(message: any): string {
@@ -288,12 +343,14 @@ export async function initSession(tenantId: string): Promise<void> {
   const existing = sessions.get(tenantId);
   if (existing?.sock && ["connecting", "connected", "qr_pending"].includes(existing.status)) return;
 
-  let makeWASocket: any, useMultiFileAuthState: any, DisconnectReason: any;
+  let makeWASocket: any, useMultiFileAuthState: any, DisconnectReason: any, makeCacheableSignalKeyStore: any, Browsers: any;
   try {
     const baileys = await import("@whiskeysockets/baileys");
     makeWASocket = (baileys as any).makeWASocket || baileys.default;
     useMultiFileAuthState = (baileys as any).useMultiFileAuthState;
     DisconnectReason = (baileys as any).DisconnectReason;
+    makeCacheableSignalKeyStore = (baileys as any).makeCacheableSignalKeyStore;
+    Browsers = (baileys as any).Browsers;
   } catch (error: any) {
     console.error("[Baileys] Não instalado:", error?.message);
     await updateDb(tenantId, "disconnected", null, null);
@@ -318,11 +375,18 @@ export async function initSession(tenantId: string): Promise<void> {
   sessions.set(tenantId, session);
 
   const sock = makeWASocket({
-    version: waVersion, auth: state,
-    browser: ["Chrome (Linux)", "", ""],
-    printQRInTerminal: false, syncFullHistory: false,
-    markOnlineOnConnect: false, connectTimeoutMs: 60_000,
-    retryRequestDelayMs: 2000, logger: makeLogger(),
+    version: waVersion,
+    auth: {
+      creds: state.creds,
+      keys: makeCacheableSignalKeyStore ? makeCacheableSignalKeyStore(state.keys, makeLogger()) : state.keys,
+    },
+    browser: Browsers ? Browsers.macOS("Desktop") : ["Chrome (Mac)", "Desktop", "10.15.7"],
+    printQRInTerminal: false,
+    syncFullHistory: false,
+    markOnlineOnConnect: false,
+    connectTimeoutMs: 60_000,
+    retryRequestDelayMs: 2000,
+    logger: makeLogger(),
   });
   session.sock = sock;
 
@@ -338,8 +402,9 @@ export async function initSession(tenantId: string): Promise<void> {
     }
 
     if (connection === "open") {
+      const user = sock.user || (sock.authState as any)?.creds?.me;
       session.status = "connected";
-      session.phone = jidToPhone(sock.user?.id || "");
+      session.phone = jidToPhone(user?.id || "");
       session.qrDataUrl = null;
       session.qrRaw = null;
       await updateDb(tenantId, "connected", session.phone, null);
@@ -348,7 +413,11 @@ export async function initSession(tenantId: string): Promise<void> {
     }
 
     if (connection === "close") {
-      const loggedOut = (lastDisconnect?.error as any)?.output?.statusCode === DisconnectReason.loggedOut;
+      const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
+      const loggedOut = statusCode === DisconnectReason.loggedOut;
+      
+      console.log(`[Baileys][${tenantId}] Conexão fechada. Código: ${statusCode}. LoggedOut: ${loggedOut}`);
+
       session.status = "disconnected";
       session.phone = null;
       session.qrDataUrl = null;
@@ -403,8 +472,14 @@ export function onSessionUpdate(tenantId: string, listener: (info: SessionInfo) 
 export async function connectSession(tenantId: string): Promise<SessionInfo> {
   await initSession(tenantId);
   await new Promise<void>((resolve) => {
-    const timeout = setTimeout(resolve, 3000);
-    onSessionUpdate(tenantId, () => { clearTimeout(timeout); resolve(); });
+    const timeout = setTimeout(resolve, 5000); // increased timeout
+    const unsub = onSessionUpdate(tenantId, (info) => {
+      if (info.status === "connected" || info.qrDataUrl) {
+        clearTimeout(timeout);
+        unsub();
+        resolve();
+      }
+    });
   });
   return getSessionInfo(tenantId);
 }
@@ -450,4 +525,5 @@ export async function restoreAllSessions(): Promise<void> {
   }
 }
 
-export { isOpenNow, parseBusinessHours, formatBusinessHours };
+export { isOpenNow, parseBusinessHours, formatBusinessHours, jidMatchesPhone, getBrazilPhoneVariants };
+

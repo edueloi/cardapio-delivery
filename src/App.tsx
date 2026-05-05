@@ -30,7 +30,7 @@ function AnimatedRoutes() {
         <LoadingScreen key="splash" onComplete={() => {}} />
       )}
       
-      <Routes location={location} key={location.pathname}>
+      <Routes location={location} key={routeKey}>
         <Route path="/login" element={<Login />} />
         <Route path="/cadastro" element={<Register />} />
 
@@ -38,14 +38,7 @@ function AnimatedRoutes() {
           path="/painel"
           element={
             <AuthGuard>
-              <motion.div
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -12 }}
-                transition={{ duration: 0.25, ease: "easeInOut" }}
-              >
-                <OwnerPortal />
-              </motion.div>
+              <OwnerPortal />
             </AuthGuard>
           }
         />
@@ -54,14 +47,7 @@ function AnimatedRoutes() {
           path="/dashboard/:slug"
           element={
             <AuthGuard>
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                transition={{ duration: 0.3, ease: "easeInOut" }}
-              >
-                <Dashboard />
-              </motion.div>
+              <Dashboard />
             </AuthGuard>
           }
         />
@@ -69,14 +55,7 @@ function AnimatedRoutes() {
           path="/dashboard/:slug/historico/:orderId"
           element={
             <AuthGuard>
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                transition={{ duration: 0.3, ease: "easeInOut" }}
-              >
-                <Dashboard />
-              </motion.div>
+              <Dashboard />
             </AuthGuard>
           }
         />
@@ -84,14 +63,7 @@ function AnimatedRoutes() {
           path="/dashboard/:slug/:tab"
           element={
             <AuthGuard>
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                transition={{ duration: 0.3, ease: "easeInOut" }}
-              >
-                <Dashboard />
-              </motion.div>
+              <Dashboard />
             </AuthGuard>
           }
         />

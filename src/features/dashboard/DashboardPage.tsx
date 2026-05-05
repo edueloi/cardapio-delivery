@@ -45,7 +45,10 @@ export default function DashboardPage() {
       return;
     }
 
-    setLoading(true);
+    // Only show full loading if we don't have a tenant yet or slug changed
+    if (!tenant || tenant.slug !== slug) {
+      setLoading(true);
+    }
 
     try {
       const data = await apiJson<Tenant>(`/api/admin/tenant/${slug}`);
