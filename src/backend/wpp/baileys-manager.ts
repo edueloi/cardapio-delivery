@@ -108,6 +108,22 @@ function isOpenNow(tenant: { isOpen: boolean; businessHours: string | null }): b
   return true;
 }
 
+function formatAddress(raw: string | null): string {
+  if (!raw) return "Endereço não informado";
+  try {
+    const addr = JSON.parse(raw);
+    const parts = [];
+    if (addr.street) parts.push(`${addr.street}${addr.number ? `, ${addr.number}` : ""}`);
+    if (addr.complement) parts.push(addr.complement);
+    if (addr.neighborhood) parts.push(addr.neighborhood);
+    if (addr.city) parts.push(`${addr.city}${addr.state ? ` - ${addr.state}` : ""}`);
+    if (addr.cep) parts.push(`CEP: ${addr.cep}`);
+    return parts.length ? parts.join("\n") : raw;
+  } catch {
+    return raw;
+  }
+}
+
 function formatBusinessHours(hours: BusinessHours): string {
   const labels: Record<DayKey, string> = {
     sun: "Dom", mon: "Seg", tue: "Ter", wed: "Qua",
@@ -274,16 +290,16 @@ function detectIntent(text: string): "menu" | "address" | "hours" | "human" | "o
 
   const has = (...words: string[]) => words.some(w => t.includes(w));
 
-  if (has("falar com", "atendente", "humano", "pessoa", "funcionario", "dono", "gerente", "responsavel"))
+  if (has("falar com", "atendente", "humano", "pessoa", "funcionario", "dono", "gerente", "responsavel") || t === "0")
     return "human";
 
-  if (has("endereco", "localizacao", "onde fica", "onde voces ficam", "como chegar", "localizacao", "bairro", "rua", "avenida", "maps", "mapa", "localizacao"))
+  if (has("endereco", "localizacao", "onde fica", "onde voces ficam", "como chegar", "localizacao", "bairro", "rua", "avenida", "maps", "mapa", "localizacao") || t === "2")
     return "address";
 
-  if (has("horario", "hora", "funcionamento", "abre", "fecha", "aberto", "fechado", "que horas", "funcionando", "atende"))
+  if (has("horario", "hora", "funcionamento", "abre", "fecha", "aberto", "fechado", "que horas", "funcionando", "atende") || t === "3")
     return "hours";
 
-  if (has("cardapio", "menu", "pedido", "pedir", "quero", "o que tem", "oque tem", "comida", "lanche", "marmita", "prato", "ver cardapio", "fazer pedido", "comprar", "produto", "combo", "opcao", "opcoes"))
+  if (has("cardapio", "menu", "pedido", "pedir", "quero", "o que tem", "oque tem", "comida", "lanche", "marmita", "prato", "ver cardapio", "fazer pedido", "comprar", "produto", "combo", "opcao", "opcoes") || t === "1")
     return "order";
 
   if (has("oi", "ola", "boa noite", "boa tarde", "bom dia", "bom dia", "oiee", "oii", "hey", "ola", "ei ", "e ai", "eai", "tudo bem", "tudo bom"))
@@ -382,7 +398,7 @@ async function handleIncomingMessage(tenantId: string, remoteJid: string, text: 
   };
 
   const sendAddress = async () => {
-    await send(`📍 *Endereço de ${name}:*\n${addr || "Endereço não informado"}`, 1500);
+    await send(`📍 *Endereço de ${name}:*\n\n${formatAddress(addr)}`, 1500);
     setConvState(tenantId, phone, { step: "idle" });
   };
 
