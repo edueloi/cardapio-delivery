@@ -430,11 +430,6 @@ async function handleIncomingMessage(tenantId: string, remoteJid: string, text: 
   if (intent === "human") { await sendHuman(); return; }
 
   if (intent === "greeting" || intent !== null) {
-    const customWelcome = tenant.wppBotConfig.welcomeMessage?.trim();
-    if (customWelcome) {
-      await send(customWelcome);
-      return;
-    }
     await sendMenu();
     return;
   }
