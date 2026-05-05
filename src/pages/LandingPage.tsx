@@ -60,7 +60,7 @@ const LandingPage: React.FC = () => {
           <Link to="/" className="flex items-center gap-3 group">
             <div className="w-11 h-11 rounded-2xl bg-white border border-white/10 flex items-center justify-center shadow-lg shadow-black/20 group-hover:border-[#D49E00]/50 transition-all">
               <img
-                src="/src/images/favicon-menu-flow.png"
+                src="/images/favicon-menu-flow.png"
                 alt="MenuFlow"
                 className="w-8 h-8 object-contain"
               />
@@ -207,7 +207,7 @@ const LandingPage: React.FC = () => {
             <div className="relative rounded-[28px] sm:rounded-[36px] p-2 sm:p-3 bg-white/10 border border-white/15 shadow-[0_40px_120px_rgba(0,0,0,0.45)] backdrop-blur-xl lg:rotate-1">
               <div className="rounded-[22px] sm:rounded-[28px] overflow-hidden bg-[#0B1424] border border-white/10 aspect-[16/10]">
                 <img
-                  src="/src/images/mockup-site-menuflow.png"
+                  src="/images/mockup-site-menuflow.png"
                   alt="Painel MenuFlow"
                   className="w-full h-full object-cover object-center"
                 />
@@ -309,7 +309,7 @@ const LandingPage: React.FC = () => {
               <div className="absolute top-0 right-0 w-44 h-44 bg-[#D49E00]/10 rounded-full blur-3xl" />
               <div className="relative rounded-[24px] sm:rounded-[28px] overflow-hidden aspect-[16/10]">
                 <img
-                  src="/src/images/mockup-site-menuflow.png"
+                  src="/images/mockup-site-menuflow.png"
                   alt="MenuFlow Operação"
                   className="w-full h-full object-cover object-center"
                 />
@@ -450,7 +450,7 @@ const LandingPage: React.FC = () => {
           </Link>
 
           <div className="mt-14 pt-10 border-t border-[#001D3D]/8 flex flex-col md:flex-row items-center justify-center gap-4 md:gap-8">
-            <img src="/src/images/develoi.png" alt="Develoi" className="h-9 object-contain opacity-80" />
+            <img src="/images/develoi.png" alt="Develoi" className="h-9 object-contain opacity-80" />
             <div className="text-[10px] uppercase tracking-[0.22em] font-black text-[#001D3D]/40">
               © 2026 MenuFlow | Cardápios & Bots by Develoi
             </div>

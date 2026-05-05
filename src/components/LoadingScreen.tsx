@@ -37,7 +37,7 @@ const LoadingScreen: React.FC<LoadingProps> = ({ onComplete }) => {
               className="mb-8" // Reduzi a margem abaixo do ícone
             >
               <img 
-                src="/src/images/favicon-menu-flow.png" 
+                src="/images/favicon-menu-flow.png" 
                 alt="MenuFlow Icon" 
                 className="w-24 h-24 object-contain drop-shadow-2xl"
               />
@@ -78,7 +78,7 @@ const LoadingScreen: React.FC<LoadingProps> = ({ onComplete }) => {
                 <div className="text-[11px] uppercase tracking-[0.15em] flex items-center font-medium" style={{ color: '#001D3D' }}>
                   <span className="opacity-50 mr-2 italic text-[9px]">by</span>
                   <img 
-                    src="/src/images/develoi.png" 
+                    src="/images/develoi.png" 
                     alt="Develoi" 
                     className="h-10 object-contain"
                   />

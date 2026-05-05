@@ -43,7 +43,7 @@ export default function LoginPage() {
           <div className="flex flex-col items-center mb-10 text-center">
             <div className="w-20 h-20 mb-4 drop-shadow-md">
               <img 
-                src="/src/images/favicon-menu-flow.png" 
+                src="/images/favicon-menu-flow.png" 
                 alt="MenuFlow Logo" 
                 className="w-full h-full object-contain"
               />
