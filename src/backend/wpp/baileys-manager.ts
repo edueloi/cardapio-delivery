@@ -300,10 +300,10 @@ async function handleIncomingMessage(tenantId: string, remoteJid: string, text: 
     return;
   }
 
-  const send = async (msg: string) => {
-    console.log(`[Baileys][${tenantId}] 🤖 Enviando resposta para ${remoteJid}...`);
+  const send = async (msg: string, delay = 0) => {
+    console.log(`[Baileys][${tenantId}] 🤖 Enviando resposta para ${remoteJid} (delay: ${delay}ms)...`);
     setConvState(tenantId, phone, { lastBotAt: Date.now() });
-    await sendMessage(tenantId, remoteJid, msg);
+    await sendMessage(tenantId, remoteJid, msg, delay);
   };
 
   const openNow = isOpenNow(tenant as any);
@@ -313,13 +313,18 @@ async function handleIncomingMessage(tenantId: string, remoteJid: string, text: 
 
   const sendMenu = async () => {
     const statusLine = openNow ? "✅ Estamos *abertos* agora!" : "🔴 Estamos *fechados* no momento.";
+    
+    // 1. Quick initial greeting
+    await send(`${greeting()}! 👋 Bem-vindo ao *${name}*.\n${statusLine}`);
+    
+    // 2. Menu with typing simulation
     await send(
-      `${greeting()}! 👋 Bem-vindo ao *${name}*.\n${statusLine}\n\n` +
       `O que você precisa?\n\n` +
       `1️⃣ Ver cardápio\n` +
       `2️⃣ Endereço\n` +
       `3️⃣ Horários de funcionamento\n` +
-      `0️⃣ Falar com atendente`
+      `0️⃣ Falar com atendente`,
+      2500 // 2.5 seconds typing...
     );
     setConvState(tenantId, phone, { step: "menu" });
   };
@@ -329,27 +334,28 @@ async function handleIncomingMessage(tenantId: string, remoteJid: string, text: 
       await send(
         `⚠️ *${name}* está fechado no momento.\n\n` +
         `🕐 *Horários de funcionamento:*\n${formatBusinessHours(hours)}\n\n` +
-        `Volte quando estivermos abertos! 😊`
+        `Volte quando estivermos abertos! 😊`,
+        2000
       );
     } else {
-      await send(`🍽️ Aqui está nosso cardápio:\n${menuLink}\n\nFaça seu pedido por lá e a gente cuida do resto! 👌`);
+      await send(`🍽️ Aqui está nosso cardápio:\n${menuLink}\n\nFaça seu pedido por lá e a gente cuida do resto! 👌`, 1800);
     }
     setConvState(tenantId, phone, { step: "idle" });
   };
 
   const sendAddress = async () => {
-    await send(`📍 *Endereço de ${name}:*\n${addr || "Endereço não informado"}`);
+    await send(`📍 *Endereço de ${name}:*\n${addr || "Endereço não informado"}`, 1500);
     setConvState(tenantId, phone, { step: "idle" });
   };
 
   const sendHours = async () => {
     const status = openNow ? "✅ *Aberto agora*" : "🔴 *Fechado no momento*";
-    await send(`${status}\n\n🕐 *Horários de funcionamento:*\n${formatBusinessHours(hours)}`);
+    await send(`${status}\n\n🕐 *Horários de funcionamento:*\n${formatBusinessHours(hours)}`, 1800);
     setConvState(tenantId, phone, { step: "idle" });
   };
 
   const sendHuman = async () => {
-    await send(`👋 Ok! Um atendente irá falar com você em breve.\n\nSe quiser, você também pode ligar: ${tenant.whatsapp || "número não informado"}`);
+    await send(`👋 Ok! Um atendente irá falar com você em breve.\n\nSe quiser, você também pode ligar: ${tenant.whatsapp || "número não informado"}`, 1500);
     setConvState(tenantId, phone, { step: "idle" });
   };
 
@@ -562,7 +568,7 @@ export async function disconnectSession(tenantId: string): Promise<void> {
   await updateDb(tenantId, "disconnected", null, null);
 }
 
-export async function sendMessage(tenantId: string, to: string, text: string): Promise<void> {
+export async function sendMessage(tenantId: string, to: string, text: string, delayMs = 0): Promise<void> {
   const session = sessions.get(tenantId);
   if (!session?.sock || session.status !== "connected") return;
 
@@ -570,7 +576,16 @@ export async function sendMessage(tenantId: string, to: string, text: string): P
   const previous = sendingLocks.get(tenantId) || Promise.resolve();
   const current = previous.then(async () => {
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1200 + Math.random() * 1800));
+      // Simulate typing if delay is requested
+      if (delayMs > 0) {
+        await session.sock.sendPresenceUpdate("composing", jid);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        await session.sock.sendPresenceUpdate("paused", jid);
+      } else {
+        // Natural small delay to avoid being flagged as spam
+        await new Promise((resolve) => setTimeout(resolve, 800 + Math.random() * 1000));
+      }
+
       await session.sock.sendMessage(jid, { text });
     } catch (error) {
       console.warn("[Baileys] sendMessage error:", error);
