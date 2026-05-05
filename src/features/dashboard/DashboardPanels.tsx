@@ -827,6 +827,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
 export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, refresh: () => void }) {
   const [search, setSearch] = useState("");
   const [selectedCat, setSelectedCat] = useState<string>("all");
+  const [localCategories, setLocalCategories] = useState<any[]>([]);
 
   // Category modal
   const [catModal, setCatModal] = useState<{ open: boolean; editing: { id: string; name: string } | null }>({ open: false, editing: null });
@@ -845,6 +846,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
 
   useEffect(() => {
     if (tenant) {
+      setLocalCategories(tenant.categories || []);
       apiFetch(`/api/tenants/${tenant.slug}/inventory`)
         .then(res => res.json())
         .then(data => setInventoryItems(data))
@@ -866,14 +868,16 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: catName.trim() })
         });
+        setLocalCategories(cats => cats.map(c => c.id === catModal.editing!.id ? { ...c, name: catName.trim() } : c));
       } else {
-        await apiFetch('/api/categories', {
+        const res = await apiFetch('/api/categories', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: catName.trim(), tenantId: tenant?.id })
         });
+        const newCat = await res.json();
+        setLocalCategories(cats => [...cats, { ...newCat, products: [] }]);
       }
-      refresh();
       closeCatModal();
     } finally {
       setCatSaving(false);
@@ -884,7 +888,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
     if (!confirm("Excluir categoria e todos os produtos dela?")) return;
     await apiFetch(`/api/categories/${id}`, { method: 'DELETE' });
     if (selectedCat === id) setSelectedCat("all");
-    refresh();
+    setLocalCategories(cats => cats.filter(c => c.id !== id));
   };
 
   const openNewProduct = (categoryId: string) => {
@@ -912,40 +916,54 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
   const saveProduct = async () => {
     if (!prodForm.name || !prodModal.categoryId) return;
     const url = editingProduct ? `/api/products/${editingProduct.id}` : '/api/products';
-    await apiFetch(url, {
+    const res = await apiFetch(url, {
       method: editingProduct ? 'PATCH' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...prodForm, categoryId: prodModal.categoryId, tenantId: tenant?.id })
     });
-    refresh();
+    const saved = await res.json();
+    if (editingProduct) {
+      setLocalCategories(cats => cats.map(cat => ({
+        ...cat,
+        products: cat.products?.map((p: any) => p.id === saved.id ? { ...p, ...saved } : p)
+      })));
+    } else {
+      setLocalCategories(cats => cats.map(cat =>
+        cat.id === prodModal.categoryId
+          ? { ...cat, products: [...(cat.products || []), saved] }
+          : cat
+      ));
+    }
     closeProdModal();
   };
 
   const deleteProduct = async (id: string) => {
     if (!confirm("Excluir produto?")) return;
     await apiFetch(`/api/products/${id}`, { method: 'DELETE' });
-    refresh();
+    setLocalCategories(cats => cats.map(cat => ({
+      ...cat,
+      products: cat.products?.filter((p: any) => p.id !== id)
+    })));
   };
 
   const toggleProductAvailability = async (prod: any) => {
-    try {
-      // Optimistic update would be better, but let's at least handle the request smoothly
-      await apiFetch(`/api/products/${prod.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ available: !prod.available })
-      });
-      refresh();
-    } catch (err) {
-      console.error("Falha ao alternar status do produto:", err);
-    }
+    const newAvailable = !prod.available;
+    setLocalCategories(cats => cats.map(cat => ({
+      ...cat,
+      products: cat.products?.map((p: any) => p.id === prod.id ? { ...p, available: newAvailable } : p)
+    })));
+    await apiFetch(`/api/products/${prod.id}/availability`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ available: newAvailable })
+    });
   };
 
   const addVariantField = () => setProdForm(prev => ({ ...prev, variants: [...prev.variants, { name: "", price: "", description: "", inventoryItemId: "" }] }));
   const removeVariantField = (i: number) => setProdForm(prev => ({ ...prev, variants: prev.variants.filter((_, idx) => idx !== i) }));
   const updateVariantField = (i: number, field: string, value: string) => setProdForm(prev => ({ ...prev, variants: prev.variants.map((v, idx) => idx === i ? { ...v, [field]: value } : v) }));
 
-  const categories = tenant?.categories || [];
+  const categories = localCategories;
   const visibleCategories = categories
     .filter(cat => selectedCat === "all" || cat.id === selectedCat)
     .map(cat => ({
