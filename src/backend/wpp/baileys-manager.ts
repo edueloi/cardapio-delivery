@@ -62,15 +62,44 @@ function parseBusinessHours(raw: string | null): BusinessHours {
 function isOpenNow(tenant: { isOpen: boolean; businessHours: string | null }): boolean {
   if (!tenant.isOpen) return false;
   const hours = parseBusinessHours(tenant.businessHours);
+  
+  // Converte o horário do servidor para o horário de Brasília (UTC-3)
   const now = new Date();
-  const dayKey = DAY_KEYS[now.getDay()];
+  const brasilTime = new Date(now.getTime() - (3 * 60 * 60 * 1000)); 
+  
+  // Nota: Se o servidor já estiver em UTC-3, essa lógica pode precisar de ajuste, 
+  // mas a maioria das VPS vem em UTC (Londres).
+  // Uma forma mais robusta é usar o fuso fixo:
+  const formatter = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    hour: "numeric",
+    minute: "numeric",
+    weekday: "long",
+    hour12: false
+  });
+  
+  const parts = formatter.formatToParts(now);
+  const hour = parseInt(parts.find(p => p.type === "hour")?.value || "0");
+  const minute = parseInt(parts.find(p => p.type === "minute")?.value || "0");
+  const weekday = parts.find(p => p.type === "weekday")?.value.toLowerCase() || "";
+  
+  // Mapeia o dia da semana do Intl para as nossas chaves
+  const dayMap: Record<string, DayKey> = {
+    "domingo": "sun", "segunda-feira": "mon", "terça-feira": "tue", 
+    "quarta-feira": "wed", "quinta-feira": "thu", "sexta-feira": "fri", "sábado": "sat"
+  };
+  
+  const dayKey = dayMap[weekday] || DAY_KEYS[now.getDay()];
   const day = hours[dayKey];
+
   if (!day || !day.enabled) return false;
+  
   const [oh, om] = day.open.split(":").map(Number);
   const [ch, cm] = day.close.split(":").map(Number);
-  const mins = now.getHours() * 60 + now.getMinutes();
+  const mins = hour * 60 + minute;
+  
   if (mins < oh * 60 + om || mins >= ch * 60 + cm) return false;
-  // Check break interval
+
   if (day.breakEnabled && day.breakStart && day.breakEnd) {
     const [bsh, bsm] = day.breakStart.split(":").map(Number);
     const [beh, bem] = day.breakEnd.split(":").map(Number);
@@ -312,19 +341,22 @@ async function handleIncomingMessage(tenantId: string, remoteJid: string, text: 
   const name = tenant.name;
 
   const sendMenu = async () => {
-    const statusLine = openNow ? "✅ Estamos *abertos* agora!" : "🔴 Estamos *fechados* no momento.";
+    const statusLine = openNow 
+      ? "✅ *Estamos abertos e prontos para te atender!*" 
+      : "🔴 *No momento estamos fechados, mas você pode ver nosso cardápio e deixar seu pedido agendado!*";
     
-    // 1. Quick initial greeting
-    await send(`${greeting()}! 👋 Bem-vindo ao *${name}*.\n${statusLine}`);
+    // 1. Saudação inicial completa
+    await send(`${greeting()}! 👋 Seja muito bem-vindo ao *${name}*.\n\n${statusLine}`);
     
-    // 2. Menu with typing simulation
+    // 2. Menu de opções logo em seguida com digitação
     await send(
-      `O que você precisa?\n\n` +
-      `1️⃣ Ver cardápio\n` +
-      `2️⃣ Endereço\n` +
-      `3️⃣ Horários de funcionamento\n` +
-      `0️⃣ Falar com atendente`,
-      2500 // 2.5 seconds typing...
+      `Como podemos te ajudar hoje?\n\n` +
+      `1️⃣ *Ver Cardápio Online*\n` +
+      `2️⃣ *Endereço / Localização*\n` +
+      `3️⃣ *Horários de Funcionamento*\n` +
+      `0️⃣ *Falar com um Atendente*\n\n` +
+      `_Digite apenas o número da opção desejada._`,
+      2500 // Mostra "digitando..." por 2.5 segundos
     );
     setConvState(tenantId, phone, { step: "menu" });
   };
