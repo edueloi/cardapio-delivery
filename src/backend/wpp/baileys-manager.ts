@@ -455,9 +455,10 @@ export async function initSession(tenantId: string): Promise<void> {
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
-export function getSessionInfo(tenantId: string): SessionInfo {
+export function getSessionInfo(tenantId: string): SessionInfo | null {
   const session = sessions.get(tenantId);
-  return { tenantId, status: session?.status ?? "disconnected", phone: session?.phone ?? null, qrDataUrl: session?.qrDataUrl ?? null };
+  if (!session) return null;
+  return { tenantId, status: session.status, phone: session.phone, qrDataUrl: session.qrDataUrl };
 }
 
 export function getQrCode(tenantId: string): string | null {
