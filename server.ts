@@ -42,6 +42,30 @@ const io = new Server(httpServer, {
   },
 });
 
+io.on("connection", (socket) => {
+  console.log("Client connected:", socket.id);
+
+  socket.on("join-tenant", (tenantId) => {
+    socket.join(`tenant-${tenantId}`);
+    console.log(`Socket ${socket.id} joined tenant room: ${tenantId}`);
+  });
+
+  socket.on("join-table", (tableRoom) => {
+    // tableRoom format: "tenantId-mesa-tableId"
+    socket.join(tableRoom);
+    console.log(`Socket ${socket.id} joined table room: ${tableRoom}`);
+  });
+
+  socket.on("request-checkout", ({ tenantId, tableId, customerName }) => {
+    console.log(`Table ${tableId} of tenant ${tenantId} requested checkout`);
+    io.to(`tenant-${tenantId}`).emit("checkout-requested", { tableId, customerName });
+  });
+
+  socket.on("disconnect", () => {
+    console.log("Client disconnected:", socket.id);
+  });
+});
+
 const uploadDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
@@ -466,7 +490,7 @@ app.patch("/api/owner/tenants/:tenantId", requireAuth, async (req, res) => {
   const tenant = await requireTenantById(req, res, req.params.tenantId);
   if (!tenant) return;
 
-  const { name, description, address, whatsapp, logoUrl, isOpen, businessHours } = req.body;
+  const { name, description, address, whatsapp, logoUrl, isOpen, businessHours, deliveryConfig } = req.body;
   try {
     const updated = await prisma.tenant.update({
       where: { id: tenant.id },
@@ -478,6 +502,7 @@ app.patch("/api/owner/tenants/:tenantId", requireAuth, async (req, res) => {
         ...(logoUrl !== undefined && { logoUrl: logoUrl || null }),
         ...(isOpen !== undefined && { isOpen: Boolean(isOpen) }),
         ...(businessHours !== undefined && { businessHours: typeof businessHours === "string" ? businessHours : JSON.stringify(businessHours) }),
+        ...(deliveryConfig !== undefined && { deliveryConfig: deliveryConfig === null ? null : typeof deliveryConfig === "string" ? deliveryConfig : JSON.stringify(deliveryConfig) }),
       },
     });
     res.json(updated);
@@ -638,7 +663,10 @@ app.get("/api/tenants/:slug", async (req, res) => {
           include: {
             products: {
               where: { available: true },
-              include: { variants: true },
+              include: { 
+                variants: true,
+                inventoryItem: true
+              },
             },
           },
         },
@@ -649,9 +677,55 @@ app.get("/api/tenants/:slug", async (req, res) => {
       return res.status(404).json({ error: "Tenant not found" });
     }
 
-    res.json(tenant);
+    // Filter out products with zero stock
+    const filteredCategories = tenant.categories.map(cat => ({
+      ...cat,
+      products: cat.products.filter(p => {
+        if (p.inventoryItem && p.inventoryItem.quantity <= 0) return false;
+        return true;
+      })
+    })).filter(cat => cat.products.length > 0);
+
+    res.json({ ...tenant, categories: filteredCategories });
   } catch (error) {
     console.error("Error fetching tenant:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Calculate delivery fee for a given CEP
+app.get("/api/tenants/:slug/delivery-fee", async (req, res) => {
+  const { slug } = req.params;
+  const { cep } = req.query as { cep?: string };
+
+  try {
+    const tenant = await prisma.tenant.findUnique({ where: { slug }, select: { deliveryConfig: true } });
+    if (!tenant) return res.status(404).json({ error: "Not found" });
+
+    if (!tenant.deliveryConfig) return res.json({ fee: 0, label: "Grátis" });
+
+    const config = JSON.parse(tenant.deliveryConfig) as {
+      mode: string; fixedFee?: number; defaultFee?: number; allowUnlisted?: boolean;
+      zones?: Array<{ id: string; label: string; ceps: string[]; fee: number }>;
+    };
+
+    if (config.mode === "free") return res.json({ fee: 0, label: "Grátis" });
+    if (config.mode === "fixed") return res.json({ fee: config.fixedFee ?? 0, label: `R$ ${(config.fixedFee ?? 0).toFixed(2).replace(".", ",")}` });
+
+    if (config.mode === "zones" && cep) {
+      const cleanCep = cep.replace(/\D/g, "");
+      const zone = config.zones?.find((z) =>
+        z.ceps.some((prefix) => cleanCep.startsWith(prefix.replace(/\D/g, "")))
+      );
+      if (zone) return res.json({ fee: zone.fee, label: zone.fee === 0 ? "Grátis" : `R$ ${zone.fee.toFixed(2).replace(".", ",")}`, zone: zone.label });
+      if (config.allowUnlisted === false) return res.json({ fee: null, label: "Fora da área de entrega", blocked: true });
+      const fallback = config.defaultFee ?? 0;
+      return res.json({ fee: fallback, label: fallback === 0 ? "Grátis" : `R$ ${fallback.toFixed(2).replace(".", ",")}`, zone: "Outros" });
+    }
+
+    return res.json({ fee: 0, label: "Grátis" });
+  } catch (error) {
+    console.error(error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -668,6 +742,7 @@ app.get("/api/admin/tenant/:slug", requireAuth, async (req, res) => {
           products: {
             include: {
               variants: true,
+              inventoryItem: true,
             },
           },
         },
@@ -681,7 +756,8 @@ app.get("/api/admin/tenant/:slug", requireAuth, async (req, res) => {
 });
 
 app.post("/api/orders", async (req, res) => {
-  const { customerName, customerPhone, address, items, tenantId, orderType, paymentMethod, paymentDetail } = req.body;
+  console.log("Incoming Order Body:", JSON.stringify(req.body, null, 2));
+  const { customerName, customerPhone, address, items, tenantId, orderType, paymentMethod, paymentDetail, tableId } = req.body;
 
   try {
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
@@ -730,6 +806,7 @@ app.post("/api/orders", async (req, res) => {
         paymentDetail,
         total,
         tenantId,
+        tableId: tableId || null,
         items: {
           create: orderItemsData,
         },
@@ -744,7 +821,10 @@ app.post("/api/orders", async (req, res) => {
       },
     });
 
-    io.to(`tenant-${tenantId}`).emit("new-order", order);
+    io.to(`tenant-${tenant.id}`).emit("new-order", order);
+    if (order.tableId) {
+      io.to(`${tenant.id}-mesa-${order.tableId}`).emit("table-update");
+    }
     await sendOrderCreatedMessage(order, tenant).catch(() => undefined);
     await sendOwnerOrderAlert(order, tenant).catch(() => undefined);
 
@@ -752,6 +832,32 @@ app.post("/api/orders", async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to place order" });
+  }
+});
+
+// Buscar pedidos ativos de uma mesa
+app.get("/api/orders/table/:slug/:tableId", async (req, res) => {
+  const { slug, tableId } = req.params;
+  try {
+    const orders = await prisma.order.findMany({
+      where: {
+        tenant: { slug },
+        tableId: tableId,
+        status: { notIn: ["DELIVERED", "CANCELLED"] }
+      },
+      include: {
+        items: {
+          include: {
+            product: true
+          }
+        }
+      },
+      orderBy: { createdAt: "desc" }
+    });
+    res.json(orders);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao buscar pedidos" });
   }
 });
 
@@ -784,7 +890,7 @@ app.patch("/api/orders/:id/status", requireAuth, async (req, res) => {
 
         if (!inventoryItemId) continue;
 
-        await prisma.inventoryItem.update({
+        const updatedItem = await prisma.inventoryItem.update({
           where: { id: inventoryItemId },
           data: {
             quantity: { decrement: item.quantity },
@@ -798,6 +904,21 @@ app.patch("/api/orders/:id/status", requireAuth, async (req, res) => {
             },
           },
         });
+
+        io.to(`tenant-${updatedOrder.tenantId}`).emit("inventory-update", {
+          id: updatedItem.id,
+          quantity: updatedItem.quantity
+        });
+
+        if (updatedItem.quantity <= 0) {
+          const productsToDisable = await prisma.product.findMany({
+            where: { inventoryItemId: updatedItem.id, autoDisableWhenOutOfStock: true, available: true },
+          });
+          for (const p of productsToDisable) {
+            await prisma.product.update({ where: { id: p.id }, data: { available: false } });
+            io.to(`tenant-${updatedOrder.tenantId}`).emit("product-availability-changed", { id: p.id, available: false });
+          }
+        }
       }
     }
 
@@ -832,6 +953,30 @@ app.get("/api/admin/:tenantId/orders", requireAuth, async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to fetch orders" });
+  }
+});
+
+app.post("/api/admin/:tenantId/table/:tableId/clear", requireAuth, async (req, res) => {
+  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  if (!tenant) return;
+
+  const { tableId } = req.params;
+
+  try {
+    await prisma.order.updateMany({
+      where: {
+        tenantId: tenant.id,
+        tableId: tableId,
+        status: { notIn: ["DELIVERED", "CANCELLED"] }
+      },
+      data: { status: "DELIVERED" }
+    });
+
+    io.to(`${tenant.id}-mesa-${tableId}`).emit("table-update");
+    res.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to clear table" });
   }
 });
 
@@ -894,7 +1039,7 @@ app.delete("/api/categories/:id", requireAuth, async (req, res) => {
 });
 
 app.post("/api/products", requireAuth, async (req, res) => {
-  const { name, description, price, imageUrl, categoryId, tenantId, variants } = req.body;
+  const { name, description, price, imageUrl, categoryId, tenantId, variants, inventoryItemId } = req.body;
   const tenant = await requireTenantById(req, res, tenantId);
   if (!tenant) return;
 
@@ -908,6 +1053,7 @@ app.post("/api/products", requireAuth, async (req, res) => {
         categoryId,
         tenantId: tenant.id,
         available: true,
+        inventoryItemId: inventoryItemId || null,
         variants: Array.isArray(variants)
           ? {
               create: variants.map((variant: any) => ({
@@ -932,7 +1078,7 @@ app.patch("/api/products/:id", requireAuth, async (req, res) => {
   const scoped = await requireTenantFromProduct(req, res, req.params.id);
   if (!scoped) return;
 
-  const { name, description, price, imageUrl, variants } = req.body;
+  const { name, description, price, imageUrl, variants, inventoryItemId, available, autoDisableWhenOutOfStock } = req.body;
 
   try {
     const product = await prisma.$transaction(async (tx) => {
@@ -945,6 +1091,9 @@ app.patch("/api/products/:id", requireAuth, async (req, res) => {
           description,
           price: parseFloat(price),
           imageUrl,
+          inventoryItemId: inventoryItemId || null,
+          ...(available !== undefined && { available: Boolean(available) }),
+          ...(autoDisableWhenOutOfStock !== undefined && { autoDisableWhenOutOfStock: Boolean(autoDisableWhenOutOfStock) }),
           variants: Array.isArray(variants)
             ? {
                 create: variants.map((variant: any) => ({
@@ -963,6 +1112,24 @@ app.patch("/api/products/:id", requireAuth, async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to update product" });
+  }
+});
+
+app.patch("/api/products/:id/availability", requireAuth, async (req, res) => {
+  const scoped = await requireTenantFromProduct(req, res, req.params.id);
+  if (!scoped) return;
+
+  const { available } = req.body;
+
+  try {
+    const product = await prisma.product.update({
+      where: { id: scoped.product.id },
+      data: { available: Boolean(available) },
+    });
+    res.json(product);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to update product availability" });
   }
 });
 
@@ -1275,6 +1442,23 @@ app.get("/api/tenants/:slug/inventory/categories", requireAuth, async (req, res)
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to fetch inventory categories" });
+  }
+});
+
+app.get("/api/tenants/:slug/inventory", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  if (!tenant) return;
+
+  try {
+    const items = await prisma.inventoryItem.findMany({
+      where: { tenantId: tenant.id },
+      orderBy: { name: "asc" },
+    });
+
+    res.json(items);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to fetch inventory items" });
   }
 });
 

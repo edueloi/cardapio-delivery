@@ -17,6 +17,7 @@ model Tenant {
   address     String?
   isOpen      Boolean  @default(true) @map("is_open")
   businessHours String? @map("business_hours") // JSON: { mon: {open:"08:00",close:"22:00",enabled:true}, ... }
+  deliveryConfig String? @map("delivery_config") // JSON: DeliveryConfig
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -210,6 +211,7 @@ model Product {
   categoryId  String   @map("category_id")
   tenantId    String   @map("tenant_id")
   available   Boolean  @default(true)
+  autoDisableWhenOutOfStock Boolean @default(false) @map("auto_disable_when_out_of_stock")
   createdAt   DateTime @default(now()) @map("created_at")
   inventoryItemId String? @map("inventory_item_id")
 
@@ -243,6 +245,7 @@ model Order {
   address      String?
   status       String   @default("PENDING") // PENDING, PREPARING, SHIPPED, DELIVERED, CANCELLED
   orderType    String   @default("DELIVERY") @map("order_type")
+  tableId      String?  @map("table_id")
   paymentMethod String  @default("CASH") @map("payment_method")
   paymentDetail String? @map("payment_detail")
   total        Float

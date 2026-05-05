@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import {
   ShoppingCart,
@@ -75,6 +75,19 @@ function getTodayHours(raw: string | null): string | null {
   }
 }
 
+// ─── Masks ───────────────────────────────────────────────────────────────────
+function maskPhone(v: string): string {
+  const d = v.replace(/\D/g, "").slice(0, 11);
+  if (d.length <= 2) return d.length ? `(${d}` : "";
+  if (d.length <= 7) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+}
+
+function maskCep(v: string): string {
+  const d = v.replace(/\D/g, "").slice(0, 8);
+  return d.length > 5 ? `${d.slice(0, 5)}-${d.slice(5)}` : d;
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface CartItem {
   product: Product;
@@ -108,14 +121,19 @@ export default function MenuViewPage() {
   const [productQty, setProductQty] = useState(1);
   const [panel, setPanel] = useState<"none" | "cart" | "orders" | "info">("none");
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [checkoutStep, setCheckoutStep] = useState<"info" | "payment" | "review">("info");
   const [orderSent, setOrderSent] = useState(false);
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
   const [customerOrders, setCustomerOrders] = useState<Order[]>([]);
+  const [deliveryFee, setDeliveryFee] = useState<number>(0);
+  const [deliveryFeeLabel, setDeliveryFeeLabel] = useState("Grátis");
+  const [deliveryBlocked, setDeliveryBlocked] = useState(false);
+  const [feeLoading, setFeeLoading] = useState(false);
   const [form, setForm] = useState({
     name: "",
     phone: "",
-    address: "",
     orderType: "DELIVERY" as "DELIVERY" | "PICKUP",
+    cep: "", street: "", number: "", complement: "", neighborhood: "", city: "", state: "",
     paymentMethod: "CASH" as "PIX" | "CREDIT" | "DEBIT" | "MEAL" | "CASH",
     paymentDetail: "",
   });
@@ -152,8 +170,39 @@ export default function MenuViewPage() {
   useEffect(() => {
     const savedName = localStorage.getItem(`customer_name_${slug}`);
     const savedPhone = localStorage.getItem(`customer_phone_${slug}`);
-    if (savedName || savedPhone) setForm((f) => ({ ...f, name: savedName ?? "", phone: savedPhone ?? "" }));
+    if (savedName || savedPhone) setForm((f) => ({ ...f, name: savedName ?? "", phone: maskPhone(savedPhone ?? "") }));
   }, [slug]);
+
+  const fetchCep = async (cep: string) => {
+    const digits = cep.replace(/\D/g, "");
+    if (digits.length !== 8) return;
+    try {
+      const r = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+      const d = await r.json();
+      if (!d.erro) {
+        setForm((f) => ({ ...f, street: d.logradouro || "", neighborhood: d.bairro || "", city: d.localidade || "", state: d.uf || "" }));
+        fetchDeliveryFee(digits);
+      }
+    } catch {}
+  };
+
+  const fetchDeliveryFee = async (cepDigits: string) => {
+    if (!slug) return;
+    setFeeLoading(true);
+    try {
+      const r = await fetch(`/api/tenants/${slug}/delivery-fee?cep=${cepDigits}`);
+      const d = await r.json();
+      setDeliveryFee(d.fee ?? 0);
+      setDeliveryFeeLabel(d.label ?? "Grátis");
+      setDeliveryBlocked(d.blocked === true);
+    } catch {
+      setDeliveryFee(0);
+      setDeliveryFeeLabel("Grátis");
+      setDeliveryBlocked(false);
+    } finally {
+      setFeeLoading(false);
+    }
+  };
 
   // Fetch customer orders when panel opens
   useEffect(() => {
@@ -204,20 +253,31 @@ export default function MenuViewPage() {
 
   const removeItem = (idx: number) => setCart((prev) => prev.filter((_, i) => i !== idx));
 
+  const buildAddressStr = () => {
+    if (form.orderType === "PICKUP") return "Retirada no Local";
+    const parts = [
+      form.street && form.number ? `${form.street}, ${form.number}` : form.street,
+      form.complement, form.neighborhood,
+      form.city && form.state ? `${form.city} - ${form.state}` : form.city,
+      form.cep ? `CEP ${form.cep}` : "",
+    ].filter(Boolean);
+    return parts.join(", ");
+  };
+
   const handleCheckout = async () => {
-    if (!form.name || !form.phone) return alert("Preencha nome e telefone!");
     try {
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           customerName: form.name,
-          customerPhone: form.phone,
-          address: form.orderType === "DELIVERY" ? form.address : "Retirada no Local",
+          customerPhone: form.phone.replace(/\D/g, ""),
+          address: buildAddressStr(),
           orderType: form.orderType,
           paymentMethod: form.paymentMethod,
           paymentDetail: form.paymentDetail,
           tenantId: tenant?.id,
+          deliveryFee,
           items: cart.map((item) => ({
             productId: item.product.id,
             productVariantId: item.variant?.id,
@@ -229,11 +289,12 @@ export default function MenuViewPage() {
       if (res.ok) {
         const order = await res.json();
         localStorage.setItem(`customer_name_${slug}`, form.name);
-        localStorage.setItem(`customer_phone_${slug}`, form.phone);
+        localStorage.setItem(`customer_phone_${slug}`, form.phone.replace(/\D/g, ""));
         setActiveOrder(order);
         setOrderSent(true);
         setCart([]);
         setIsCheckoutOpen(false);
+        setCheckoutStep("info");
         setPanel("none");
       }
     } catch {}
@@ -724,113 +785,274 @@ export default function MenuViewPage() {
         )}
       </AnimatePresence>
 
-      {/* ── CHECKOUT MODAL ───────────────────────────────────────────────── */}
+      {/* ── CHECKOUT MODAL (multi-step) ───────────────────────────────────── */}
       <AnimatePresence>
         {isCheckoutOpen && (
-          <div className="fixed inset-0 z-[130] flex items-end sm:items-center justify-center">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsCheckoutOpen(false)} className="absolute inset-0 bg-black/70 backdrop-blur-md" />
+          <div className="fixed inset-0 z-[130] flex items-end justify-center">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => { setIsCheckoutOpen(false); setCheckoutStep("info"); }} className="absolute inset-0 bg-black/70 backdrop-blur-md" />
             <motion.div
-              initial={{ y: "100%", opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: "100%", opacity: 0 }}
-              transition={{ type: "spring", stiffness: 350, damping: 34 }}
-              className="relative bg-white w-full max-w-md rounded-t-[32px] sm:rounded-[32px] shadow-2xl max-h-[94vh] overflow-y-auto"
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", stiffness: 360, damping: 36 }}
+              className="relative bg-white w-full max-w-lg rounded-t-[28px] shadow-2xl max-h-[95vh] flex flex-col"
             >
-              <div className="p-6 sm:p-8 space-y-6">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-2xl font-black text-slate-900">Finalizar Pedido</h2>
-                  <button onClick={() => setIsCheckoutOpen(false)} className="w-9 h-9 rounded-full hover:bg-slate-100 flex items-center justify-center transition-colors">
-                    <X className="w-5 h-5 text-slate-400" />
+              {/* Drag handle */}
+              <div className="flex justify-center pt-3 pb-1 shrink-0">
+                <div className="w-10 h-1 rounded-full bg-slate-200" />
+              </div>
+
+              {/* Step header */}
+              <div className="px-6 pb-4 pt-2 flex items-center gap-3 shrink-0">
+                {checkoutStep !== "info" && (
+                  <button
+                    onClick={() => setCheckoutStep(checkoutStep === "review" ? "payment" : "info")}
+                    className="w-9 h-9 rounded-full hover:bg-slate-100 flex items-center justify-center transition-colors shrink-0"
+                  >
+                    <ChevronLeft className="w-5 h-5 text-slate-500" />
                   </button>
-                </div>
-
-                {/* Order type */}
-                <div className="flex bg-slate-100 p-1 rounded-2xl gap-1">
-                  {(["DELIVERY", "PICKUP"] as const).map((type) => (
-                    <button
-                      key={type}
-                      onClick={() => setForm((f) => ({ ...f, orderType: type }))}
-                      className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold transition-all ${form.orderType === type ? "bg-white text-slate-900 shadow-sm" : "text-slate-400"}`}
-                    >
-                      {type === "DELIVERY" ? <><Truck className="w-3.5 h-3.5" /> Delivery</> : <><Store className="w-3.5 h-3.5" /> Retirada</>}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Name + phone */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Nome</label>
-                    <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Seu nome" className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 transition-all" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">WhatsApp</label>
-                    <input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="(00) 00000-0000" type="tel" className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 transition-all" />
-                  </div>
-                </div>
-
-                {/* Address */}
-                {form.orderType === "DELIVERY" ? (
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Endereço de entrega</label>
-                    <textarea value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} placeholder="Rua, número, bairro…" rows={2} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 transition-all resize-none" />
-                  </div>
-                ) : (
-                  <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 flex items-start gap-3">
-                    <MapPin className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-widest text-blue-400 mb-1">Endereço de retirada</p>
-                      <p className="text-sm font-bold text-blue-800">{tenant.address || "Consulte o estabelecimento"}</p>
-                    </div>
-                  </div>
                 )}
-
-                {/* Payment */}
-                <div className="space-y-2.5">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Forma de pagamento</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {([
-                      { id: "PIX", label: "PIX", icon: Send },
-                      { id: "CREDIT", label: "Crédito", icon: CreditCard },
-                      { id: "DEBIT", label: "Débito", icon: CreditCard },
-                      { id: "MEAL", label: "Vale Refeição", icon: Wallet },
-                      { id: "CASH", label: "Dinheiro", icon: Banknote },
-                    ] as const).map((m) => (
-                      <button
-                        key={m.id}
-                        onClick={() => setForm((f) => ({ ...f, paymentMethod: m.id }))}
-                        className={`flex items-center gap-2 px-3 py-3 rounded-xl border text-xs font-bold transition-all ${form.paymentMethod === m.id ? "bg-slate-900 text-white border-slate-900 shadow-md" : "bg-white text-slate-500 border-slate-100 hover:border-slate-200"}`}
-                      >
-                        <m.icon className="w-3.5 h-3.5" /> {m.label}
-                      </button>
+                <div className="flex-1">
+                  <h2 className="text-lg font-black text-slate-900">
+                    {checkoutStep === "info" ? "Seus Dados" : checkoutStep === "payment" ? "Pagamento" : "Confirmar Pedido"}
+                  </h2>
+                  <div className="flex gap-1.5 mt-1.5">
+                    {(["info", "payment", "review"] as const).map((s) => (
+                      <div key={s} className={`h-1 rounded-full transition-all ${checkoutStep === s ? "flex-1 bg-amber-400" : "w-6 bg-slate-200"}`} />
                     ))}
                   </div>
                 </div>
+                <button onClick={() => { setIsCheckoutOpen(false); setCheckoutStep("info"); }} className="w-9 h-9 rounded-full hover:bg-slate-100 flex items-center justify-center transition-colors shrink-0">
+                  <X className="w-5 h-5 text-slate-400" />
+                </button>
+              </div>
 
-                {(form.paymentMethod === "CREDIT" || form.paymentMethod === "DEBIT" || form.paymentMethod === "MEAL") && (
-                  <select value={form.paymentDetail} onChange={(e) => setForm((f) => ({ ...f, paymentDetail: e.target.value }))} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 transition-all">
-                    <option value="">Escolha a bandeira</option>
-                    {["Visa", "Mastercard", "Elo", "Alelo", "Sodexo", "Ticket"].map((b) => <option key={b} value={b}>{b}</option>)}
-                  </select>
-                )}
+              {/* Step content */}
+              <div className="flex-1 overflow-y-auto px-6 pb-6">
+                <AnimatePresence mode="wait">
+                  {checkoutStep === "info" && (
+                    <motion.div key="info" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4">
+                      {/* Order type */}
+                      <div className="flex bg-slate-100 p-1 rounded-2xl gap-1">
+                        {(["DELIVERY", "PICKUP"] as const).map((type) => (
+                          <button key={type} onClick={() => setForm((f) => ({ ...f, orderType: type }))}
+                            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold transition-all ${form.orderType === type ? "bg-white text-slate-900 shadow-sm" : "text-slate-400"}`}>
+                            {type === "DELIVERY" ? <><Truck className="w-3.5 h-3.5" /> Delivery</> : <><Store className="w-3.5 h-3.5" /> Retirada</>}
+                          </button>
+                        ))}
+                      </div>
 
-                {form.paymentMethod === "CASH" && (
-                  <input value={form.paymentDetail} onChange={(e) => setForm((f) => ({ ...f, paymentDetail: e.target.value }))} placeholder="Troco para quanto? (opcional)" className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 transition-all" />
-                )}
+                      {/* Name + phone */}
+                      <CField label="Nome completo">
+                        <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Como devo te chamar?" className={cinput} />
+                      </CField>
+                      <CField label="WhatsApp">
+                        <input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: maskPhone(e.target.value) }))} placeholder="(00) 00000-0000" type="tel" inputMode="numeric" className={cinput} />
+                      </CField>
 
-                {/* Submit */}
-                <motion.button
-                  whileTap={{ scale: 0.97 }}
-                  onClick={handleCheckout}
-                  className="w-full flex items-center justify-between px-6 py-4 rounded-2xl text-white font-black text-sm shadow-xl transition-all"
-                  style={{ background: "linear-gradient(135deg, #0f0f1a 0%, #1e293b 100%)" }}
-                >
-                  <span>Enviar Pedido</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-amber-400">{fmt(total)}</span>
-                    <Send className="w-4 h-4 text-amber-400" />
-                  </div>
-                </motion.button>
+                      {/* Address (delivery only) */}
+                      {form.orderType === "DELIVERY" && (
+                        <div className="space-y-3 pt-1">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Endereço de entrega</p>
+
+                          {/* CEP */}
+                          <div className="flex gap-2">
+                            <CField label="CEP" className="flex-1">
+                              <div className="relative">
+                                <input
+                                  value={form.cep}
+                                  onChange={(e) => setForm((f) => ({ ...f, cep: maskCep(e.target.value) }))}
+                                  onBlur={(e) => fetchCep(e.target.value)}
+                                  placeholder="00000-000"
+                                  inputMode="numeric"
+                                  className={cinput}
+                                />
+                                {feeLoading && <Loader2 className="w-4 h-4 animate-spin text-amber-400 absolute right-3 top-1/2 -translate-y-1/2" />}
+                              </div>
+                            </CField>
+                            <button
+                              type="button"
+                              onClick={() => fetchCep(form.cep)}
+                              className="self-end mb-0.5 px-4 py-3 bg-slate-100 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-200 transition-colors whitespace-nowrap"
+                            >
+                              Buscar
+                            </button>
+                          </div>
+
+                          {/* Delivery fee badge */}
+                          {form.cep.replace(/\D/g, "").length === 8 && (
+                            <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold ${deliveryBlocked ? "bg-red-50 text-red-600 border border-red-200" : "bg-green-50 text-green-700 border border-green-200"}`}>
+                              {deliveryBlocked ? <X className="w-3.5 h-3.5" /> : <Truck className="w-3.5 h-3.5" />}
+                              {deliveryBlocked ? "Fora da área de entrega" : `Taxa de entrega: ${deliveryFeeLabel}`}
+                            </div>
+                          )}
+
+                          {/* Street + number */}
+                          <div className="grid grid-cols-3 gap-2">
+                            <CField label="Rua / Av." className="col-span-2">
+                              <input value={form.street} onChange={(e) => setForm((f) => ({ ...f, street: e.target.value }))} placeholder="Rua, Avenida…" className={cinput} />
+                            </CField>
+                            <CField label="Número">
+                              <input value={form.number} onChange={(e) => setForm((f) => ({ ...f, number: e.target.value }))} placeholder="123" inputMode="numeric" className={cinput} />
+                            </CField>
+                          </div>
+
+                          {/* Complement + neighborhood */}
+                          <div className="grid grid-cols-2 gap-2">
+                            <CField label="Complemento">
+                              <input value={form.complement} onChange={(e) => setForm((f) => ({ ...f, complement: e.target.value }))} placeholder="Apto, Sala…" className={cinput} />
+                            </CField>
+                            <CField label="Bairro">
+                              <input value={form.neighborhood} onChange={(e) => setForm((f) => ({ ...f, neighborhood: e.target.value }))} placeholder="Bairro" className={cinput} />
+                            </CField>
+                          </div>
+
+                          {/* City + state */}
+                          <div className="grid grid-cols-3 gap-2">
+                            <CField label="Cidade" className="col-span-2">
+                              <input value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} placeholder="Cidade" className={cinput} />
+                            </CField>
+                            <CField label="UF">
+                              <input value={form.state} onChange={(e) => setForm((f) => ({ ...f, state: e.target.value.toUpperCase().slice(0, 2) }))} placeholder="SP" className={cinput} maxLength={2} />
+                            </CField>
+                          </div>
+                        </div>
+                      )}
+
+                      {form.orderType === "PICKUP" && (
+                        <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 flex items-start gap-3">
+                          <MapPin className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-blue-400 mb-1">Retirada no local</p>
+                            <p className="text-sm font-bold text-blue-800">{tenant.address || "Consulte o estabelecimento"}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      <motion.button
+                        whileTap={{ scale: 0.97 }}
+                        disabled={!form.name || form.phone.replace(/\D/g, "").length < 10 || (form.orderType === "DELIVERY" && deliveryBlocked)}
+                        onClick={() => setCheckoutStep("payment")}
+                        className={`w-full py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all mt-2 ${form.name && form.phone.replace(/\D/g, "").length >= 10 && !deliveryBlocked ? "text-white shadow-lg" : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}
+                        style={form.name && form.phone.replace(/\D/g, "").length >= 10 && !deliveryBlocked ? { background: "linear-gradient(135deg, #0f0f1a 0%, #1e293b 100%)" } : {}}
+                      >
+                        Continuar <ChevronRight className="w-4 h-4" />
+                      </motion.button>
+                    </motion.div>
+                  )}
+
+                  {checkoutStep === "payment" && (
+                    <motion.div key="payment" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4">
+                      <div className="grid grid-cols-2 gap-2">
+                        {([
+                          { id: "PIX", label: "PIX", icon: Send },
+                          { id: "CREDIT", label: "Crédito", icon: CreditCard },
+                          { id: "DEBIT", label: "Débito", icon: CreditCard },
+                          { id: "MEAL", label: "Vale Refeição", icon: Wallet },
+                          { id: "CASH", label: "Dinheiro", icon: Banknote },
+                        ] as const).map((m) => (
+                          <button key={m.id} onClick={() => setForm((f) => ({ ...f, paymentMethod: m.id }))}
+                            className={`flex items-center gap-2.5 px-4 py-4 rounded-2xl border-2 text-sm font-bold transition-all ${form.paymentMethod === m.id ? "bg-slate-900 text-white border-slate-900 shadow-md" : "bg-white text-slate-500 border-slate-100 hover:border-slate-200"}`}>
+                            <m.icon className="w-4 h-4" /> {m.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {(form.paymentMethod === "CREDIT" || form.paymentMethod === "DEBIT" || form.paymentMethod === "MEAL") && (
+                        <CField label="Bandeira">
+                          <select value={form.paymentDetail} onChange={(e) => setForm((f) => ({ ...f, paymentDetail: e.target.value }))} className={cinput}>
+                            <option value="">Escolha a bandeira</option>
+                            {["Visa", "Mastercard", "Elo", "Alelo", "Sodexo", "Ticket"].map((b) => <option key={b} value={b}>{b}</option>)}
+                          </select>
+                        </CField>
+                      )}
+
+                      {form.paymentMethod === "CASH" && (
+                        <CField label="Troco para quanto? (opcional)">
+                          <input value={form.paymentDetail} onChange={(e) => setForm((f) => ({ ...f, paymentDetail: e.target.value }))} placeholder="Ex: R$ 50,00 — deixe em branco se não precisar" className={cinput} />
+                        </CField>
+                      )}
+
+                      <motion.button
+                        whileTap={{ scale: 0.97 }}
+                        onClick={() => setCheckoutStep("review")}
+                        className="w-full py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 text-white shadow-lg mt-2"
+                        style={{ background: "linear-gradient(135deg, #0f0f1a 0%, #1e293b 100%)" }}
+                      >
+                        Revisar Pedido <ChevronRight className="w-4 h-4" />
+                      </motion.button>
+                    </motion.div>
+                  )}
+
+                  {checkoutStep === "review" && (
+                    <motion.div key="review" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4">
+                      {/* Customer info card */}
+                      <div className="bg-slate-50 rounded-2xl p-4 space-y-2 border border-slate-100">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Seus dados</p>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-bold text-slate-800">{form.name}</span>
+                          <span className="text-xs text-slate-500">{form.phone}</span>
+                        </div>
+                        {form.orderType === "DELIVERY" && (
+                          <p className="text-xs text-slate-500 leading-relaxed">{buildAddressStr()}</p>
+                        )}
+                        {form.orderType === "PICKUP" && (
+                          <p className="text-xs text-slate-500">Retirada no local</p>
+                        )}
+                      </div>
+
+                      {/* Items */}
+                      <div className="space-y-2">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Itens</p>
+                        {cart.map((item, idx) => (
+                          <div key={idx} className="flex items-center justify-between text-sm">
+                            <span className="text-slate-700 font-medium">{item.quantity}× {item.product.name}{item.variant ? ` (${item.variant.name})` : ""}</span>
+                            <span className="font-bold text-slate-800">{fmt((item.variant ? item.variant.price : item.product.price) * item.quantity)}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Totals */}
+                      <div className="border-t border-slate-100 pt-3 space-y-1.5">
+                        <div className="flex justify-between text-xs text-slate-400 font-bold">
+                          <span>Subtotal</span><span>{fmt(total)}</span>
+                        </div>
+                        {form.orderType === "DELIVERY" && (
+                          <div className="flex justify-between text-xs font-bold">
+                            <span className="text-slate-400">Taxa de entrega</span>
+                            <span className={deliveryFee === 0 ? "text-green-600" : "text-slate-700"}>{deliveryFeeLabel}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between text-base font-black text-slate-900 pt-1 border-t border-slate-100">
+                          <span>Total</span>
+                          <span className="text-amber-500">{fmt(total + (form.orderType === "DELIVERY" ? deliveryFee : 0))}</span>
+                        </div>
+                      </div>
+
+                      {/* Payment summary */}
+                      <div className="bg-slate-50 rounded-xl px-4 py-3 flex justify-between items-center border border-slate-100">
+                        <span className="text-xs font-bold text-slate-500">Pagamento</span>
+                        <span className="text-xs font-black text-slate-800">
+                          {form.paymentMethod === "PIX" ? "PIX" : form.paymentMethod === "CREDIT" ? "Crédito" : form.paymentMethod === "DEBIT" ? "Débito" : form.paymentMethod === "MEAL" ? "Vale Refeição" : "Dinheiro"}
+                          {form.paymentDetail ? ` · ${form.paymentDetail}` : ""}
+                        </span>
+                      </div>
+
+                      <motion.button
+                        whileTap={{ scale: 0.97 }}
+                        onClick={handleCheckout}
+                        className="w-full flex items-center justify-between px-6 py-4 rounded-2xl text-white font-black text-sm shadow-xl mt-2"
+                        style={{ background: "linear-gradient(135deg, #C9A227 0%, #a37d1a 100%)" }}
+                      >
+                        <span>Confirmar e Enviar</span>
+                        <div className="flex items-center gap-2">
+                          <span>{fmt(total + (form.orderType === "DELIVERY" ? deliveryFee : 0))}</span>
+                          <Send className="w-4 h-4" />
+                        </div>
+                      </motion.button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </motion.div>
           </div>
@@ -872,6 +1094,18 @@ export default function MenuViewPage() {
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+// ─── Checkout field helpers ───────────────────────────────────────────────────
+const cinput = "w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 transition-all";
+
+function CField({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`space-y-1.5 ${className ?? ""}`}>
+      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</label>
+      {children}
     </div>
   );
 }

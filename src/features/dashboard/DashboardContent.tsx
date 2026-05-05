@@ -21,6 +21,7 @@ import {
   OrdersList,
   ProfileManagement,
   StaffList,
+  TableManagement,
 } from "./DashboardPanels";
 import { WhatsAppManagementPanel, WhatsAppOverviewCard } from "./WhatsAppPanel";
 import { type DashboardOrderTabId, type DashboardTabId } from "./types";
@@ -37,6 +38,8 @@ interface DashboardContentProps {
   refreshTenant: () => Promise<void>;
   updateStatus: (orderId: string, status: string) => void | Promise<void>;
   activeOrderId?: string;
+  checkoutRequests?: Array<{ tableId: string }>;
+  onClearTable?: (tableId: string) => void;
 }
 
 export default function DashboardContent({
@@ -51,6 +54,8 @@ export default function DashboardContent({
   refreshTenant,
   updateStatus,
   activeOrderId,
+  checkoutRequests,
+  onClearTable,
 }: DashboardContentProps) {
   const pendingOrders = orders.filter((order) => order.status === "PENDING").length;
   const preparingOrders = orders.filter((order) => order.status === "PREPARING").length;
@@ -276,6 +281,12 @@ export default function DashboardContent({
             </div>
           </div>
           <InventoryPanel tenant={tenant} />
+        </div>
+      )}
+
+      {activeTab === "tables" && (
+        <div className="space-y-6">
+          <TableManagement tenant={tenant} />
         </div>
       )}
     </>

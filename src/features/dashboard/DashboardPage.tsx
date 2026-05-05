@@ -8,6 +8,8 @@ import type { Order, Tenant } from "../../types";
 import DashboardContent from "./DashboardContent";
 import { DASHBOARD_NAVIGATION } from "./config/navigation";
 import { type DashboardOrderTabId, type DashboardTabId, PATH_TO_TAB, TAB_TO_PATH } from "./types";
+import { motion, AnimatePresence } from "motion/react";
+import { Receipt, X } from "lucide-react";
 
 export default function DashboardPage() {
   const { slug, tab: tabParam, orderId } = useParams<{ slug: string; tab?: string; orderId?: string }>();
@@ -18,6 +20,7 @@ export default function DashboardPage() {
   const [subTab, setSubTab] = useState<DashboardOrderTabId>("pending");
   const [loading, setLoading] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [checkoutRequests, setCheckoutRequests] = useState<Array<{ tableId: string; customerName: string; timestamp: number }>>([]);
 
   const activeTab: DashboardTabId = (tabParam ? PATH_TO_TAB[tabParam] : undefined) ?? (orderId ? "history" : "overview");
 
@@ -73,9 +76,39 @@ export default function DashboardPage() {
       );
     });
 
+    socket.on("inventory-update", ({ id, quantity }) => {
+      setTenant(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          categories: prev.categories.map(cat => ({
+            ...cat,
+            products: cat.products.map(prod => {
+              if (prod.inventoryItemId === id && prod.inventoryItem) {
+                return {
+                  ...prod,
+                  inventoryItem: { ...prod.inventoryItem, quantity }
+                };
+              }
+              return prod;
+            })
+          }))
+        };
+      });
+    });
+
+    socket.on("checkout-requested", ({ tableId, customerName }) => {
+      new Audio("/notification.mp3").play().catch(() => undefined);
+      setCheckoutRequests(prev => [
+        { tableId, customerName, timestamp: Date.now() },
+        ...prev
+      ]);
+    });
+
     return () => {
       socket.off("new-order");
       socket.off("order-status-updated");
+      socket.off("checkout-requested");
     };
   }, [slug]);
 
@@ -86,6 +119,19 @@ export default function DashboardPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleClearTable = async (tableId: string) => {
+    if (!tenant) return;
+    try {
+      await apiFetch(`/api/admin/${tenant.id}/table/${tableId}/clear`, {
+        method: "POST"
+      });
+      setCheckoutRequests(prev => prev.filter(r => r.tableId !== tableId));
+      fetchOrders(tenant.id);
     } catch (err) {
       console.error(err);
     }
@@ -135,33 +181,79 @@ export default function DashboardPage() {
   }
 
   return (
-    <DashboardShell
-      tenantName={tenant.name}
-      slug={slug ?? ""}
-      activeTab={activeTab}
-      navigationGroups={DASHBOARD_NAVIGATION}
-      isMobileMenuOpen={isMobileMenuOpen}
-      onToggleMobileMenu={() => setIsMobileMenuOpen((current) => !current)}
-      onCloseMobileMenu={() => setIsMobileMenuOpen(false)}
-      onSelectTab={(tab) => {
-        navigateToTab(tab as DashboardTabId);
-        setIsMobileMenuOpen(false);
-      }}
-      onLogout={logout}
-    >
-      <DashboardContent
-        tenant={tenant}
+    <>
+      <DashboardShell
+        tenantName={tenant.name}
         slug={slug ?? ""}
-        orders={orders}
         activeTab={activeTab}
-        setActiveTab={navigateToTab}
-        subTab={subTab}
-        setSubTab={setSubTab}
-        filteredOrders={filteredOrders}
-        refreshTenant={fetchTenant}
-        updateStatus={updateStatus}
-        activeOrderId={orderId}
-      />
-    </DashboardShell>
+        navigationGroups={DASHBOARD_NAVIGATION}
+        isMobileMenuOpen={isMobileMenuOpen}
+        onToggleMobileMenu={() => setIsMobileMenuOpen((current) => !current)}
+        onCloseMobileMenu={() => setIsMobileMenuOpen(false)}
+        onSelectTab={(tab) => {
+          navigateToTab(tab as DashboardTabId);
+          setIsMobileMenuOpen(false);
+        }}
+        onLogout={logout}
+      >
+        <DashboardContent
+          tenant={tenant}
+          slug={slug ?? ""}
+          orders={orders}
+          activeTab={activeTab}
+          setActiveTab={navigateToTab}
+          subTab={subTab}
+          setSubTab={setSubTab}
+          filteredOrders={filteredOrders}
+          refreshTenant={fetchTenant}
+          updateStatus={updateStatus}
+          activeOrderId={orderId}
+          checkoutRequests={checkoutRequests}
+          onClearTable={handleClearTable}
+        />
+      </DashboardShell>
+
+      <div className="fixed bottom-6 right-6 z-[200] space-y-4 w-full max-w-xs pointer-events-none">
+        <AnimatePresence>
+          {checkoutRequests.map((req) => (
+            <motion.div
+              key={req.timestamp}
+              initial={{ opacity: 0, x: 100, scale: 0.9 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.5, transition: { duration: 0.2 } }}
+              className="pointer-events-auto bg-red-600 text-white p-4 rounded-2xl shadow-2xl border border-red-500 flex flex-col gap-3"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center animate-pulse">
+                    <Receipt className="w-4 h-4" />
+                  </div>
+                  <span className="text-xs font-black uppercase tracking-widest">Fechar Mesa {req.tableId}</span>
+                </div>
+                <button 
+                  onClick={() => setCheckoutRequests(prev => prev.filter(r => r.timestamp !== req.timestamp))}
+                  className="p-1 hover:bg-white/10 rounded-lg transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="space-y-1">
+                <p className="text-[10px] font-bold opacity-60 uppercase">Cliente</p>
+                <p className="text-sm font-black">{req.customerName}</p>
+              </div>
+              <button 
+                onClick={() => {
+                  navigateToTab("live-orders");
+                  setCheckoutRequests(prev => prev.filter(r => r.timestamp !== req.timestamp));
+                }}
+                className="w-full bg-white text-red-600 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-50 transition-colors"
+              >
+                Ver Detalhes
+              </button>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+    </>
   );
 }

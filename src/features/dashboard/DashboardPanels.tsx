@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { 
   ClipboardList, 
@@ -31,7 +31,7 @@ import {
 } from "lucide-react";
 import socket from "../../lib/socket";
 import { apiFetch } from "../../lib/api";
-import { Order, Tenant, CashRegister } from "../../types";
+import { Order, Tenant, CashRegister, DeliveryConfig, DeliveryZone } from "../../types";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   Button, 
@@ -199,7 +199,7 @@ export function OrdersList({
                     <OrderWaitTime createdAt={order.createdAt} status={order.status} />
                   </div>
                   <p className="text-xs text-zinc-500 font-medium mt-0.5 truncate">
-                    {order.customerName} · {order.items?.map(i => `${i.quantity}x ${i.product?.name}`).join(', ')}
+                    {order.orderType === 'DINE_IN' ? `[Mesa ${order.tableId || '?'}] ` : ''}{order.customerName} · {order.items?.map(i => `${i.quantity}x ${i.product?.name}`).join(', ')}
                   </p>
                 </div>
 
@@ -271,8 +271,8 @@ export function OrdersList({
                             <Phone className="w-3 h-3 text-zinc-300" />
                             {order.customerPhone}
                           </div>
-                          <Badge color={order.orderType === 'DELIVERY' ? 'warning' : 'info'}>
-                            {order.orderType === 'DELIVERY' ? 'Delivery' : 'Retirada'}
+                          <Badge color={order.orderType === 'DELIVERY' ? 'warning' : order.orderType === 'DINE_IN' ? 'success' : 'info'}>
+                            {order.orderType === 'DELIVERY' ? 'Delivery' : order.orderType === 'DINE_IN' ? `Mesa ${order.tableId}` : 'Retirada'}
                           </Badge>
                         </div>
                         {order.address && (
@@ -420,6 +420,67 @@ function ImageUploader({ value, onChange, label, description }: { value: string,
 const DAY_KEYS_UI = ["sun","mon","tue","wed","thu","fri","sat"] as const;
 const DAY_LABELS: Record<string, string> = { sun:"Domingo", mon:"Segunda", tue:"Terça", wed:"Quarta", thu:"Quinta", fri:"Sexta", sat:"Sábado" };
 
+function TimeInput({ value, onChange, colorClass = "text-slate-800", bgClass = "bg-white", borderClass = "border-slate-200" }: {
+  value: string;
+  onChange: (v: string) => void;
+  colorClass?: string;
+  bgClass?: string;
+  borderClass?: string;
+}) {
+  const [raw, setRaw] = React.useState(value);
+
+  React.useEffect(() => { setRaw(value); }, [value]);
+
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    let v = e.target.value.replace(/[^\d]/g, "");
+    if (v.length > 4) v = v.slice(0, 4);
+    
+    let formatted = v;
+    if (v.length >= 3) {
+      formatted = v.slice(0, 2) + ":" + v.slice(2);
+    }
+    
+    setRaw(formatted);
+
+    if (v.length === 4) {
+      const hh = parseInt(v.slice(0, 2));
+      const mm = parseInt(v.slice(2, 4));
+      if (hh <= 23 && mm <= 59) {
+        onChange(`${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`);
+      }
+    }
+  }
+
+  function handleBlur() {
+    // ao sair do campo, corrige e normaliza
+    const digits = raw.replace(/[^\d]/g, "");
+    if (digits.length === 4) {
+      let hh = Math.min(Number(digits.slice(0, 2)), 23);
+      let mm = Math.min(Number(digits.slice(2, 4)), 59);
+      const normalized = `${String(hh).padStart(2,"0")}:${String(mm).padStart(2,"0")}`;
+      setRaw(normalized);
+      onChange(normalized);
+    } else {
+      setRaw(value); // reverte se incompleto
+    }
+  }
+
+  return (
+    <div className={`flex items-center ${bgClass} border ${borderClass} rounded-xl px-4 py-3 flex-1 min-w-[100px]`}>
+      <input
+        type="text"
+        inputMode="numeric"
+        maxLength={5}
+        value={raw}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        placeholder="00:00"
+        className={`bg-transparent text-lg font-black focus:outline-none w-full text-center ${colorClass}`}
+      />
+    </div>
+  );
+}
+
 const DEFAULT_HOURS = Object.fromEntries(DAY_KEYS_UI.map(d => [d, { enabled: !["sun"].includes(d), open: "08:00", close: "22:00", breakEnabled: false, breakStart: "12:00", breakEnd: "13:00" }]));
 
 function parseAddress(raw: string | null | undefined) {
@@ -462,11 +523,18 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  const parseDeliveryConfig = (raw?: string | null): DeliveryConfig => {
+    try { return raw ? JSON.parse(raw) : { mode: "free" }; } catch { return { mode: "free" }; }
+  };
+
+  const [delivery, setDelivery] = useState<DeliveryConfig>(() => parseDeliveryConfig(tenant?.deliveryConfig));
+
   useEffect(() => {
     if (tenant) {
       setForm({ name: tenant.name || "", description: tenant.description || "", logoUrl: tenant.logoUrl || "", whatsapp: tenant.whatsapp || "", isOpen: tenant.isOpen ?? true });
       setAddr(parseAddress(tenant.address) ?? { ...EMPTY_ADDR });
       try { setHours(tenant.businessHours ? JSON.parse(tenant.businessHours) : DEFAULT_HOURS); } catch { setHours(DEFAULT_HOURS); }
+      setDelivery(parseDeliveryConfig(tenant.deliveryConfig));
     }
   }, [tenant]);
 
@@ -492,7 +560,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
       await apiFetch(`/api/owner/tenants/${tenant?.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, address: JSON.stringify(addr), businessHours: JSON.stringify(hours) })
+        body: JSON.stringify({ ...form, address: JSON.stringify(addr), businessHours: JSON.stringify(hours), deliveryConfig: JSON.stringify(delivery) })
       });
       refresh();
       setSaved(true);
@@ -526,38 +594,37 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
             <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-3">Endereço</p>
             <div className="space-y-3">
               {/* CEP */}
-              <div className="flex gap-3 items-end">
+              <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
                 <Input
                   label="CEP"
                   value={addr.cep}
                   onChange={e => { setA("cep", e.target.value); setCepError(""); }}
                   onBlur={e => fetchCep(e.target.value)}
                   placeholder="00000-000"
-                  wrapperClassName="w-44"
+                  wrapperClassName="w-full sm:w-44"
                   error={cepError || undefined}
                 />
                 <Button type="button" variant="outline" size="sm" loading={cepLoading}
-                  onClick={() => fetchCep(addr.cep)} className="mb-0.5">
+                  onClick={() => fetchCep(addr.cep)} className="w-full sm:w-auto mb-0.5">
                   Buscar CEP
                 </Button>
-                <p className="text-xs text-slate-400 mb-2">Preenchimento automático via ViaCEP</p>
               </div>
 
               {/* Street + number */}
-              <div className="grid grid-cols-3 gap-3">
-                <Input label="Logradouro" value={addr.street} onChange={e => setA("street", e.target.value)} placeholder="Rua, Av, Travessa..." wrapperClassName="col-span-2" />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <Input label="Logradouro" value={addr.street} onChange={e => setA("street", e.target.value)} placeholder="Rua, Av, Travessa..." wrapperClassName="md:col-span-2" />
                 <Input label="Número" value={addr.number} onChange={e => setA("number", e.target.value)} placeholder="123" />
               </div>
 
               {/* Complement + neighborhood */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <Input label="Complemento" value={addr.complement} onChange={e => setA("complement", e.target.value)} placeholder="Apto, Sala, Bloco..." />
                 <Input label="Bairro" value={addr.neighborhood} onChange={e => setA("neighborhood", e.target.value)} placeholder="Bairro" />
               </div>
 
               {/* City + state + country */}
-              <div className="grid grid-cols-3 gap-3">
-                <Input label="Cidade" value={addr.city} onChange={e => setA("city", e.target.value)} placeholder="Cidade" wrapperClassName="col-span-1" />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <Input label="Cidade" value={addr.city} onChange={e => setA("city", e.target.value)} placeholder="Cidade" />
                 <Input label="Estado (UF)" value={addr.state} onChange={e => setA("state", e.target.value.toUpperCase().slice(0,2))} placeholder="SP" />
                 <Input label="País" value={addr.country} onChange={e => setA("country", e.target.value)} placeholder="Brasil" />
               </div>
@@ -583,52 +650,153 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
           {/* Business hours */}
           <div>
             <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-3">Horários de funcionamento</p>
-            <div className="space-y-2">
+            <div className="rounded-2xl border border-slate-200 overflow-hidden divide-y divide-slate-100">
               {DAY_KEYS_UI.map(day => {
                 const d = hours[day] ?? { enabled: false, open: "08:00", close: "22:00", breakEnabled: false, breakStart: "12:00", breakEnd: "13:00" };
-                const timeInput = (val: string, field: string) => (
-                  <input type="time" value={val} onChange={e => setDay(day, field, e.target.value)}
-                    className="bg-white border border-zinc-200 rounded-lg px-2 py-1.5 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400" />
-                );
                 return (
-                  <div key={day} className="rounded-xl border border-slate-200 bg-slate-50/50 overflow-hidden">
-                    {/* Main row */}
-                    <div className="flex items-center gap-3 px-4 py-3">
-                      <Switch checked={d.enabled} onCheckedChange={v => setDay(day, "enabled", v)} />
-                      <span className="w-20 text-sm font-bold text-slate-700 shrink-0">{DAY_LABELS[day]}</span>
-                      {d.enabled ? (
-                        <div className="flex items-center gap-2 flex-1 flex-wrap">
-                          {timeInput(d.open, "open")}
-                          <span className="text-xs text-slate-400 font-bold">até</span>
-                          {timeInput(d.close, "close")}
+                  <div key={day} className={`transition-colors ${d.enabled ? "bg-white" : "bg-slate-50/60"}`}>
+                    <div className="px-4 py-4 space-y-4">
+                      {/* Linha 1: Toggle + Nome do Dia */}
+                      <div className="flex items-center gap-3">
+                        <Switch checked={d.enabled} onCheckedChange={v => setDay(day, "enabled", v)} />
+                        <span className={`text-sm font-black shrink-0 ${d.enabled ? "text-slate-800" : "text-slate-400"}`}>
+                          {DAY_LABELS[day]}
+                        </span>
+                        {!d.enabled && <span className="text-xs font-bold text-slate-300 ml-auto">Fechado</span>}
+                      </div>
+
+                      {d.enabled && (
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-3 pl-[44px] sm:pl-0">
+                          {/* Horários */}
+                          <div className="flex items-center gap-2 flex-1">
+                            <TimeInput value={d.open} onChange={v => setDay(day, "open", v)} />
+                            <span className="text-slate-300 font-bold text-sm">–</span>
+                            <TimeInput value={d.close} onChange={v => setDay(day, "close", v)} />
+                          </div>
+                          {/* Botão Intervalo */}
                           <button
                             type="button"
                             onClick={() => setDay(day, "breakEnabled", !d.breakEnabled)}
-                            className={`ml-auto text-[10px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-lg border transition-colors ${d.breakEnabled ? "bg-amber-50 border-amber-300 text-amber-700" : "border-slate-200 text-slate-400 hover:border-slate-300"}`}
+                            className={`h-[38px] px-3 rounded-xl flex items-center justify-center gap-1.5 border text-xs font-black transition-all w-full sm:w-auto ${d.breakEnabled ? "bg-amber-50 border-amber-300 text-amber-600" : "border-slate-200 text-slate-400 hover:border-amber-300 hover:text-amber-500"}`}
                           >
-                            {d.breakEnabled ? "▸ Intervalo" : "+ Intervalo"}
+                            <span>{d.breakEnabled ? "⏸" : "+"}</span>
+                            <span>{d.breakEnabled ? "Remover Pausa" : "Adicionar Intervalo"}</span>
                           </button>
                         </div>
-                      ) : (
-                        <span className="text-xs text-slate-400 font-bold flex-1">Fechado</span>
                       )}
                     </div>
-                    {/* Break row */}
+
+                    {/* Linha do intervalo */}
                     {d.enabled && d.breakEnabled && (
-                      <div className="flex items-center gap-3 px-4 py-2.5 border-t border-dashed border-amber-200 bg-amber-50/50">
-                        <span className="w-20 shrink-0" />
-                        <span className="text-[11px] font-black text-amber-600 uppercase tracking-widest shrink-0">Intervalo</span>
-                        <div className="flex items-center gap-2">
-                          {timeInput(d.breakStart ?? "12:00", "breakStart")}
-                          <span className="text-xs text-slate-400 font-bold">até</span>
-                          {timeInput(d.breakEnd ?? "13:00", "breakEnd")}
+                      <div className="bg-amber-50/50 px-4 py-4 border-t border-amber-100/50 space-y-3">
+                        <div className="flex flex-col gap-3 pl-[44px] sm:pl-[calc(0.75rem+96px+0.75rem)]">
+                          <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Pausa (Início e Fim)</span>
+                          <div className="flex items-center gap-2">
+                            <TimeInput value={d.breakStart ?? "12:00"} onChange={v => setDay(day, "breakStart", v)} colorClass="text-amber-700" bgClass="bg-amber-50" borderClass="border-amber-200" />
+                            <span className="text-amber-300 font-bold text-sm">–</span>
+                            <TimeInput value={d.breakEnd ?? "13:00"} onChange={v => setDay(day, "breakEnd", v)} colorClass="text-amber-700" bgClass="bg-amber-50" borderClass="border-amber-200" />
+                          </div>
                         </div>
-                        <span className="text-[10px] text-amber-500 ml-1">Pausa / almoço</span>
                       </div>
                     )}
                   </div>
                 );
               })}
+            </div>
+          </div>
+
+          {/* Delivery config */}
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-3">Taxa de Entrega</p>
+            <div className="space-y-3">
+              {/* Mode selector */}
+              <div className="flex gap-2 flex-wrap">
+                {([
+                  { id: "free", label: "Grátis" },
+                  { id: "fixed", label: "Taxa Fixa" },
+                  { id: "zones", label: "Por Bairro/CEP" },
+                ] as const).map(opt => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setDelivery(d => ({ ...d, mode: opt.id }))}
+                    className={`px-4 py-2 rounded-xl text-xs font-black transition-all border ${delivery.mode === opt.id ? "bg-[#0D1B3E] text-white border-[#0D1B3E]" : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"}`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+
+              {delivery.mode === "fixed" && (
+                <div className="flex items-center gap-3 bg-slate-50 rounded-xl p-4 border border-slate-200">
+                  <span className="text-sm font-bold text-slate-600 shrink-0">Valor único:</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-sm font-bold text-slate-400">R$</span>
+                    <input
+                      type="number" min="0" step="0.50"
+                      value={delivery.fixedFee ?? ""}
+                      onChange={e => setDelivery(d => ({ ...d, fixedFee: parseFloat(e.target.value) || 0 }))}
+                      className="w-24 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400"
+                      placeholder="0,00"
+                    />
+                  </div>
+                  <span className="text-xs text-slate-400">cobrado para todos os endereços</span>
+                </div>
+              )}
+
+              {delivery.mode === "zones" && (
+                <div className="space-y-3">
+                  {/* Default fee for unlisted */}
+                  <div className="flex items-center gap-3 bg-slate-50 rounded-xl p-3 border border-slate-200 flex-wrap">
+                    <span className="text-xs font-bold text-slate-600">Bairros não listados:</span>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={delivery.allowUnlisted !== false} onChange={e => setDelivery(d => ({ ...d, allowUnlisted: e.target.checked }))} className="rounded" />
+                      <span className="text-xs text-slate-500">Aceitar pedidos</span>
+                    </label>
+                    {delivery.allowUnlisted !== false && (
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-slate-400">Taxa:</span>
+                        <span className="text-xs font-bold text-slate-400">R$</span>
+                        <input
+                          type="number" min="0" step="0.50"
+                          value={delivery.defaultFee ?? ""}
+                          onChange={e => setDelivery(d => ({ ...d, defaultFee: parseFloat(e.target.value) || 0 }))}
+                          className="w-20 bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-amber-400"
+                          placeholder="0,00"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Zone list */}
+                  {(delivery.zones ?? []).map((zone, idx) => (
+                    <div key={zone.id} className="bg-white border border-slate-200 rounded-xl p-3 flex items-start gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm font-black text-slate-800">{zone.label}</span>
+                          <span className="text-sm font-black text-amber-500">{zone.fee === 0 ? "Grátis" : `R$ ${zone.fee.toFixed(2)}`}</span>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-1 truncate">
+                          {zone.ceps.map(c => {
+                            const fmt = c.replace(/\D/g, "");
+                            return fmt.length === 8 ? `${fmt.slice(0,5)}-${fmt.slice(5)}` : c;
+                          }).join(", ")}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setDelivery(d => ({ ...d, zones: d.zones?.filter((_, i) => i !== idx) }))}
+                        className="w-7 h-7 rounded-lg bg-red-50 text-red-400 flex items-center justify-center hover:bg-red-100 transition-colors shrink-0"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Add zone — CEP lookup */}
+                  <ZoneAdder onAdd={zone => setDelivery(d => ({ ...d, zones: [...(d.zones ?? []), zone] }))} />
+                </div>
+              )}
             </div>
           </div>
 
@@ -671,6 +839,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
   const [prodForm, setProdForm] = useState({
     name: "", description: "", price: "", imageUrl: "", inventoryItemId: "",
+    available: true, autoDisableWhenOutOfStock: false,
     variants: [] as { name: string, price: string, description: string, inventoryItemId: string }[]
   });
 
@@ -720,7 +889,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
 
   const openNewProduct = (categoryId: string) => {
     setEditingProduct(null);
-    setProdForm({ name: "", description: "", price: "", imageUrl: "", inventoryItemId: "", variants: [] });
+    setProdForm({ name: "", description: "", price: "", imageUrl: "", inventoryItemId: "", available: true, autoDisableWhenOutOfStock: false, variants: [] });
     setProdModal({ open: true, categoryId });
   };
 
@@ -729,10 +898,14 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
     setProdForm({
       name: prod.name, description: prod.description || "", price: String(prod.price),
       imageUrl: prod.imageUrl || "", inventoryItemId: prod.inventoryItemId || "",
+      available: prod.available !== false,
+      autoDisableWhenOutOfStock: prod.autoDisableWhenOutOfStock || false,
       variants: prod.variants?.map((v: any) => ({ name: v.name, price: String(v.price), description: v.description || "", inventoryItemId: v.inventoryItemId || "" })) || []
     });
     setProdModal({ open: true, categoryId: prod.categoryId });
   };
+
+
 
   const closeProdModal = () => { setProdModal({ open: false, categoryId: null }); setEditingProduct(null); };
 
@@ -742,7 +915,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
     await apiFetch(url, {
       method: editingProduct ? 'PATCH' : 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...prodForm, categoryId: prodModal.categoryId, tenantId: tenant?.id, available: true })
+      body: JSON.stringify({ ...prodForm, categoryId: prodModal.categoryId, tenantId: tenant?.id })
     });
     refresh();
     closeProdModal();
@@ -752,6 +925,20 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
     if (!confirm("Excluir produto?")) return;
     await apiFetch(`/api/products/${id}`, { method: 'DELETE' });
     refresh();
+  };
+
+  const toggleProductAvailability = async (prod: any) => {
+    try {
+      // Optimistic update would be better, but let's at least handle the request smoothly
+      await apiFetch(`/api/products/${prod.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ available: !prod.available })
+      });
+      refresh();
+    } catch (err) {
+      console.error("Falha ao alternar status do produto:", err);
+    }
   };
 
   const addVariantField = () => setProdForm(prev => ({ ...prev, variants: [...prev.variants, { name: "", price: "", description: "", inventoryItemId: "" }] }));
@@ -852,7 +1039,6 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
             </div>
           </div>
 
-          {/* Products */}
           <div className="divide-y divide-slate-50">
             {cat.products?.length === 0 && (
               <div className="px-4 py-6 text-center">
@@ -863,23 +1049,57 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
               </div>
             )}
             {cat.products?.map(prod => (
-              <div key={prod.id} className="flex items-center gap-3 px-4 py-3">
-                <div className="w-12 h-12 bg-slate-100 rounded-xl overflow-hidden shrink-0">
+              <div key={prod.id} className={`flex items-center gap-3 px-4 py-3 transition-all duration-300 ${!prod.available ? 'bg-slate-50/50 opacity-70' : 'bg-white'}`}>
+                <div className={`w-12 h-12 bg-slate-100 rounded-xl overflow-hidden shrink-0 transition-all duration-500 ${!prod.available ? 'grayscale opacity-60 scale-95 border-2 border-slate-200' : 'border border-transparent'}`}>
                   {prod.imageUrl
                     ? <img src={prod.imageUrl} className="w-full h-full object-cover" />
                     : <div className="w-full h-full flex items-center justify-center text-slate-300"><Utensils className="w-5 h-5" /></div>
                   }
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-slate-800 truncate">{prod.name}</p>
-                  <p className="text-xs text-slate-400 font-medium">
+                  <div className="flex items-center gap-2">
+                    <p className={`text-sm font-bold truncate transition-colors ${!prod.available ? 'text-slate-400 italic' : 'text-slate-800'}`}>{prod.name}</p>
+                    {!prod.available && (
+                      <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-white bg-slate-400 px-1.5 py-0.5 rounded-full shadow-sm">Inativo</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-400 font-medium flex items-center gap-2">
                     {prod.variants?.length > 0
                       ? `${prod.variants.length} variações • desde ${fmt(Math.min(...prod.variants.map((v: any) => v.price)))}`
                       : fmt(prod.price)
                     }
+                    {prod.inventoryItem && (
+                      <>
+                        <span className="w-1 h-1 rounded-full bg-slate-300" />
+                        <span className={`font-black uppercase text-[10px] ${
+                          prod.inventoryItem.quantity <= 0
+                            ? "text-red-500"
+                            : prod.inventoryItem.quantity < 5
+                              ? "text-amber-500"
+                              : "text-green-600"
+                        }`}>
+                          {prod.inventoryItem.quantity <= 0
+                            ? "Esgotado"
+                            : `${prod.inventoryItem.quantity} ${prod.inventoryItem.unit || 'un'}`
+                          }
+                        </span>
+                      </>
+                    )}
                   </p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => toggleProductAvailability(prod)}
+                    title={prod.available ? "Desativar produto" : "Ativar produto"}
+                    className={`p-2 rounded-lg transition-colors ${prod.available ? 'text-green-500 hover:text-slate-400 hover:bg-slate-100' : 'text-slate-300 hover:text-green-500 hover:bg-green-50'}`}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                      {prod.available
+                        ? <><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.6"/><path d="M5.5 8L7 9.5L10.5 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></>
+                        : <><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.6"/><path d="M6 6L10 10M10 6L6 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></>
+                      }
+                    </svg>
+                  </button>
                   <button onClick={() => openEditProduct(prod)} className="p-2 text-slate-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors">
                     <Settings className="w-4 h-4" />
                   </button>
@@ -956,15 +1176,40 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
           <ImageUploader label="Foto do produto" value={prodForm.imageUrl} onChange={val => setProdForm({ ...prodForm, imageUrl: val })} description="Fotos de alta qualidade convertem mais vendas." />
 
           {inventoryItems.length > 0 && (
-            <div>
+            <div className="space-y-2">
               <label className="block text-[11px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Vincular ao estoque (opcional)</label>
               <select value={prodForm.inventoryItemId} onChange={e => setProdForm({ ...prodForm, inventoryItemId: e.target.value })}
                 className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
                 <option value="">Sem vínculo de estoque</option>
                 {inventoryItems.map(item => <option key={item.id} value={item.id}>{item.name} ({item.quantity} {item.unit})</option>)}
               </select>
+              {prodForm.inventoryItemId && (
+                <label className="flex items-center gap-2.5 cursor-pointer select-none mt-1">
+                  <input
+                    type="checkbox"
+                    checked={prodForm.autoDisableWhenOutOfStock}
+                    onChange={e => setProdForm({ ...prodForm, autoDisableWhenOutOfStock: e.target.checked })}
+                    className="w-4 h-4 rounded accent-amber-500"
+                  />
+                  <span className="text-xs font-semibold text-slate-600">Desativar automaticamente quando o estoque zerar</span>
+                </label>
+              )}
             </div>
           )}
+
+          <div className="flex items-center justify-between py-1 border-t border-slate-100">
+            <div>
+              <p className="text-sm font-bold text-slate-700">Produto ativo no cardápio</p>
+              <p className="text-xs text-slate-400">Clientes conseguem ver e pedir este produto</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setProdForm(f => ({ ...f, available: !f.available }))}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${prodForm.available ? 'bg-green-500' : 'bg-slate-200'}`}
+            >
+              <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition duration-200 ${prodForm.available ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
+          </div>
 
           {/* Variantes */}
           <div>
@@ -1731,4 +1976,285 @@ function CategoryForm({ tenantId, onSuccess, onClose, isInventory = false }: { t
   );
 }
 
+// ─── ZoneAdder ────────────────────────────────────────────────────────────────
+function ZoneAdder({ onAdd }: { onAdd: (zone: DeliveryZone) => void }) {
+  const [cepInput, setCepInput] = useState("");
+  const [fee, setFee] = useState("");
+  const [cepInfo, setCepInfo] = useState<{ cep: string; label: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
+  const fmtCep = (v: string) => {
+    const d = v.replace(/\D/g, "").slice(0, 8);
+    return d.length > 5 ? `${d.slice(0, 5)}-${d.slice(5)}` : d;
+  };
+
+  const searchCep = async (raw: string) => {
+    const digits = raw.replace(/\D/g, "");
+    if (digits.length !== 8) { setCepInfo(null); return; }
+    setLoading(true);
+    setError("");
+    try {
+      const r = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+      const d = await r.json();
+      if (d.erro) { setError("CEP não encontrado"); setCepInfo(null); return; }
+      setCepInfo({ cep: digits, label: [d.bairro, d.localidade, d.uf].filter(Boolean).join(", ") });
+    } catch {
+      setError("Erro ao buscar CEP");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAdd = () => {
+    if (!cepInfo) return;
+    onAdd({
+      id: Date.now().toString(),
+      label: cepInfo.label,
+      ceps: [cepInfo.cep],
+      fee: parseFloat(fee) || 0,
+    });
+    setCepInput("");
+    setFee("");
+    setCepInfo(null);
+  };
+
+  return (
+    <div className="border border-dashed border-slate-300 rounded-xl p-3 space-y-3 bg-slate-50/50">
+      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Adicionar zona por CEP</p>
+
+      {/* CEP search */}
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <input
+            value={cepInput}
+            onChange={e => { setCepInput(fmtCep(e.target.value)); setCepInfo(null); setError(""); }}
+            onBlur={e => searchCep(e.target.value)}
+            placeholder="00000-000"
+            inputMode="numeric"
+            className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-amber-400 pr-8"
+          />
+          {loading && (
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => searchCep(cepInput)}
+          className="px-3 py-2 bg-slate-100 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-200 transition-colors whitespace-nowrap"
+        >
+          Buscar
+        </button>
+      </div>
+
+      {error && <p className="text-xs text-red-500 font-medium">{error}</p>}
+
+      {/* CEP result */}
+      {cepInfo && (
+        <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
+          <span className="text-xs font-bold text-green-800 flex-1">
+            {cepInput} — {cepInfo.label}
+          </span>
+        </div>
+      )}
+
+      {/* Fee */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-bold text-slate-400 shrink-0">Taxa R$</span>
+        <input
+          type="number" min="0" step="0.50"
+          value={fee}
+          onChange={e => setFee(e.target.value)}
+          placeholder="0,00"
+          className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-amber-400"
+        />
+        <span className="text-xs text-slate-400">(0 = grátis)</span>
+      </div>
+
+      <Button
+        type="button" size="xs" variant="outline"
+        disabled={!cepInfo}
+        onClick={handleAdd}
+      >
+        + Adicionar zona
+      </Button>
+    </div>
+  );
+}
+
+
+export function TableManagement({ 
+  tenant, 
+  checkoutRequests = [], 
+  onClearTable 
+}: { 
+  tenant: Tenant; 
+  checkoutRequests?: Array<{ tableId: string }>;
+  onClearTable?: (tableId: string) => void;
+}) {
+  const [tables, setTables] = useState<string[]>(["1", "2", "3", "4", "5"]);
+  const [newTable, setNewTable] = useState("");
+
+  const addTable = () => {
+    if (newTable && !tables.includes(newTable)) {
+      setTables([...tables, newTable].sort((a, b) => {
+        const numA = parseInt(a);
+        const numB = parseInt(b);
+        if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+        return a.localeCompare(b);
+      }));
+      setNewTable("");
+    }
+  };
+
+  const removeTable = (id: string) => {
+    setTables(tables.filter(t => t !== id));
+  };
+
+  const menuUrl = `${window.location.origin}/${tenant.slug}/mesa/`;
+
+  return (
+    <ContentCard padding="none" className="overflow-hidden">
+      <div className="p-6 sm:p-8 border-b border-slate-100 bg-slate-50/50">
+        <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Gestão de QR Codes</h3>
+        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Gere códigos para Balcão ou Mesas específicas</p>
+      </div>
+      
+      <div className="p-6 sm:p-8 space-y-10">
+        
+        {/* Balcão Section */}
+        <section className="space-y-4">
+          <h4 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Ponto de Venda Geral</h4>
+          <div className="max-w-sm bg-amber-50 border border-amber-100 rounded-[2rem] p-6 space-y-4 shadow-sm">
+            <div className="flex justify-between items-center">
+              <div>
+                <h4 className="text-2xl font-black text-amber-900">Balcão</h4>
+                <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Pedido sem mesa fixa</p>
+              </div>
+              <div className="w-10 h-10 rounded-full bg-amber-200 flex items-center justify-center text-amber-700">
+                <Monitor className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div className="aspect-square bg-white rounded-2xl flex flex-col items-center justify-center border-2 border-dashed border-amber-200 p-4">
+              <img 
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(menuUrl + 'Balcao')}`} 
+                alt="QR Balcão"
+                className="w-full h-full object-contain"
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <Button 
+                variant="primary" 
+                size="sm" 
+                className="flex-1 text-[10px] bg-amber-600 border-amber-600 hover:bg-amber-700"
+                onClick={() => {
+                  const link = `https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&data=${encodeURIComponent(menuUrl + 'Balcao')}`;
+                  window.open(link, '_blank');
+                }}
+              >
+                Imprimir QR Balcão
+              </Button>
+            </div>
+          </div>
+        </section>
+
+        <div className="h-px bg-slate-100 w-full" />
+
+        {/* Dynamic Tables Section */}
+        <section className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <h4 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Mesas do Salão</h4>
+            <div className="flex gap-2">
+              <input 
+                value={newTable} 
+                onChange={e => setNewTable(e.target.value)} 
+                placeholder="Nº da Mesa" 
+                className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 w-28"
+              />
+              <Button variant="primary" size="sm" onClick={addTable}>
+                + Adicionar Mesa
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            {tables.map(table => {
+              const isRequestingAccount = checkoutRequests.some(r => r.tableId === table);
+              
+              return (
+                <div 
+                  key={table} 
+                  className={`bg-white border rounded-3xl p-4 space-y-3 hover:shadow-xl hover:shadow-slate-100 transition-all group relative ${
+                    isRequestingAccount 
+                      ? "border-red-500 shadow-lg shadow-red-100 animate-pulse" 
+                      : "border-zinc-100 hover:border-amber-400"
+                  }`}
+                >
+                  <button 
+                    onClick={() => removeTable(table)}
+                    className="absolute top-2 right-2 w-6 h-6 rounded-full bg-red-50 text-red-400 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+
+                  <div className="text-center">
+                    <h4 className="text-lg font-black text-slate-800 leading-tight">Mesa {table}</h4>
+                    {isRequestingAccount && (
+                      <p className="text-[9px] font-black text-red-600 uppercase tracking-widest mt-1">Pediu a Conta!</p>
+                    )}
+                  </div>
+
+                  <div className="aspect-square bg-slate-50 rounded-xl flex items-center justify-center p-2 border border-slate-100">
+                    <img 
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(menuUrl + table)}`} 
+                      alt={`QR Mesa ${table}`}
+                      className="w-full h-full object-contain mix-blend-multiply"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    {isRequestingAccount ? (
+                      <button 
+                        onClick={() => onClearTable?.(table)}
+                        className="text-[9px] font-black uppercase text-white bg-red-600 py-2 rounded-lg hover:bg-red-700 transition-colors shadow-lg shadow-red-200"
+                      >
+                        Liberar Mesa
+                      </button>
+                    ) : (
+                      <button 
+                        onClick={() => {
+                          const link = `https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&data=${encodeURIComponent(menuUrl + table)}`;
+                          window.open(link, '_blank');
+                        }}
+                        className="text-[9px] font-black uppercase text-amber-600 bg-amber-50 py-2 rounded-lg hover:bg-amber-100 transition-colors"
+                      >
+                        Baixar QR
+                      </button>
+                    )}
+                    <button 
+                      onClick={() => window.open(menuUrl + table, '_blank')}
+                      className="text-[9px] font-black uppercase text-slate-400 hover:text-slate-600 transition-colors"
+                    >
+                      Testar Link
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {tables.length === 0 && (
+            <EmptyState 
+              title="Nenhuma mesa no salão" 
+              description="Cadastre as mesas para gerar os códigos individuais."
+              icon={Monitor}
+            />
+          )}
+        </section>
+      </div>
+    </ContentCard>
+  );
+}

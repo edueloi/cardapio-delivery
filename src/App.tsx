@@ -92,6 +92,20 @@ function AnimatedRoutes() {
         <Route path="/:slug/display" element={<PublicDashboard />} />
 
         <Route
+          path="/:slug/mesa/:tableId"
+          element={
+            <motion.div
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.4, ease: "easeOut" }}
+            >
+              <MenuView />
+            </motion.div>
+          }
+        />
+
+        <Route
           path="/:slug"
           element={
             <motion.div
