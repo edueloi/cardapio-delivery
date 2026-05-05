@@ -557,14 +557,21 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
     setSaving(true);
     setSaved(false);
     try {
-      await apiFetch(`/api/owner/tenants/${tenant?.id}`, {
+      await apiJson(`/api/owner/tenants/${tenant?.id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, address: JSON.stringify(addr), businessHours: JSON.stringify(hours), deliveryConfig: JSON.stringify(delivery) })
+        body: JSON.stringify({ 
+          ...form, 
+          address: JSON.stringify(addr), 
+          businessHours: JSON.stringify(hours), 
+          deliveryConfig: JSON.stringify(delivery) 
+        })
       });
-      refresh();
+      await refresh();
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "Erro ao salvar configurações");
     } finally {
       setSaving(false);
     }

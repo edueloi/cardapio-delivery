@@ -508,13 +508,24 @@ app.patch("/api/owner/tenants/:tenantId", requireAuth, async (req, res) => {
         ...(whatsapp !== undefined && { whatsapp: whatsapp || null }),
         ...(logoUrl !== undefined && { logoUrl: logoUrl || null }),
         ...(isOpen !== undefined && { isOpen: Boolean(isOpen) }),
-        ...(businessHours !== undefined && { businessHours: typeof businessHours === "string" ? businessHours : JSON.stringify(businessHours) }),
-        ...(deliveryConfig !== undefined && { deliveryConfig: deliveryConfig === null ? null : typeof deliveryConfig === "string" ? deliveryConfig : JSON.stringify(deliveryConfig) }),
+        ...(businessHours !== undefined && { 
+          businessHours: (businessHours === null || businessHours === "null") ? null : 
+                        (typeof businessHours === "string" ? businessHours : JSON.stringify(businessHours)) 
+        }),
+        ...(deliveryConfig !== undefined && { 
+          deliveryConfig: (deliveryConfig === null || deliveryConfig === "null") ? null : 
+                          (typeof deliveryConfig === "string" ? deliveryConfig : JSON.stringify(deliveryConfig)) 
+        }),
       },
     });
+
+    if (name) {
+      await ensureWppSetup(updated.id, updated.name);
+    }
+
     res.json(updated);
   } catch (error) {
-    console.error(error);
+    console.error("TENANT UPDATE ERROR:", error);
     res.status(500).json({ error: "Falha ao atualizar estabelecimento." });
   }
 });
