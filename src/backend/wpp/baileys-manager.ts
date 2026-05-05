@@ -30,6 +30,7 @@ interface ConvState {
   step: "idle" | "menu" | "waiting_order";
   lastMessageAt: number;
   lastBotAt: number;
+  pausedUntil?: number; // timestamp until bot stays silent
 }
 
 const sessions = new Map<string, ActiveSession>();
@@ -283,14 +284,17 @@ function setConvState(tenantId: string, phone: string, update: Partial<ConvState
 
 // ─── Intent detection ─────────────────────────────────────────────────────────
 
-function detectIntent(text: string): "menu" | "address" | "hours" | "human" | "order" | "greeting" | null {
+function detectIntent(text: string): "menu" | "address" | "hours" | "human" | "order" | "greeting" | "exit" | null {
   const t = text.toLowerCase()
-    .normalize("NFD").replace(/[̀-ͯ]/g, "") // remove accents
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // remove accents
     .replace(/[^\w\s]/g, " ").trim();
 
   const has = (...words: string[]) => words.some(w => t.includes(w));
 
-  if (has("falar com", "atendente", "humano", "pessoa", "funcionario", "dono", "gerente", "responsavel") || t === "0")
+  if (has("sair", "encerrar", "obrigado", "obrigada", "valeu", "tchau", "ate logo", "finalizar", "nada mais") || t === "0")
+    return "exit";
+
+  if (has("falar com", "atendente", "humano", "pessoa", "funcionario", "dono", "gerente", "responsavel") || t === "4")
     return "human";
 
   if (has("endereco", "localizacao", "onde fica", "onde voces ficam", "como chegar", "localizacao", "bairro", "rua", "avenida", "maps", "mapa", "localizacao") || t === "2")
@@ -341,6 +345,13 @@ async function handleIncomingMessage(tenantId: string, remoteJid: string, text: 
 
   const phone = jidToPhone(remoteJid);
   const conv = getConvState(tenantId, phone);
+
+  // Trava de Atendimento Humano (Glow-Cut Style)
+  if (conv.pausedUntil && Date.now() < conv.pausedUntil) {
+    console.log(`[Baileys][${tenantId}] 🤐 Robô pausado para atendimento humano com ${phone}.`);
+    return;
+  }
+
   const baseUrl = (process.env.APP_URL || "http://localhost:3000").replace(/\/$/, "");
   const menuLink = `${baseUrl}/${tenant.slug}`;
   const normalized = text.toLowerCase().trim();
@@ -367,83 +378,97 @@ async function handleIncomingMessage(tenantId: string, remoteJid: string, text: 
       ? "✅ *Estamos abertos e prontos para te atender!*" 
       : "🔴 *No momento estamos fechados, mas você pode ver nosso cardápio e deixar seu pedido agendado!*";
     
-    // 1. Saudação inicial completa
-    await send(`${greeting()}! 👋 Seja muito bem-vindo ao *${name}*.\n\n${statusLine}`);
+    // 1. Saudação inicial vinda do painel ou padrão
+    const welcome = tenant.wppBotConfig?.welcomeMessage?.trim() || `${greeting()}! 👋 Seja muito bem-vindo ao *${name}*`;
+    await send(`${welcome}.\n\n${statusLine}`);
     
-    // 2. Menu de opções logo em seguida com digitação
+    // 2. Menu de opções renovado
     await send(
       `Como podemos te ajudar hoje?\n\n` +
       `1️⃣ *Ver Cardápio Online*\n` +
       `2️⃣ *Endereço / Localização*\n` +
       `3️⃣ *Horários de Funcionamento*\n` +
-      `0️⃣ *Falar com um Atendente*\n\n` +
+      `4️⃣ *Falar com um Atendente*\n` +
+      `0️⃣ *Encerrar / Sair*\n\n` +
       `_Digite apenas o número da opção desejada._`,
-      2500 // Mostra "digitando..." por 2.5 segundos
+      2200
     );
     setConvState(tenantId, phone, { step: "menu" });
   };
 
   const sendOrderInfo = async () => {
     if (!openNow) {
-      await send(
-        `⚠️ *${name}* está fechado no momento.\n\n` +
-        `🕐 *Horários de funcionamento:*\n${formatBusinessHours(hours)}\n\n` +
-        `Volte quando estivermos abertos! 😊`,
-        2000
-      );
+      await send(`⚠️ *${name}* está fechado no momento, mas você pode ver o cardápio e agendar aqui:\n${menuLink}`, 1500);
     } else {
-      await send(`🍽️ Aqui está nosso cardápio:\n${menuLink}\n\nFaça seu pedido por lá e a gente cuida do resto! 👌`, 1800);
+      await send(`🍽️ Aqui está nosso cardápio:\n${menuLink}\n\nFaça seu pedido por lá! 👌`, 1500);
     }
-    setConvState(tenantId, phone, { step: "idle" });
+    // Loop de volta para o menu após 3 segundos
+    setTimeout(() => sendMenu(), 3500);
   };
 
   const sendAddress = async () => {
     await send(`📍 *Endereço de ${name}:*\n\n${formatAddress(addr)}`, 1500);
-    setConvState(tenantId, phone, { step: "idle" });
+    // Loop de volta para o menu após 3 segundos
+    setTimeout(() => sendMenu(), 3500);
   };
 
   const sendHours = async () => {
     const status = openNow ? "✅ *Aberto agora*" : "🔴 *Fechado no momento*";
-    await send(`${status}\n\n🕐 *Horários de funcionamento:*\n${formatBusinessHours(hours)}`, 1800);
-    setConvState(tenantId, phone, { step: "idle" });
+    await send(`${status}\n\n🕐 *Horários de funcionamento:*\n${formatBusinessHours(hours)}`, 1500);
+    // Loop de volta para o menu após 3 segundos
+    setTimeout(() => sendMenu(), 3500);
   };
 
   const sendHuman = async () => {
-    await send(`👋 Ok! Um atendente irá falar com você em breve.\n\nSe quiser, você também pode ligar: ${tenant.whatsapp || "número não informado"}`, 1500);
+    const rawOwnerPhone = tenant.whatsapp || "";
+    const cleanOwnerPhone = rawOwnerPhone.replace(/\D/g, "");
+    const ownerWaLink = cleanOwnerPhone ? `https://wa.me/${cleanOwnerPhone.startsWith("55") ? cleanOwnerPhone : `55${cleanOwnerPhone}`}` : null;
+    
+    let clientMsg = `👋 *Entendido! Um atendente humano foi acionado e falará com você em breve.*`;
+    if (ownerWaLink) clientMsg += `\n\nSe tiver pressa, clique aqui:\n👉 ${ownerWaLink}`;
+    await send(clientMsg, 1500);
+
+    setConvState(tenantId, phone, { step: "idle", pausedUntil: Date.now() + (60 * 60 * 1000) });
+
+    if (cleanOwnerPhone) {
+      const notifyMsg = `📢 *ATENDIMENTO SOLICITADO*\nO cliente *${phone}* quer falar com um humano.\n\n🔗 Clique para atender:\nhttps://wa.me/${phone}`;
+      await sendMessage(tenantId, cleanOwnerPhone, notifyMsg);
+    }
+  };
+
+  const sendExit = async () => {
+    await send(`😊 Foi um prazer te atender! Se precisar de algo mais, é só me chamar.\n\nTenha um ótimo dia! 🙏`, 1200);
     setConvState(tenantId, phone, { step: "idle" });
   };
 
-  // Detect intent regardless of step — allows natural language anywhere in the conversation
   const intent = detectIntent(normalized);
 
-  // ── Step: waiting for menu choice ─────────────────────────────────────────
   if (conv.step === "menu") {
-    // Accept numeric shortcuts
     if (normalized === "1") { await sendOrderInfo(); return; }
     if (normalized === "2") { await sendAddress(); return; }
     if (normalized === "3") { await sendHours(); return; }
-    if (normalized === "0") { await sendHuman(); return; }
+    if (normalized === "4") { await sendHuman(); return; }
+    if (normalized === "0") { await sendExit(); return; }
 
-    // Accept natural language — user typed something like "quero cardápio" instead of "1"
     if (intent === "order") { await sendOrderInfo(); return; }
     if (intent === "address") { await sendAddress(); return; }
     if (intent === "hours") { await sendHours(); return; }
     if (intent === "human") { await sendHuman(); return; }
+    if (intent === "exit") { await sendExit(); return; }
     if (intent === "greeting") { await sendMenu(); return; }
 
-    // Didn't match anything — show menu again
     await send(
-      `Não entendi 😅 Pode digitar o número da opção ou escrever o que precisa:\n\n` +
-      `1️⃣ Ver cardápio\n2️⃣ Endereço\n3️⃣ Horários\n0️⃣ Falar com atendente`
+      `Não entendi 😅 Pode digitar o número ou escolher abaixo:\n\n` +
+      `1️⃣ Cardápio\n2️⃣ Endereço\n3️⃣ Horários\n4️⃣ Atendente\n0️⃣ Sair`
     );
     return;
   }
 
-  // ── Step: idle — respond to intent directly, no need for keyword list ─────
   if (intent === "order") { await sendOrderInfo(); return; }
   if (intent === "address") { await sendAddress(); return; }
   if (intent === "hours") { await sendHours(); return; }
   if (intent === "human") { await sendHuman(); return; }
+  if (intent === "exit") { await sendExit(); return; }
 
   if (intent === "greeting" || intent !== null) {
     await sendMenu();
