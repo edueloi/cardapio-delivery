@@ -10,9 +10,10 @@ import MenuView from "./pages/MenuView";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
 import OwnerPortal from "./pages/OwnerPortal";
-import PublicDashboard from "./pages/PublicDashboard";
 import Register from "./pages/Register";
 import LoadingScreen from "./components/LoadingScreen";
+import LandingPage from "./pages/LandingPage";
+import PublicDashboard from "./features/public-dashboard";
 
 function AnimatedRoutes() {
   const location = useLocation();
@@ -24,7 +25,12 @@ function AnimatedRoutes() {
 
   return (
     <AnimatePresence mode="wait">
-      <Routes location={location} key={routeKey}>
+      {/* Só mostra o loading na página inicial (Landing Page) */}
+      {location.pathname === "/" && (
+        <LoadingScreen key="splash" onComplete={() => {}} />
+      )}
+      
+      <Routes location={location} key={location.pathname}>
         <Route path="/login" element={<Login />} />
         <Route path="/cadastro" element={<Register />} />
 
@@ -120,7 +126,7 @@ function AnimatedRoutes() {
           } 
         />
         
-        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/" element={<LandingPage />} />
       </Routes>
     </AnimatePresence>
   );
@@ -128,11 +134,8 @@ function AnimatedRoutes() {
 
 export default function App() {
   return (
-    <>
-      <LoadingScreen />
-      <Router>
-        <AnimatedRoutes />
-      </Router>
-    </>
+    <Router>
+      <AnimatedRoutes />
+    </Router>
   );
 }

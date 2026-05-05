@@ -1,7 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const LoadingScreen: React.FC = () => {
+interface LoadingProps {
+  onComplete?: () => void;
+}
+
+const LoadingScreen: React.FC<LoadingProps> = ({ onComplete }) => {
   const [isVisible, setIsVisible] = useState(true);
 
   useEffect(() => {
