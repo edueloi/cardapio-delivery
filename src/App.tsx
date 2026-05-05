@@ -15,10 +15,15 @@ import Register from "./pages/Register";
 
 function AnimatedRoutes() {
   const location = useLocation();
+  // For /dashboard/* routes use a stable key so tab changes don't trigger exit/enter animation
+  const isDashboard = location.pathname.startsWith("/dashboard/");
+  const routeKey = isDashboard
+    ? location.pathname.split("/").slice(0, 3).join("/")
+    : location.pathname;
 
   return (
     <AnimatePresence mode="wait">
-      <Routes location={location} key={location.pathname}>
+      <Routes location={location} key={routeKey}>
         <Route path="/login" element={<Login />} />
         <Route path="/cadastro" element={<Register />} />
 
@@ -51,7 +56,37 @@ function AnimatedRoutes() {
                 <Dashboard />
               </motion.div>
             </AuthGuard>
-          } 
+          }
+        />
+        <Route
+          path="/dashboard/:slug/historico/:orderId"
+          element={
+            <AuthGuard>
+              <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.3, ease: "easeInOut" }}
+              >
+                <Dashboard />
+              </motion.div>
+            </AuthGuard>
+          }
+        />
+        <Route
+          path="/dashboard/:slug/:tab"
+          element={
+            <AuthGuard>
+              <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.3, ease: "easeInOut" }}
+              >
+                <Dashboard />
+              </motion.div>
+            </AuthGuard>
+          }
         />
 
         <Route path="/:slug/display" element={<PublicDashboard />} />

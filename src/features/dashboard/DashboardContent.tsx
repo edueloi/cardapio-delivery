@@ -36,6 +36,7 @@ interface DashboardContentProps {
   filteredOrders: Order[];
   refreshTenant: () => Promise<void>;
   updateStatus: (orderId: string, status: string) => void | Promise<void>;
+  activeOrderId?: string;
 }
 
 export default function DashboardContent({
@@ -49,6 +50,7 @@ export default function DashboardContent({
   filteredOrders,
   refreshTenant,
   updateStatus,
+  activeOrderId,
 }: DashboardContentProps) {
   const pendingOrders = orders.filter((order) => order.status === "PENDING").length;
   const preparingOrders = orders.filter((order) => order.status === "PREPARING").length;
@@ -186,7 +188,7 @@ export default function DashboardContent({
 
           <div className="grid grid-cols-12 gap-6">
             <div className="col-span-12">
-              <OrdersList filteredOrders={filteredOrders} updateStatus={updateStatus} />
+              <OrdersList filteredOrders={filteredOrders} updateStatus={updateStatus} slug={slug} />
             </div>
           </div>
         </PageWrapper>
@@ -200,7 +202,12 @@ export default function DashboardContent({
             icon={Clock}
             className="mb-5 hidden sm:flex"
           />
-          <OrdersList filteredOrders={filteredOrders} updateStatus={updateStatus} />
+          <OrdersList
+            filteredOrders={filteredOrders}
+            updateStatus={updateStatus}
+            slug={slug}
+            activeOrderId={activeOrderId}
+          />
         </PageWrapper>
       )}
 

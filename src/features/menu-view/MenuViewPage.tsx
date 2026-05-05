@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { 
   ShoppingCart, 
@@ -36,6 +36,47 @@ import {
   StatCard,
   PageWrapper
 } from "../../components";
+
+// ─── Business hours client-side helper ───────────────────────────────────────
+const DAY_KEYS_M = ["sun","mon","tue","wed","thu","fri","sat"] as const;
+function checkIsOpen(tenant: Tenant | null): boolean {
+  if (!tenant) return false;
+  if (tenant.isOpen === false) return false;
+  if (!tenant.businessHours) return true;
+  try {
+    const hours = JSON.parse(tenant.businessHours);
+    const dayKey = DAY_KEYS_M[new Date().getDay()];
+    const day = hours[dayKey];
+    if (!day || !day.enabled) return false;
+    const [oh, om] = day.open.split(":").map(Number);
+    const [ch, cm] = day.close.split(":").map(Number);
+    const mins = new Date().getHours() * 60 + new Date().getMinutes();
+    if (mins < oh * 60 + om || mins >= ch * 60 + cm) return false;
+    if (day.breakEnabled && day.breakStart && day.breakEnd) {
+      const [bsh, bsm] = day.breakStart.split(":").map(Number);
+      const [beh, bem] = day.breakEnd.split(":").map(Number);
+      if (mins >= bsh * 60 + bsm && mins < beh * 60 + bem) return false;
+    }
+    return true;
+  } catch { return true; }
+}
+
+function formatHoursClient(raw: string | null): string {
+  if (!raw) return "Horários não informados";
+  const labels: Record<string, string> = { sun:"Dom", mon:"Seg", tue:"Ter", wed:"Qua", thu:"Qui", fri:"Sex", sat:"Sáb" };
+  try {
+    const hours = JSON.parse(raw);
+    return DAY_KEYS_M.map(k => {
+      const d = hours[k];
+      if (!d) return null;
+      if (!d.enabled) return `${labels[k]}: Fechado`;
+      const base = `${labels[k]}: ${d.open}–${d.close}`;
+      return d.breakEnabled && d.breakStart && d.breakEnd
+        ? `${base} (intervalo ${d.breakStart}–${d.breakEnd})`
+        : base;
+    }).filter(Boolean).join("  •  ");
+  } catch { return "Horários não informados"; }
+}
 
 interface CartItem {
   product: Product;
@@ -92,6 +133,7 @@ export default function MenuViewPage() {
   });
 
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
+  const storeOpen = useMemo(() => checkIsOpen(tenant), [tenant]);
 
   useEffect(() => {
     const savedName = localStorage.getItem(`customer_name_${slug}`);
@@ -279,19 +321,6 @@ export default function MenuViewPage() {
            animate={{ opacity: 1, y: 0 }}
            className="relative z-10 max-w-lg mx-auto text-center"
         >
-          <div className="mb-4">
-             <Button 
-              variant="outline"
-              size="xs"
-              onClick={() =>
-                window.location.assign(`/login?next=${encodeURIComponent(`/dashboard/${slug}`)}`)
-              }
-              className="rounded-full shadow-sm"
-            >
-              Acessar Gestão (Admin)
-            </Button>
-          </div>
-
           {tenant.logoUrl ? (
             <img src={tenant.logoUrl} className="w-20 h-20 rounded-3xl mx-auto shadow-xl mb-6 object-cover border-4 border-white" alt="logo" />
           ) : (
@@ -305,13 +334,25 @@ export default function MenuViewPage() {
           </p>
           
           <div className="flex items-center justify-center gap-4 mt-6">
-            <Badge color="success" dot size="sm">Aberto Agora</Badge>
+            <Badge color={storeOpen ? "success" : "danger"} dot size="sm">
+              {storeOpen ? "Aberto agora" : "Fechado"}
+            </Badge>
             <div className="text-slate-300">|</div>
             <div className="flex items-center gap-1.5 text-slate-400 text-[10px] font-bold uppercase tracking-wider">
                <Utensils className="w-3 h-3" />
                Delivery & Balcão
             </div>
           </div>
+
+          {!storeOpen && (
+            <div className="mt-4 bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-center">
+              <p className="text-sm font-black text-red-700">Estabelecimento fechado no momento</p>
+              {tenant.businessHours && (
+                <p className="text-[11px] text-red-500 mt-1 font-medium">{formatHoursClient(tenant.businessHours)}</p>
+              )}
+              <p className="text-xs text-red-400 mt-1">Você ainda pode navegar pelo cardápio, mas pedidos não serão aceitos.</p>
+            </div>
+          )}
 
           {/* Action buttons */}
           <div className="flex gap-4 mt-8">
@@ -823,14 +864,21 @@ export default function MenuViewPage() {
                     </div>
                   </div>
                   
+                  {!storeOpen && (
+                    <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-center mb-3">
+                      <p className="text-sm font-black text-red-600">Estabelecimento fechado</p>
+                      <p className="text-xs text-red-400 mt-0.5">Pedidos não estão sendo aceitos no momento.</p>
+                    </div>
+                  )}
                   <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => { setIsCartOpen(false); setIsCheckoutOpen(true); }}
-                    className="w-full bg-[#0F172A] text-white p-5 rounded-[24px] font-black text-sm uppercase tracking-widest shadow-xl shadow-blue-900/10 hover:bg-slate-800 transition-all flex items-center justify-center gap-3"
+                    whileHover={{ scale: storeOpen ? 1.02 : 1 }}
+                    whileTap={{ scale: storeOpen ? 0.98 : 1 }}
+                    onClick={() => { if (!storeOpen) return; setIsCartOpen(false); setIsCheckoutOpen(true); }}
+                    disabled={!storeOpen}
+                    className={`w-full p-5 rounded-[24px] font-black text-sm uppercase tracking-widest shadow-xl transition-all flex items-center justify-center gap-3 ${storeOpen ? "bg-[#0F172A] text-white hover:bg-slate-800 shadow-blue-900/10" : "bg-slate-200 text-slate-400 cursor-not-allowed"}`}
                   >
                     <span>Finalizar Pedido</span>
-                    <Send className="w-4 h-4 text-blue-400" />
+                    <Send className="w-4 h-4" />
                   </motion.button>
                 </div>
               )}

@@ -1,21 +1,29 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { DashboardShell } from "../../components";
 import { apiFetch, apiJson } from "../../lib/api";
+import { useAuth } from "../../lib/auth";
 import socket from "../../lib/socket";
 import type { Order, Tenant } from "../../types";
 import DashboardContent from "./DashboardContent";
 import { DASHBOARD_NAVIGATION } from "./config/navigation";
-import { type DashboardOrderTabId, type DashboardTabId } from "./types";
+import { type DashboardOrderTabId, type DashboardTabId, PATH_TO_TAB, TAB_TO_PATH } from "./types";
 
 export default function DashboardPage() {
-  const { slug } = useParams();
+  const { slug, tab: tabParam, orderId } = useParams<{ slug: string; tab?: string; orderId?: string }>();
+  const navigate = useNavigate();
+  const { logout } = useAuth();
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [activeTab, setActiveTab] = useState<DashboardTabId>("overview");
   const [subTab, setSubTab] = useState<DashboardOrderTabId>("pending");
   const [loading, setLoading] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const activeTab: DashboardTabId = (tabParam ? PATH_TO_TAB[tabParam] : undefined) ?? (orderId ? "history" : "overview");
+
+  const navigateToTab = (tab: DashboardTabId) => {
+    navigate(`/dashboard/${slug ?? ""}/${TAB_TO_PATH[tab]}`);
+  };
 
   const fetchOrders = async (tenantId: string) => {
     try {
@@ -71,9 +79,9 @@ export default function DashboardPage() {
     };
   }, [slug]);
 
-  const updateStatus = async (orderId: string, status: string) => {
+  const updateStatus = async (id: string, status: string) => {
     try {
-      await apiFetch(`/api/orders/${orderId}/status`, {
+      await apiFetch(`/api/orders/${id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
@@ -136,21 +144,23 @@ export default function DashboardPage() {
       onToggleMobileMenu={() => setIsMobileMenuOpen((current) => !current)}
       onCloseMobileMenu={() => setIsMobileMenuOpen(false)}
       onSelectTab={(tab) => {
-        setActiveTab(tab as DashboardTabId);
+        navigateToTab(tab as DashboardTabId);
         setIsMobileMenuOpen(false);
       }}
+      onLogout={logout}
     >
       <DashboardContent
         tenant={tenant}
         slug={slug ?? ""}
         orders={orders}
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={navigateToTab}
         subTab={subTab}
         setSubTab={setSubTab}
         filteredOrders={filteredOrders}
         refreshTenant={fetchTenant}
         updateStatus={updateStatus}
+        activeOrderId={orderId}
       />
     </DashboardShell>
   );

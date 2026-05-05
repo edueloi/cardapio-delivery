@@ -29,7 +29,7 @@ import {
   restoreAllSessions,
   sendMessage,
 } from "./src/backend/wpp/baileys-manager";
-import { sendOrderCreatedMessage, sendOrderStatusMessage } from "./src/backend/wpp/messages";
+import { sendOrderCreatedMessage, sendOrderStatusMessage, sendOwnerOrderAlert } from "./src/backend/wpp/messages";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -462,6 +462,31 @@ app.post("/api/owner/tenants/claim", requireAuth, async (req, res) => {
   }
 });
 
+app.patch("/api/owner/tenants/:tenantId", requireAuth, async (req, res) => {
+  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  if (!tenant) return;
+
+  const { name, description, address, whatsapp, logoUrl, isOpen, businessHours } = req.body;
+  try {
+    const updated = await prisma.tenant.update({
+      where: { id: tenant.id },
+      data: {
+        ...(name !== undefined && { name: String(name).trim() }),
+        ...(description !== undefined && { description: description || null }),
+        ...(address !== undefined && { address: address || null }),
+        ...(whatsapp !== undefined && { whatsapp: whatsapp || null }),
+        ...(logoUrl !== undefined && { logoUrl: logoUrl || null }),
+        ...(isOpen !== undefined && { isOpen: Boolean(isOpen) }),
+        ...(businessHours !== undefined && { businessHours: typeof businessHours === "string" ? businessHours : JSON.stringify(businessHours) }),
+      },
+    });
+    res.json(updated);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao atualizar estabelecimento." });
+  }
+});
+
 app.get("/api/owner/tenants/by-slug/:slug", requireAuth, async (req, res) => {
   const tenant = await requireTenantBySlug(req, res, req.params.slug);
   if (!tenant) return;
@@ -721,6 +746,7 @@ app.post("/api/orders", async (req, res) => {
 
     io.to(`tenant-${tenantId}`).emit("new-order", order);
     await sendOrderCreatedMessage(order, tenant).catch(() => undefined);
+    await sendOwnerOrderAlert(order, tenant).catch(() => undefined);
 
     res.json(order);
   } catch (error) {

@@ -1,3 +1,15 @@
+export interface DaySchedule {
+  enabled: boolean;
+  open: string;
+  close: string;
+  breakEnabled?: boolean;
+  breakStart?: string;
+  breakEnd?: string;
+}
+
+export type DayKey = "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
+export type BusinessHours = Partial<Record<DayKey, DaySchedule>>;
+
 export interface Tenant {
   id: string;
   name: string;
@@ -6,6 +18,8 @@ export interface Tenant {
   logoUrl?: string;
   whatsapp?: string;
   address?: string;
+  isOpen?: boolean;
+  businessHours?: string | null; // JSON string
   categories?: Category[];
   wppInstance?: WppInstance | null;
   wppBotConfig?: WppBotConfig | null;

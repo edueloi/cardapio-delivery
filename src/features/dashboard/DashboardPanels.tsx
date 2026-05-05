@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { 
   ClipboardList, 
   Utensils, 
@@ -124,8 +124,37 @@ const STATUS_MAP = {
 
 const fmt = (n: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
 
-export function OrdersList({ filteredOrders, updateStatus }: { filteredOrders: Order[], updateStatus: any }) {
-  const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+export function OrdersList({
+  filteredOrders,
+  updateStatus,
+  slug,
+  activeOrderId,
+}: {
+  filteredOrders: Order[];
+  updateStatus: any;
+  slug?: string;
+  activeOrderId?: string;
+}) {
+  const navigate = useNavigate();
+  const [expandedOrder, setExpandedOrder] = useState<string | null>(activeOrderId ?? null);
+
+  useEffect(() => {
+    setExpandedOrder(activeOrderId ?? null);
+  }, [activeOrderId]);
+
+  const toggleOrder = (orderId: string, isHistory: boolean) => {
+    if (isHistory && slug) {
+      if (expandedOrder === orderId) {
+        navigate(`/dashboard/${slug}/historico`);
+        setExpandedOrder(null);
+      } else {
+        navigate(`/dashboard/${slug}/historico/${orderId}`);
+        setExpandedOrder(orderId);
+      }
+    } else {
+      setExpandedOrder(expandedOrder === orderId ? null : orderId);
+    }
+  };
 
   if (filteredOrders.length === 0) {
     return (
@@ -142,6 +171,7 @@ export function OrdersList({ filteredOrders, updateStatus }: { filteredOrders: O
       <AnimatePresence mode="popLayout">
         {filteredOrders.map(order => {
           const st = STATUS_MAP[order.status as keyof typeof STATUS_MAP] ?? STATUS_MAP.PENDING;
+          const isHistory = order.status === "DELIVERED" || order.status === "CANCELLED";
           const isExpanded = expandedOrder === order.id;
 
           return (
@@ -157,7 +187,7 @@ export function OrdersList({ filteredOrders, updateStatus }: { filteredOrders: O
               {/* Row principal */}
               <div
                 className="flex items-center gap-3 px-4 py-3 cursor-pointer active:bg-zinc-50"
-                onClick={() => setExpandedOrder(isExpanded ? null : order.id)}
+                onClick={() => toggleOrder(order.id, isHistory)}
               >
                 {/* ID + info */}
                 <div className="flex-1 min-w-0">
@@ -387,105 +417,242 @@ function ImageUploader({ value, onChange, label, description }: { value: string,
   );
 }
 
+const DAY_KEYS_UI = ["sun","mon","tue","wed","thu","fri","sat"] as const;
+const DAY_LABELS: Record<string, string> = { sun:"Domingo", mon:"Segunda", tue:"Terça", wed:"Quarta", thu:"Quinta", fri:"Sexta", sat:"Sábado" };
+
+const DEFAULT_HOURS = Object.fromEntries(DAY_KEYS_UI.map(d => [d, { enabled: !["sun"].includes(d), open: "08:00", close: "22:00", breakEnabled: false, breakStart: "12:00", breakEnd: "13:00" }]));
+
+function parseAddress(raw: string | null | undefined) {
+  try { return raw ? JSON.parse(raw) : null; } catch { return null; }
+}
+
+function buildAddressString(addr: AddressForm): string {
+  const parts = [
+    addr.street && addr.number ? `${addr.street}, ${addr.number}` : addr.street || "",
+    addr.complement,
+    addr.neighborhood,
+    addr.city && addr.state ? `${addr.city} - ${addr.state}` : addr.city || addr.state,
+    addr.country !== "Brasil" ? addr.country : "",
+    addr.cep ? `CEP ${addr.cep}` : "",
+  ].filter(Boolean);
+  return parts.join(", ");
+}
+
+interface AddressForm {
+  cep: string; street: string; number: string; complement: string;
+  neighborhood: string; city: string; state: string; country: string;
+}
+
+const EMPTY_ADDR: AddressForm = { cep: "", street: "", number: "", complement: "", neighborhood: "", city: "", state: "", country: "Brasil" };
+
 export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, refresh: () => void }) {
   const [form, setForm] = useState({
     name: tenant?.name || "",
     description: tenant?.description || "",
-    address: tenant?.address || "",
     logoUrl: tenant?.logoUrl || "",
-    whatsapp: tenant?.whatsapp || ""
+    whatsapp: tenant?.whatsapp || "",
+    isOpen: tenant?.isOpen ?? true,
   });
+  const [addr, setAddr] = useState<AddressForm>(() => parseAddress(tenant?.address) ?? { ...EMPTY_ADDR });
+  const [cepLoading, setCepLoading] = useState(false);
+  const [cepError, setCepError] = useState("");
+  const [hours, setHours] = useState<Record<string, { enabled: boolean; open: string; close: string; breakEnabled?: boolean; breakStart?: string; breakEnd?: string }>>(() => {
+    try { return tenant?.businessHours ? JSON.parse(tenant.businessHours) : DEFAULT_HOURS; } catch { return DEFAULT_HOURS; }
+  });
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     if (tenant) {
-      setForm({
-        name: tenant.name || "",
-        description: tenant.description || "",
-        address: tenant.address || "",
-        logoUrl: tenant.logoUrl || "",
-        whatsapp: tenant.whatsapp || ""
-      });
+      setForm({ name: tenant.name || "", description: tenant.description || "", logoUrl: tenant.logoUrl || "", whatsapp: tenant.whatsapp || "", isOpen: tenant.isOpen ?? true });
+      setAddr(parseAddress(tenant.address) ?? { ...EMPTY_ADDR });
+      try { setHours(tenant.businessHours ? JSON.parse(tenant.businessHours) : DEFAULT_HOURS); } catch { setHours(DEFAULT_HOURS); }
     }
   }, [tenant]);
 
-  const handleUpdate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await apiFetch(`/api/tenants/${tenant?.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form)
-    });
-    refresh();
-    alert("Dados atualizados com sucesso!");
+  const fetchCep = async (cep: string) => {
+    const digits = cep.replace(/\D/g, "");
+    if (digits.length !== 8) return;
+    setCepLoading(true);
+    setCepError("");
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+      const data = await res.json();
+      if (data.erro) { setCepError("CEP não encontrado."); return; }
+      setAddr(a => ({ ...a, cep: digits, street: data.logradouro || a.street, neighborhood: data.bairro || a.neighborhood, city: data.localidade || a.city, state: data.uf || a.state, country: "Brasil" }));
+    } catch { setCepError("Erro ao buscar CEP."); }
+    finally { setCepLoading(false); }
   };
 
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setSaved(false);
+    try {
+      await apiFetch(`/api/owner/tenants/${tenant?.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, address: JSON.stringify(addr), businessHours: JSON.stringify(hours) })
+      });
+      refresh();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const setDay = (day: string, field: string, value: any) =>
+    setHours(h => ({ ...h, [day]: { ...h[day], [field]: value } }));
+
+  const setA = (field: keyof AddressForm, value: string) => setAddr(a => ({ ...a, [field]: value }));
+
   return (
-    <ContentCard padding="lg" className="max-w-4xl mx-auto">
-      <form onSubmit={handleUpdate} className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <ImageUploader 
-            label="Logo / Imagem da Unidade"
-            value={form.logoUrl}
-            onChange={(val) => setForm({...form, logoUrl: val})}
-            description="Esta imagem aparecerá no topo do seu cardápio digital."
-          />
-          <div className="space-y-6">
-            <Input 
-              label="Nome do Restaurante"
-              value={form.name}
-              onChange={e => setForm({...form, name: e.target.value})}
-              placeholder="Ex: Smart Burger"
-            />
-            <Input 
-              label="WhatsApp de Contato"
-              value={form.whatsapp}
-              onChange={e => setForm({...form, whatsapp: e.target.value})}
-              placeholder="5511999999999"
-            />
-          </div>
-        </div>
-
-        <Input 
-          label="Slogan / Descrição Curta"
-          value={form.description}
-          onChange={e => setForm({...form, description: e.target.value})}
-          placeholder="Ex: O melhor burger da região"
-        />
-
-        <Textarea 
-          label="Endereço Completo"
-          value={form.address}
-          onChange={e => setForm({...form, address: e.target.value})}
-          placeholder="Rua, Número, Bairro, Cidade - UF"
-          rows={2}
-        />
-
-        <div className="bg-blue-50 p-5 sm:p-6 rounded-2xl border border-blue-100 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-               <p className="text-[10px] font-black uppercase text-blue-600 tracking-widest mb-1">Link do seu Cardápio</p>
-               <p className="text-sm font-bold text-blue-800 break-all">{window.location.origin}/{tenant?.slug}</p>
+    <div className="max-w-4xl mx-auto space-y-6">
+      <ContentCard padding="lg">
+        <form onSubmit={handleUpdate} className="space-y-6">
+          {/* Basic info */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <ImageUploader label="Logo / Imagem da Unidade" value={form.logoUrl} onChange={(val) => setForm({...form, logoUrl: val})} description="Aparecerá no topo do cardápio digital." />
+            <div className="space-y-4">
+              <Input label="Nome do estabelecimento" value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="Ex: Pastel do Edu" />
+              <Input label="WhatsApp de contato" value={form.whatsapp} onChange={e => setForm({...form, whatsapp: e.target.value})} placeholder="5511999999999" hint="DDI + DDD + número" />
             </div>
-            <Button 
-              type="button"
-              variant="outline"
-              size="xs"
-              className="w-full sm:w-auto"
-              onClick={() => {
-                navigator.clipboard.writeText(`${window.location.origin}/${tenant?.slug}`);
-                alert("Link copiado!");
-              }}
-            >
-              Copiar Link
-            </Button>
-        </div>
+          </div>
+          <Input label="Slogan / Descrição curta" value={form.description} onChange={e => setForm({...form, description: e.target.value})} placeholder="Ex: Os melhores pastéis da cidade" />
 
-        <div className="pt-4 flex justify-end">
-          <Button type="submit" size="lg" className="w-full sm:w-auto" iconLeft={<CheckCircle2 className="w-5 h-5" />}>
-            Salvar Alterações
-          </Button>
-        </div>
-      </form>
-    </ContentCard>
+          {/* Address */}
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-3">Endereço</p>
+            <div className="space-y-3">
+              {/* CEP */}
+              <div className="flex gap-3 items-end">
+                <Input
+                  label="CEP"
+                  value={addr.cep}
+                  onChange={e => { setA("cep", e.target.value); setCepError(""); }}
+                  onBlur={e => fetchCep(e.target.value)}
+                  placeholder="00000-000"
+                  wrapperClassName="w-44"
+                  error={cepError || undefined}
+                />
+                <Button type="button" variant="outline" size="sm" loading={cepLoading}
+                  onClick={() => fetchCep(addr.cep)} className="mb-0.5">
+                  Buscar CEP
+                </Button>
+                <p className="text-xs text-slate-400 mb-2">Preenchimento automático via ViaCEP</p>
+              </div>
+
+              {/* Street + number */}
+              <div className="grid grid-cols-3 gap-3">
+                <Input label="Logradouro" value={addr.street} onChange={e => setA("street", e.target.value)} placeholder="Rua, Av, Travessa..." wrapperClassName="col-span-2" />
+                <Input label="Número" value={addr.number} onChange={e => setA("number", e.target.value)} placeholder="123" />
+              </div>
+
+              {/* Complement + neighborhood */}
+              <div className="grid grid-cols-2 gap-3">
+                <Input label="Complemento" value={addr.complement} onChange={e => setA("complement", e.target.value)} placeholder="Apto, Sala, Bloco..." />
+                <Input label="Bairro" value={addr.neighborhood} onChange={e => setA("neighborhood", e.target.value)} placeholder="Bairro" />
+              </div>
+
+              {/* City + state + country */}
+              <div className="grid grid-cols-3 gap-3">
+                <Input label="Cidade" value={addr.city} onChange={e => setA("city", e.target.value)} placeholder="Cidade" wrapperClassName="col-span-1" />
+                <Input label="Estado (UF)" value={addr.state} onChange={e => setA("state", e.target.value.toUpperCase().slice(0,2))} placeholder="SP" />
+                <Input label="País" value={addr.country} onChange={e => setA("country", e.target.value)} placeholder="Brasil" />
+              </div>
+
+              {/* Preview */}
+              {(addr.street || addr.city) && (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-500 font-medium">
+                  📍 {buildAddressString(addr)}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* isOpen toggle */}
+          <div className="rounded-2xl border border-slate-200 p-5 flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-black text-slate-900">Estabelecimento aberto agora</p>
+              <p className="text-xs text-slate-500 mt-0.5">Desativar fecha o cardápio imediatamente e o bot avisa clientes.</p>
+            </div>
+            <Switch checked={form.isOpen} onCheckedChange={v => setForm(f => ({ ...f, isOpen: v }))} />
+          </div>
+
+          {/* Business hours */}
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-3">Horários de funcionamento</p>
+            <div className="space-y-2">
+              {DAY_KEYS_UI.map(day => {
+                const d = hours[day] ?? { enabled: false, open: "08:00", close: "22:00", breakEnabled: false, breakStart: "12:00", breakEnd: "13:00" };
+                const timeInput = (val: string, field: string) => (
+                  <input type="time" value={val} onChange={e => setDay(day, field, e.target.value)}
+                    className="bg-white border border-zinc-200 rounded-lg px-2 py-1.5 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                );
+                return (
+                  <div key={day} className="rounded-xl border border-slate-200 bg-slate-50/50 overflow-hidden">
+                    {/* Main row */}
+                    <div className="flex items-center gap-3 px-4 py-3">
+                      <Switch checked={d.enabled} onCheckedChange={v => setDay(day, "enabled", v)} />
+                      <span className="w-20 text-sm font-bold text-slate-700 shrink-0">{DAY_LABELS[day]}</span>
+                      {d.enabled ? (
+                        <div className="flex items-center gap-2 flex-1 flex-wrap">
+                          {timeInput(d.open, "open")}
+                          <span className="text-xs text-slate-400 font-bold">até</span>
+                          {timeInput(d.close, "close")}
+                          <button
+                            type="button"
+                            onClick={() => setDay(day, "breakEnabled", !d.breakEnabled)}
+                            className={`ml-auto text-[10px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-lg border transition-colors ${d.breakEnabled ? "bg-amber-50 border-amber-300 text-amber-700" : "border-slate-200 text-slate-400 hover:border-slate-300"}`}
+                          >
+                            {d.breakEnabled ? "▸ Intervalo" : "+ Intervalo"}
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-400 font-bold flex-1">Fechado</span>
+                      )}
+                    </div>
+                    {/* Break row */}
+                    {d.enabled && d.breakEnabled && (
+                      <div className="flex items-center gap-3 px-4 py-2.5 border-t border-dashed border-amber-200 bg-amber-50/50">
+                        <span className="w-20 shrink-0" />
+                        <span className="text-[11px] font-black text-amber-600 uppercase tracking-widest shrink-0">Intervalo</span>
+                        <div className="flex items-center gap-2">
+                          {timeInput(d.breakStart ?? "12:00", "breakStart")}
+                          <span className="text-xs text-slate-400 font-bold">até</span>
+                          {timeInput(d.breakEnd ?? "13:00", "breakEnd")}
+                        </div>
+                        <span className="text-[10px] text-amber-500 ml-1">Pausa / almoço</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Link */}
+          <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase text-blue-600 tracking-widest mb-1">Link do cardápio</p>
+              <p className="text-sm font-bold text-blue-800 break-all">{window.location.origin}/{tenant?.slug}</p>
+            </div>
+            <Button type="button" variant="outline" size="xs" className="w-full sm:w-auto"
+              onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/${tenant?.slug}`); }}>
+              Copiar link
+            </Button>
+          </div>
+
+          <div className="pt-2 flex items-center justify-end gap-3">
+            {saved && <span className="text-sm font-bold text-green-600">✓ Salvo!</span>}
+            <Button type="submit" loading={saving} iconLeft={<CheckCircle2 className="w-4 h-4" />}>
+              Salvar alterações
+            </Button>
+          </div>
+        </form>
+      </ContentCard>
+    </div>
   );
 }
 

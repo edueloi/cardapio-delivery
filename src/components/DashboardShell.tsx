@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { type LucideIcon, Menu, Monitor, Utensils, X } from "lucide-react";
+import { type LucideIcon, LogOut, Menu, Monitor, Utensils, X } from "lucide-react";
 
 interface DashboardNavigationItem {
   id: string;
@@ -25,6 +25,7 @@ interface DashboardShellProps {
   onToggleMobileMenu: () => void;
   onCloseMobileMenu: () => void;
   onSelectTab: (tab: string) => void;
+  onLogout?: () => void;
   children: ReactNode;
 }
 
@@ -37,6 +38,7 @@ export default function DashboardShell({
   onToggleMobileMenu,
   onCloseMobileMenu,
   onSelectTab,
+  onLogout,
   children,
 }: DashboardShellProps) {
   const tenantInitial = tenantName?.[0] || "G";
@@ -123,8 +125,8 @@ export default function DashboardShell({
           ))}
         </nav>
 
-        {/* Ver cardápio link */}
-        <div className="p-4 border-t border-white/10">
+        {/* Ver cardápio + logout */}
+        <div className="p-4 border-t border-white/10 space-y-1">
           <Link
             to={`/${slug}`}
             className="flex items-center gap-3 w-full p-2.5 text-slate-400 hover:text-[#C9A227] transition-colors rounded-xl hover:bg-white/10"
@@ -132,6 +134,15 @@ export default function DashboardShell({
             <Utensils className="w-4 h-4 shrink-0" />
             <span className="text-xs font-bold uppercase tracking-widest">Ver Cardápio</span>
           </Link>
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              className="flex items-center gap-3 w-full p-2.5 text-slate-400 hover:text-red-400 transition-colors rounded-xl hover:bg-white/10"
+            >
+              <LogOut className="w-4 h-4 shrink-0" />
+              <span className="text-xs font-bold uppercase tracking-widest">Sair</span>
+            </button>
+          )}
         </div>
 
         {/* Status footer */}
@@ -196,8 +207,19 @@ export default function DashboardShell({
                   <span className="w-2 h-2 rounded-full bg-green-500" />
                   <span className="text-xs font-medium text-slate-600">Bot Atendimento: Ativo</span>
                 </div>
-                <div className="w-10 h-10 bg-[#C9A227] rounded-full flex items-center justify-center font-bold text-white text-sm">
-                  {tenantInitial}
+                <div className="flex items-center gap-2">
+                  <div className="w-10 h-10 bg-[#C9A227] rounded-full flex items-center justify-center font-bold text-white text-sm">
+                    {tenantInitial}
+                  </div>
+                  {onLogout && (
+                    <button
+                      onClick={onLogout}
+                      title="Sair"
+                      className="w-10 h-10 rounded-full flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors border border-slate-200"
+                    >
+                      <LogOut className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
