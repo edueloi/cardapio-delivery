@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Lock, Mail, Store } from "lucide-react";
+import { Eye, EyeOff, Lock, Mail, Store } from "lucide-react";
 import { Button, Input } from "../../components";
 import { useAuth } from "../../lib/auth";
 import { resolvePostAuthPath } from "./authRedirect";
@@ -13,6 +13,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const next = searchParams.get("next") || "/painel";
 
@@ -55,10 +56,15 @@ export default function LoginPage() {
           />
           <Input
             label="Senha"
-            type="password"
+            type={showPassword ? "text" : "password"}
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             iconLeft={<Lock className="w-4 h-4" />}
+            iconRight={
+              <button type="button" onClick={() => setShowPassword((v) => !v)} className="text-zinc-400 hover:text-zinc-600">
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            }
             placeholder="Sua senha"
             error={error || undefined}
           />

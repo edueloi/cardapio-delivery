@@ -596,6 +596,12 @@ app.post("/api/upload", requireAuth, upload.single("file"), (req, res) => {
   res.json({ url: `/uploads/${req.file.filename}` });
 });
 
+app.get("/api/tenants/check-slug/:slug", async (req, res) => {
+  const { slug } = req.params;
+  const existing = await prisma.tenant.findUnique({ where: { slug } });
+  res.json({ taken: !!existing });
+});
+
 app.get("/api/tenants/:slug", async (req, res) => {
   const { slug } = req.params;
 

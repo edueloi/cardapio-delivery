@@ -3,8 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider = "mysql"
+  url      = env("DATABASE_URL")
 }
 
 model Tenant {
@@ -97,7 +97,7 @@ model InventoryItem {
   minStock        Float?    @map("min_stock")
   unit            String?   // kg, g, un, cm, ml
   weight          String?   // Specific weight/measure e.g. "500g"
-  usage           String    @default("SALE") // SALE (external), INTERNAL
+  usage           String    @default("SALE") @map("usage") // SALE (external), INTERNAL
   purchaseDate    DateTime? @map("purchase_date")
   expirationDate  DateTime? @map("expiration_date")
   createdAt       DateTime  @default(now()) @map("created_at")

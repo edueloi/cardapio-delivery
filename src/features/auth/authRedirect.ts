@@ -23,13 +23,11 @@ export function resolvePostAuthPath(next: string | null, tenants: TenantMembersh
   const normalized = normalizeNextPath(next);
   const requestedSlug = getRequestedDashboardSlug(normalized);
 
-  if (!requestedSlug) {
-    return normalized;
-  }
-
-  const requestedTenant = tenants.find((membership) => membership.tenant.slug === requestedSlug);
-  if (requestedTenant) {
-    return `/dashboard/${requestedTenant.tenant.slug}`;
+  if (requestedSlug) {
+    const requestedTenant = tenants.find((membership) => membership.tenant.slug === requestedSlug);
+    if (requestedTenant) {
+      return `/dashboard/${requestedTenant.tenant.slug}`;
+    }
   }
 
   const firstTenantSlug = tenants[0]?.tenant.slug;

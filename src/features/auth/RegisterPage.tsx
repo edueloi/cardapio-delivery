@@ -1,11 +1,22 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Lock, Mail, Store, User } from "lucide-react";
+import { Eye, EyeOff, Lock, Mail, Store, User } from "lucide-react";
 import { Button, Input } from "../../components";
 import { useAuth } from "../../lib/auth";
 import { getRequestedDashboardSlug, resolvePostAuthPath } from "./authRedirect";
 
 type RegisterMode = "create" | "claim";
+
+function toSlug(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
+}
 
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -23,7 +34,34 @@ export default function RegisterPage() {
     claimSlug: requestedSlug || "",
   });
   const [error, setError] = useState("");
+  const [slugError, setSlugError] = useState("");
+  const [slugEdited, setSlugEdited] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const slugCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (slugEdited) return;
+    setForm((current) => ({ ...current, establishmentSlug: toSlug(form.establishmentName) }));
+  }, [form.establishmentName, slugEdited]);
+
+  function handleSlugChange(value: string) {
+    const sanitized = toSlug(value);
+    setSlugEdited(true);
+    setForm((current) => ({ ...current, establishmentSlug: sanitized }));
+    setSlugError("");
+
+    if (slugCheckTimer.current) clearTimeout(slugCheckTimer.current);
+    if (!sanitized) return;
+
+    slugCheckTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/tenants/check-slug/${encodeURIComponent(sanitized)}`);
+        const data = await res.json();
+        if (data.taken) setSlugError("Esse link já está em uso, escolha outro.");
+      } catch {}
+    }, 500);
+  }
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -111,10 +149,15 @@ export default function RegisterPage() {
 
           <Input
             label="Senha"
-            type="password"
+            type={showPassword ? "text" : "password"}
             value={form.password}
             onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
             iconLeft={<Lock className="w-4 h-4" />}
+            iconRight={
+              <button type="button" onClick={() => setShowPassword((v) => !v)} className="text-zinc-400 hover:text-zinc-600">
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            }
             placeholder="Crie uma senha"
           />
 
@@ -132,11 +175,10 @@ export default function RegisterPage() {
               <Input
                 label="Slug do link"
                 value={form.establishmentSlug}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, establishmentSlug: event.target.value }))
-                }
+                onChange={(event) => handleSlugChange(event.target.value)}
                 placeholder="Ex: pastelaria-do-edu"
-                error={error || undefined}
+                error={slugError || (mode === "create" && error ? error : undefined)}
+                hint={!slugError && form.establishmentSlug ? `localhost:3000/${form.establishmentSlug}` : undefined}
               />
             </div>
           ) : (

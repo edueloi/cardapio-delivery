@@ -70,7 +70,7 @@ function AnimatedRoutes() {
           } 
         />
         
-        <Route path="/" element={<Navigate to="/pastelaria-do-edu" replace />} />
+        <Route path="/" element={<Navigate to="/login" replace />} />
       </Routes>
     </AnimatePresence>
   );

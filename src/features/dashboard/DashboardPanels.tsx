@@ -742,9 +742,24 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
           </div>
         </div>
       )) : (
-        <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-8 sm:p-12 text-center">
-           <Utensils className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-           <p className="text-slate-400 font-medium">Nenhuma categoria criada ainda.</p>
+        <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-8 sm:p-12 text-center flex flex-col items-center gap-4">
+          <Utensils className="w-12 h-12 text-slate-300" />
+          <div>
+            <p className="text-slate-700 font-black text-base">Comece criando uma categoria</p>
+            <p className="text-slate-400 text-sm mt-1 max-w-xs mx-auto">
+              Categorias organizam seu cardápio — ex: <span className="font-bold">Pastéis</span>, <span className="font-bold">Bebidas</span>, <span className="font-bold">Sobremesas</span>. Depois de criar uma, você adiciona os produtos dentro dela.
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              const input = document.querySelector<HTMLInputElement>('input[placeholder="Ex: Marmitas"]');
+              input?.focus();
+            }}
+            className="mt-1 inline-flex items-center gap-2 bg-[#C9A227] hover:bg-[#A8841C] text-white text-sm font-black px-5 py-2.5 rounded-xl transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Adicionar primeira categoria
+          </button>
         </div>
       )}
     </div>
