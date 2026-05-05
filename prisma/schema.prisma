@@ -19,14 +19,57 @@ model Tenant {
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   users      User[]
+  memberships TenantMembership[]
   categories Category[]
   products   Product[]
   orders     Order[]
   cashRegisters CashRegister[]
   inventoryCategories InventoryCategory[]
   inventoryItems      InventoryItem[]
+  wppInstance WppInstance?
+  wppBotConfig WppBotConfig?
 
   @@map("tenants")
+}
+
+model Account {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  memberships TenantMembership[]
+  sessions    AuthSession[]
+
+  @@map("accounts")
+}
+
+model TenantMembership {
+  id        String   @id @default(cuid())
+  accountId String   @map("account_id")
+  tenantId  String   @map("tenant_id")
+  role      String   @default("OWNER") // OWNER, ADMIN, STAFF
+  createdAt DateTime @default(now()) @map("created_at")
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  tenant   Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, tenantId])
+  @@map("tenant_memberships")
+}
+
+model AuthSession {
+  id        String   @id @default(cuid())
+  accountId String   @map("account_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("auth_sessions")
 }
 
 model InventoryCategory {
@@ -110,6 +153,38 @@ model User {
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
   @@map("users")
+}
+
+model WppInstance {
+  id           String   @id @default(cuid())
+  tenantId     String   @unique @map("tenant_id")
+  instanceName String   @map("instance_name")
+  phone        String?
+  status       String   @default("not_configured") // not_configured, disconnected, qr_pending, connecting, connected
+  qrCode       String?  @map("qr_code")
+  isActive     Boolean  @default(false) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("wpp_instances")
+}
+
+model WppBotConfig {
+  id               String   @id @default(cuid())
+  tenantId         String   @unique @map("tenant_id")
+  botEnabled       Boolean  @default(false) @map("bot_enabled")
+  autoReplyEnabled Boolean  @default(true) @map("auto_reply_enabled")
+  sendOrderCreated Boolean  @default(true) @map("send_order_created")
+  sendStatusUpdates Boolean @default(true) @map("send_status_updates")
+  welcomeMessage   String?  @map("welcome_message")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("wpp_bot_configs")
 }
 
 model Category {

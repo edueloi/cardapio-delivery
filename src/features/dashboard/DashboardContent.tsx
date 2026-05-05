@@ -1,0 +1,276 @@
+import {
+  CircleDollarSign,
+  Clock,
+  LayoutDashboard,
+  MessageSquare,
+  Utensils,
+} from "lucide-react";
+import {
+  ContentCard,
+  FilterLineSegmented,
+  PageWrapper,
+  SectionTitle,
+  StatCard,
+  StatGrid,
+} from "../../components";
+import type { Order, Tenant } from "../../types";
+import {
+  FinancePanel,
+  InventoryPanel,
+  MenuManagement,
+  OrdersList,
+  ProfileManagement,
+  StaffList,
+} from "./DashboardPanels";
+import { WhatsAppManagementPanel, WhatsAppOverviewCard } from "./WhatsAppPanel";
+import { type DashboardOrderTabId, type DashboardTabId } from "./types";
+
+interface DashboardContentProps {
+  tenant: Tenant;
+  slug: string;
+  orders: Order[];
+  activeTab: DashboardTabId;
+  setActiveTab: (tab: DashboardTabId) => void;
+  subTab: DashboardOrderTabId;
+  setSubTab: (tab: DashboardOrderTabId) => void;
+  filteredOrders: Order[];
+  refreshTenant: () => Promise<void>;
+  updateStatus: (orderId: string, status: string) => void | Promise<void>;
+}
+
+export default function DashboardContent({
+  tenant,
+  slug,
+  orders,
+  activeTab,
+  setActiveTab,
+  subTab,
+  setSubTab,
+  filteredOrders,
+  refreshTenant,
+  updateStatus,
+}: DashboardContentProps) {
+  const pendingOrders = orders.filter((order) => order.status === "PENDING").length;
+  const preparingOrders = orders.filter((order) => order.status === "PREPARING").length;
+  const shippedOrders = orders.filter((order) => order.status === "SHIPPED").length;
+  const deliveredOrders = orders.filter((order) => order.status === "DELIVERED").length;
+  const totalSales = orders.reduce((acc, order) => acc + order.total, 0);
+  const averageTicket = totalSales / (orders.length || 1);
+
+  return (
+    <>
+      {activeTab === "overview" && (
+        <PageWrapper>
+          <SectionTitle
+            title="Visão Geral"
+            description="Acompanhe o desempenho da sua unidade em tempo real"
+            icon={LayoutDashboard}
+            className="mb-6"
+          />
+
+          <StatGrid cols={4} className="mb-8">
+            <StatCard
+              title="Pedidos Hoje"
+              value={orders.length}
+              icon={Clock}
+              description="Atualizado agora"
+              color="info"
+              delay={0.1}
+            />
+            <StatCard
+              title="Ticket Médio"
+              value={new Intl.NumberFormat("pt-BR", {
+                style: "currency",
+                currency: "BRL",
+              }).format(averageTicket)}
+              icon={CircleDollarSign}
+              description="Estável hoje"
+              color="success"
+              delay={0.2}
+            />
+            <StatCard
+              title="Vendas Totais"
+              value={new Intl.NumberFormat("pt-BR", {
+                style: "currency",
+                currency: "BRL",
+              }).format(totalSales)}
+              icon={CircleDollarSign}
+              description="Acumulado do dia"
+              color="info"
+              delay={0.3}
+            />
+            <StatCard
+              title="Fila Cozinha"
+              value={preparingOrders}
+              icon={Utensils}
+              description="Requisições ativas"
+              color="warning"
+              delay={0.4}
+            />
+          </StatGrid>
+
+          <div className="grid grid-cols-12 gap-6">
+            <div className="col-span-12 lg:col-span-8 space-y-6">
+              <ContentCard>
+                <h3 className="text-lg font-bold text-slate-800 mb-4">Resumo da Operação</h3>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
+                  <button
+                    onClick={() => {
+                      setActiveTab("live-orders");
+                      setSubTab("pending");
+                    }}
+                    className="p-4 bg-blue-50 rounded-2xl text-center hover:bg-blue-100 transition-colors group"
+                  >
+                    <div className="text-2xl font-black text-blue-600 group-hover:scale-110 transition-transform">
+                      {pendingOrders}
+                    </div>
+                    <div className="text-[10px] font-black uppercase text-blue-400 tracking-wider">
+                      Aguardando
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setActiveTab("live-orders");
+                      setSubTab("preparing");
+                    }}
+                    className="p-4 bg-orange-50 rounded-2xl text-center hover:bg-orange-100 transition-colors group"
+                  >
+                    <div className="text-2xl font-black text-orange-600 group-hover:scale-110 transition-transform">
+                      {preparingOrders}
+                    </div>
+                    <div className="text-[10px] font-black uppercase text-orange-400 tracking-wider">
+                      Em Preparo
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("history")}
+                    className="p-4 bg-green-50 rounded-2xl text-center hover:bg-green-100 transition-colors group"
+                  >
+                    <div className="text-2xl font-black text-green-600 group-hover:scale-110 transition-transform">
+                      {deliveredOrders}
+                    </div>
+                    <div className="text-[10px] font-black uppercase text-green-400 tracking-wider">
+                      Entregues
+                    </div>
+                  </button>
+                </div>
+              </ContentCard>
+            </div>
+            <div className="col-span-12 lg:col-span-4">
+              <WhatsAppOverviewCard tenant={tenant} onOpenSettings={() => setActiveTab("whatsapp")} />
+            </div>
+          </div>
+        </PageWrapper>
+      )}
+
+      {activeTab === "live-orders" && (
+        <PageWrapper>
+          <SectionTitle
+            title="Painel de Pedidos"
+            description="O que está acontecendo agora?"
+            icon={Clock}
+            action={
+              <FilterLineSegmented
+                options={[
+                  { value: "pending", label: `Pendentes (${pendingOrders})` },
+                  { value: "preparing", label: `Cozinha (${preparingOrders})` },
+                  { value: "shipped", label: `Prontos (${shippedOrders})` },
+                ]}
+                value={subTab}
+                onChange={(id) => setSubTab(id as DashboardOrderTabId)}
+              />
+            }
+            className="mb-6"
+          />
+
+          <div className="grid grid-cols-12 gap-6">
+            <div className="col-span-12">
+              <OrdersList filteredOrders={filteredOrders} updateStatus={updateStatus} />
+            </div>
+          </div>
+        </PageWrapper>
+      )}
+
+      {activeTab === "history" && (
+        <div className="space-y-6">
+          <h3 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">
+            Relatório de Encerramento
+          </h3>
+          <div className="grid grid-cols-12 gap-6">
+            <div className="col-span-12">
+              <OrdersList filteredOrders={filteredOrders} updateStatus={updateStatus} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "menu" && (
+        <div className="space-y-6">
+          <div className="bg-blue-600 rounded-[28px] sm:rounded-3xl p-6 sm:p-8 text-white mb-8 shadow-xl shadow-blue-100 flex flex-col items-start gap-5 sm:flex-row sm:justify-between sm:items-center overflow-hidden relative">
+            <div className="relative z-10 max-w-md">
+              <h3 className="text-2xl sm:text-3xl font-black tracking-tight mb-2">Cardápio Inteligente</h3>
+              <p className="text-blue-100 font-medium text-sm sm:text-base">
+                Gerencie categorias, preços e disponibilidades em tempo real.
+              </p>
+            </div>
+            <Utensils className="w-24 h-24 sm:w-32 sm:h-32 absolute -right-6 -bottom-6 sm:-right-8 sm:-bottom-8 text-blue-500/30 rotate-12" />
+          </div>
+          <MenuManagement tenant={tenant} refresh={refreshTenant} />
+        </div>
+      )}
+
+      {activeTab === "finance" && (
+        <div className="space-y-6">
+          <h3 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">Fluxo de Caixa</h3>
+          <FinancePanel slug={slug} tenant={tenant} />
+        </div>
+      )}
+
+      {activeTab === "whatsapp" && (
+        <div className="space-y-6">
+          <SectionTitle
+            title="WhatsApp e Bot"
+            description="Conecte um número por estabelecimento e configure o atendimento automático."
+            icon={MessageSquare}
+          />
+          <WhatsAppManagementPanel tenant={tenant} onUpdated={refreshTenant} />
+        </div>
+      )}
+
+      {activeTab === "profile" && (
+        <div className="space-y-6">
+          <h3 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">
+            Configurações da Unidade
+          </h3>
+          <ProfileManagement tenant={tenant} refresh={refreshTenant} />
+        </div>
+      )}
+
+      {activeTab === "staff" && (
+        <div className="space-y-6">
+          <h3 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">
+            Equipe de Atendimento
+          </h3>
+          <StaffList tenant={tenant} />
+        </div>
+      )}
+
+      {activeTab === "inventory" && (
+        <div className="space-y-6">
+          <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h3 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight underline decoration-blue-500 decoration-4 underline-offset-4">
+              Gestão de Insumos
+            </h3>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                Estoque Integrado
+              </span>
+            </div>
+          </div>
+          <InventoryPanel tenant={tenant} />
+        </div>
+      )}
+    </>
+  );
+}

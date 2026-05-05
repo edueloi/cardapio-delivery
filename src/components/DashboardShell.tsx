@@ -1,0 +1,233 @@
+import type { ReactNode } from "react";
+import { Link } from "react-router-dom";
+import { AnimatePresence, motion } from "motion/react";
+import { type LucideIcon, Menu, Monitor, Utensils, X } from "lucide-react";
+
+interface DashboardNavigationItem {
+  id: string;
+  label: string;
+  tab: string;
+  icon: LucideIcon;
+}
+
+interface DashboardNavigationGroup {
+  id: string;
+  label: string;
+  items: DashboardNavigationItem[];
+}
+
+interface DashboardShellProps {
+  tenantName?: string;
+  slug: string;
+  activeTab: string;
+  navigationGroups: DashboardNavigationGroup[];
+  isMobileMenuOpen: boolean;
+  onToggleMobileMenu: () => void;
+  onCloseMobileMenu: () => void;
+  onSelectTab: (tab: string) => void;
+  children: ReactNode;
+}
+
+export default function DashboardShell({
+  tenantName,
+  slug,
+  activeTab,
+  navigationGroups,
+  isMobileMenuOpen,
+  onToggleMobileMenu,
+  onCloseMobileMenu,
+  onSelectTab,
+  children,
+}: DashboardShellProps) {
+  const tenantInitial = tenantName?.[0] || "G";
+  const tenantLabel = tenantName || "SmartMenu";
+
+  return (
+    <div className="min-h-screen bg-[#F8FAFC] flex flex-col md:flex-row font-sans relative">
+      <div className="md:hidden flex items-center justify-between gap-3 px-4 py-3 bg-[#0F172A] text-white sticky top-0 z-40">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="w-9 h-9 bg-blue-500 rounded-xl flex items-center justify-center font-bold text-white uppercase text-sm shrink-0">
+            {tenantInitial}
+          </div>
+          <div className="min-w-0">
+            <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+              Unidade ativa
+            </div>
+            <div className="font-black tracking-tight text-sm uppercase truncate">
+              {tenantLabel}
+            </div>
+          </div>
+        </div>
+        <button
+          onClick={onToggleMobileMenu}
+          className="p-2 hover:bg-slate-800 rounded-xl transition-colors shrink-0"
+        >
+          {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+        </button>
+      </div>
+
+      <aside
+        className={`
+          fixed inset-y-0 left-0 z-50 w-[84vw] max-w-[320px] bg-[#0F172A] text-slate-300 flex flex-col transition-transform duration-300 ease-in-out md:w-72 md:max-w-none md:translate-x-0 md:sticky md:top-0 md:h-screen shrink-0
+          ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"}
+        `}
+      >
+        <div className="p-5 md:p-6 flex items-center justify-between border-b border-slate-800">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="w-9 h-9 bg-blue-500 rounded-xl flex items-center justify-center font-bold text-white uppercase shrink-0">
+              {tenantInitial}
+            </div>
+            <div className="min-w-0">
+              <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">
+                Painel
+              </div>
+              <span className="block text-base md:text-lg font-semibold text-white tracking-tight leading-none truncate">
+                {tenantLabel}
+              </span>
+            </div>
+          </div>
+          <button onClick={onCloseMobileMenu} className="md:hidden text-slate-500 hover:text-white shrink-0">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <nav className="flex-1 py-5 md:py-6 px-4 space-y-6 overflow-y-auto">
+          {navigationGroups.map((group) => (
+            <div key={group.id} className="space-y-2">
+              <div className="px-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                {group.label}
+              </div>
+              <div className="space-y-1">
+                {group.items.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => onSelectTab(item.tab)}
+                    className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl font-medium transition-colors cursor-pointer ${
+                      activeTab === item.tab
+                        ? "bg-slate-800 text-white shadow-sm"
+                        : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                    }`}
+                  >
+                    <item.icon className="w-4 h-4 shrink-0" />
+                    <span className="text-sm text-left">{item.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </nav>
+
+        <div className="p-4 border-t border-slate-800">
+          <Link
+            to={`/${slug}`}
+            className="flex items-center gap-3 w-full p-2.5 text-slate-400 hover:text-white transition-colors rounded-xl hover:bg-slate-800"
+          >
+            <Utensils className="w-4 h-4 shrink-0" />
+            <span className="text-xs font-bold uppercase tracking-widest">Ver Cardápio</span>
+          </Link>
+        </div>
+
+        <div className="p-5 md:p-6 bg-slate-950/50">
+          <div className="flex items-center gap-2 text-[10px] text-green-500/80 font-mono">
+            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+            Server Online
+          </div>
+        </div>
+      </aside>
+
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden"
+            onClick={onCloseMobileMenu}
+          />
+        )}
+      </AnimatePresence>
+
+      <main className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
+        <header className="bg-white/90 backdrop-blur-md border-b border-slate-200 sticky top-[61px] md:top-0 z-30">
+          <div className="px-4 sm:px-6 md:px-8 py-3 md:py-4">
+            <div className="flex items-start justify-between gap-4 md:hidden">
+              <div className="min-w-0">
+                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1">
+                  Gestão da unidade
+                </div>
+                <h2 className="text-xl font-black text-slate-900 tracking-tight leading-none">
+                  Painel Operacional
+                </h2>
+                <span className="inline-flex mt-3 bg-blue-50 text-blue-700 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase border border-blue-100 tracking-wide">
+                  {tenantName || "Unidade"}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <Link
+                  to={`/${slug}/display`}
+                  target="_blank"
+                  className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500 hover:text-indigo-600 transition-colors"
+                  aria-label="Abrir painel TV"
+                >
+                  <Monitor className="w-4 h-4" />
+                </Link>
+                <Link
+                  to={`/${slug}`}
+                  className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500 hover:text-blue-600 transition-colors"
+                  aria-label="Ver cardápio"
+                >
+                  <Utensils className="w-4 h-4" />
+                </Link>
+              </div>
+            </div>
+
+            <div className="hidden md:flex items-center justify-between gap-6 min-h-[48px]">
+              <div className="flex items-center gap-4 min-w-0">
+                <h2 className="text-xl font-bold text-slate-800">Painel Operacional</h2>
+                <span className="bg-blue-50 text-blue-700 text-[10px] px-2 py-1 rounded font-bold uppercase border border-blue-100 tracking-wide">
+                  {tenantName || "Unidade"}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-6">
+                <Link
+                  to={`/${slug}/display`}
+                  target="_blank"
+                  className="text-slate-400 hover:text-indigo-600 transition-colors flex items-center gap-2 group"
+                >
+                  <span className="text-xs font-bold uppercase tracking-widest group-hover:underline">
+                    Painel TV
+                  </span>
+                  <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center border border-slate-200">
+                    <Monitor className="w-4 h-4" />
+                  </div>
+                </Link>
+                <Link
+                  to={`/${slug}`}
+                  className="text-slate-400 hover:text-blue-600 transition-colors flex items-center gap-2 group"
+                >
+                  <span className="text-xs font-bold uppercase tracking-widest group-hover:underline">
+                    Ver Cardápio
+                  </span>
+                  <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center border border-slate-200">
+                    <Utensils className="w-4 h-4" />
+                  </div>
+                </Link>
+                <div className="hidden xl:flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-green-500" />
+                  <span className="text-xs font-medium text-slate-600">Bot Atendimento: Ativo</span>
+                </div>
+                <div className="w-10 h-10 bg-slate-50 rounded-full border border-slate-200 flex items-center justify-center font-bold text-slate-400 text-sm">
+                  JS
+                </div>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <div className="p-4 sm:p-5 md:p-8 overflow-y-auto">{children}</div>
+      </main>
+    </div>
+  );
+}

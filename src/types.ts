@@ -7,6 +7,54 @@ export interface Tenant {
   whatsapp?: string;
   address?: string;
   categories?: Category[];
+  wppInstance?: WppInstance | null;
+  wppBotConfig?: WppBotConfig | null;
+}
+
+export interface Account {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface TenantMembership {
+  membershipId: string;
+  role: string;
+  tenant: Tenant;
+}
+
+export interface AuthPayload {
+  token: string;
+  account: Account;
+  tenants: TenantMembership[];
+}
+
+export interface WppInstance {
+  id: string;
+  tenantId: string;
+  instanceName: string;
+  phone?: string | null;
+  status: string;
+  qrCode?: string | null;
+  isActive: boolean;
+}
+
+export interface WppBotConfig {
+  id: string;
+  tenantId: string;
+  botEnabled: boolean;
+  autoReplyEnabled: boolean;
+  sendOrderCreated: boolean;
+  sendStatusUpdates: boolean;
+  welcomeMessage?: string | null;
+}
+
+export interface WppSessionInfo {
+  tenantId: string;
+  status: string;
+  phone?: string | null;
+  qrCode?: string | null;
+  qrDataUrl?: string | null;
 }
 
 export interface Category {
