@@ -912,9 +912,10 @@ app.patch("/api/orders/:id/status", requireAuth, async (req, res) => {
 
         if (updatedItem.quantity <= 0) {
           const productsToDisable = await prisma.product.findMany({
-            where: { inventoryItemId: updatedItem.id, autoDisableWhenOutOfStock: true, available: true },
+            where: { inventoryItemId: updatedItem.id, available: true },
           });
           for (const p of productsToDisable) {
+            if (!(p as any).autoDisableWhenOutOfStock) continue;
             await prisma.product.update({ where: { id: p.id }, data: { available: false } });
             io.to(`tenant-${updatedOrder.tenantId}`).emit("product-availability-changed", { id: p.id, available: false });
           }
