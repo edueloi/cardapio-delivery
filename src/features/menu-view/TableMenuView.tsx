@@ -37,14 +37,20 @@ export default function TableMenuView() {
       })
       .catch(() => setLoading(false));
 
-    const savedName = localStorage.getItem(`table_name_${slug}_${tableId}`);
-    const savedPhone = localStorage.getItem(`table_phone_${slug}_${tableId}`);
-    if (savedName && savedPhone) {
-      setCustomer({ name: savedName, phone: savedPhone });
-      setStep("menu");
-      fetchActiveOrders();
+    const savedCart = localStorage.getItem(`table_cart_${slug}_${tableId}`);
+    if (savedCart) {
+      try { setCart(JSON.parse(savedCart)); } catch (e) { console.error("Failed to parse saved cart"); }
     }
   }, [slug, tableId]);
+
+  // Persist cart to localStorage
+  useEffect(() => {
+    if (cart.length > 0) {
+      localStorage.setItem(`table_cart_${slug}_${tableId}`, JSON.stringify(cart));
+    } else {
+      localStorage.removeItem(`table_cart_${slug}_${tableId}`);
+    }
+  }, [cart, slug, tableId]);
 
   useEffect(() => {
     if (!tenant) return;
@@ -55,17 +61,36 @@ export default function TableMenuView() {
       socket.emit("join-table", `${tenant.id}-mesa-${tableId}`);
     }
 
-    socket.on("table-update", fetchActiveOrders);
+    socket.on("table-update", () => {
+      fetchActiveOrders();
+      // If we are in the menu and orders are now empty, it means the admin cleared the table
+      // We check if the fetch returns empty in the fetchActiveOrders itself
+    });
     
     return () => {
-      socket.off("table-update", fetchActiveOrders);
+      socket.off("table-update");
     };
   }, [tenant, tableId]);
 
   const fetchActiveOrders = () => {
     fetch(`/api/orders/table/${slug}/${tableId}`)
       .then(r => r.json())
-      .then(data => setOrders(data))
+      .then(data => {
+        setOrders(data);
+        
+        // AUTO-RESET LOGIC:
+        // If the admin cleared the table (data is empty) 
+        // AND we are currently in the menu step
+        // we should clear the local session to allow the next customer to check in.
+        if (data.length === 0 && step === "menu") {
+          localStorage.removeItem(`table_name_${slug}_${tableId}`);
+          localStorage.removeItem(`table_phone_${slug}_${tableId}`);
+          localStorage.removeItem(`table_cart_${slug}_${tableId}`);
+          setCustomer({ name: "", phone: "" });
+          setCart([]);
+          setStep("checkin");
+        }
+      })
       .catch(() => {});
   };
 
@@ -127,6 +152,7 @@ export default function TableMenuView() {
       });
       if (res.ok) {
         setCart([]);
+        localStorage.removeItem(`table_cart_${slug}_${tableId}`);
         showToast("Pedido enviado para a cozinha!");
         fetchActiveOrders();
       }
@@ -170,7 +196,9 @@ export default function TableMenuView() {
               
               <div className="space-y-2">
                 <h1 className="text-3xl font-serif text-white tracking-wide">Bem-vindo ao {tenant.name}</h1>
-                <p className="text-amber-500/60 text-sm font-medium tracking-widest uppercase">Mesa {tableId}</p>
+                <p className="text-amber-500/60 text-sm font-medium tracking-widest uppercase">
+                  {tableId === 'Balcao' ? 'Atendimento no Balcão' : `Mesa ${tableId}`}
+                </p>
               </div>
 
               <form onSubmit={handleCheckin} className="space-y-4">
@@ -224,7 +252,9 @@ export default function TableMenuView() {
                 <div className="h-8 w-px bg-white/5" />
                 <div>
                   <h1 className="text-lg font-serif text-white leading-none">{tenant.name}</h1>
-                  <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mt-1">Mesa {tableId}</p>
+                  <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mt-1">
+                    {tableId === 'Balcao' ? 'Balcão' : `Mesa ${tableId}`}
+                  </p>
                 </div>
               </div>
               <div className="text-right">

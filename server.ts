@@ -1610,7 +1610,7 @@ await restoreAllSessions().catch((error) => {
   console.warn("[Baileys] Falha ao restaurar sessões:", error);
 });
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3012;
 httpServer.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
