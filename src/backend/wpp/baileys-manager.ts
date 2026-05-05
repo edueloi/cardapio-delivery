@@ -128,9 +128,15 @@ function formatBusinessHours(hours: BusinessHours): string {
 }
 
 function greeting(): string {
-  const h = new Date().getHours();
-  if (h < 12) return "Bom dia";
-  if (h < 18) return "Boa tarde";
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    hour: "numeric",
+    hour12: false
+  });
+  const h = parseInt(formatter.format(now));
+  if (h >= 5 && h < 12) return "Bom dia";
+  if (h >= 12 && h < 18) return "Boa tarde";
   return "Boa noite";
 }
 
