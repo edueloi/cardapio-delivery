@@ -16,8 +16,8 @@ model Tenant {
   whatsapp    String?
   address     String?
   isOpen      Boolean  @default(true) @map("is_open")
-  businessHours String? @map("business_hours") // JSON: { mon: {open:"08:00",close:"22:00",enabled:true}, ... }
-  deliveryConfig String? @map("delivery_config") // JSON: DeliveryConfig
+  businessHours String? @map("business_hours") @db.Text // JSON: { mon: {open:"08:00",close:"22:00",enabled:true}, ... }
+  deliveryConfig String? @map("delivery_config") @db.Text // JSON: DeliveryConfig
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 

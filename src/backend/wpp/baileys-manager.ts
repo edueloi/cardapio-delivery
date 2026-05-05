@@ -301,9 +301,9 @@ async function handleIncomingMessage(tenantId: string, remoteJid: string, text: 
   }
 
   const send = async (msg: string) => {
-    console.log(`[Baileys][${tenantId}] 🤖 Enviando resposta para ${phone}...`);
+    console.log(`[Baileys][${tenantId}] 🤖 Enviando resposta para ${remoteJid}...`);
     setConvState(tenantId, phone, { lastBotAt: Date.now() });
-    await sendMessage(tenantId, phone, msg);
+    await sendMessage(tenantId, remoteJid, msg);
   };
 
   const openNow = isOpenNow(tenant as any);
@@ -562,11 +562,11 @@ export async function disconnectSession(tenantId: string): Promise<void> {
   await updateDb(tenantId, "disconnected", null, null);
 }
 
-export async function sendMessage(tenantId: string, phone: string, text: string): Promise<void> {
+export async function sendMessage(tenantId: string, to: string, text: string): Promise<void> {
   const session = sessions.get(tenantId);
   if (!session?.sock || session.status !== "connected") return;
 
-  const jid = phoneToJid(phone);
+  const jid = to.includes("@") ? to : phoneToJid(to);
   const previous = sendingLocks.get(tenantId) || Promise.resolve();
   const current = previous.then(async () => {
     try {
