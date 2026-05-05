@@ -519,14 +519,18 @@ app.patch("/api/owner/tenants/:tenantId", requireAuth, async (req, res) => {
       },
     });
 
-    if (name) {
-      await ensureWppSetup(updated.id, updated.name);
-    }
-
     res.json(updated);
   } catch (error) {
     console.error("TENANT UPDATE ERROR:", error);
     res.status(500).json({ error: "Falha ao atualizar estabelecimento." });
+  }
+
+  if (name) {
+    try {
+      await ensureWppSetup(req.params.tenantId, String(name).trim());
+    } catch (wppError) {
+      console.error("Erro ao configurar WhatsApp (não crítico):", wppError);
+    }
   }
 });
 
