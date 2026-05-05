@@ -392,6 +392,8 @@ export async function initSession(tenantId: string): Promise<void> {
 
   sock.ev.on("connection.update", async (update: any) => {
     const { connection, lastDisconnect, qr } = update;
+    
+    console.log(`[Baileys][${tenantId}] Connection Update:`, { connection, hasQR: !!qr });
 
     if (qr) {
       session.qrRaw = qr;
@@ -409,14 +411,15 @@ export async function initSession(tenantId: string): Promise<void> {
       session.qrRaw = null;
       await updateDb(tenantId, "connected", session.phone, null);
       broadcast(tenantId);
-      console.log(`[Baileys][${tenantId}] Conectado como ${session.phone}`);
+      console.log(`[Baileys][${tenantId}] ✅ CONECTADO COM SUCESSO! Telefone: ${session.phone}`);
     }
 
     if (connection === "close") {
       const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
       const loggedOut = statusCode === DisconnectReason.loggedOut;
+      const reason = lastDisconnect?.error?.message || "Unknown";
       
-      console.log(`[Baileys][${tenantId}] Conexão fechada. Código: ${statusCode}. LoggedOut: ${loggedOut}`);
+      console.log(`[Baileys][${tenantId}] ❌ Conexão fechada. Status: ${statusCode}, LoggedOut: ${loggedOut}, Reason: ${reason}`);
 
       session.status = "disconnected";
       session.phone = null;
@@ -425,9 +428,11 @@ export async function initSession(tenantId: string): Promise<void> {
       broadcast(tenantId);
 
       if (loggedOut) {
+        console.log(`[Baileys][${tenantId}] 🗑️ Sessão encerrada pelo usuário. Limpando dados.`);
         try { fs.rmSync(dir, { recursive: true, force: true }); } catch { return; }
         sessions.delete(tenantId);
       } else {
+        console.log(`[Baileys][${tenantId}] 🔄 Tentando reconectar em 5 segundos...`);
         setTimeout(() => { initSession(tenantId).catch(() => undefined); }, 5_000);
       }
     }

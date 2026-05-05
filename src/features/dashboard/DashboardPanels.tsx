@@ -30,7 +30,7 @@ import {
   Plus
 } from "lucide-react";
 import socket from "../../lib/socket";
-import { apiFetch } from "../../lib/api";
+import { apiFetch, apiJson } from "../../lib/api";
 import { Order, Tenant, CashRegister, DeliveryConfig, DeliveryZone } from "../../types";
 import { motion, AnimatePresence } from "motion/react";
 import { 
@@ -499,6 +499,30 @@ function buildAddressString(addr: AddressForm): string {
   return parts.join(", ");
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function maskPhone(value: string | null | undefined): string {
+  if (!value) return "";
+  const digits = String(value).replace(/\D/g, "");
+  // Remove 55 prefix if present for masking
+  const clean = (digits.startsWith("55") && digits.length >= 12) ? digits.slice(2) : digits;
+  
+  if (clean.length <= 2) return clean.length > 0 ? `(${clean}` : "";
+  if (clean.length <= 6) return `(${clean.slice(0, 2)}) ${clean.slice(2)}`;
+  if (clean.length <= 10) return `(${clean.slice(0, 2)}) ${clean.slice(2, 6)}-${clean.slice(6)}`;
+  return `(${clean.slice(0, 2)}) ${clean.slice(2, 7)}-${clean.slice(7, 11)}`;
+}
+
+function unmaskPhone(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  // Se já tem 12 ou 13 dígitos e começa com 55, mantém. 
+  // Caso contrário, se tem 10 ou 11 (DDD + número), adiciona 55.
+  if (digits.length === 10 || digits.length === 11) {
+    return `55${digits}`;
+  }
+  return digits;
+}
+
 interface AddressForm {
   cep: string; street: string; number: string; complement: string;
   neighborhood: string; city: string; state: string; country: string;
@@ -511,7 +535,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
     name: tenant?.name || "",
     description: tenant?.description || "",
     logoUrl: tenant?.logoUrl || "",
-    whatsapp: tenant?.whatsapp || "",
+    whatsapp: maskPhone(tenant?.whatsapp) || "",
     isOpen: tenant?.isOpen ?? true,
   });
   const [addr, setAddr] = useState<AddressForm>(() => parseAddress(tenant?.address) ?? { ...EMPTY_ADDR });
@@ -531,7 +555,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
 
   useEffect(() => {
     if (tenant) {
-      setForm({ name: tenant.name || "", description: tenant.description || "", logoUrl: tenant.logoUrl || "", whatsapp: tenant.whatsapp || "", isOpen: tenant.isOpen ?? true });
+      setForm({ name: tenant.name || "", description: tenant.description || "", logoUrl: tenant.logoUrl || "", whatsapp: maskPhone(tenant.whatsapp) || "", isOpen: tenant.isOpen ?? true });
       setAddr(parseAddress(tenant.address) ?? { ...EMPTY_ADDR });
       try { setHours(tenant.businessHours ? JSON.parse(tenant.businessHours) : DEFAULT_HOURS); } catch { setHours(DEFAULT_HOURS); }
       setDelivery(parseDeliveryConfig(tenant.deliveryConfig));
@@ -561,6 +585,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
         method: 'PATCH',
         body: JSON.stringify({ 
           ...form, 
+          whatsapp: unmaskPhone(form.whatsapp),
           address: JSON.stringify(addr), 
           businessHours: JSON.stringify(hours), 
           deliveryConfig: JSON.stringify(delivery) 
@@ -591,7 +616,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
             <ImageUploader label="Logo / Imagem da Unidade" value={form.logoUrl} onChange={(val) => setForm({...form, logoUrl: val})} description="Aparecerá no topo do cardápio digital." />
             <div className="space-y-4">
               <Input label="Nome do estabelecimento" value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="Ex: Pastel do Edu" />
-              <Input label="WhatsApp de contato" value={form.whatsapp} onChange={e => setForm({...form, whatsapp: e.target.value})} placeholder="5511999999999" hint="DDI + DDD + número" />
+              <Input label="WhatsApp de contato" value={form.whatsapp} onChange={e => setForm({...form, whatsapp: maskPhone(e.target.value)})} placeholder="(00) 00000-0000" hint="Digite apenas o DDD + Número" />
             </div>
           </div>
           <Input label="Slogan / Descrição curta" value={form.description} onChange={e => setForm({...form, description: e.target.value})} placeholder="Ex: Os melhores pastéis da cidade" />
