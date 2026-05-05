@@ -12,6 +12,7 @@ import Login from "./pages/Login";
 import OwnerPortal from "./pages/OwnerPortal";
 import PublicDashboard from "./pages/PublicDashboard";
 import Register from "./pages/Register";
+import LoadingScreen from "./components/LoadingScreen";
 
 function AnimatedRoutes() {
   const location = useLocation();
@@ -127,8 +128,11 @@ function AnimatedRoutes() {
 
 export default function App() {
   return (
-    <Router>
-      <AnimatedRoutes />
-    </Router>
+    <>
+      <LoadingScreen />
+      <Router>
+        <AnimatedRoutes />
+      </Router>
+    </>
   );
 }

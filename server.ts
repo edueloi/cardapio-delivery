@@ -1602,8 +1602,39 @@ if (process.env.NODE_ENV !== "production") {
 } else {
   const distPath = path.join(process.cwd(), "dist");
   app.use(express.static(distPath));
-  app.get("*", (_req, res) => {
-    res.sendFile(path.join(distPath, "index.html"));
+
+  app.get("*", async (req, res) => {
+    const parts = req.path.split("/").filter(Boolean);
+    const slug = parts[0];
+    
+    // Default values
+    let title = "Cardápio Digital";
+    let description = "Peça agora pelo nosso cardápio digital!";
+    let image = "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800";
+
+    if (slug && !["api", "login", "register", "admin", "assets", "uploads"].includes(slug)) {
+      try {
+        const tenant = await prisma.tenant.findUnique({ where: { slug } });
+        if (tenant) {
+          title = `${tenant.name} | Cardápio Digital`;
+          description = tenant.description || "Confira nosso cardápio e faça seu pedido online!";
+          image = tenant.logoUrl || image;
+        }
+      } catch (e) {
+        console.error("SEO Error:", e);
+      }
+    }
+
+    try {
+      const indexHtml = fs.readFileSync(path.join(distPath, "index.html"), "utf-8");
+      const injectedHtml = indexHtml
+        .replace(/{{TITLE}}/g, title)
+        .replace(/{{DESCRIPTION}}/g, description)
+        .replace(/{{IMAGE}}/g, image);
+      res.send(injectedHtml);
+    } catch (e) {
+      res.sendFile(path.join(distPath, "index.html"));
+    }
   });
 }
 
