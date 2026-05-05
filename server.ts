@@ -118,7 +118,7 @@ async function ensureWppSetup(tenantId: string, tenantName: string) {
       where: { tenantId },
       create: {
         tenantId,
-        botEnabled: false,
+        botEnabled: true,
         autoReplyEnabled: true,
         sendOrderCreated: true,
         sendStatusUpdates: true,

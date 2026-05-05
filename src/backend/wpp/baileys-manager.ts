@@ -230,6 +230,33 @@ function setConvState(tenantId: string, phone: string, update: Partial<ConvState
   convStates.set(key, { ...current, ...update, lastMessageAt: Date.now() });
 }
 
+// ─── Intent detection ─────────────────────────────────────────────────────────
+
+function detectIntent(text: string): "menu" | "address" | "hours" | "human" | "order" | "greeting" | null {
+  const t = text.toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "") // remove accents
+    .replace(/[^\w\s]/g, " ").trim();
+
+  const has = (...words: string[]) => words.some(w => t.includes(w));
+
+  if (has("falar com", "atendente", "humano", "pessoa", "funcionario", "dono", "gerente", "responsavel"))
+    return "human";
+
+  if (has("endereco", "localizacao", "onde fica", "onde voces ficam", "como chegar", "localizacao", "bairro", "rua", "avenida", "maps", "mapa", "localizacao"))
+    return "address";
+
+  if (has("horario", "hora", "funcionamento", "abre", "fecha", "aberto", "fechado", "que horas", "funcionando", "atende"))
+    return "hours";
+
+  if (has("cardapio", "menu", "pedido", "pedir", "quero", "o que tem", "oque tem", "comida", "lanche", "marmita", "prato", "ver cardapio", "fazer pedido", "comprar", "produto", "combo", "opcao", "opcoes"))
+    return "order";
+
+  if (has("oi", "ola", "boa noite", "boa tarde", "bom dia", "bom dia", "oiee", "oii", "hey", "ola", "ei ", "e ai", "eai", "tudo bem", "tudo bom"))
+    return "greeting";
+
+  return null;
+}
+
 // ─── Main bot handler ─────────────────────────────────────────────────────────
 
 async function handleIncomingMessage(tenantId: string, remoteJid: string, text: string) {
@@ -259,82 +286,94 @@ async function handleIncomingMessage(tenantId: string, remoteJid: string, text: 
 
   const openNow = isOpenNow(tenant as any);
   const hours = parseBusinessHours((tenant as any).businessHours);
+  const addr = (tenant as any).address;
+  const name = tenant.name;
+
+  const sendMenu = async () => {
+    const statusLine = openNow ? "✅ Estamos *abertos* agora!" : "🔴 Estamos *fechados* no momento.";
+    await send(
+      `${greeting()}! 👋 Bem-vindo ao *${name}*.\n${statusLine}\n\n` +
+      `O que você precisa?\n\n` +
+      `1️⃣ Ver cardápio\n` +
+      `2️⃣ Endereço\n` +
+      `3️⃣ Horários de funcionamento\n` +
+      `0️⃣ Falar com atendente`
+    );
+    setConvState(tenantId, phone, { step: "menu" });
+  };
+
+  const sendOrderInfo = async () => {
+    if (!openNow) {
+      await send(
+        `⚠️ *${name}* está fechado no momento.\n\n` +
+        `🕐 *Horários de funcionamento:*\n${formatBusinessHours(hours)}\n\n` +
+        `Volte quando estivermos abertos! 😊`
+      );
+    } else {
+      await send(`🍽️ Aqui está nosso cardápio:\n${menuLink}\n\nFaça seu pedido por lá e a gente cuida do resto! 👌`);
+    }
+    setConvState(tenantId, phone, { step: "idle" });
+  };
+
+  const sendAddress = async () => {
+    await send(`📍 *Endereço de ${name}:*\n${addr || "Endereço não informado"}`);
+    setConvState(tenantId, phone, { step: "idle" });
+  };
+
+  const sendHours = async () => {
+    const status = openNow ? "✅ *Aberto agora*" : "🔴 *Fechado no momento*";
+    await send(`${status}\n\n🕐 *Horários de funcionamento:*\n${formatBusinessHours(hours)}`);
+    setConvState(tenantId, phone, { step: "idle" });
+  };
+
+  const sendHuman = async () => {
+    await send(`👋 Ok! Um atendente irá falar com você em breve.\n\nSe quiser, você também pode ligar: ${tenant.whatsapp || "número não informado"}`);
+    setConvState(tenantId, phone, { step: "idle" });
+  };
+
+  // Detect intent regardless of step — allows natural language anywhere in the conversation
+  const intent = detectIntent(normalized);
 
   // ── Step: waiting for menu choice ─────────────────────────────────────────
   if (conv.step === "menu") {
-    if (normalized === "1") {
-      if (!openNow) {
-        await send(
-          `⚠️ *${tenant.name}* está fechado no momento.\n\n` +
-          `🕐 *Horários de funcionamento:*\n${formatBusinessHours(hours)}\n\n` +
-          `Volte quando estivermos abertos! 😊`
-        );
-      } else {
-        await send(`🍽️ Aqui está nosso cardápio:\n${menuLink}\n\nFaça seu pedido por lá e a gente cuida do resto! 👌`);
-      }
-      setConvState(tenantId, phone, { step: "idle" });
-      return;
-    }
+    // Accept numeric shortcuts
+    if (normalized === "1") { await sendOrderInfo(); return; }
+    if (normalized === "2") { await sendAddress(); return; }
+    if (normalized === "3") { await sendHours(); return; }
+    if (normalized === "0") { await sendHuman(); return; }
 
-    if (normalized === "2") {
-      const addr = (tenant as any).address || "Endereço não informado";
-      await send(`📍 *Endereço de ${tenant.name}:*\n${addr}`);
-      setConvState(tenantId, phone, { step: "idle" });
-      return;
-    }
+    // Accept natural language — user typed something like "quero cardápio" instead of "1"
+    if (intent === "order") { await sendOrderInfo(); return; }
+    if (intent === "address") { await sendAddress(); return; }
+    if (intent === "hours") { await sendHours(); return; }
+    if (intent === "human") { await sendHuman(); return; }
+    if (intent === "greeting") { await sendMenu(); return; }
 
-    if (normalized === "3") {
-      const status = openNow ? "✅ *Aberto agora*" : "🔴 *Fechado no momento*";
-      await send(
-        `${status}\n\n🕐 *Horários de funcionamento:*\n${formatBusinessHours(hours)}`
-      );
-      setConvState(tenantId, phone, { step: "idle" });
-      return;
-    }
-
-    if (normalized === "0") {
-      await send(`👋 Ok! Um atendente irá falar com você em breve.\n\nSe quiser, você também pode ligar: ${tenant.whatsapp || "número não informado"}`);
-      setConvState(tenantId, phone, { step: "idle" });
-      return;
-    }
-
-    // Didn't pick a valid option — show menu again
+    // Didn't match anything — show menu again
     await send(
-      `Não entendi 😅 Por favor, escolha uma opção:\n\n` +
+      `Não entendi 😅 Pode digitar o número da opção ou escrever o que precisa:\n\n` +
       `1️⃣ Ver cardápio\n2️⃣ Endereço\n3️⃣ Horários\n0️⃣ Falar com atendente`
     );
     return;
   }
 
-  // ── Step: idle — detect trigger keywords ──────────────────────────────────
-  const triggers = ["oi", "olá", "ola", "bom dia", "boa tarde", "boa noite", "menu",
-    "cardapio", "cardápio", "pedido", "quero", "oque tem", "o que tem", "atendimento"];
-  const isTriggered = triggers.some((t) => normalized.includes(t));
-  if (!isTriggered) return;
+  // ── Step: idle — respond to intent directly, no need for keyword list ─────
+  if (intent === "order") { await sendOrderInfo(); return; }
+  if (intent === "address") { await sendAddress(); return; }
+  if (intent === "hours") { await sendHours(); return; }
+  if (intent === "human") { await sendHuman(); return; }
 
-  const customWelcome = tenant.wppBotConfig.welcomeMessage?.trim();
-
-  if (customWelcome) {
-    // Owner defined a custom message — just send it
-    await send(customWelcome);
+  if (intent === "greeting" || intent !== null) {
+    const customWelcome = tenant.wppBotConfig.welcomeMessage?.trim();
+    if (customWelcome) {
+      await send(customWelcome);
+      return;
+    }
+    await sendMenu();
     return;
   }
 
-  // Default: send greeting + menu
-  const name = tenant.name;
-  const statusLine = openNow
-    ? "✅ Estamos *abertos* agora!"
-    : "🔴 Estamos *fechados* no momento.";
-
-  await send(
-    `${greeting()}! 👋 Bem-vindo ao *${name}*.\n${statusLine}\n\n` +
-    `O que você precisa?\n\n` +
-    `1️⃣ Ver cardápio\n` +
-    `2️⃣ Endereço\n` +
-    `3️⃣ Horários de funcionamento\n` +
-    `0️⃣ Falar com atendente`
-  );
-  setConvState(tenantId, phone, { step: "menu" });
+  // No intent matched — ignore silently (spam, stickers, reactions)
 }
 
 // ─── initSession ─────────────────────────────────────────────────────────────
@@ -487,7 +526,7 @@ export async function connectSession(tenantId: string): Promise<SessionInfo> {
       }
     });
   });
-  return getSessionInfo(tenantId);
+  return getSessionInfo(tenantId) ?? { tenantId, status: "disconnected", phone: null, qrDataUrl: null };
 }
 
 export async function disconnectSession(tenantId: string): Promise<void> {

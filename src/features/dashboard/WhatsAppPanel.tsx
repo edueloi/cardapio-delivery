@@ -334,14 +334,16 @@ export function WhatsAppManagementPanel({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-6">
-            <Button
-              fullWidth
-              loading={busyAction === "connect"}
-              iconLeft={<Power className="w-4 h-4" />}
-              onClick={connect}
-            >
-              Conectar
-            </Button>
+            {status !== "connected" && (
+              <Button
+                fullWidth
+                loading={busyAction === "connect"}
+                iconLeft={<Power className="w-4 h-4" />}
+                onClick={connect}
+              >
+                Conectar
+              </Button>
+            )}
             <Button
               fullWidth
               variant="outline"
@@ -389,7 +391,7 @@ export function WhatsAppManagementPanel({
               value={tenant.whatsapp || ""}
               disabled
               placeholder="Ainda não informado"
-              hint="Esse número vem do cadastro do estabelecimento."
+              hint="Edite em Configurações → dados do estabelecimento."
             />
           </div>
 
