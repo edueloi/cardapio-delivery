@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { 
   ClipboardList, 
@@ -48,7 +48,9 @@ import {
   FilterLineSegmented,
   EmptyState,
   Modal,
+  ModalFooter,
   Input,
+  Select,
   Textarea,
   Switch,
   StatCardColor,
@@ -113,179 +115,160 @@ function OrderWaitTime({ createdAt, status }: { createdAt: string, status: strin
   return <span className="text-[10px] font-bold text-orange-500 bg-orange-50 px-2 py-0.5 rounded-full">{wait}</span>;
 }
 
+const STATUS_MAP = {
+  PENDING:   { label: 'Aguardando', color: 'bg-amber-100 text-amber-700',  border: '#F59E0B' },
+  PREPARING: { label: 'Em Preparo', color: 'bg-blue-100 text-blue-700',    border: '#3B82F6' },
+  SHIPPED:   { label: 'Pronto',     color: 'bg-orange-100 text-orange-700', border: '#F97316' },
+  DELIVERED: { label: 'Concluído',  color: 'bg-green-100 text-green-700',  border: '#22C55E' },
+} as const;
+
+const fmt = (n: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
+
 export function OrdersList({ filteredOrders, updateStatus }: { filteredOrders: Order[], updateStatus: any }) {
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
 
+  if (filteredOrders.length === 0) {
+    return (
+      <EmptyState
+        title="Nenhum pedido aqui por enquanto"
+        description="Os pedidos aparecerão aqui conforme forem chegando."
+        icon={ClipboardList}
+      />
+    );
+  }
+
   return (
-    <AnimatePresence mode="popLayout">
-      {filteredOrders.length === 0 ? (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="bg-white rounded-2xl p-12 text-center border border-slate-200 shadow-sm"
-        >
-          <div className="text-4xl mb-4 opacity-20">📋</div>
-          <p className="text-slate-400 font-bold text-sm uppercase tracking-wide">Nenhum pedido aqui por enquanto.</p>
-        </motion.div>
-      ) : (
-        <div className="space-y-4">
-          {filteredOrders.map(order => (
+    <div className="space-y-2.5">
+      <AnimatePresence mode="popLayout">
+        {filteredOrders.map(order => {
+          const st = STATUS_MAP[order.status as keyof typeof STATUS_MAP] ?? STATUS_MAP.PENDING;
+          const isExpanded = expandedOrder === order.id;
+
+          return (
             <motion.div
               key={order.id}
               layout
-              className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden border-l-4 transition-all"
-              style={{ 
-                borderLeftColor: 
-                  order.status === 'PENDING' ? '#FBBF24' : 
-                  order.status === 'PREPARING' ? '#3B82F6' : '#22C55E' 
-              }}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.97 }}
+              className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden"
+              style={{ borderLeftWidth: 4, borderLeftColor: st.border }}
             >
-              <div 
-                className="flex flex-col gap-3 p-4 cursor-pointer hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between"
-                onClick={() => setExpandedOrder(expandedOrder === order.id ? null : order.id)}
+              {/* Row principal */}
+              <div
+                className="flex items-center gap-3 px-4 py-3 cursor-pointer active:bg-zinc-50"
+                onClick={() => setExpandedOrder(isExpanded ? null : order.id)}
               >
+                {/* ID + info */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-1">
-                    <span className="font-bold text-slate-800 text-sm">#{order.id.slice(-4).toUpperCase()}</span>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Cliente: {order.customerName}</span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-black text-zinc-800">#{order.id.slice(-4).toUpperCase()}</span>
+                    <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md ${st.color}`}>
+                      {st.label}
+                    </span>
                     <OrderWaitTime createdAt={order.createdAt} status={order.status} />
                   </div>
-                  <div className="text-xs text-slate-500 font-medium pr-1 sm:truncate sm:max-w-md">
-                    {order.items?.map(i => `${i.quantity}x ${i.product?.name}`).join(', ')}
-                  </div>
+                  <p className="text-xs text-zinc-500 font-medium mt-0.5 truncate">
+                    {order.customerName} · {order.items?.map(i => `${i.quantity}x ${i.product?.name}`).join(', ')}
+                  </p>
                 </div>
 
-                <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:gap-6">
-                  <div className="text-right hidden sm:block">
-                    <span className={`block px-2 py-0.5 rounded text-[10px] font-bold uppercase mb-1 ${
-                      order.status === 'PENDING' ? 'bg-amber-100 text-amber-700' :
-                      order.status === 'PREPARING' ? 'bg-blue-100 text-blue-700' : 
-                      order.status === 'SHIPPED' ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'
-                    }`}>
-                      {order.status === 'PENDING' ? 'Novo Pedido' : 
-                       order.status === 'PREPARING' ? 'Em Preparo' : 
-                       order.status === 'SHIPPED' ? (order.orderType === 'DELIVERY' ? 'Em Trânsito' : 'Pronto') : 'Concluído'}
-                    </span>
-                    <span className="text-[10px] text-slate-400 font-medium shrink-0">
-                      {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
-
-                  <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row" onClick={e => e.stopPropagation()}>
-                    {order.status === 'PENDING' && (
-                      <Button 
-                        size="sm"
-                        className="w-full sm:w-auto"
-                        onClick={() => updateStatus(order.id, 'PREPARING')}
-                      >
-                        Aceitar
-                      </Button>
-                    )}
-                    {order.status === 'PREPARING' && (
-                      <Button 
-                        size="sm"
-                        variant="secondary"
-                        className="w-full sm:w-auto"
-                        onClick={() => updateStatus(order.id, 'SHIPPED')}
-                      >
-                        {order.orderType === 'DELIVERY' ? 'Despachar' : 'Pronto'}
-                      </Button>
-                    )}
-                    {order.status === 'SHIPPED' && (
-                      <Button 
-                        size="sm"
-                        variant="success"
-                        className="w-full sm:w-auto"
-                        onClick={() => updateStatus(order.id, 'DELIVERED')}
-                      >
-                        Concluir
-                      </Button>
-                    )}
-                  </div>
+                {/* Valor + hora */}
+                <div className="text-right shrink-0">
+                  <p className="text-sm font-black text-zinc-800">{fmt(order.total)}</p>
+                  <p className="text-[10px] text-zinc-400 font-medium">
+                    {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </p>
                 </div>
+
+                {/* Chevron */}
+                <ChevronRight className={`w-4 h-4 text-zinc-300 shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
               </div>
 
+              {/* Ações rápidas */}
+              <div className="px-4 pb-3 flex gap-2" onClick={e => e.stopPropagation()}>
+                {order.status === 'PENDING' && (
+                  <Button size="sm" variant="primary" className="flex-1" onClick={() => updateStatus(order.id, 'PREPARING')}>
+                    Aceitar Pedido
+                  </Button>
+                )}
+                {order.status === 'PREPARING' && (
+                  <Button size="sm" variant="secondary" className="flex-1" onClick={() => updateStatus(order.id, 'SHIPPED')}>
+                    {order.orderType === 'DELIVERY' ? 'Despachar' : 'Marcar Pronto'}
+                  </Button>
+                )}
+                {order.status === 'SHIPPED' && (
+                  <Button size="sm" variant="success" className="flex-1" onClick={() => updateStatus(order.id, 'DELIVERED')}>
+                    Confirmar Entrega
+                  </Button>
+                )}
+              </div>
+
+              {/* Detalhes expandidos */}
               <AnimatePresence>
-                {expandedOrder === order.id && (
+                {isExpanded && (
                   <motion.div
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
-                    className="border-t border-slate-100 bg-slate-50/30 p-4"
+                    transition={{ duration: 0.2 }}
+                    className="overflow-hidden"
                   >
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                       <div className="space-y-3">
-                          <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest px-1">Itens do Pedido</h4>
-                          {order.items?.map((item, itIdx) => (
-                            <div key={`${order.id}-item-${itIdx}`} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
-                               <div className="flex justify-between items-start">
-                                  <div className="flex flex-col">
-                                     <span className="text-sm font-bold text-slate-800">{item.quantity}x {item.product?.name}</span>
-                                     {item.productVariantId && (
-                                        <span className="text-[10px] text-blue-600 font-black uppercase tracking-tighter">
-                                           Tamanho Selecionado
-                                        </span>
-                                     )}
-                                  </div>
-                                  <span className="text-xs font-medium text-slate-400">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.price * item.quantity)}</span>
-                               </div>
-                               {item.notes && (
-                                 <div className="mt-2 text-[11px] text-orange-600 font-bold bg-orange-50 p-2 rounded-lg border border-orange-100 flex items-start gap-2">
-                                    <Utensils className="w-3 h-3 mt-0.5 shrink-0" />
-                                    <span>Obs: {item.notes}</span>
-                                 </div>
-                               )}
+                    <div className="border-t border-zinc-100 bg-zinc-50/60 p-4 space-y-4">
+
+                      {/* Itens */}
+                      <div className="space-y-2">
+                        <p className="ds-label">Itens do pedido</p>
+                        {order.items?.map((item, idx) => (
+                          <div key={idx} className="bg-white rounded-xl border border-zinc-100 px-3 py-2.5 flex items-start justify-between gap-2">
+                            <div>
+                              <p className="text-sm font-bold text-zinc-800">{item.quantity}x {item.product?.name}</p>
+                              {item.notes && (
+                                <p className="text-[11px] text-orange-600 font-medium mt-1 flex items-center gap-1">
+                                  <Utensils className="w-3 h-3 shrink-0" /> {item.notes}
+                                </p>
+                              )}
                             </div>
-                          ))}
-                       </div>
-                       
-                       <div className="space-y-4">
-                          <div>
-                            <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest px-1 mb-2">Informações Adicionais</h4>
-                            <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm space-y-3">
-                               <div className="flex items-center justify-between">
-                                 <div className="flex items-center gap-2">
-                                    <Phone className="w-3 h-3 text-slate-300" />
-                                    <span className="text-xs font-bold text-slate-600">{order.customerPhone}</span>
-                                 </div>
-                                 <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest ${order.orderType === 'DELIVERY' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
-                                    {order.orderType === 'DELIVERY' ? 'Delivery' : 'Retirada'}
-                                 </span>
-                               </div>
-
-                               <div className="text-xs text-slate-500 bg-slate-50 p-3 rounded-lg border border-slate-100 italic">
-                                  {order.address}
-                               </div>
-
-                               <div className="pt-2 border-t border-slate-100">
-                                  <div className="flex items-center justify-between mb-1">
-                                     <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Pagamento</span>
-                                     <span className="text-xs font-bold text-blue-600">{order.paymentMethod}</span>
-                                  </div>
-                                  {order.paymentDetail && (
-                                     <div className="bg-blue-50 text-blue-700 text-[11px] font-bold p-2 rounded-lg border border-blue-100 flex items-center gap-2">
-                                        <Info className="w-3 h-3" />
-                                        <span>{order.paymentMethod === 'CASH' ? `Troco para: ${order.paymentDetail}` : `Bandeira: ${order.paymentDetail}`}</span>
-                                     </div>
-                                  )}
-                               </div>
-                            </div>
+                            <span className="text-xs font-bold text-zinc-400 shrink-0">{fmt(item.price * item.quantity)}</span>
                           </div>
+                        ))}
+                      </div>
 
-                          <div className="bg-[#0F172A] p-4 rounded-xl text-white flex justify-between items-center">
-                             <span className="text-[10px] font-black uppercase tracking-widest">Total do Pedido</span>
-                             <span className="text-lg font-black">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(order.total)}</span>
+                      {/* Info cliente */}
+                      <div className="bg-white rounded-xl border border-zinc-100 px-3 py-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-zinc-600">
+                            <Phone className="w-3 h-3 text-zinc-300" />
+                            {order.customerPhone}
                           </div>
-                       </div>
+                          <Badge color={order.orderType === 'DELIVERY' ? 'warning' : 'info'}>
+                            {order.orderType === 'DELIVERY' ? 'Delivery' : 'Retirada'}
+                          </Badge>
+                        </div>
+                        {order.address && (
+                          <p className="text-xs text-zinc-400 italic">{order.address}</p>
+                        )}
+                        <div className="flex items-center justify-between pt-1 border-t border-zinc-100">
+                          <span className="ds-label">Pagamento</span>
+                          <span className="text-xs font-black text-blue-600">{order.paymentMethod}</span>
+                        </div>
+                      </div>
+
+                      {/* Total */}
+                      <div className="flex items-center justify-between bg-zinc-900 rounded-xl px-4 py-3">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Total</span>
+                        <span className="text-base font-black text-white">{fmt(order.total)}</span>
+                      </div>
+
                     </div>
                   </motion.div>
                 )}
               </AnimatePresence>
             </motion.div>
-          ))}
-        </div>
-      )}
-    </AnimatePresence>
+          );
+        })}
+      </AnimatePresence>
+    </div>
   );
 }
 
@@ -768,13 +751,15 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
   );
 }
 
-export function FinancePanel({ slug, tenant }: { slug: string, tenant: Tenant }) {
+export function FinancePanel({ slug }: { slug: string, tenant: Tenant }) {
   const [summary, setSummary] = useState<{ daily: number, dailyCount: number, weekly: number, monthly: number } | null>(null);
   const [currentCash, setCurrentCash] = useState<CashRegister & { expectedBalance?: number } | null>(null);
   const [history, setHistory] = useState<CashRegister[]>([]);
   const [showOpenModal, setShowOpenModal] = useState(false);
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  const fmt = (n: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
 
   const fetchFinanceData = async () => {
     setLoading(true);
@@ -784,12 +769,9 @@ export function FinancePanel({ slug, tenant }: { slug: string, tenant: Tenant })
         apiFetch(`/api/tenants/${slug}/cash/current`),
         apiFetch(`/api/tenants/${slug}/cash/history`)
       ]);
-      const sumData = await sumRes.json();
-      const cashData = await cashRes.json();
-      const historyData = await historyRes.json();
-      setSummary(sumData);
-      setCurrentCash(cashData);
-      setHistory(historyData);
+      setSummary(await sumRes.json());
+      setCurrentCash(await cashRes.json());
+      setHistory(await historyRes.json());
     } catch (err) {
       console.error(err);
     } finally {
@@ -797,264 +779,183 @@ export function FinancePanel({ slug, tenant }: { slug: string, tenant: Tenant })
     }
   };
 
-  useEffect(() => {
-    fetchFinanceData();
-  }, [slug]);
+  useEffect(() => { fetchFinanceData(); }, [slug]);
 
   if (loading) return (
     <div className="flex items-center justify-center p-12">
-      <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+      <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
     </div>
   );
 
   return (
-    <div className="space-y-6 sm:space-y-8">
-      {/* Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
-            <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:scale-110 transition-transform">
-               <TrendingUp className="w-24 h-24 text-blue-600" />
-            </div>
-            <div className="flex items-center justify-between mb-4">
-               <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
-                  <TrendingUp className="w-5 h-5" />
-               </div>
-               <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Ganhos Hoje</span>
-            </div>
-            <div className="text-3xl font-black text-slate-800 tracking-tight">
-               {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(summary?.daily || 0)}
-            </div>
-            <div className="text-[10px] text-slate-400 mt-1 font-bold uppercase tracking-wide">
-               {summary?.dailyCount || 0} pedidos concluídos
-            </div>
-         </div>
+    <PageWrapper>
+      <SectionTitle title="Financeiro" description="Fluxo de caixa e receitas do estabelecimento" icon={Wallet} className="mb-6" />
 
-         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
-            <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:scale-110 transition-transform">
-               <Calendar className="w-24 h-24 text-indigo-600" />
-            </div>
-            <div className="flex items-center justify-between mb-4">
-               <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
-                  <Calendar className="w-5 h-5" />
-               </div>
-               <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Na Semana</span>
-            </div>
-            <div className="text-3xl font-black text-slate-800 tracking-tight">
-               {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(summary?.weekly || 0)}
-            </div>
-            <div className="text-[10px] text-slate-400 mt-1 font-bold uppercase tracking-wide">Últimos 7 dias</div>
-         </div>
-
-         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
-            <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:scale-110 transition-transform">
-               <CircleDollarSign className="w-24 h-24 text-emerald-600" />
-            </div>
-            <div className="flex items-center justify-between mb-4">
-               <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
-                  <CircleDollarSign className="w-5 h-5" />
-               </div>
-               <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">No Mês</span>
-            </div>
-            <div className="text-3xl font-black text-slate-800 tracking-tight">
-               {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(summary?.monthly || 0)}
-            </div>
-            <div className="text-[10px] text-slate-400 mt-1 font-bold uppercase tracking-wide">
-              {new Date().toLocaleString('pt-BR', { month: 'long' })}
-            </div>
-         </div>
-      </div>
-
-      {/* Cash Register Control */}
-      <div className="bg-white rounded-[28px] sm:rounded-3xl border border-slate-200 shadow-sm overflow-hidden border-b-4 border-b-blue-600">
-         <div className="p-5 sm:p-8">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-               <div className="flex gap-4 sm:gap-5 items-center">
-                  <div className={`p-4 sm:p-5 rounded-[22px] ${currentCash ? 'bg-green-50 text-green-600 shadow-inner' : 'bg-slate-50 text-slate-300'}`}>
-                     <Wallet className="w-8 h-8 sm:w-10 sm:h-10" />
-                  </div>
-                  <div>
-                     <h3 className="text-lg sm:text-xl font-black text-slate-800 uppercase tracking-tight">Status do Caixa</h3>
-                     <div className="flex items-center gap-2 mt-1">
-                        <div className={`w-2.5 h-2.5 rounded-full ${currentCash ? 'bg-green-500 animate-pulse' : 'bg-slate-300'}`}></div>
-                        <span className="text-xs font-black text-slate-500 uppercase tracking-widest">
-                           {currentCash ? 'Aberto no momento' : 'Fechado'}
-                        </span>
-                     </div>
-                  </div>
-               </div>
-
-               <div className="flex gap-3 w-full md:w-auto">
-                  {!currentCash ? (
-                  <button 
-                     onClick={() => setShowOpenModal(true)}
-                     className="w-full md:w-auto bg-blue-600 text-white px-6 sm:px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-100 active:scale-95 transition-all"
-                  >
-                     Abrir Caixa
-                  </button>
-                  ) : (
-                  <button 
-                     onClick={() => setShowCloseModal(true)}
-                     className="w-full md:w-auto bg-red-600 text-white px-6 sm:px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-red-100 active:scale-95 transition-all"
-                  >
-                     Fechar Caixa
-                  </button>
-                  )}
-               </div>
-            </div>
-
-            {currentCash && (
-            <div className="mt-8 sm:mt-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-8 p-5 sm:p-6 bg-slate-50 rounded-2xl border border-slate-100">
-               <div>
-                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Início da Sessão</p>
-                  <p className="text-sm font-black text-slate-800">
-                     {new Date(currentCash.openedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                  </p>
-                  <p className="text-[10px] text-slate-400 mt-1 font-bold uppercase tracking-tighter">Hoje</p>
-               </div>
-               <div>
-                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1 text-slate-400">Fundo de Troco</p>
-                  <p className="text-sm font-black text-slate-800">
-                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(currentCash.openingBalance)}
-                  </p>
-                  <p className="text-[10px] text-slate-400 mt-1 font-bold uppercase tracking-tighter">Saldo Inicial</p>
-               </div>
-               <div>
-                  <p className="text-[10px] font-black uppercase text-blue-600 tracking-widest mb-1">Vendas em Dinheiro</p>
-                  <p className="text-sm font-black text-blue-700">
-                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((currentCash.expectedBalance || 0) - currentCash.openingBalance)}
-                  </p>
-                  <p className="text-[10px] text-blue-400 mt-1 font-bold uppercase tracking-tighter">Registrado no Sistema</p>
-               </div>
-               <div className="lg:border-l-2 lg:border-white lg:pl-8">
-                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Total Esperado</p>
-                  <p className="text-lg font-black text-blue-600 leading-none">
-                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(currentCash.expectedBalance || 0)}
-                  </p>
-                  <p className="text-[10px] text-slate-400 mt-1 font-bold uppercase tracking-tighter">Esperado na Gaveta</p>
-               </div>
-            </div>
-            )}
-         </div>
-      </div>
-
-      {/* History List */}
-      <div className="space-y-4">
-         <div className="flex items-center gap-3 px-1">
-            <History className="w-5 h-5 text-slate-400" />
-            <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Últimos Fechamentos</h3>
-         </div>
-
-         <GridTable 
-            data={history}
-            keyExtractor={cash => cash.id}
-            columns={[
-              {
-                header: "Data / Hora",
-                render: cash => (
-                  <div className="flex flex-col">
-                    <span className="font-bold">{new Date(cash.openedAt).toLocaleDateString()}</span>
-                    <span className="text-[10px] text-slate-400 font-black uppercase">
-                      {new Date(cash.openedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} → {cash.closedAt ? new Date(cash.closedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '...'}
-                    </span>
-                  </div>
-                )
-              },
-              {
-                header: "Entrada/Saída",
-                render: cash => (
-                  <div className="flex gap-4">
-                    <div>
-                      <p className="text-[9px] text-slate-400 uppercase font-black tracking-tighter">Iniciou</p>
-                      <p className="text-xs font-bold text-slate-600">
-                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cash.openingBalance)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[9px] text-slate-400 uppercase font-black tracking-tighter">Retirou</p>
-                      <p className="text-xs font-black text-slate-800">
-                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cash.closingBalance || 0)}
-                      </p>
-                    </div>
-                  </div>
-                )
-              },
-              {
-                header: "Diferença",
-                render: cash => {
-                  const diff = (cash.closingBalance || 0) - (cash.expectedBalance || 0);
-                  if (!cash.closedAt) return <span className="text-slate-300">--</span>;
-                  return (
-                    <Badge color={Math.abs(diff) < 0.01 ? "success" : diff > 0 ? "info" : "danger"}>
-                      {Math.abs(diff) < 0.01 ? "Bateu Certinho" : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Math.abs(diff))}
-                    </Badge>
-                  );
-                }
-              },
-              {
-                header: "Ações",
-                className: "text-right",
-                render: () => <Button variant="ghost" size="xs">Ver Notas</Button>
-              }
-            ]}
-         />
-      </div>
-
-      {showOpenModal && (
-        <CashRegisterModal 
-          type="open" 
-          slug={slug} 
-          onClose={() => setShowOpenModal(false)} 
-          onSuccess={() => {
-            setShowOpenModal(false);
-            fetchFinanceData();
-          }} 
+      {/* Stats */}
+      <StatGrid cols={3} className="mb-6">
+        <StatCard
+          title="Hoje"
+          value={fmt(summary?.daily || 0)}
+          icon={TrendingUp}
+          description={`${summary?.dailyCount || 0} pedidos concluídos`}
+          color="info"
+          delay={0.1}
         />
-      )}
-
-      {showCloseModal && currentCash && (
-        <CashRegisterModal 
-          type="close" 
-          slug={slug} 
-          expected={currentCash.expectedBalance || 0}
-          onClose={() => setShowCloseModal(false)} 
-          onSuccess={() => {
-            setShowCloseModal(false);
-            fetchFinanceData();
-          }} 
+        <StatCard
+          title="Na semana"
+          value={fmt(summary?.weekly || 0)}
+          icon={Calendar}
+          description="Últimos 7 dias"
+          color="purple"
+          delay={0.2}
         />
-      )}
-    </div>
+        <StatCard
+          title="No mês"
+          value={fmt(summary?.monthly || 0)}
+          icon={CircleDollarSign}
+          description={new Date().toLocaleString('pt-BR', { month: 'long' })}
+          color="success"
+          delay={0.3}
+        />
+      </StatGrid>
+
+      {/* Caixa */}
+      <ContentCard className="mb-6">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-4">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${currentCash ? 'bg-green-50 text-green-600' : 'bg-zinc-100 text-zinc-400'}`}>
+              <Wallet className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-sm font-black text-zinc-800 tracking-tight">Status do Caixa</p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className={`w-2 h-2 rounded-full ${currentCash ? 'bg-green-500 animate-pulse' : 'bg-zinc-300'}`} />
+                <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                  {currentCash ? 'Aberto' : 'Fechado'}
+                </span>
+              </div>
+            </div>
+          </div>
+          {!currentCash ? (
+            <Button variant="primary" onClick={() => setShowOpenModal(true)}>Abrir Caixa</Button>
+          ) : (
+            <Button variant="danger" onClick={() => setShowCloseModal(true)}>Fechar Caixa</Button>
+          )}
+        </div>
+
+        {currentCash && (
+          <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-4 pt-5 border-t border-zinc-100">
+            {[
+              { label: "Abertura", value: new Date(currentCash.openedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), sub: "hoje" },
+              { label: "Fundo de troco", value: fmt(currentCash.openingBalance), sub: "saldo inicial" },
+              { label: "Vendas (dinheiro)", value: fmt((currentCash.expectedBalance || 0) - currentCash.openingBalance), sub: "no sistema", highlight: true },
+              { label: "Total esperado", value: fmt(currentCash.expectedBalance || 0), sub: "na gaveta", highlight: true },
+            ].map(({ label, value, sub, highlight }) => (
+              <div key={label}>
+                <p className="ds-label mb-1">{label}</p>
+                <p className={`text-sm font-black ${highlight ? 'text-blue-600' : 'text-zinc-800'}`}>{value}</p>
+                <p className="text-[10px] text-zinc-400 font-medium uppercase mt-0.5">{sub}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </ContentCard>
+
+      {/* Histórico */}
+      <SectionTitle title="Últimos Fechamentos" icon={History} className="mb-4" />
+      <GridTable
+        data={history}
+        keyExtractor={cash => cash.id}
+        columns={[
+          {
+            header: "Data / Hora",
+            render: cash => (
+              <div>
+                <span className="font-bold text-zinc-800">{new Date(cash.openedAt).toLocaleDateString('pt-BR')}</span>
+                <p className="text-[10px] text-zinc-400 font-bold uppercase mt-0.5">
+                  {new Date(cash.openedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {cash.closedAt && ` → ${new Date(cash.closedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+                </p>
+              </div>
+            )
+          },
+          {
+            header: "Entrada / Saída",
+            render: cash => (
+              <div className="flex gap-4">
+                <div>
+                  <p className="ds-label mb-0.5">Iniciou</p>
+                  <p className="text-xs font-bold text-zinc-600">{fmt(cash.openingBalance)}</p>
+                </div>
+                <div>
+                  <p className="ds-label mb-0.5">Retirou</p>
+                  <p className="text-xs font-black text-zinc-800">{fmt(cash.closingBalance || 0)}</p>
+                </div>
+              </div>
+            )
+          },
+          {
+            header: "Diferença",
+            render: cash => {
+              const diff = (cash.closingBalance || 0) - (cash.expectedBalance || 0);
+              if (!cash.closedAt) return <span className="text-zinc-300 text-sm">—</span>;
+              return (
+                <Badge color={Math.abs(diff) < 0.01 ? "success" : diff > 0 ? "info" : "danger"}>
+                  {Math.abs(diff) < 0.01 ? "Exato" : fmt(Math.abs(diff))}
+                </Badge>
+              );
+            }
+          },
+          {
+            header: "Ações",
+            className: "text-right",
+            render: () => <Button variant="ghost" size="xs">Ver Notas</Button>
+          }
+        ]}
+      />
+
+      <CashRegisterModal
+        isOpen={showOpenModal}
+        type="open"
+        slug={slug}
+        onClose={() => setShowOpenModal(false)}
+        onSuccess={() => { setShowOpenModal(false); fetchFinanceData(); }}
+      />
+      <CashRegisterModal
+        isOpen={showCloseModal}
+        type="close"
+        slug={slug}
+        expected={currentCash?.expectedBalance || 0}
+        onClose={() => setShowCloseModal(false)}
+        onSuccess={() => { setShowCloseModal(false); fetchFinanceData(); }}
+      />
+    </PageWrapper>
   );
 }
 
-function CashRegisterModal({ type, slug, expected, onClose, onSuccess }: { 
-  type: 'open' | 'close', 
-  slug: string, 
+function CashRegisterModal({ isOpen, type, slug, expected, onClose, onSuccess }: {
+  isOpen: boolean,
+  type: 'open' | 'close',
+  slug: string,
   expected?: number,
-  onClose: () => void, 
-  onSuccess: () => void 
+  onClose: () => void,
+  onSuccess: () => void
 }) {
   const [value, setValue] = useState(type === 'close' ? String(expected || 0) : "");
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const fmt = (n: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
+
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      const endpoint = type === 'open' ? 'open' : 'close';
-      const body = type === 'open' 
-        ? { openingBalance: value } 
-        : { closingBalance: value, notes };
-
-      const res = await apiFetch(`/api/tenants/${slug}/cash/${endpoint}`, {
+      const res = await apiFetch(`/api/tenants/${slug}/cash/${type === 'open' ? 'open' : 'close'}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+        body: JSON.stringify(type === 'open' ? { openingBalance: value } : { closingBalance: value, notes })
       });
-
-      if (res.ok) {
-        onSuccess();
-      }
+      if (res.ok) onSuccess();
     } catch (err) {
       console.error(err);
     } finally {
@@ -1062,107 +963,75 @@ function CashRegisterModal({ type, slug, expected, onClose, onSuccess }: {
     }
   };
 
-  const diff = type === 'close' && expected ? parseFloat(value) - expected : 0;
+  const diff = type === 'close' && expected ? parseFloat(value || "0") - expected : 0;
+  const isOpen_ = type === 'open';
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-       <motion.div 
-         initial={{ opacity: 0, scale: 0.95, y: 20 }}
-         animate={{ opacity: 1, scale: 1, y: 0 }}
-         className="bg-white w-full max-w-md rounded-3xl overflow-hidden shadow-2xl"
-       >
-          <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-             <div>
-                <h3 className="font-black text-slate-800 uppercase tracking-tight text-lg">
-                  {type === 'open' ? 'Abrir Caixa' : 'Fechar Caixa'}
-                </h3>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Fluxo de Loja Diário</p>
-             </div>
-             <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
-                <X className="w-5 h-5 text-slate-400" />
-             </button>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={isOpen_ ? "Abrir Caixa" : "Fechar Caixa"}
+      size="sm"
+      mobileStyle="bottom-sheet"
+      footer={
+        <ModalFooter>
+          <Button variant="ghost" onClick={onClose} disabled={loading}>Cancelar</Button>
+          <Button
+            variant={isOpen_ ? "primary" : "danger"}
+            onClick={handleSubmit}
+            disabled={loading || !value}
+            className="sm:min-w-[160px]"
+          >
+            {loading ? "Aguarde..." : isOpen_ ? "Confirmar Abertura" : "Confirmar Fechamento"}
+          </Button>
+        </ModalFooter>
+      }
+    >
+      <div className="space-y-4">
+        {type === 'close' && expected !== undefined && (
+          <div className="flex items-center justify-between bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
+            <div>
+              <p className="ds-label text-blue-500">Esperado pelo sistema</p>
+              <p className="text-xs text-blue-400 mt-0.5 font-medium">Vendas em dinheiro + saldo inicial</p>
+            </div>
+            <span className="text-base font-black text-blue-600">{fmt(expected)}</span>
           </div>
+        )}
 
-          <div className="p-8 space-y-6">
-             {type === 'close' && expected !== undefined && (
-               <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
-                  <div className="flex justify-between items-center mb-1">
-                     <span className="text-[10px] font-black uppercase text-blue-400 tracking-widest">Expectativa do Sistema</span>
-                     <span className="text-sm font-black text-blue-600">
-                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(expected)}
-                     </span>
-                  </div>
-                  <p className="text-[10px] text-blue-400 font-medium leading-tight">Valor esperado com base em vendas em dinheiro e saldo de abertura.</p>
-               </div>
-             )}
+        <Input
+          label={isOpen_ ? "Valor inicial em caixa" : "Valor contado em espécie"}
+          type="number"
+          step="0.01"
+          placeholder="0,00"
+          addonLeft="R$"
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          autoFocus
+        />
 
-             <div>
-                <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2 px-1">
-                  {type === 'open' ? 'Valor Inicial em Caixa' : 'Valor Total em Espécie (Contado)'}
-                </label>
-                <div className="relative">
-                   <div className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">R$</div>
-                   <input 
-                     type="number"
-                     step="0.01"
-                     value={value}
-                     onChange={e => setValue(e.target.value)}
-                     className="w-full bg-slate-50 border-2 border-slate-100 p-4 pl-12 rounded-2xl font-black text-slate-800 focus:border-blue-500 outline-none transition-all placeholder:text-slate-300"
-                     placeholder="0,00"
-                   />
-                </div>
-             </div>
-
-             {type === 'close' && (
-               <>
-                 {Math.abs(diff) > 0.01 && (
-                   <div className={`p-4 rounded-2xl border ${diff > 0 ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'}`}>
-                      <div className="flex items-center gap-2 mb-1">
-                         <Info className={`w-4 h-4 ${diff > 0 ? 'text-green-500' : 'text-red-500'}`} />
-                         <span className={`text-xs font-black uppercase tracking-tight ${diff > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {diff > 0 ? 'Sobra de Caixa' : 'Quebra de Caixa'}
-                         </span>
-                      </div>
-                      <p className={`text-lg font-black ${diff > 0 ? 'text-green-700' : 'text-red-700'}`}>
-                         {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Math.abs(diff))}
-                      </p>
-                      <p className="text-[10px] text-slate-400 mt-1">Conforme valor contado vs esperado pelo sistema.</p>
-                   </div>
-                 )}
-
-                 <div>
-                    <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2 px-1">Obsevações</label>
-                    <textarea 
-                      value={notes}
-                      onChange={e => setNotes(e.target.value)}
-                      className="w-full bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl text-sm text-slate-600 focus:border-blue-500 outline-none transition-all"
-                      rows={3}
-                      placeholder="Alguma divergência ou anotação importante..."
-                    />
-                 </div>
-               </>
-             )}
-
-             <button 
-               onClick={handleSubmit}
-               disabled={loading || !value}
-               className={`w-full py-4 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2
-                 ${type === 'open' ? 'bg-blue-600 text-white shadow-blue-200' : 'bg-red-600 text-white shadow-red-200'}
-                 ${loading || !value ? 'opacity-50 grayscale cursor-not-allowed shadow-none' : ''}
-               `}
-             >
-                {loading ? (
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                ) : (
-                  <>
-                    <Wallet className="w-5 h-5" />
-                    {type === 'open' ? 'Confirmar Abertura' : 'Confirmar Fechamento'}
-                  </>
-                )}
-             </button>
+        {type === 'close' && Math.abs(diff) > 0.01 && (
+          <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${diff > 0 ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'}`}>
+            <Info className={`w-4 h-4 shrink-0 ${diff > 0 ? 'text-green-500' : 'text-red-500'}`} />
+            <div>
+              <p className={`text-xs font-black uppercase ${diff > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                {diff > 0 ? 'Sobra' : 'Quebra'} de {fmt(Math.abs(diff))}
+              </p>
+              <p className="text-[10px] text-zinc-400 mt-0.5">Valor contado vs esperado</p>
+            </div>
           </div>
-       </motion.div>
-    </div>
+        )}
+
+        {type === 'close' && (
+          <Textarea
+            label="Observações"
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            placeholder="Alguma divergência ou anotação..."
+            rows={3}
+          />
+        )}
+      </div>
+    </Modal>
   );
 }
 
@@ -1413,11 +1282,11 @@ export function InventoryPanel({ tenant }: { tenant: Tenant | null }) {
   );
 }
 
-function InventoryItemModal({ tenant, item, categories, onClose, onSave, refreshCategories }: { 
-  tenant: Tenant | null, 
-  item: any | null, 
-  categories: any[], 
-  onClose: () => void, 
+function InventoryItemModal({ tenant, item, categories, onClose, onSave, refreshCategories }: {
+  tenant: Tenant | null,
+  item: any | null,
+  categories: any[],
+  onClose: () => void,
   onSave: () => void,
   refreshCategories: () => void
 }) {
@@ -1438,17 +1307,20 @@ function InventoryItemModal({ tenant, item, categories, onClose, onSave, refresh
   });
 
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const set = (key: string, value: string) => setForm(f => ({ ...f, [key]: value }));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
     const url = item ? `/api/inventory/items/${item.id}` : `/api/inventory/items`;
     const method = item ? 'PATCH' : 'POST';
-    
     await apiFetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        ...form, 
+      body: JSON.stringify({
+        ...form,
         tenantId: tenant?.id,
         purchasePrice: parseFloat(form.purchasePrice.toString()) || 0,
         sellingPrice: form.sellingPrice ? parseFloat(form.sellingPrice.toString()) : null,
@@ -1456,242 +1328,128 @@ function InventoryItemModal({ tenant, item, categories, onClose, onSave, refresh
         minStock: form.minStock ? parseFloat(form.minStock.toString()) : null
       })
     });
+    setLoading(false);
     onSave();
   };
 
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      <motion.div 
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="absolute inset-0 bg-[#0F172A]/90 backdrop-blur-md" 
-        onClick={onClose}
-      />
-      <motion.div 
-        initial={{ scale: 0.9, opacity: 0, y: 100 }}
-        animate={{ scale: 1, opacity: 1, y: 0 }}
-        exit={{ scale: 0.9, opacity: 0, y: 100 }}
-        className="relative bg-white rounded-[40px] shadow-2xl w-full max-w-4xl overflow-hidden border border-white/20"
-      >
-        <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-           <div>
-              <h3 className="text-3xl font-black text-slate-800 uppercase tracking-tighter">{item ? 'Ajustar Insumo' : 'Novo Registro Técnico'}</h3>
-              <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest mt-1">Configuração detalhada de mercadorias no estoque.</p>
-           </div>
-           <button onClick={onClose} className="w-12 h-12 flex items-center justify-center bg-white shadow-xl rounded-full hover:bg-slate-50 transition-colors border border-slate-100">
-              <X className="w-5 h-5 text-slate-400" />
-           </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-10 grid grid-cols-1 md:grid-cols-2 gap-10 max-h-[75vh] overflow-y-auto custom-scrollbar">
-           <div className="space-y-8">
-              <div className="flex items-center gap-3 mb-2">
-                 <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-100">
-                    <Info className="w-4 h-4 text-white" />
-                 </div>
-                 <h4 className="text-xs font-black uppercase text-slate-800 tracking-widest">Identificação Básica</h4>
-              </div>
-              
-              <div className="space-y-5">
-                 <div>
-                    <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2 px-1">Nome de Cadastro</label>
-                    <input 
-                      required
-                      type="text" 
-                      value={form.name} 
-                      onChange={e => setForm({...form, name: e.target.value})}
-                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-black focus:border-blue-500 transition-all outline-none"
-                      placeholder="Ex: Coca-Cola 350ml"
-                    />
-                 </div>
-                 <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2 px-1">SKU / Cód Barrax</label>
-                      <input 
-                        type="text" 
-                        value={form.code} 
-                        onChange={e => setForm({...form, code: e.target.value})}
-                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-black focus:border-blue-500 transition-all outline-none"
-                        placeholder="78900..."
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2 px-1">Marca / Fabr.</label>
-                      <input 
-                        type="text" 
-                        value={form.brand} 
-                        onChange={e => setForm({...form, brand: e.target.value})}
-                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-black focus:border-blue-500 transition-all outline-none"
-                        placeholder="Ex: Ambev"
-                      />
-                    </div>
-                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                 <div>
-                    <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2 px-1">Categoria</label>
-                    <div className="flex gap-2">
-                       <select 
-                         value={form.categoryId} 
-                         onChange={e => setForm({...form, categoryId: e.target.value})}
-                         className="flex-1 bg-slate-50 border-2 border-slate-100 rounded-2xl p-3 text-xs font-black uppercase focus:border-blue-500 transition-all outline-none"
-                       >
-                         <option value="">Selecione...</option>
-                         {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                       </select>
-                       <button 
-                         type="button" 
-                         onClick={() => setIsCategoryModalOpen(true)}
-                         className="w-12 h-12 bg-white border-2 border-slate-100 hover:bg-slate-50 rounded-2xl flex items-center justify-center transition-all shadow-sm"
-                       >
-                         +
-                       </button>
-                    </div>
-                 </div>
-                 <div>
-                    <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2 px-1">Tipo de Aplicação</label>
-                    <select 
-                       value={form.usage}
-                       onChange={e => setForm({...form, usage: e.target.value})}
-                       className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-3 text-xs font-black uppercase focus:border-blue-500 transition-all outline-none"
-                    >
-                       <option value="SALE">Comercial (Final)</option>
-                       <option value="INTERNAL">Interno (Insumo)</option>
-                    </select>
-                 </div>
-              </div>
-           </div>
-
-           <div className="space-y-8">
-              <div className="flex items-center gap-3 mb-2">
-                 <div className="w-8 h-8 rounded-lg bg-orange-500 flex items-center justify-center shadow-lg shadow-orange-100">
-                    <CircleDollarSign className="w-4 h-4 text-white" />
-                 </div>
-                 <h4 className="text-xs font-black uppercase text-slate-800 tracking-widest">Financeiro e Logística</h4>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                 <div>
-                    <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2 px-1">Quantidade Atual</label>
-                    <input 
-                      required
-                      type="number" step="0.001"
-                      value={form.quantity} 
-                      onChange={e => setForm({...form, quantity: e.target.value})}
-                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-lg font-black focus:border-orange-500 transition-all outline-none"
-                    />
-                 </div>
-                 <div>
-                    <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2 px-1">Peso / Unidade</label>
-                    <div className="flex gap-2">
-                       <input 
-                         type="text" 
-                         value={form.unit} 
-                         onChange={e => setForm({...form, unit: e.target.value})}
-                         className="w-20 bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-black focus:border-blue-500 transition-all outline-none text-center"
-                         placeholder="un"
-                       />
-                       <input 
-                         type="text" 
-                         value={form.weight} 
-                         onChange={e => setForm({...form, weight: e.target.value})}
-                         className="flex-1 bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-black focus:border-blue-500 transition-all outline-none"
-                         placeholder="Ex: 500g / 1.5L"
-                       />
-                    </div>
-                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                   <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2 px-1">Alerta: Estoque Mín.</label>
-                   <input 
-                      type="number" step="0.01"
-                      value={form.minStock} 
-                      onChange={e => setForm({...form, minStock: e.target.value})}
-                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-black focus:border-red-500 transition-all outline-none"
-                   />
-                </div>
-                <div>
-                   <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2 px-1">Custo de Compra (R$)</label>
-                   <input 
-                      type="number" step="0.01"
-                      value={form.purchasePrice} 
-                      onChange={e => setForm({...form, purchasePrice: e.target.value})}
-                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-black focus:border-emerald-500 transition-all outline-none"
-                   />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                 <div>
-                   <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2 px-1">Data Registro Compra</label>
-                   <input 
-                      type="date" 
-                      value={form.purchaseDate} 
-                      onChange={e => setForm({...form, purchaseDate: e.target.value})}
-                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-black focus:border-blue-500 transition-all outline-none"
-                   />
-                 </div>
-                 <div>
-                   <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2 px-1">Limite de Validade</label>
-                   <input 
-                      type="date" 
-                      value={form.expirationDate} 
-                      onChange={e => setForm({...form, expirationDate: e.target.value})}
-                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-black focus:border-blue-500 transition-all outline-none"
-                   />
-                 </div>
-              </div>
-           </div>
-           
-           <div className="md:col-span-2 pt-8 border-t border-slate-100 flex flex-col md:flex-row justify-end gap-3 mt-4">
-              <button 
-                type="button" 
-                onClick={onClose}
-                className="px-10 py-5 rounded-3xl font-black text-[11px] uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-all"
-              >
-                Descartar Mudanças
-              </button>
-              <button 
-                type="submit"
-                className="bg-[#0F172A] text-white px-16 py-5 rounded-3xl font-black text-[11px] uppercase tracking-widest shadow-2xl shadow-slate-200 hover:bg-slate-800 active:scale-95 transition-all text-center"
-              >
-                {item ? 'Atualizar Inventário' : 'Efetivar Cadastro'}
-              </button>
-           </div>
-        </form>
-      </motion.div>
-
-      <AnimatePresence>
-         {isCategoryModalOpen && (
-           <div className="fixed inset-0 z-[75] flex items-center justify-center p-4">
-              <motion.div 
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-                onClick={() => setIsCategoryModalOpen(false)}
-              />
-              <motion.div 
-                initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
-                className="relative bg-white rounded-[32px] p-10 w-full max-w-md shadow-2xl border border-slate-100"
-              >
-                 <div className="mb-6">
-                    <h4 className="text-2xl font-black text-slate-800 tracking-tight">Novas Categorias</h4>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Organize seus insumos tecnicamente.</p>
-                 </div>
-                 <CategoryForm 
-                    tenantId={tenant?.id || ""} 
-                    onSuccess={() => { refreshCategories(); setIsCategoryModalOpen(false); }} 
-                    onClose={() => setIsCategoryModalOpen(false)}
-                    isInventory
-                 />
-              </motion.div>
-           </div>
-         )}
-      </AnimatePresence>
+  const SectionHeader = ({ icon: Icon, label, color }: { icon: React.ElementType; label: string; color: string }) => (
+    <div className="flex items-center gap-2.5 mb-4">
+      <div className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 ${color}`}>
+        <Icon size={14} className="text-white" />
+      </div>
+      <span className="text-[11px] font-black uppercase tracking-widest text-zinc-500">{label}</span>
     </div>
+  );
+
+  return (
+    <>
+      <Modal
+        isOpen
+        onClose={onClose}
+        title={item ? "Editar Item" : "Novo Item de Estoque"}
+        size="xl"
+        mobileStyle="bottom-sheet"
+        footer={
+          <ModalFooter>
+            <Button variant="ghost" onClick={onClose} disabled={loading}>Cancelar</Button>
+            <Button variant="primary" onClick={() => {}} disabled={loading}
+              className="sm:min-w-[160px]"
+              type="submit"
+              form="inventory-form"
+            >
+              {loading ? "Salvando..." : item ? "Salvar Alterações" : "Cadastrar Item"}
+            </Button>
+          </ModalFooter>
+        }
+      >
+        <form id="inventory-form" onSubmit={handleSubmit} className="space-y-3">
+
+          {/* Identificação */}
+          <div className="rounded-xl border border-zinc-100 bg-zinc-50 p-3 space-y-3">
+            <SectionHeader icon={Info} label="Identificação" color="bg-blue-500" />
+            <Input
+              label="Nome"
+              required
+              size="sm"
+              placeholder="Ex: Coca-Cola 350ml"
+              value={form.name}
+              onChange={e => set("name", e.target.value)}
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <Input label="SKU" size="sm" placeholder="78900..." value={form.code} onChange={e => set("code", e.target.value)} />
+              <Input label="Marca" size="sm" placeholder="Ambev" value={form.brand} onChange={e => set("brand", e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="ds-label">Categoria</label>
+              <div className="flex gap-1.5">
+                <Select
+                  size="sm"
+                  value={form.categoryId}
+                  onChange={e => set("categoryId", e.target.value)}
+                  wrapperClassName="flex-1 min-w-0"
+                >
+                  <option value="">Selecione...</option>
+                  {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </Select>
+                <button
+                  type="button"
+                  onClick={() => setIsCategoryModalOpen(true)}
+                  className="w-8 h-8 shrink-0 rounded-lg border border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-100 flex items-center justify-center font-bold transition-colors"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+            <Select label="Uso" size="sm" value={form.usage} onChange={e => set("usage", e.target.value)}>
+              <option value="SALE">Venda direta</option>
+              <option value="INTERNAL">Insumo interno</option>
+            </Select>
+          </div>
+
+          {/* Estoque */}
+          <div className="rounded-xl border border-zinc-100 bg-zinc-50 p-3 space-y-3">
+            <SectionHeader icon={Package} label="Estoque" color="bg-orange-500" />
+            <div className="grid grid-cols-2 gap-2">
+              <Input label="Quantidade" required size="sm" type="number" step="0.001" placeholder="0" value={form.quantity} onChange={e => set("quantity", e.target.value)} />
+              <Input label="Mín. alerta" size="sm" type="number" step="0.01" placeholder="0" value={form.minStock} onChange={e => set("minStock", e.target.value)} />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Input label="Unidade" size="sm" placeholder="un, kg..." value={form.unit} onChange={e => set("unit", e.target.value)} />
+              <Input label="Peso/Volume" size="sm" placeholder="500g, 1.5L" value={form.weight} onChange={e => set("weight", e.target.value)} />
+            </div>
+          </div>
+
+          {/* Financeiro */}
+          <div className="rounded-xl border border-zinc-100 bg-zinc-50 p-3 space-y-3">
+            <SectionHeader icon={CircleDollarSign} label="Financeiro" color="bg-emerald-500" />
+            <div className="grid grid-cols-2 gap-2">
+              <Input label="Custo (R$)" size="sm" type="number" step="0.01" placeholder="0,00" value={form.purchasePrice} onChange={e => set("purchasePrice", e.target.value)} />
+              <Input label="Venda (R$)" size="sm" type="number" step="0.01" placeholder="0,00" value={form.sellingPrice} onChange={e => set("sellingPrice", e.target.value)} />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Input label="Compra" size="sm" type="date" value={form.purchaseDate} onChange={e => set("purchaseDate", e.target.value)} />
+              <Input label="Validade" size="sm" type="date" value={form.expirationDate} onChange={e => set("expirationDate", e.target.value)} />
+            </div>
+          </div>
+
+        </form>
+      </Modal>
+
+      <Modal
+        isOpen={isCategoryModalOpen}
+        onClose={() => setIsCategoryModalOpen(false)}
+        title="Nova Categoria"
+        size="sm"
+        mobileStyle="center"
+      >
+        <CategoryForm
+          tenantId={tenant?.id || ""}
+          onSuccess={() => { refreshCategories(); setIsCategoryModalOpen(false); }}
+          onClose={() => setIsCategoryModalOpen(false)}
+          isInventory
+        />
+      </Modal>
+    </>
   );
 }
 
@@ -1713,32 +1471,21 @@ function CategoryForm({ tenantId, onSuccess, onClose, isInventory = false }: { t
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      <div>
-        <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2 px-1">Nome Administrativo</label>
-        <input 
-          required autoFocus
-          type="text" value={name} onChange={e => setName(e.target.value)}
-          className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-black focus:border-blue-500 outline-none transition-all"
-          placeholder="Ex: Embalagens, Frios..."
-        />
-      </div>
-      <div className="flex gap-3 pt-2">
-         <button 
-           type="button" 
-           onClick={onClose}
-           className="flex-1 px-4 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-400 active:scale-95 transition-all"
-         >
-            Voltar
-         </button>
-         <button 
-           type="submit" 
-           disabled={loading}
-           className="flex-1 bg-blue-600 text-white px-4 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-blue-100 active:scale-95 transition-all"
-         >
-            {loading ? "Gravando..." : "Confirmar Cadastro"}
-         </button>
-      </div>
+    <form onSubmit={handleSubmit} className="space-y-5">
+      <Input
+        label="Nome da categoria"
+        required
+        autoFocus
+        placeholder="Ex: Embalagens, Frios..."
+        value={name}
+        onChange={e => setName(e.target.value)}
+      />
+      <ModalFooter>
+        <Button variant="ghost" type="button" onClick={onClose} disabled={loading}>Voltar</Button>
+        <Button variant="primary" type="submit" disabled={loading}>
+          {loading ? "Salvando..." : "Criar Categoria"}
+        </Button>
+      </ModalFooter>
     </form>
   );
 }

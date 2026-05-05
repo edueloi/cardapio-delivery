@@ -29,15 +29,15 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ) => {
     const variants: Record<string, string> = {
       primary:
-        "bg-[#2a74ac] border-[#295b85] text-white hover:bg-[#295b85] hover:border-[#264a6c]",
+        "bg-[#C9A227] border-[#A8841C] text-white hover:bg-[#A8841C] hover:border-[#7a6014]",
       secondary:
-        "bg-[#295b85] border-[#143a59] text-white hover:bg-[#143a59] hover:border-[#0b2942]",
+        "bg-[#0D1B3E] border-[#1a3068] text-white hover:bg-[#1a3068] hover:border-[#0D1B3E]",
       success:
         "bg-[#4f8d67] border-[#3d6c50] text-white hover:bg-[#3d6c50] hover:border-[#325641]",
       danger:
         "bg-[#aa403d] border-[#7f3431] text-white hover:bg-[#7f3431] hover:border-[#642d2a]",
       outline:
-        "bg-white border-[#2a74ac] text-[#2a74ac] hover:bg-[#e6e7e8] hover:border-[#487295] hover:text-[#487295]",
+        "bg-white border-[#C9A227] text-[#C9A227] hover:bg-[#fdf8e8] hover:border-[#A8841C] hover:text-[#A8841C]",
       ghost:
         "bg-transparent border-transparent text-zinc-600 hover:bg-zinc-100 hover:text-zinc-700",
     };
@@ -121,15 +121,15 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
   ) => {
     const variants: Record<string, string> = {
       primary:
-        "bg-[#2a74ac] border-[#295b85] text-white hover:bg-[#295b85] hover:border-[#264a6c]",
+        "bg-[#C9A227] border-[#A8841C] text-white hover:bg-[#A8841C] hover:border-[#7a6014]",
       secondary:
-        "bg-[#295b85] border-[#143a59] text-white hover:bg-[#143a59] hover:border-[#0b2942]",
+        "bg-[#0D1B3E] border-[#1a3068] text-white hover:bg-[#1a3068] hover:border-[#0D1B3E]",
       success:
         "bg-[#4f8d67] border-[#3d6c50] text-white hover:bg-[#3d6c50] hover:border-[#325641]",
       danger:
         "bg-[#aa403d] border-[#7f3431] text-white hover:bg-[#7f3431] hover:border-[#642d2a]",
       outline:
-        "bg-white border-[#2a74ac] text-[#2a74ac] hover:bg-[#e6e7e8] hover:border-[#487295] hover:text-[#487295]",
+        "bg-white border-[#C9A227] text-[#C9A227] hover:bg-[#fdf8e8] hover:border-[#A8841C] hover:text-[#A8841C]",
       ghost:
         "bg-transparent border-transparent text-zinc-600 hover:bg-zinc-100 hover:text-zinc-700",
     };

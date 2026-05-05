@@ -27,11 +27,11 @@ export function PageWrapper({
         // Ocupa toda a largura útil do painel
         "w-full max-w-none min-w-0",
         // Padding horizontal mais equilibrado para admin
-        "px-4 sm:px-5 lg:px-6 xl:px-8",
+        "px-0 sm:px-5 lg:px-6 xl:px-8",
         // Padding vertical menor para reduzir o "vazio" no topo
-        "pt-3 sm:pt-4 lg:pt-5",
+        "pt-1 sm:pt-4 lg:pt-5",
         // Bottom spacing
-        mobileBottomPad ? "pb-24 sm:pb-5 lg:pb-6" : "pb-0",
+        mobileBottomPad ? "pb-12 sm:pb-5 lg:pb-6" : "pb-0",
         className
       )}
       {...props}
@@ -118,11 +118,11 @@ export function StatGrid({
   const colsMap: Record<number, string> = {
     2: "grid-cols-1 sm:grid-cols-2",
     3: "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3",
-    4: "grid-cols-1 sm:grid-cols-2 xl:grid-cols-4",
+    4: "grid-cols-2 sm:grid-cols-2 xl:grid-cols-4",
   };
 
   return (
-    <div className={cn("grid gap-3 sm:gap-4", colsMap[cols], className)} {...props}>
+    <div className={cn("grid gap-2.5 sm:gap-4", colsMap[cols], className)} {...props}>
       {children}
     </div>
   );
@@ -145,9 +145,9 @@ export function ContentCard({
 }: ContentCardProps) {
   const paddingMap = {
     none: "",
-    sm: "p-3 sm:p-4",
-    md: "p-4 sm:p-5",
-    lg: "p-5 sm:p-6 lg:p-7",
+    sm: "p-2.5 sm:p-4",
+    md: "p-3 sm:p-5",
+    lg: "p-4 sm:p-6 lg:p-7",
   };
 
   return (

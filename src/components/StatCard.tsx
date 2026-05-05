@@ -27,9 +27,9 @@ const colorMap: Record<StatCardColor, { wrap: string; icon: string; glow: string
     glow: "bg-emerald-500/5",
   },
   info: {
-    wrap: "bg-blue-50 border-blue-100 group-hover:bg-blue-500 group-hover:border-blue-500",
-    icon: "text-blue-600 group-hover:text-white",
-    glow: "bg-blue-500/5",
+    wrap: "bg-[#edf0f7] border-[#c5ceeb] group-hover:bg-[#0D1B3E] group-hover:border-[#0D1B3E]",
+    icon: "text-[#1a3068] group-hover:text-white",
+    glow: "bg-[#0D1B3E]/5",
   },
   danger: {
     wrap: "bg-red-50 border-red-100 group-hover:bg-red-500 group-hover:border-red-500",
@@ -81,29 +81,29 @@ export function StatCard({
         "bg-white rounded-2xl border border-zinc-200 shadow-sm",
         "hover:shadow-md transition-all duration-300 group",
         "relative overflow-hidden",
-        // Padding responsivo: menor no mobile
-        "p-4 sm:p-5",
+        // Padding responsivo: mais compacto no mobile
+        "min-h-[112px] p-3 sm:min-h-0 sm:p-5",
         className
       )}
     >
       {/* Círculo decorativo de fundo */}
       <div
         className={cn(
-          "absolute top-0 right-0 w-16 h-16 sm:w-20 sm:h-20 rounded-full -mr-8 -mt-8 sm:-mr-10 sm:-mt-10",
+          "absolute top-0 right-0 w-12 h-12 sm:w-20 sm:h-20 rounded-full -mr-6 -mt-6 sm:-mr-10 sm:-mt-10",
           "transition-transform group-hover:scale-150 duration-700",
           c.glow
         )}
       />
 
       {/* Header: ícone + trend */}
-      <div className="flex justify-between items-start mb-3 sm:mb-4 relative z-10">
+      <div className="flex justify-between items-start mb-2 sm:mb-4 relative z-10">
         <div
           className={cn(
-            "p-2 sm:p-2.5 rounded-xl border transition-all duration-300",
+            "p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl border transition-all duration-300",
             c.wrap
           )}
         >
-          <Icon size={16} className={cn("transition-colors duration-300 sm:hidden", c.icon)} />
+          <Icon size={14} className={cn("transition-colors duration-300 sm:hidden", c.icon)} />
           <Icon size={18} className={cn("hidden sm:block transition-colors duration-300", c.icon)} />
         </div>
 
@@ -131,10 +131,10 @@ export function StatCard({
 
       {/* Conteúdo */}
       <div className="relative z-10">
-        <p className="text-[8px] sm:text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-0.5 sm:mb-1 truncate">
+        <p className="text-[7px] sm:text-[10px] font-bold text-zinc-400 uppercase tracking-[0.18em] mb-0.5 sm:mb-1 truncate">
           {title}
         </p>
-        <h3 className="text-base sm:text-2xl font-black text-zinc-900 tracking-tight leading-none">
+        <h3 className="text-sm sm:text-2xl font-black text-zinc-900 tracking-tight leading-none">
           {value}
         </h3>
         {description && (

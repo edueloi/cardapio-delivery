@@ -61,14 +61,15 @@ export default function DashboardContent({
     <>
       {activeTab === "overview" && (
         <PageWrapper>
+          {/* Título — oculto no mobile, visível no desktop */}
           <SectionTitle
             title="Visão Geral"
             description="Acompanhe o desempenho da sua unidade em tempo real"
             icon={LayoutDashboard}
-            className="mb-6"
+            className="mb-6 hidden sm:flex"
           />
 
-          <StatGrid cols={4} className="mb-8">
+          <StatGrid cols={4} className="mb-4 sm:mb-8">
             <StatCard
               title="Pedidos Hoje"
               value={orders.length}
@@ -109,22 +110,22 @@ export default function DashboardContent({
             />
           </StatGrid>
 
-          <div className="grid grid-cols-12 gap-6">
-            <div className="col-span-12 lg:col-span-8 space-y-6">
+          <div className="grid grid-cols-12 gap-4 sm:gap-6">
+            <div className="col-span-12 lg:col-span-8 space-y-4 sm:space-y-6">
               <ContentCard>
-                <h3 className="text-lg font-bold text-slate-800 mb-4">Resumo da Operação</h3>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
+                <h3 className="text-sm sm:text-lg font-bold text-slate-800 mb-3 sm:mb-4">Resumo da Operação</h3>
+                <div className="grid grid-cols-3 gap-2 sm:gap-4">
                   <button
                     onClick={() => {
                       setActiveTab("live-orders");
                       setSubTab("pending");
                     }}
-                    className="p-4 bg-blue-50 rounded-2xl text-center hover:bg-blue-100 transition-colors group"
+                    className="p-3 sm:p-4 bg-[#fdf8e8] rounded-xl sm:rounded-2xl text-center hover:bg-[#faefc0] transition-colors group"
                   >
-                    <div className="text-2xl font-black text-blue-600 group-hover:scale-110 transition-transform">
+                    <div className="text-xl sm:text-2xl font-black text-[#A8841C] group-hover:scale-110 transition-transform">
                       {pendingOrders}
                     </div>
-                    <div className="text-[10px] font-black uppercase text-blue-400 tracking-wider">
+                    <div className="text-[9px] sm:text-[10px] font-black uppercase text-[#C9A227]/70 tracking-wider mt-0.5">
                       Aguardando
                     </div>
                   </button>
@@ -133,23 +134,23 @@ export default function DashboardContent({
                       setActiveTab("live-orders");
                       setSubTab("preparing");
                     }}
-                    className="p-4 bg-orange-50 rounded-2xl text-center hover:bg-orange-100 transition-colors group"
+                    className="p-3 sm:p-4 bg-orange-50 rounded-xl sm:rounded-2xl text-center hover:bg-orange-100 transition-colors group"
                   >
-                    <div className="text-2xl font-black text-orange-600 group-hover:scale-110 transition-transform">
+                    <div className="text-xl sm:text-2xl font-black text-orange-600 group-hover:scale-110 transition-transform">
                       {preparingOrders}
                     </div>
-                    <div className="text-[10px] font-black uppercase text-orange-400 tracking-wider">
+                    <div className="text-[9px] sm:text-[10px] font-black uppercase text-orange-400 tracking-wider mt-0.5">
                       Em Preparo
                     </div>
                   </button>
                   <button
                     onClick={() => setActiveTab("history")}
-                    className="p-4 bg-green-50 rounded-2xl text-center hover:bg-green-100 transition-colors group"
+                    className="p-3 sm:p-4 bg-green-50 rounded-xl sm:rounded-2xl text-center hover:bg-green-100 transition-colors group"
                   >
-                    <div className="text-2xl font-black text-green-600 group-hover:scale-110 transition-transform">
+                    <div className="text-xl sm:text-2xl font-black text-green-600 group-hover:scale-110 transition-transform">
                       {deliveredOrders}
                     </div>
-                    <div className="text-[10px] font-black uppercase text-green-400 tracking-wider">
+                    <div className="text-[9px] sm:text-[10px] font-black uppercase text-green-400 tracking-wider mt-0.5">
                       Entregues
                     </div>
                   </button>
@@ -192,28 +193,27 @@ export default function DashboardContent({
       )}
 
       {activeTab === "history" && (
-        <div className="space-y-6">
-          <h3 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">
-            Relatório de Encerramento
-          </h3>
-          <div className="grid grid-cols-12 gap-6">
-            <div className="col-span-12">
-              <OrdersList filteredOrders={filteredOrders} updateStatus={updateStatus} />
-            </div>
-          </div>
-        </div>
+        <PageWrapper>
+          <SectionTitle
+            title="Histórico de Pedidos"
+            description="Todos os pedidos processados hoje"
+            icon={Clock}
+            className="mb-5 hidden sm:flex"
+          />
+          <OrdersList filteredOrders={filteredOrders} updateStatus={updateStatus} />
+        </PageWrapper>
       )}
 
       {activeTab === "menu" && (
         <div className="space-y-6">
-          <div className="bg-blue-600 rounded-[28px] sm:rounded-3xl p-6 sm:p-8 text-white mb-8 shadow-xl shadow-blue-100 flex flex-col items-start gap-5 sm:flex-row sm:justify-between sm:items-center overflow-hidden relative">
+          <div className="bg-[#0D1B3E] rounded-[28px] sm:rounded-3xl p-6 sm:p-8 text-white mb-8 shadow-xl shadow-[#0D1B3E]/20 flex flex-col items-start gap-5 sm:flex-row sm:justify-between sm:items-center overflow-hidden relative">
             <div className="relative z-10 max-w-md">
               <h3 className="text-2xl sm:text-3xl font-black tracking-tight mb-2">Cardápio Inteligente</h3>
-              <p className="text-blue-100 font-medium text-sm sm:text-base">
+              <p className="text-[#C9A227]/80 font-medium text-sm sm:text-base">
                 Gerencie categorias, preços e disponibilidades em tempo real.
               </p>
             </div>
-            <Utensils className="w-24 h-24 sm:w-32 sm:h-32 absolute -right-6 -bottom-6 sm:-right-8 sm:-bottom-8 text-blue-500/30 rotate-12" />
+            <Utensils className="w-24 h-24 sm:w-32 sm:h-32 absolute -right-6 -bottom-6 sm:-right-8 sm:-bottom-8 text-[#C9A227]/15 rotate-12" />
           </div>
           <MenuManagement tenant={tenant} refresh={refreshTenant} />
         </div>
@@ -258,7 +258,7 @@ export default function DashboardContent({
       {activeTab === "inventory" && (
         <div className="space-y-6">
           <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h3 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight underline decoration-blue-500 decoration-4 underline-offset-4">
+            <h3 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight underline decoration-[#C9A227] decoration-4 underline-offset-4">
               Gestão de Insumos
             </h3>
             <div className="flex items-center gap-2">

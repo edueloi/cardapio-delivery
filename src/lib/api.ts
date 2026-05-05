@@ -1,5 +1,12 @@
 export const AUTH_TOKEN_KEY = "cardapio_delivery_auth_token";
 
+export class AuthError extends Error {
+  constructor(message = "Login obrigatório.") {
+    super(message);
+    this.name = "AuthError";
+  }
+}
+
 export function getAuthToken(): string | null {
   return window.localStorage.getItem(AUTH_TOKEN_KEY);
 }
@@ -37,6 +44,9 @@ export async function apiJson<T>(input: RequestInfo | URL, init: RequestInit = {
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new AuthError(data?.error || "Login obrigatório.");
+    }
     throw new Error(data?.error || "Falha na requisição.");
   }
 

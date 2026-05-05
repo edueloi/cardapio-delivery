@@ -57,8 +57,8 @@ export default function RegisterPage() {
             Crie seu acesso e gerencie os estabelecimentos com QR Code e bot próprio no WhatsApp.
           </p>
           {requestedSlug && (
-            <p className="text-sm text-blue-600 font-bold mt-3">
-              VocÃª veio do estabelecimento <span className="font-black">/{requestedSlug}</span>. Se ele jÃ¡ existe, use a opÃ§Ã£o de vincular.
+            <p className="text-sm text-[#C9A227] font-bold mt-3">
+              Você veio do estabelecimento <span className="font-black">/{requestedSlug}</span>. Se ele já existe, use a opção de vincular.
             </p>
           )}
         </div>
@@ -69,7 +69,7 @@ export default function RegisterPage() {
             onClick={() => setMode("create")}
             className={`rounded-2xl border px-4 py-4 text-left transition-colors ${
               mode === "create"
-                ? "border-[#2a74ac] bg-blue-50"
+                ? "border-[#C9A227] bg-[#fdf8e8]"
                 : "border-slate-200 bg-slate-50 hover:bg-slate-100"
             }`}
           >
@@ -81,7 +81,7 @@ export default function RegisterPage() {
             onClick={() => setMode("claim")}
             className={`rounded-2xl border px-4 py-4 text-left transition-colors ${
               mode === "claim"
-                ? "border-[#2a74ac] bg-blue-50"
+                ? "border-[#C9A227] bg-[#fdf8e8]"
                 : "border-slate-200 bg-slate-50 hover:bg-slate-100"
             }`}
           >
@@ -156,7 +156,7 @@ export default function RegisterPage() {
 
         <div className="mt-6 text-sm text-slate-500">
           Já tem conta?{" "}
-          <Link to={`/login?next=${encodeURIComponent(next)}`} className="font-bold text-[#2a74ac]">
+          <Link to={`/login?next=${encodeURIComponent(next)}`} className="font-bold text-[#C9A227] hover:text-[#A8841C]">
             Entrar no sistema
           </Link>
         </div>

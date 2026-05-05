@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { X, DollarSign, CreditCard, Smartphone, CheckCircle, Plus, Trash2, Split, AlertTriangle, ChevronDown } from "lucide-react";
+import { DollarSign, CreditCard, Smartphone, CheckCircle, Plus, Trash2, Split, AlertTriangle } from "lucide-react";
 import { cn } from "@/src/lib/utils";
+import { Modal, ModalFooter } from "./Modal";
+import { Button } from "./Button";
 
 interface PaymentEntry {
   method: "cash" | "card" | "pix";
@@ -123,33 +125,47 @@ export function PaymentModal({ isOpen, onClose, comanda, onConfirm }: PaymentMod
   const addEntry    = () => setEntries(prev => [...prev, { method: "cash", amount: "" }]);
   const removeEntry = (idx: number) => setEntries(prev => prev.filter((_, i) => i !== idx));
 
-  if (!isOpen || !comanda) return null;
+  if (!comanda) return null;
 
   const canConfirmSingle = singleAmountNum > 0.01 && !singleOverpay;
+  const canConfirm = mode === "single" ? canConfirmSingle : canConfirmMixed;
 
   return (
-    <div
-      className="fixed inset-0 bg-black/60 z-[100] flex items-end sm:items-center justify-center sm:p-4 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-t-[28px] sm:rounded-[28px] shadow-2xl w-full sm:max-w-md overflow-hidden border border-zinc-200"
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="p-5 border-b border-zinc-100 flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-black text-zinc-900 tracking-tight">Finalizar Pagamento</h3>
-            <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest mt-0.5">
-              {comanda.client?.name} • Comanda #{comanda.id?.slice(-6).toUpperCase()}
-            </p>
-          </div>
-          <button onClick={onClose} className="p-2 hover:bg-zinc-100 text-zinc-400 rounded-xl transition-all">
-            <X size={18} />
-          </button>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={
+        <div>
+          <div>Finalizar Pagamento</div>
+          <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest mt-0.5 normal-case">
+            {comanda.client?.name} • #{comanda.id?.slice(-6).toUpperCase()}
+          </p>
         </div>
-
-        <div className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+      }
+      size="sm"
+      mobileStyle="bottom-sheet"
+      footer={
+        <ModalFooter>
+          <Button variant="ghost" onClick={onClose} disabled={loading}>Cancelar</Button>
+          <Button
+            variant="success"
+            onClick={handleConfirm}
+            disabled={loading || !canConfirm}
+            className="flex-[2] flex items-center justify-center gap-2"
+          >
+            <CheckCircle size={14} />
+            {loading
+              ? "Processando..."
+              : mode === "single" && singleIsPartial && singleAmount
+              ? `Pagar ${fmtBRL(singleAmountNum)} (Parcial)`
+              : mode === "mixed" && mixedIsPartial
+              ? `Pagar ${fmtBRL(mixedTotal)} (Parcial)`
+              : "Confirmar Pagamento"}
+          </Button>
+        </ModalFooter>
+      }
+    >
+        <div className="space-y-4">
 
           {/* Total box */}
           <div className="bg-zinc-50 rounded-2xl p-4 border border-zinc-100 text-center">
@@ -394,36 +410,6 @@ export function PaymentModal({ isOpen, onClose, comanda, onConfirm }: PaymentMod
             </div>
           )}
         </div>
-
-        {/* Footer */}
-        <div className="p-4 border-t border-zinc-100 flex gap-3">
-          <button
-            onClick={onClose}
-            className="flex-1 py-3 bg-zinc-100 hover:bg-zinc-200 text-zinc-600 rounded-2xl text-xs font-black uppercase tracking-widest transition-all"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={handleConfirm}
-            disabled={loading || (mode === "single" && !canConfirmSingle) || (mode === "mixed" && !canConfirmMixed)}
-            className={cn(
-              "flex-[2] py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg",
-              loading || (mode === "single" && !canConfirmSingle) || (mode === "mixed" && !canConfirmMixed)
-                ? "bg-zinc-200 text-zinc-400 cursor-not-allowed shadow-none"
-                : "bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-500/20 active:scale-95"
-            )}
-          >
-            <CheckCircle size={14} />
-            {loading
-              ? "Processando..."
-              : mode === "single" && singleIsPartial && singleAmount
-              ? `Pagar ${fmtBRL(singleAmountNum)} (Parcial)`
-              : mode === "mixed" && mixedIsPartial
-              ? `Pagar ${fmtBRL(mixedTotal)} (Parcial)`
-              : "Confirmar Pagamento"}
-          </button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

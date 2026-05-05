@@ -124,7 +124,7 @@ export function FilterLineSegmented<T extends string | number = string>({
   value, onChange, options, className = '', size = 'md',
 }: FilterLineSegmentedProps<T>) {
   return (
-    <FilterLineGroup compact={size === 'sm'} className={cx('w-full flex-wrap sm:w-auto sm:flex-nowrap', className)}>
+    <FilterLineGroup compact={size === 'sm'} className={cx('w-full sm:w-auto sm:flex-nowrap', className)}>
       {options.map((option) => {
         const active = String(option.value) === String(value);
         return (
@@ -133,8 +133,8 @@ export function FilterLineSegmented<T extends string | number = string>({
             type="button"
             onClick={() => onChange(option.value)}
             className={cx(
-              'inline-flex flex-1 justify-center items-center gap-2 rounded-lg font-bold transition-all sm:flex-none',
-              size === 'sm' ? 'px-3 py-1 h-7 text-[10px]' : 'px-4 py-2 text-xs',
+              'inline-flex flex-1 justify-center items-center gap-1.5 rounded-lg font-bold transition-all sm:flex-none whitespace-nowrap',
+              size === 'sm' ? 'px-2.5 py-1 h-7 text-[10px]' : 'px-3 py-2 text-[11px]',
               active ? 'bg-white text-amber-600 shadow-sm' : 'text-zinc-500 hover:text-zinc-800'
             )}
           >

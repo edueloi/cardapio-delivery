@@ -89,7 +89,7 @@ export default function OwnerPortalPage() {
                 >
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <Store className="w-4 h-4 text-[#2a74ac]" />
+                      <Store className="w-4 h-4 text-[#C9A227]" />
                       <h3 className="text-lg font-black text-slate-900">{membership.tenant.name}</h3>
                     </div>
                     <div className="text-sm text-slate-500">/{membership.tenant.slug}</div>

@@ -3,8 +3,30 @@
 
 @theme {
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
-  
-  --color-orange-50: #fff7ed;
+
+  /* ── Develoi Brand Colors ───────────────────────────── */
+  --color-brand-navy:    #0D1B3E;
+  --color-brand-gold:    #C9A227;
+  --color-brand-gold-lt: #E8B93A;
+  --color-brand-gold-dk: #A8841C;
+
+  /* amber overrides → dourado Develoi */
+  --color-amber-50:  #fdf8e8;
+  --color-amber-100: #faefc0;
+  --color-amber-200: #f5de82;
+  --color-amber-400: #C9A227;
+  --color-amber-500: #C9A227;
+  --color-amber-600: #A8841C;
+  --color-amber-700: #7a6014;
+
+  /* blue overrides → marinho Develoi */
+  --color-blue-50:  #edf0f7;
+  --color-blue-100: #d0d8ee;
+  --color-blue-500: #1a3068;
+  --color-blue-600: #0D1B3E;
+  --color-blue-700: #0a1530;
+
+  --color-orange-50:  #fff7ed;
   --color-orange-100: #ffedd5;
   --color-orange-200: #fed7aa;
   --color-orange-500: #f97316;
@@ -15,6 +37,20 @@
   body {
     -webkit-tap-highlight-color: transparent;
     @apply font-sans;
+  }
+}
+
+@layer components {
+  .ds-label {
+    @apply block text-[11px] font-bold text-zinc-500 uppercase tracking-wide leading-none;
+  }
+
+  .ds-input {
+    @apply w-full h-10 rounded-[10px] border border-zinc-200 bg-zinc-50 px-3 py-0
+           text-sm font-bold text-zinc-800 placeholder:text-zinc-400
+           outline-none transition-all duration-150 shadow-sm
+           focus:border-[#C9A227] focus:ring-2 focus:ring-[#C9A227]/10 focus:bg-white
+           disabled:opacity-50 disabled:cursor-not-allowed;
   }
 }
 

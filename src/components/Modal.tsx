@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { X } from "lucide-react";
-import { motion, AnimatePresence, Variants } from "motion/react";
+import { motion, AnimatePresence, type Variants } from "motion/react";
 import { cn } from "@/src/lib/utils";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -87,15 +87,6 @@ export const Modal: React.FC<ModalProps> = ({
   mobileStyle = "bottom-sheet",
   backdropBlur = "sm",
 }) => {
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 640);
-    check();
-    window.addEventListener("resize", check);
-    return () => window.removeEventListener("resize", check);
-  }, []);
-
   // Bloqueia scroll do body enquanto o modal está aberto
   useEffect(() => {
     if (isOpen) {
@@ -106,12 +97,9 @@ export const Modal: React.FC<ModalProps> = ({
     return () => { document.body.style.overflow = ""; };
   }, [isOpen]);
 
-  const isBottomSheet   = isMobile && mobileStyle === "bottom-sheet";
-  const isMobileFullscreen = isMobile && mobileStyle === "fullscreen";
-
-  const variants = isMobile
-    ? isMobileFullscreen ? fullscreenVariants : bottomSheetVariants
-    : desktopVariants;
+  const isSheet    = mobileStyle === "bottom-sheet";
+  const isFs       = mobileStyle === "fullscreen";
+  const isCenter   = mobileStyle === "center";
 
   return (
     <AnimatePresence>
@@ -135,40 +123,39 @@ export const Modal: React.FC<ModalProps> = ({
           <div
             className={cn(
               "fixed inset-0 z-[101] flex pointer-events-none",
-              isBottomSheet
-                ? "items-end sm:items-center sm:justify-center p-0 sm:p-6"
-                : "items-center justify-center p-4 sm:p-6"
+              // mobile: sheet alinha embaixo sem padding; center/fullscreen centralizam
+              isSheet  && "items-end sm:items-center sm:justify-center sm:p-6",
+              isFs     && "items-end sm:items-center sm:justify-center sm:p-6",
+              isCenter && "items-center justify-center p-4 sm:p-6",
             )}
           >
             <motion.div
               key="modal-content"
-              variants={variants}
+              variants={isSheet || isFs ? bottomSheetVariants : desktopVariants}
               initial="hidden"
               animate="visible"
               exit="exit"
               className={cn(
                 "w-full bg-white relative flex flex-col pointer-events-auto overflow-hidden",
-                // Mobile styles
-                isBottomSheet && [
+                // bottom-sheet & fullscreen: sem arredondamento lateral no mobile, ocupa largura total
+                (isSheet || isFs) && [
                   "rounded-t-[2rem] sm:rounded-3xl",
                   "max-h-[92dvh] sm:max-h-[88vh]",
                   "shadow-[0_-12px_48px_rgba(0,0,0,0.12)]",
+                  "sm:shadow-[0_25px_60px_rgba(0,0,0,0.15)] sm:border sm:border-zinc-200/60",
                 ],
-                isMobileFullscreen && [
-                  "h-[100dvh] w-full rounded-none",
-                ],
-                // Desktop styles
-                !isBottomSheet && !isMobileFullscreen && [
+                // center: sempre arredondado e com shadow
+                isCenter && [
                   "rounded-3xl",
-                  "max-h-[90dvh] sm:max-h-[88vh]",
+                  "max-h-[90dvh]",
+                  "shadow-[0_25px_60px_rgba(0,0,0,0.15)] border border-zinc-200/60",
                 ],
-                "sm:rounded-3xl sm:shadow-[0_25px_60px_rgba(0,0,0,0.15)] sm:border sm:border-zinc-200/60",
                 sizeClasses[size],
                 className
               )}
             >
               {/* iOS Grab Handle */}
-              {isBottomSheet && (
+              {isSheet && (
                 <div className="w-full flex justify-center pt-3 pb-0 shrink-0 sm:hidden">
                   <div className="w-10 h-[5px] rounded-full bg-zinc-200" />
                 </div>
@@ -181,7 +168,7 @@ export const Modal: React.FC<ModalProps> = ({
                     "flex items-center justify-between shrink-0",
                     "px-5 sm:px-7",
                     "border-b border-zinc-100",
-                    isBottomSheet ? "pt-5 pb-4 sm:py-5" : "py-4 sm:py-5"
+                    isSheet ? "pt-5 pb-4 sm:py-5" : "py-4 sm:py-5"
                   )}
                 >
                   <div className="text-sm sm:text-[15px] font-black text-zinc-900 uppercase tracking-wide truncate pr-4 font-display">
@@ -200,7 +187,7 @@ export const Modal: React.FC<ModalProps> = ({
               )}
 
               {/* Body — scrollável */}
-              <div className="flex-1 overflow-y-auto overscroll-contain w-full p-5 sm:p-7 relative scroll-smooth">
+              <div className="flex-1 overflow-y-auto overscroll-contain w-full p-4 sm:p-6 relative scroll-smooth">
                 {/* Botão fechar flutuante (quando sem título) */}
                 {!title && !hideCloseButton && (
                   <button
