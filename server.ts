@@ -334,7 +334,11 @@ app.post("/api/auth/register", async (req, res) => {
       return { account, tenant };
     });
 
-    await ensureWppSetup(tenant.id, tenant.name);
+    try {
+      await ensureWppSetup(tenant.id, tenant.name);
+    } catch (wppError) {
+      console.error("Erro ao configurar WhatsApp inicial (não crítico):", wppError);
+    }
 
     const token = await createAuthSession(account.id);
     const tenants = await listAccountTenants(account.id);
@@ -345,8 +349,11 @@ app.post("/api/auth/register", async (req, res) => {
       tenants,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Falha ao cadastrar usuário." });
+    console.error("ERRO NO CADASTRO:", error);
+    res.status(500).json({ 
+      error: "Falha ao cadastrar usuário.",
+      details: error instanceof Error ? error.message : String(error)
+    });
   }
 });
 
