@@ -260,15 +260,33 @@ function detectIntent(text: string): "menu" | "address" | "hours" | "human" | "o
 // ─── Main bot handler ─────────────────────────────────────────────────────────
 
 async function handleIncomingMessage(tenantId: string, remoteJid: string, text: string) {
+  console.log(`[Baileys][${tenantId}] 💬 Mensagem recebida de ${remoteJid}: "${text}"`);
+  
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
     include: { wppBotConfig: true },
   });
 
-  if (!tenant?.wppBotConfig?.botEnabled || !tenant.wppBotConfig.autoReplyEnabled) return;
+  if (!tenant) {
+    console.log(`[Baileys][${tenantId}] ❌ Tenant não encontrado no banco.`);
+    return;
+  }
+
+  if (!tenant.wppBotConfig?.botEnabled) {
+    console.log(`[Baileys][${tenantId}] ⚠️ Bot desativado nas configurações (botEnabled: false).`);
+    return;
+  }
+
+  if (!tenant.wppBotConfig.autoReplyEnabled) {
+    console.log(`[Baileys][${tenantId}] ⚠️ Auto-atendimento desativado (autoReplyEnabled: false).`);
+    return;
+  }
 
   const session = sessions.get(tenantId);
-  if (!session?.sock || session.status !== "connected") return;
+  if (!session?.sock || session.status !== "connected") {
+    console.log(`[Baileys][${tenantId}] ⚠️ Sessão não está pronta ou não está conectada.`);
+    return;
+  }
 
   const phone = jidToPhone(remoteJid);
   const conv = getConvState(tenantId, phone);
@@ -277,9 +295,13 @@ async function handleIncomingMessage(tenantId: string, remoteJid: string, text: 
   const normalized = text.toLowerCase().trim();
 
   // Throttle: bot won't reply twice within 3s to same person
-  if (Date.now() - conv.lastBotAt < 3_000) return;
+  if (Date.now() - conv.lastBotAt < 3_000) {
+    console.log(`[Baileys][${tenantId}] ⏳ Ignorando mensagem por throttle (menos de 3s).`);
+    return;
+  }
 
   const send = async (msg: string) => {
+    console.log(`[Baileys][${tenantId}] 🤖 Enviando resposta para ${phone}...`);
     setConvState(tenantId, phone, { lastBotAt: Date.now() });
     await sendMessage(tenantId, phone, msg);
   };
