@@ -67,24 +67,24 @@ export function SectionTitle({
     <div
       className={cn(
         "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between",
-        divider && "mb-4 border-b border-zinc-100 pb-4 sm:mb-5 sm:pb-5",
+        divider && "mb-4 border-b border-slate-100 pb-4 sm:mb-5 sm:pb-5",
         className
       )}
     >
       <div className="flex min-w-0 items-center gap-3">
         {Icon && (
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-amber-100 bg-amber-50">
-            <Icon size={18} className="text-amber-600" />
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200/60 bg-white shadow-sm">
+            <Icon size={16} className="text-[#C9A227]" />
           </div>
         )}
 
         <div className="min-w-0">
-          <h1 className="truncate font-display text-lg font-black tracking-tight text-zinc-900 sm:text-xl lg:text-2xl">
+          <h1 className="truncate font-sans text-base sm:text-lg font-black tracking-tight text-[#0D1B3E] uppercase">
             {title}
           </h1>
 
           {description && (
-            <p className="mt-0.5 text-xs leading-relaxed text-zinc-400 sm:text-sm">
+            <p className="mt-0.5 text-[10px] sm:text-[11px] font-bold leading-relaxed text-slate-400 uppercase tracking-widest">
               {description}
             </p>
           )}
@@ -153,7 +153,7 @@ export function ContentCard({
   return (
     <div
       className={cn(
-        "rounded-2xl border border-zinc-200 bg-white shadow-sm sm:rounded-3xl",
+        "ds-card-premium",
         paddingMap[padding],
         className
       )}

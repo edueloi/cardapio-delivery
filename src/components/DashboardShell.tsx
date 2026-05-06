@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { type LucideIcon, LogOut, Menu, Monitor, Utensils, X } from "lucide-react";
+import { cn } from "@/src/lib/utils";
 
 interface DashboardNavigationItem {
   id: string;
@@ -99,10 +100,10 @@ export default function DashboardShell({
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 py-5 md:py-6 px-4 space-y-6 overflow-y-auto">
+        <nav className="flex-1 py-5 md:py-6 px-4 space-y-6 overflow-y-auto custom-scrollbar">
           {navigationGroups.map((group) => (
             <div key={group.id} className="space-y-2">
-              <div className="px-3 text-[10px] font-black uppercase tracking-[0.2em] text-white/25">
+              <div className="px-3 text-[9px] font-black uppercase tracking-[0.25em] text-white/20">
                 {group.label}
               </div>
               <div className="space-y-0.5">
@@ -110,14 +111,17 @@ export default function DashboardShell({
                   <button
                     key={item.id}
                     onClick={() => onSelectTab(item.tab)}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium transition-all cursor-pointer ${
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl font-bold transition-all cursor-pointer group ${
                       activeTab === item.tab
-                        ? "bg-[#C9A227] text-white shadow-sm"
-                        : "text-slate-400 hover:bg-white/10 hover:text-white"
+                        ? "bg-[#C9A227] text-white shadow-lg shadow-[#C9A227]/20"
+                        : "text-slate-400 hover:bg-white/5 hover:text-white"
                     }`}
                   >
-                    <item.icon className="w-4 h-4 shrink-0" />
-                    <span className="text-sm text-left">{item.label}</span>
+                    <item.icon className={cn(
+                      "w-3.5 h-3.5 shrink-0 transition-transform group-hover:scale-110",
+                      activeTab === item.tab ? "text-white" : "text-slate-500 group-hover:text-[#C9A227]"
+                    )} />
+                    <span className="text-[11px] text-left uppercase tracking-wider">{item.label}</span>
                   </button>
                 ))}
               </div>

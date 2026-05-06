@@ -319,7 +319,7 @@ function detectIntent(text: string): "menu" | "address" | "hours" | "human" | "o
   if (has("cardapio", "menu", "pedido", "pedir", "quero", "o que tem", "oque tem", "comida", "lanche", "marmita", "prato", "ver cardapio", "fazer pedido", "comprar", "produto", "combo", "opcao", "opcoes") || t === "1")
     return "order";
 
-  if (has("oi", "ola", "boa noite", "boa tarde", "bom dia", "bom dia", "oiee", "oii", "hey", "ola", "ei ", "e ai", "eai", "tudo bem", "tudo bom"))
+  if (has("oi", "ola", "boa noite", "boa tarde", "bom dia", "oiee", "oii", "hey", "ola", "ei ", "e ai", "eai", "tudo bem", "tudo bom", "salve", "slv"))
     return "greeting";
 
   return null;
@@ -486,21 +486,18 @@ async function handleIncomingMessage(tenantId: string, remoteJid: string, text: 
     } else {
       await send(`🍽️ Aqui está nosso cardápio:\n${menuLink}\n\nFaça seu pedido por lá! 👌`, 1500);
     }
-    // Loop de volta para o menu após 3 segundos
-    setTimeout(() => sendMenu(), 3500);
+    // Removido loop automático para o menu para não 'atropelar' a conversa
   };
 
   const sendAddress = async () => {
     await send(`📍 *Endereço de ${name}:*\n\n${formatAddress(addr)}`, 1500);
-    // Loop de volta para o menu após 3 segundos
-    setTimeout(() => sendMenu(), 3500);
+    // Removido loop automático para o menu
   };
 
   const sendHours = async () => {
     const status = openNow ? "✅ *Aberto agora*" : "🔴 *Fechado no momento*";
     await send(`${status}\n\n🕐 *Horários de funcionamento:*\n${formatBusinessHours(hours)}`, 1500);
-    // Loop de volta para o menu após 3 segundos
-    setTimeout(() => sendMenu(), 3500);
+    // Removido loop automático para o menu
   };
 
   const sendHuman = async () => {
@@ -598,7 +595,8 @@ async function handleIncomingMessage(tenantId: string, remoteJid: string, text: 
   if (intent === "human") { await sendHuman(); return; }
   if (intent === "exit") { await sendExit(); return; }
 
-  if (intent === "greeting" || intent !== null) {
+  // Fallback para qualquer mensagem inicial não reconhecida ou se estiver idle
+  if (conv.step === "idle" || intent === "greeting") {
     await sendMenu();
     return;
   }

@@ -88,10 +88,10 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
               maxLength={maxLength}
               value={value}
               className={cn(
-                "w-full bg-transparent px-3 py-2.5 outline-none",
-                "text-sm text-zinc-800 placeholder:text-zinc-400 font-bold tracking-tight",
+                "w-full bg-transparent px-3 py-1.5 outline-none",
+                "text-xs text-zinc-800 placeholder:text-zinc-400/50 font-bold tracking-tight",
                 "disabled:opacity-50 disabled:cursor-not-allowed",
-                size === "sm" && "py-1.5 text-xs",
+                size === "sm" && "text-[11px]",
                 iconLeft && (size === "sm" ? "pl-8" : "pl-9"),
                 iconRight && (size === "sm" ? "pr-8" : "pr-9"),
                 className

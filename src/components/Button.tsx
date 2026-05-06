@@ -29,24 +29,24 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ) => {
     const variants: Record<string, string> = {
       primary:
-        "bg-[#C9A227] border-[#A8841C] text-white hover:bg-[#A8841C] hover:border-[#7a6014]",
+        "bg-[#C9A227] border-[#A8841C]/30 text-white hover:bg-[#A8841C] shadow-[0_2px_10px_-3px_rgba(201,162,39,0.3)] hover:shadow-none",
       secondary:
-        "bg-[#0D1B3E] border-[#1a3068] text-white hover:bg-[#1a3068] hover:border-[#0D1B3E]",
+        "bg-[#0D1B3E] border-white/5 text-white hover:bg-[#1a3068] shadow-[0_2px_10px_-3px_rgba(13,27,62,0.3)] hover:shadow-none",
       success:
-        "bg-[#4f8d67] border-[#3d6c50] text-white hover:bg-[#3d6c50] hover:border-[#325641]",
+        "bg-[#4f8d67] border-white/5 text-white hover:bg-[#3d6c50] shadow-[0_2px_10px_-3px_rgba(79,141,103,0.3)] hover:shadow-none",
       danger:
-        "bg-[#aa403d] border-[#7f3431] text-white hover:bg-[#7f3431] hover:border-[#642d2a]",
+        "bg-[#aa403d] border-white/5 text-white hover:bg-[#7f3431] shadow-[0_2px_10px_-3px_rgba(170,64,61,0.3)] hover:shadow-none",
       outline:
-        "bg-white border-[#C9A227] text-[#C9A227] hover:bg-[#fdf8e8] hover:border-[#A8841C] hover:text-[#A8841C]",
+        "bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 shadow-sm",
       ghost:
-        "bg-transparent border-transparent text-zinc-600 hover:bg-zinc-100 hover:text-zinc-700",
+        "bg-transparent border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-900",
     };
 
     const sizes: Record<string, string> = {
-      xs: "h-7 min-w-[74px] px-2.5 text-[11px] rounded-[20px]",
-      sm: "h-8 min-w-[82px] px-3 text-[12px] rounded-[20px]",
-      md: "h-9 min-w-[90px] px-4 text-[13px] rounded-[20px]",
-      lg: "h-10 min-w-[110px] px-5 text-[14px] rounded-[20px]",
+      xs: "h-7 min-w-[74px] px-2.5 text-[10px] rounded-lg tracking-wider uppercase font-black",
+      sm: "h-8 min-w-[82px] px-3 text-[11px] rounded-xl tracking-wide font-black uppercase",
+      md: "h-9 min-w-[90px] px-4 text-xs rounded-xl font-bold tracking-tight",
+      lg: "h-11 min-w-[110px] px-6 text-sm rounded-2xl font-bold tracking-tight",
     };
 
     const spinnerSize = size === "lg" ? 16 : size === "md" ? 15 : 13;
@@ -135,10 +135,10 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
     };
 
     const sizes: Record<string, string> = {
-      xs: "h-7 w-7 rounded-[10px]",
-      sm: "h-8 w-8 rounded-[10px]",
-      md: "h-9 w-9 rounded-[12px]",
-      lg: "h-10 w-10 rounded-[12px]",
+      xs: "h-7 w-7 rounded-lg",
+      sm: "h-8 w-8 rounded-xl",
+      md: "h-9 w-9 rounded-xl",
+      lg: "h-11 w-11 rounded-2xl",
     };
 
     const spinnerSize = size === "lg" ? 16 : size === "md" ? 15 : 13;

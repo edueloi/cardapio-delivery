@@ -70,47 +70,51 @@ export function WhatsAppOverviewCard({
   const botEnabled = tenant.wppBotConfig?.botEnabled;
 
   return (
-    <div className="bg-[#075E54] text-white p-6 rounded-2xl shadow-xl relative overflow-hidden border-b-4 border-emerald-800 h-full">
+    <div className="ds-card-premium bg-[#075E54] text-white p-5 sm:p-6 relative overflow-hidden border-b-4 border-emerald-800 h-full group">
       <div className="relative z-10 flex h-full flex-col">
         <div className="flex items-center gap-2 mb-4">
-          <div className="w-9 h-9 bg-emerald-500 rounded-full flex items-center justify-center shadow-lg">
+          <div className="w-8 h-8 sm:w-9 sm:h-9 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
             <MessageSquare className="w-4 h-4" />
           </div>
-          <span className="text-xs font-black uppercase tracking-widest opacity-80">
-            WhatsApp do Estabelecimento
+          <span className="text-[10px] font-black uppercase tracking-[0.15em] opacity-80">
+            Inteligência WhatsApp
           </span>
         </div>
 
         <div className="space-y-4 flex-1">
-          <div className="bg-emerald-900/40 p-4 rounded-xl border border-emerald-400/20">
-            <div className="text-[10px] text-emerald-300 font-bold uppercase mb-1">Status da Sessão</div>
-            <div className="text-sm font-black">{getStatusLabel(status)}</div>
-            <div className="text-[11px] text-emerald-100/80 mt-2">
-              {phone ? `Número conectado: ${phone}` : "Conecte um número exclusivo para este estabelecimento."}
+          <div className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-400/20 backdrop-blur-sm">
+            <div className="text-[9px] text-emerald-300 font-black uppercase tracking-widest mb-1 opacity-70">Status da Sessão</div>
+            <div className="text-sm font-black tracking-tight">{getStatusLabel(status)}</div>
+            <div className="text-[11px] text-emerald-100/60 mt-2 font-medium">
+              {phone ? `📱 ${phone}` : "Conecte seu número oficial para atendimento."}
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 text-[11px] font-bold">
-            <div className="rounded-xl bg-white/10 p-3 border border-white/10">
-              <div className="uppercase tracking-widest text-[9px] opacity-70 mb-1">Bot</div>
-              <div>{botEnabled ? "Ligado" : "Desligado"}</div>
+          <div className="grid grid-cols-2 gap-3 text-[10px] font-black uppercase tracking-widest">
+            <div className="rounded-2xl bg-white/10 p-3 border border-white/10 flex flex-col justify-center">
+              <div className="opacity-50 mb-1">Status Bot</div>
+              <div className="text-xs">{botEnabled ? "ATIVO" : "OFF"}</div>
             </div>
-            <div className="rounded-xl bg-white/10 p-3 border border-white/10">
-              <div className="uppercase tracking-widest text-[9px] opacity-70 mb-1">Link</div>
-              <div className="truncate">/{tenant.slug}</div>
+            <div className="rounded-2xl bg-white/10 p-3 border border-white/10 flex flex-col justify-center">
+              <div className="opacity-50 mb-1">Unidade</div>
+              <div className="text-xs truncate">/{tenant.slug}</div>
             </div>
           </div>
         </div>
 
         <Button
-          className="mt-6"
+          className="mt-6 shadow-xl shadow-emerald-900/20"
           fullWidth
           variant="outline"
+          size="sm"
           iconLeft={<Bot className="w-4 h-4" />}
           onClick={onOpenSettings}
         >
-          Configurar Bot
+          Configurar Atendimento
         </Button>
+      </div>
+      <div className="absolute -right-12 -bottom-12 text-emerald-400/10 text-[140px] font-bold rotate-12 pointer-events-none group-hover:rotate-0 transition-transform duration-700">
+        💬
       </div>
     </div>
   );

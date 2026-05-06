@@ -181,54 +181,54 @@ export function OrdersList({
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.97 }}
-              className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden"
-              style={{ borderLeftWidth: 4, borderLeftColor: st.border }}
+              className="ds-card-premium overflow-hidden border-l-4"
+              style={{ borderLeftColor: st.border }}
             >
               {/* Row principal */}
               <div
-                className="flex items-center gap-3 px-4 py-3 cursor-pointer active:bg-zinc-50"
+                className="flex items-center gap-3 px-3 py-2.5 cursor-pointer active:bg-slate-50 transition-colors"
                 onClick={() => toggleOrder(order.id, isHistory)}
               >
                 {/* ID + info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-black text-zinc-800">#{order.id.slice(-4).toUpperCase()}</span>
-                    <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md ${st.color}`}>
+                    <span className="text-xs font-black text-slate-800 tracking-tight">#{order.id.slice(-4).toUpperCase()}</span>
+                    <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md tracking-wider ${st.color}`}>
                       {st.label}
                     </span>
                     <OrderWaitTime createdAt={order.createdAt} status={order.status} />
                   </div>
-                  <p className="text-xs text-zinc-500 font-medium mt-0.5 truncate">
-                    {order.orderType === 'DINE_IN' ? `[Mesa ${order.tableId || '?'}] ` : ''}{order.customerName} · {order.items?.map(i => `${i.quantity}x ${i.product?.name}`).join(', ')}
+                  <p className="text-[11px] text-slate-400 font-medium mt-0.5 truncate">
+                    {order.orderType === 'DINE_IN' ? `[Mesa ${order.tableId || '?'}] ` : ''}{order.customerName}
                   </p>
                 </div>
 
                 {/* Valor + hora */}
                 <div className="text-right shrink-0">
-                  <p className="text-sm font-black text-zinc-800">{fmt(order.total)}</p>
-                  <p className="text-[10px] text-zinc-400 font-medium">
+                  <p className="text-xs font-black text-slate-800">{fmt(order.total)}</p>
+                  <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">
                     {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </p>
                 </div>
 
                 {/* Chevron */}
-                <ChevronRight className={`w-4 h-4 text-zinc-300 shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                <ChevronRight className={`w-3.5 h-3.5 text-slate-300 shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
               </div>
 
               {/* Ações rápidas */}
-              <div className="px-4 pb-3 flex gap-2" onClick={e => e.stopPropagation()}>
+              <div className="px-3 pb-3 flex gap-2" onClick={e => e.stopPropagation()}>
                 {order.status === 'PENDING' && (
-                  <Button size="sm" variant="primary" className="flex-1" onClick={() => updateStatus(order.id, 'PREPARING')}>
+                  <Button size="sm" variant="primary" className="flex-1 rounded-xl" onClick={() => updateStatus(order.id, 'PREPARING')}>
                     Aceitar Pedido
                   </Button>
                 )}
                 {order.status === 'PREPARING' && (
-                  <Button size="sm" variant="secondary" className="flex-1" onClick={() => updateStatus(order.id, 'SHIPPED')}>
+                  <Button size="sm" variant="secondary" className="flex-1 rounded-xl" onClick={() => updateStatus(order.id, 'SHIPPED')}>
                     {order.orderType === 'DELIVERY' ? 'Despachar' : 'Marcar Pronto'}
                   </Button>
                 )}
                 {order.status === 'SHIPPED' && (
-                  <Button size="sm" variant="success" className="flex-1" onClick={() => updateStatus(order.id, 'DELIVERED')}>
+                  <Button size="sm" variant="success" className="flex-1 rounded-xl" onClick={() => updateStatus(order.id, 'DELIVERED')}>
                     Confirmar Entrega
                   </Button>
                 )}
@@ -242,52 +242,54 @@ export function OrdersList({
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
                     transition={{ duration: 0.2 }}
-                    className="overflow-hidden"
+                    className="overflow-hidden bg-slate-50/50"
                   >
-                    <div className="border-t border-zinc-100 bg-zinc-50/60 p-4 space-y-4">
+                    <div className="border-t border-slate-100 p-4 space-y-4">
 
                       {/* Itens */}
                       <div className="space-y-2">
-                        <p className="ds-label">Itens do pedido</p>
+                        <p className="ds-label tracking-[0.2em]">Conteúdo do Pedido</p>
                         {order.items?.map((item, idx) => (
-                          <div key={idx} className="bg-white rounded-xl border border-zinc-100 px-3 py-2.5 flex items-start justify-between gap-2">
+                          <div key={idx} className="bg-white rounded-xl border border-slate-200/60 px-3 py-2 flex items-start justify-between gap-2 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
                             <div>
-                              <p className="text-sm font-bold text-zinc-800">{item.quantity}x {item.product?.name}</p>
+                              <p className="text-xs font-bold text-slate-800 tracking-tight">{item.quantity}x {item.product?.name}</p>
                               {item.notes && (
-                                <p className="text-[11px] text-orange-600 font-medium mt-1 flex items-center gap-1">
-                                  <Utensils className="w-3 h-3 shrink-0" /> {item.notes}
+                                <p className="text-[10px] text-amber-600 font-bold mt-1 flex items-center gap-1 uppercase tracking-wide">
+                                  <Utensils className="w-2.5 h-2.5 shrink-0" /> {item.notes}
                                 </p>
                               )}
                             </div>
-                            <span className="text-xs font-bold text-zinc-400 shrink-0">{fmt(item.price * item.quantity)}</span>
+                            <span className="text-[11px] font-black text-slate-400 shrink-0 tabular-nums">{fmt(item.price * item.quantity)}</span>
                           </div>
                         ))}
                       </div>
 
                       {/* Info cliente */}
-                      <div className="bg-white rounded-xl border border-zinc-100 px-3 py-3 space-y-2">
+                      <div className="bg-white rounded-xl border border-slate-200/60 p-3 space-y-3 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5 text-xs font-bold text-zinc-600">
-                            <Phone className="w-3 h-3 text-zinc-300" />
-                            {order.customerPhone}
+                          <div className="flex items-center gap-1.5 text-[11px] font-black text-slate-500 uppercase tracking-wider">
+                            <Phone className="w-3 h-3 text-slate-300" />
+                            {maskPhone(order.customerPhone)}
                           </div>
-                          <Badge color={order.orderType === 'DELIVERY' ? 'warning' : order.orderType === 'DINE_IN' ? 'success' : 'info'}>
+                          <span className="text-[9px] font-black uppercase tracking-[0.15em] px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md border border-slate-200/50">
                             {order.orderType === 'DELIVERY' ? 'Delivery' : order.orderType === 'DINE_IN' ? `Mesa ${order.tableId}` : 'Retirada'}
-                          </Badge>
+                          </span>
                         </div>
                         {order.address && (
-                          <p className="text-xs text-zinc-400 italic">{order.address}</p>
+                          <p className="text-[10px] text-slate-400 font-medium italic border-l-2 border-slate-200 pl-2 leading-relaxed">
+                            {order.address}
+                          </p>
                         )}
-                        <div className="flex items-center justify-between pt-1 border-t border-zinc-100">
-                          <span className="ds-label">Pagamento</span>
-                          <span className="text-xs font-black text-blue-600">{order.paymentMethod}</span>
+                        <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                          <span className="ds-label">Método de Pagamento</span>
+                          <span className="text-[11px] font-black text-[#0D1B3E] uppercase tracking-widest">{order.paymentMethod}</span>
                         </div>
                       </div>
 
                       {/* Total */}
-                      <div className="flex items-center justify-between bg-zinc-900 rounded-xl px-4 py-3">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Total</span>
-                        <span className="text-base font-black text-white">{fmt(order.total)}</span>
+                      <div className="flex items-center justify-between bg-slate-900 rounded-xl px-4 py-2.5 shadow-lg shadow-slate-900/10">
+                        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Total Final</span>
+                        <span className="text-sm font-black text-white tabular-nums">{fmt(order.total)}</span>
                       </div>
 
                     </div>

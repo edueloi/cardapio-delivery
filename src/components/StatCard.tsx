@@ -17,34 +17,34 @@ export type StatCardColor = "default" | "success" | "info" | "danger" | "purple"
 
 const colorMap: Record<StatCardColor, { wrap: string; icon: string; glow: string }> = {
   default: {
-    wrap: "bg-amber-50 border-amber-100 group-hover:bg-amber-500 group-hover:border-amber-500",
-    icon: "text-amber-600 group-hover:text-white",
-    glow: "bg-amber-500/5",
+    wrap: "bg-slate-50 border-slate-100 group-hover:bg-[#C9A227] group-hover:border-[#C9A227]",
+    icon: "text-slate-400 group-hover:text-white",
+    glow: "bg-[#C9A227]/5",
   },
   success: {
-    wrap: "bg-emerald-50 border-emerald-100 group-hover:bg-emerald-500 group-hover:border-emerald-500",
-    icon: "text-emerald-600 group-hover:text-white",
+    wrap: "bg-slate-50 border-slate-100 group-hover:bg-emerald-500 group-hover:border-emerald-500",
+    icon: "text-slate-400 group-hover:text-white",
     glow: "bg-emerald-500/5",
   },
   info: {
-    wrap: "bg-[#edf0f7] border-[#c5ceeb] group-hover:bg-[#0D1B3E] group-hover:border-[#0D1B3E]",
-    icon: "text-[#1a3068] group-hover:text-white",
+    wrap: "bg-slate-50 border-slate-100 group-hover:bg-[#0D1B3E] group-hover:border-[#0D1B3E]",
+    icon: "text-slate-400 group-hover:text-white",
     glow: "bg-[#0D1B3E]/5",
   },
   danger: {
-    wrap: "bg-red-50 border-red-100 group-hover:bg-red-500 group-hover:border-red-500",
-    icon: "text-red-600 group-hover:text-white",
+    wrap: "bg-slate-50 border-slate-100 group-hover:bg-red-500 group-hover:border-red-500",
+    icon: "text-slate-400 group-hover:text-white",
     glow: "bg-red-500/5",
   },
   purple: {
-    wrap: "bg-violet-50 border-violet-100 group-hover:bg-violet-500 group-hover:border-violet-500",
-    icon: "text-violet-600 group-hover:text-white",
+    wrap: "bg-slate-50 border-slate-100 group-hover:bg-violet-500 group-hover:border-violet-500",
+    icon: "text-slate-400 group-hover:text-white",
     glow: "bg-violet-500/5",
   },
   warning: {
-    wrap: "bg-yellow-50 border-yellow-100 group-hover:bg-yellow-500 group-hover:border-yellow-500",
-    icon: "text-yellow-600 group-hover:text-white",
-    glow: "bg-yellow-500/5",
+    wrap: "bg-slate-50 border-slate-100 group-hover:bg-amber-500 group-hover:border-amber-500",
+    icon: "text-slate-400 group-hover:text-white",
+    glow: "bg-amber-500/5",
   },
 };
 
@@ -74,15 +74,13 @@ export function StatCard({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 16 }}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.3, ease: "easeOut" }}
+      transition={{ delay, duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
       className={cn(
-        "bg-white rounded-2xl border border-zinc-200 shadow-sm",
-        "hover:shadow-md transition-all duration-300 group",
-        "relative overflow-hidden",
-        // Padding responsivo: mais compacto no mobile
-        "min-h-[112px] p-3 sm:min-h-0 sm:p-5",
+        "ds-card-premium group relative overflow-hidden",
+        "min-h-[100px] p-3 sm:min-h-0 sm:p-5 transition-all duration-300",
+        "hover:translate-y-[-2px] hover:shadow-[0_20px_40px_rgb(0,0,0,0.08)]",
         className
       )}
     >
