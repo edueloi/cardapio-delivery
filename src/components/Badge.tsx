@@ -135,7 +135,7 @@ export function StatusBadge({ status, size = "sm", dot = true, className }: Stat
 }
 
 // ─── PaymentBadge – wrapper para formas de pagamento ─────────────────────────
-type PaymentMethod = "cash" | "card" | "pix" | "mixed" | "transfer" | "voucher";
+type PaymentMethod = "cash" | "card" | "pix" | "mixed" | "transfer" | "voucher" | "meal" | "food";
 
 const paymentConfig: Record<PaymentMethod, { label: string; color: BadgeColor }> = {
   cash:     { label: "Dinheiro", color: "success" },
@@ -144,6 +144,8 @@ const paymentConfig: Record<PaymentMethod, { label: string; color: BadgeColor }>
   mixed:    { label: "Misto",    color: "purple" },
   transfer: { label: "Transf.",  color: "default" },
   voucher:  { label: "Voucher",  color: "orange" },
+  meal:     { label: "Refeição", color: "orange" },
+  food:     { label: "Alimentação", color: "orange" },
 };
 
 interface PaymentBadgeProps {

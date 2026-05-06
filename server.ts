@@ -497,7 +497,7 @@ app.patch("/api/owner/tenants/:tenantId", requireAuth, async (req, res) => {
   const tenant = await requireTenantById(req, res, req.params.tenantId);
   if (!tenant) return;
 
-  const { name, description, address, whatsapp, logoUrl, isOpen, businessHours, deliveryConfig } = req.body;
+  const { name, description, address, whatsapp, logoUrl, isOpen, businessHours, deliveryConfig, paymentMethods } = req.body;
   try {
     const updated = await prisma.tenant.update({
       where: { id: tenant.id },
@@ -515,6 +515,10 @@ app.patch("/api/owner/tenants/:tenantId", requireAuth, async (req, res) => {
         ...(deliveryConfig !== undefined && { 
           deliveryConfig: (deliveryConfig === null || deliveryConfig === "null") ? null : 
                           (typeof deliveryConfig === "string" ? deliveryConfig : JSON.stringify(deliveryConfig)) 
+        }),
+        ...(paymentMethods !== undefined && { 
+          paymentMethods: (paymentMethods === null || paymentMethods === "null") ? null : 
+                          (typeof paymentMethods === "string" ? paymentMethods : JSON.stringify(paymentMethods)) 
         }),
       },
     });
@@ -608,6 +612,9 @@ app.patch("/api/owner/tenants/:tenantId/wpp/config", requireAuth, async (req, re
     sendStatusUpdates,
     welcomeMessage,
     instanceName,
+    isPaused,
+    startTime,
+    endTime,
   } = req.body;
 
   const [config, instance] = await Promise.all([
@@ -620,6 +627,9 @@ app.patch("/api/owner/tenants/:tenantId/wpp/config", requireAuth, async (req, re
         sendOrderCreated: sendOrderCreated !== false,
         sendStatusUpdates: sendStatusUpdates !== false,
         welcomeMessage: welcomeMessage || null,
+        isPaused: !!isPaused,
+        startTime: startTime || null,
+        endTime: endTime || null,
       },
       update: {
         ...(botEnabled !== undefined && { botEnabled: !!botEnabled }),
@@ -627,6 +637,9 @@ app.patch("/api/owner/tenants/:tenantId/wpp/config", requireAuth, async (req, re
         ...(sendOrderCreated !== undefined && { sendOrderCreated: !!sendOrderCreated }),
         ...(sendStatusUpdates !== undefined && { sendStatusUpdates: !!sendStatusUpdates }),
         ...(welcomeMessage !== undefined && { welcomeMessage: welcomeMessage || null }),
+        ...(isPaused !== undefined && { isPaused: !!isPaused }),
+        ...(startTime !== undefined && { startTime: startTime || null }),
+        ...(endTime !== undefined && { endTime: endTime || null }),
       },
     }),
     prisma.wppInstance.upsert({

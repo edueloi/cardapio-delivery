@@ -105,6 +105,15 @@ const ORDER_STATUS = {
   CANCELLED: { label: "Cancelado",   color: "text-red-500",    bg: "bg-red-50",    border: "border-red-200",    dot: "bg-red-400"    },
 };
 
+const PAYMENT_METHODS_CONFIG = [
+  { id: "PIX", key: "pix", label: "Pix", icon: Send, emoji: '💎' },
+  { id: "CREDIT", key: "credit", label: "Crédito", icon: CreditCard, emoji: '💳' },
+  { id: "DEBIT", key: "debit", label: "Débito", icon: CreditCard, emoji: '💳' },
+  { id: "MEAL", key: "meal", label: "Vale Refeição", icon: Wallet, emoji: '🍱' },
+  { id: "FOOD", key: "food", label: "Vale Alimentação", icon: Wallet, emoji: '🛒' },
+  { id: "CASH", key: "cash", label: "Dinheiro", icon: Banknote, emoji: '💵' },
+] as const;
+
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function MenuViewPage() {
   const { slug } = useParams();
@@ -134,7 +143,7 @@ export default function MenuViewPage() {
     phone: "",
     orderType: "DELIVERY" as "DELIVERY" | "PICKUP",
     cep: "", street: "", number: "", complement: "", neighborhood: "", city: "", state: "",
-    paymentMethod: "CASH" as "PIX" | "CREDIT" | "DEBIT" | "MEAL" | "CASH",
+    paymentMethod: "CASH" as "PIX" | "CREDIT" | "DEBIT" | "MEAL" | "FOOD" | "CASH",
     paymentDetail: "",
   });
 
@@ -944,31 +953,40 @@ export default function MenuViewPage() {
                   {checkoutStep === "payment" && (
                     <motion.div key="payment" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4">
                       <div className="grid grid-cols-2 gap-2">
-                        {([
-                          { id: "PIX", label: "PIX", icon: Send },
-                          { id: "CREDIT", label: "Crédito", icon: CreditCard },
-                          { id: "DEBIT", label: "Débito", icon: CreditCard },
-                          { id: "MEAL", label: "Vale Refeição", icon: Wallet },
-                          { id: "CASH", label: "Dinheiro", icon: Banknote },
-                        ] as const).map((m) => (
-                          <button key={m.id} onClick={() => setForm((f) => ({ ...f, paymentMethod: m.id }))}
-                            className={`flex items-center gap-2.5 px-4 py-4 rounded-2xl border-2 text-sm font-bold transition-all ${form.paymentMethod === m.id ? "bg-slate-900 text-white border-slate-900 shadow-md" : "bg-white text-slate-500 border-slate-100 hover:border-slate-200"}`}>
-                            <m.icon className="w-4 h-4" /> {m.label}
-                          </button>
-                        ))}
+                        {(() => {
+                          let enabledMethods: any = {};
+                          try {
+                            if (tenant?.paymentMethods) enabledMethods = JSON.parse(tenant.paymentMethods);
+                            else enabledMethods = { pix: { enabled: true }, credit: { enabled: true }, debit: { enabled: true }, cash: { enabled: true } };
+                          } catch {
+                            enabledMethods = { pix: { enabled: true }, credit: { enabled: true }, debit: { enabled: true }, cash: { enabled: true } };
+                          }
+
+                          return PAYMENT_METHODS_CONFIG.filter(m => enabledMethods[m.key]?.enabled !== false).map((m) => (
+                            <button key={m.id} onClick={() => setForm((f) => ({ ...f, paymentMethod: m.id }))}
+                              className={`flex items-center gap-2.5 px-4 py-4 rounded-2xl border-2 text-sm font-bold transition-all ${form.paymentMethod === m.id ? "bg-slate-900 text-white border-slate-900 shadow-md" : "bg-white text-slate-500 border-slate-100 hover:border-slate-200"}`}>
+                              <m.icon className="w-4 h-4" /> {m.label}
+                            </button>
+                          ));
+                        })()}
                       </div>
 
-                      {(form.paymentMethod === "CREDIT" || form.paymentMethod === "DEBIT" || form.paymentMethod === "MEAL") && (
+                      {(form.paymentMethod === "CREDIT" || form.paymentMethod === "DEBIT" || form.paymentMethod === "MEAL" || form.paymentMethod === "FOOD") && (
                         <CField label="Bandeira">
                           <select value={form.paymentDetail} onChange={(e) => setForm((f) => ({ ...f, paymentDetail: e.target.value }))} className={cinput}>
                             <option value="">Escolha a bandeira</option>
-                            {["Visa", "Mastercard", "Elo", "Alelo", "Sodexo", "Ticket"].map((b) => <option key={b} value={b}>{b}</option>)}
+                            {["Visa", "Mastercard", "Elo", "Alelo", "Sodexo", "Ticket", "VR Benefícios", "VeroCard"].map((b) => <option key={b} value={b}>{b}</option>)}
                           </select>
                         </CField>
                       )}
 
                       {form.paymentMethod === "CASH" && (
-                        <CField label="Troco para quanto? (opcional)">
+                        <CField label={(() => {
+                          try {
+                            const p = tenant?.paymentMethods ? JSON.parse(tenant.paymentMethods) : {};
+                            return p.cash?.allowChange === false ? "Observação" : "Troco para quanto? (opcional)";
+                          } catch { return "Troco para quanto? (opcional)"; }
+                        })()}>
                           <input value={form.paymentDetail} onChange={(e) => setForm((f) => ({ ...f, paymentDetail: e.target.value }))} placeholder="Ex: R$ 50,00 — deixe em branco se não precisar" className={cinput} />
                         </CField>
                       )}
@@ -1368,6 +1386,28 @@ function InfoPanel({ tenant }: { tenant: Tenant }) {
           </div>
         </div>
       )}
+
+      {/* Accepted Payments */}
+      <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center shrink-0">
+            <CreditCard className="w-4 h-4 text-purple-500" />
+          </div>
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Pagamentos Aceitos</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {(() => {
+            let p: any = {};
+            try { p = tenant.paymentMethods ? JSON.parse(tenant.paymentMethods) : { pix: { enabled: true }, credit: { enabled: true }, debit: { enabled: true }, cash: { enabled: true } }; } catch { p = {}; }
+            return PAYMENT_METHODS_CONFIG.filter(m => p[m.key]?.enabled !== false).map(m => (
+              <div key={m.id} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-100 text-[11px] font-bold text-slate-600">
+                <span>{m.emoji}</span>
+                <span>{m.label}</span>
+              </div>
+            ));
+          })()}
+        </div>
+      </div>
     </div>
   );
 }

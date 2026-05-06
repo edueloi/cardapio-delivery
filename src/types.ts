@@ -25,6 +25,24 @@ export interface DeliveryConfig {
   zones?: DeliveryZone[];
 }
 
+export interface PaymentMethodConfig {
+  enabled: boolean;
+  label: string;
+}
+
+export interface PaymentConfig {
+  pix?: PaymentMethodConfig;
+  credit?: PaymentMethodConfig;
+  debit?: PaymentMethodConfig;
+  meal?: PaymentMethodConfig; // Vale Refeição
+  food?: PaymentMethodConfig; // Vale Alimentação
+  cash?: {
+    enabled: boolean;
+    label: string;
+    allowChange: boolean;
+  };
+}
+
 export interface Tenant {
   id: string;
   name: string;
@@ -36,6 +54,7 @@ export interface Tenant {
   isOpen?: boolean;
   businessHours?: string | null;
   deliveryConfig?: string | null; // JSON string: DeliveryConfig
+  paymentMethods?: string | null; // JSON string: PaymentConfig
   categories?: Category[];
   wppInstance?: WppInstance | null;
   wppBotConfig?: WppBotConfig | null;
@@ -77,6 +96,9 @@ export interface WppBotConfig {
   sendOrderCreated: boolean;
   sendStatusUpdates: boolean;
   welcomeMessage?: string | null;
+  isPaused: boolean;
+  startTime?: string | null;
+  endTime?: string | null;
 }
 
 export interface WppSessionInfo {
@@ -139,7 +161,7 @@ export interface Order {
   status: 'PENDING' | 'PREPARING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED';
   orderType: 'DELIVERY' | 'PICKUP' | 'DINE_IN';
   tableId?: string;
-  paymentMethod: 'PIX' | 'CREDIT' | 'DEBIT' | 'MEAL' | 'CASH';
+  paymentMethod: 'PIX' | 'CREDIT' | 'DEBIT' | 'MEAL' | 'FOOD' | 'CASH';
   paymentDetail?: string;
   total: number;
   tenantId: string;

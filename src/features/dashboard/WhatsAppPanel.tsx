@@ -27,6 +27,9 @@ interface WppFormState {
   autoReplyEnabled: boolean;
   sendOrderCreated: boolean;
   sendStatusUpdates: boolean;
+  isPaused: boolean;
+  startTime: string;
+  endTime: string;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -55,6 +58,9 @@ function buildForm(tenant: Tenant, instance: WppInstance | null, config: WppBotC
     autoReplyEnabled: config?.autoReplyEnabled ?? true,
     sendOrderCreated: config?.sendOrderCreated ?? true,
     sendStatusUpdates: config?.sendStatusUpdates ?? true,
+    isPaused: config?.isPaused || false,
+    startTime: config?.startTime || "00:00",
+    endTime: config?.endTime || "23:59",
   };
 }
 
@@ -246,6 +252,9 @@ export function WhatsAppManagementPanel({
           autoReplyEnabled: form.autoReplyEnabled,
           sendOrderCreated: form.sendOrderCreated,
           sendStatusUpdates: form.sendStatusUpdates,
+          isPaused: form.isPaused,
+          startTime: form.startTime,
+          endTime: form.endTime,
         }),
       });
 
@@ -399,7 +408,8 @@ export function WhatsAppManagementPanel({
             />
           </div>
 
-          <Textarea
+{/* Mensagem automática ocultada por enquanto conforme solicitado */}
+          {/* <Textarea
             label="Mensagem automática"
             value={form.welcomeMessage}
             onChange={(event) =>
@@ -409,7 +419,7 @@ export function WhatsAppManagementPanel({
             placeholder={`Olá! Aqui é o assistente de ${tenant.name}.`}
             hint="Usada quando o cliente manda mensagem como 'oi', 'menu' ou 'cardápio'."
             wrapperClassName="mt-4"
-          />
+          /> */}
 
           <div className="grid md:grid-cols-2 gap-4 mt-6">
             <ToggleCard
@@ -444,6 +454,38 @@ export function WhatsAppManagementPanel({
                 setForm((current) => ({ ...current, sendStatusUpdates: checked }))
               }
             />
+            <ToggleCard
+              label="Pausar Bot"
+              description="Mantém conectado, mas desativa temporariamente todas as automações."
+              checked={form.isPaused}
+              onCheckedChange={(checked) =>
+                setForm((current) => ({ ...current, isPaused: checked }))
+              }
+            />
+          </div>
+
+          <div className="mt-6 p-4 bg-amber-50 border border-amber-100 rounded-2xl">
+            <div className="flex items-center gap-2 mb-4">
+              <RefreshCw className="w-4 h-4 text-amber-500" />
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-600">Horário de Funcionamento do Bot</span>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                label="Início"
+                type="time"
+                value={form.startTime}
+                onChange={(e) => setForm(f => ({ ...f, startTime: e.target.value }))}
+              />
+              <Input
+                label="Término"
+                type="time"
+                value={form.endTime}
+                onChange={(e) => setForm(f => ({ ...f, endTime: e.target.value }))}
+              />
+            </div>
+            <p className="text-[10px] text-amber-600/70 mt-3 font-medium italic">
+              * O bot só responderá automaticamente e enviará notificações dentro deste intervalo.
+            </p>
           </div>
 
           <div className="mt-6">

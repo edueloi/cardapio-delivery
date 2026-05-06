@@ -282,7 +282,7 @@ export function OrdersList({
                         )}
                         <div className="flex items-center justify-between pt-2 border-t border-slate-100">
                           <span className="ds-label">Método de Pagamento</span>
-                          <span className="text-[11px] font-black text-[#0D1B3E] uppercase tracking-widest">{order.paymentMethod}</span>
+                          <PaymentBadge method={order.paymentMethod.toLowerCase() as any} size="sm" />
                         </div>
                       </div>
 
@@ -485,6 +485,15 @@ function TimeInput({ value, onChange, colorClass = "text-slate-800", bgClass = "
 
 const DEFAULT_HOURS = Object.fromEntries(DAY_KEYS_UI.map(d => [d, { enabled: !["sun"].includes(d), open: "08:00", close: "22:00", breakEnabled: false, breakStart: "12:00", breakEnd: "13:00" }]));
 
+const DEFAULT_PAYMENTS: PaymentConfig = {
+  pix: { enabled: true, label: "Pix" },
+  credit: { enabled: true, label: "Cartão de Crédito" },
+  debit: { enabled: true, label: "Cartão de Débito" },
+  meal: { enabled: false, label: "Vale Refeição" },
+  food: { enabled: false, label: "Vale Alimentação" },
+  cash: { enabled: true, label: "Dinheiro", allowChange: true }
+};
+
 function parseAddress(raw: string | null | undefined) {
   try { return raw ? JSON.parse(raw) : null; } catch { return null; }
 }
@@ -555,12 +564,17 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
 
   const [delivery, setDelivery] = useState<DeliveryConfig>(() => parseDeliveryConfig(tenant?.deliveryConfig));
 
+  const [payments, setPayments] = useState<PaymentConfig>(() => {
+    try { return tenant?.paymentMethods ? JSON.parse(tenant.paymentMethods) : DEFAULT_PAYMENTS; } catch { return DEFAULT_PAYMENTS; }
+  });
+
   useEffect(() => {
     if (tenant) {
       setForm({ name: tenant.name || "", description: tenant.description || "", logoUrl: tenant.logoUrl || "", whatsapp: maskPhone(tenant.whatsapp) || "", isOpen: tenant.isOpen ?? true });
       setAddr(parseAddress(tenant.address) ?? { ...EMPTY_ADDR });
       try { setHours(tenant.businessHours ? JSON.parse(tenant.businessHours) : DEFAULT_HOURS); } catch { setHours(DEFAULT_HOURS); }
       setDelivery(parseDeliveryConfig(tenant.deliveryConfig));
+      try { setPayments(tenant.paymentMethods ? JSON.parse(tenant.paymentMethods) : DEFAULT_PAYMENTS); } catch { setPayments(DEFAULT_PAYMENTS); }
     }
   }, [tenant]);
 
@@ -590,7 +604,8 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
           whatsapp: unmaskPhone(form.whatsapp),
           address: JSON.stringify(addr), 
           businessHours: JSON.stringify(hours), 
-          deliveryConfig: JSON.stringify(delivery) 
+          deliveryConfig: JSON.stringify(delivery),
+          paymentMethods: JSON.stringify(payments)
         })
       });
       await refresh();
@@ -831,6 +846,58 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                   <ZoneAdder onAdd={zone => setDelivery(d => ({ ...d, zones: [...(d.zones ?? []), zone] }))} />
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* Payment methods */}
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-3">Formas de Pagamento</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {([
+                { key: 'pix', label: 'Pix', icon: '💎' },
+                { key: 'credit', label: 'Cartão de Crédito', icon: '💳' },
+                { key: 'debit', label: 'Cartão de Débito', icon: '💳' },
+                { key: 'meal', label: 'Vale Refeição (VR)', icon: '🍱' },
+                { key: 'food', label: 'Vale Alimentação (VA)', icon: '🛒' },
+              ] as const).map(item => (
+                <div key={item.key} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-2xl transition-all hover:border-amber-200">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">{item.icon}</span>
+                    <span className="text-sm font-black text-slate-800">{item.label}</span>
+                  </div>
+                  <Switch 
+                    checked={payments[item.key as keyof PaymentConfig]?.enabled ?? false} 
+                    onCheckedChange={v => setPayments(p => ({ ...p, [item.key]: { ...(p[item.key as keyof PaymentConfig] || { label: item.label }), enabled: v } }))} 
+                  />
+                </div>
+              ))}
+              
+              {/* Dinheiro */}
+              <div className="col-span-1 sm:col-span-2 space-y-3 bg-slate-50 border border-slate-200 rounded-2xl p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">💵</span>
+                    <span className="text-sm font-black text-slate-800">Dinheiro</span>
+                  </div>
+                  <Switch 
+                    checked={payments.cash?.enabled ?? false} 
+                    onCheckedChange={v => setPayments(p => ({ ...p, cash: { ...(p.cash || { label: "Dinheiro", allowChange: true }), enabled: v } }))} 
+                  />
+                </div>
+                {payments.cash?.enabled && (
+                  <div className="pl-11 flex items-center gap-3">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={payments.cash?.allowChange !== false} 
+                        onChange={e => setPayments(p => ({ ...p, cash: { ...p.cash!, allowChange: e.target.checked } }))} 
+                        className="rounded text-amber-500 focus:ring-amber-500"
+                      />
+                      <span className="text-xs font-bold text-slate-500">Perguntar sobre troco no checkout</span>
+                    </label>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

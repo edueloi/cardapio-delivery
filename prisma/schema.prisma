@@ -18,6 +18,7 @@ model Tenant {
   isOpen      Boolean  @default(true) @map("is_open")
   businessHours String? @map("business_hours") @db.Text // JSON: { mon: {open:"08:00",close:"22:00",enabled:true}, ... }
   deliveryConfig String? @map("delivery_config") @db.Text // JSON: DeliveryConfig
+  paymentMethods String? @map("payment_methods") @db.Text // JSON: PaymentConfig
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -182,6 +183,9 @@ model WppBotConfig {
   sendOrderCreated Boolean  @default(true) @map("send_order_created")
   sendStatusUpdates Boolean @default(true) @map("send_status_updates")
   welcomeMessage   String?  @map("welcome_message")
+  isPaused         Boolean  @default(false) @map("is_paused")
+  startTime        String?  @map("start_time") // HH:mm
+  endTime          String?  @map("end_time")   // HH:mm
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
 

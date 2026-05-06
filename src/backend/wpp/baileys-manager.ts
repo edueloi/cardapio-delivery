@@ -122,6 +122,35 @@ function isOpenNow(tenant: { isOpen: boolean; businessHours: string | null }): b
   return true;
 }
 
+function isBotActiveNow(config: any): boolean {
+  if (!config || !config.botEnabled || config.isPaused) return false;
+  if (!config.startTime || !config.endTime) return true;
+
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    hour: "numeric",
+    minute: "numeric",
+    hour12: false
+  });
+  const parts = formatter.formatToParts(now);
+  const hour = parseInt(parts.find(p => p.type === "hour")?.value || "0");
+  const minute = parseInt(parts.find(p => p.type === "minute")?.value || "0");
+  const currentMins = hour * 60 + minute;
+
+  const [sh, sm] = config.startTime.split(":").map(Number);
+  const [eh, em] = config.endTime.split(":").map(Number);
+  const startMins = sh * 60 + sm;
+  const endMins = eh * 60 + em;
+
+  if (startMins <= endMins) {
+    return currentMins >= startMins && currentMins <= endMins;
+  } else {
+    // Overnight schedule (e.g., 22:00 to 06:00)
+    return currentMins >= startMins || currentMins <= endMins;
+  }
+}
+
 function formatAddress(raw: string | null): string {
   if (!raw) return "Endereço não informado";
   try {
@@ -340,12 +369,12 @@ async function handleIncomingMessage(tenantId: string, remoteJid: string, text: 
     return;
   }
 
-  if (!tenant.wppBotConfig?.botEnabled) {
-    console.log(`[Baileys][${tenantId}] ⚠️ Bot desativado nas configurações (botEnabled: false).`);
+  if (!isBotActiveNow(tenant.wppBotConfig)) {
+    console.log(`[Baileys][${tenantId}] 🤐 Bot inativo por pausa, horário ou configuração.`);
     return;
   }
 
-  if (!tenant.wppBotConfig.autoReplyEnabled) {
+  if (!tenant.wppBotConfig?.autoReplyEnabled) {
     console.log(`[Baileys][${tenantId}] ⚠️ Auto-atendimento desativado (autoReplyEnabled: false).`);
     return;
   }
@@ -768,6 +797,18 @@ export async function disconnectSession(tenantId: string): Promise<void> {
 export async function sendMessage(tenantId: string, to: string, text: string, delayMs = 0): Promise<void> {
   const session = sessions.get(tenantId);
   if (!session?.sock || session.status !== "connected") return;
+
+  // Se não for mensagem para o dono (notificação interna)
+  // precisamos checar se o bot está ativo/no horário
+  const owner = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { whatsapp: true, wppBotConfig: true } });
+  const isToOwner = owner?.whatsapp && jidMatchesPhone(to, owner.whatsapp);
+
+  if (!isToOwner) {
+    if (!isBotActiveNow(owner?.wppBotConfig)) {
+      console.log(`[Baileys][${tenantId}] 🤐 Bloqueando envio: Bot inativo ou fora do horário.`);
+      return;
+    }
+  }
 
   const jid = to.includes("@") ? to : phoneToJid(to);
   const previous = sendingLocks.get(tenantId) || Promise.resolve();
