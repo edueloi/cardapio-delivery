@@ -47,7 +47,7 @@ import {
 } from "lucide-react";
 import socket from "../../lib/socket";
 import { apiFetch, apiJson } from "../../lib/api";
-import { Order, Tenant, CashRegister, DeliveryConfig, DeliveryZone, PaymentConfig } from "../../types";
+import { Order, Tenant, CashRegister, DeliveryConfig, DeliveryZone, PaymentConfig, PaymentMethodConfig } from "../../types";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   Button, 
@@ -654,10 +654,10 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
   const setA = (field: keyof AddressForm, value: string) => setAddr(a => ({ ...a, [field]: value }));
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-20">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <PageWrapper>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
         <SectionTitle 
-          title="Configurações" 
+          title="Configurações da Unidade" 
           description="Gerencie as informações e regras do seu estabelecimento" 
           icon={Settings} 
         />
@@ -926,40 +926,118 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                   { id: "debit", label: "Cartão de Débito", icon: CreditCard, desc: "Pagamento à vista" },
                   { id: "meal", label: "Vale Refeição (VR)", icon: Utensils, desc: "Sodexo, Alelo, VR" },
                   { id: "food", label: "Vale Alimentação (VA)", icon: Package, desc: "Ticket, Alelo" },
-                ].map((method) => (
-                  <div 
-                    key={method.id}
-                    className={`p-5 rounded-2xl border transition-all flex items-center justify-between ${
-                      payments[method.id as keyof PaymentConfig]?.enabled ? 'bg-white border-[#C9A227]/30 shadow-md shadow-[#C9A227]/5' : 'bg-slate-50 border-slate-100 opacity-60'
-                    }`}
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                        payments[method.id as keyof PaymentConfig]?.enabled ? 'bg-[#C9A227]/10 text-[#C9A227]' : 'bg-slate-200 text-slate-400'
-                      }`}>
-                        <method.icon className="w-6 h-6" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-black text-slate-800">{method.label}</p>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{method.desc}</p>
-                      </div>
-                    </div>
-                    <Switch 
-                      checked={payments[method.id as keyof PaymentConfig]?.enabled} 
-                      onCheckedChange={v => setPayments({
-                        ...payments,
-                        [method.id]: { ...(payments[method.id as keyof PaymentConfig] as any || { label: method.label }), enabled: v }
-                      })}
-                    />
-                  </div>
-                ))}
+                ].map((method) => {
+                  const methodConfig = payments[method.id as keyof PaymentConfig] as PaymentMethodConfig;
+                  const isEnabled = methodConfig?.enabled;
+                  const acceptedBrands = methodConfig?.acceptedBrands || [];
+                  const allBrands = [...CARD_BRANDS_LIST.map(b => b.label), ...(payments.customBrands || [])];
 
-                <div className={`p-5 rounded-2xl border transition-all sm:col-span-2 ${
-                  payments.cash?.enabled ? 'bg-white border-[#C9A227]/30 shadow-md shadow-[#C9A227]/5' : 'bg-slate-50 border-slate-100 opacity-60'
-                }`}>
+                  return (
+                    <div 
+                      key={method.id}
+                      className={`p-6 rounded-[2rem] border transition-all space-y-4 ${
+                        isEnabled ? 'bg-white border-[#C9A227]/30 shadow-xl shadow-[#C9A227]/5' : 'bg-slate-50 border-slate-100 opacity-60'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${
+                            isEnabled ? 'bg-[#C9A227]/10 text-[#C9A227]' : 'bg-slate-200 text-slate-400'
+                          }`}>
+                            <method.icon className="w-6 h-6" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-black text-slate-800">{method.label}</p>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{method.desc}</p>
+                          </div>
+                        </div>
+                        <Switch 
+                          checked={isEnabled} 
+                          onCheckedChange={v => setPayments({
+                            ...payments,
+                            [method.id]: { ...(methodConfig || { label: method.label }), enabled: v }
+                          })}
+                        />
+                      </div>
+
+                      {isEnabled && (
+                        <div className="pt-4 border-t border-slate-50 space-y-4">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Bandeiras Aceitas</p>
+                          <div className="flex flex-wrap gap-2">
+                            {allBrands.map(brand => {
+                              const isSelected = acceptedBrands.includes(brand);
+                              return (
+                                <button
+                                  key={brand}
+                                  type="button"
+                                  onClick={() => {
+                                    const next = isSelected 
+                                      ? acceptedBrands.filter(b => b !== brand)
+                                      : [...acceptedBrands, brand];
+                                    setPayments({
+                                      ...payments,
+                                      [method.id]: { ...methodConfig, acceptedBrands: next }
+                                    });
+                                  }}
+                                  className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-wider transition-all border ${
+                                    isSelected 
+                                      ? 'bg-[#0D1B3E] border-[#0D1B3E] text-white shadow-md' 
+                                      : 'bg-white border-slate-100 text-slate-400 hover:border-slate-300'
+                                  }`}
+                                >
+                                  {brand}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          
+                          <div className="flex gap-2">
+                            <input 
+                              type="text"
+                              placeholder="Nova bandeira..."
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  const val = e.currentTarget.value.trim();
+                                  if (val) {
+                                    const custom = payments.customBrands || [];
+                                    if (!custom.includes(val)) {
+                                      setPayments({
+                                        ...payments,
+                                        customBrands: [...custom, val],
+                                        [method.id]: { ...methodConfig, acceptedBrands: [...acceptedBrands, val] }
+                                      });
+                                    } else if (!acceptedBrands.includes(val)) {
+                                      setPayments({
+                                        ...payments,
+                                        [method.id]: { ...methodConfig, acceptedBrands: [...acceptedBrands, val] }
+                                      });
+                                    }
+                                    e.currentTarget.value = "";
+                                  }
+                                }
+                              }}
+                              className="flex-1 bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-[10px] font-bold outline-none focus:border-[#C9A227] transition-all"
+                            />
+                            <div className="p-2 text-slate-300">
+                              <Plus className="w-3 h-3" />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                <div 
+                  key="cash"
+                  className={`p-6 rounded-[2rem] border transition-all sm:col-span-2 ${
+                    payments.cash?.enabled ? 'bg-white border-[#C9A227]/30 shadow-xl shadow-[#C9A227]/5' : 'bg-slate-50 border-slate-100 opacity-60'
+                  }`}
+                >
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-4">
-                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${
                         payments.cash?.enabled ? 'bg-[#C9A227]/10 text-[#C9A227]' : 'bg-slate-200 text-slate-400'
                       }`}>
                         <Banknote className="w-6 h-6" />
@@ -978,7 +1056,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                     />
                   </div>
                   {payments.cash?.enabled && (
-                    <label className="flex items-center gap-3 px-4 py-3 bg-slate-50 rounded-xl cursor-pointer">
+                    <label className="flex items-center gap-3 px-4 py-3 bg-slate-50 rounded-xl cursor-pointer transition-all hover:bg-slate-100">
                       <input 
                         type="checkbox" 
                         checked={payments.cash?.allowChange !== false}
@@ -992,38 +1070,6 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                     </label>
                   )}
                 </div>
-              </div>
-            </ContentCard>
-
-            <ContentCard padding="lg">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Bandeiras Aceitas</p>
-                  <p className="text-xs text-slate-500 mt-1">Marque as bandeiras que seu estabelecimento aceita na maquininha.</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-                {CARD_BRANDS_LIST.map(brand => {
-                  const isEnabled = (payments as any).acceptedBrands?.includes(brand.id);
-                  return (
-                    <button
-                      key={brand.id}
-                      type="button"
-                      onClick={() => {
-                        const current = (payments as any).acceptedBrands || [];
-                        const next = isEnabled 
-                          ? current.filter((id: string) => id !== brand.id)
-                          : [...current, brand.id];
-                        setPayments({ ...payments, acceptedBrands: next } as any);
-                      }}
-                      className={`p-4 rounded-2xl border text-center transition-all ${
-                        isEnabled ? 'bg-[#0D1B3E] border-[#0D1B3E] text-white shadow-lg' : 'bg-white border-slate-100 text-slate-400 hover:border-slate-300'
-                      }`}
-                    >
-                      <p className="text-[10px] font-black uppercase tracking-widest">{brand.label}</p>
-                    </button>
-                  );
-                })}
               </div>
             </ContentCard>
           </motion.div>
@@ -1059,7 +1105,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
           </div>
         </div>
       </form>
-    </div>
+    </PageWrapper>
   );
 }
 

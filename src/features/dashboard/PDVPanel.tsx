@@ -45,12 +45,23 @@ export default function PDVPanel({ tenant, onOrderCreated, checkoutRequests = []
   }, [tenant.paymentMethods]);
 
   const CARD_BRANDS = useMemo(() => {
-    const defaultBrands = ["Visa", "Mastercard", "Elo", "American Express", "Hipercard", "VR", "Sodexo", "Ticket", "Alelo"];
-    if (paymentConfig.acceptedBrands && paymentConfig.acceptedBrands.length > 0) {
-      return paymentConfig.acceptedBrands;
+    const methodMap: Record<string, keyof PaymentConfig> = {
+      'CREDIT': 'credit',
+      'DEBIT': 'debit',
+      'VR': 'meal',
+      'PIX': 'pix'
+    };
+    
+    const configKey = methodMap[paymentMethod];
+    const methodConfig = configKey ? (paymentConfig[configKey] as any) : null;
+    
+    if (methodConfig?.acceptedBrands && methodConfig.acceptedBrands.length > 0) {
+      return methodConfig.acceptedBrands;
     }
-    return defaultBrands;
-  }, [paymentConfig]);
+
+    // Fallback defaults if nothing configured for this specific method
+    return ["Visa", "Mastercard", "Elo", "American Express", "Hipercard", "VR", "Sodexo", "Ticket", "Alelo"];
+  }, [paymentConfig, paymentMethod]);
 
   const filteredProducts = useMemo(() => {
     let products: Product[] = [];

@@ -43,6 +43,7 @@ export interface PaymentConfig {
     allowChange: boolean;
   };
   acceptedBrands?: string[];
+  customBrands?: string[];
 }
 
 export interface Tenant {

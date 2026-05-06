@@ -246,12 +246,7 @@ export default function DashboardContent({
       )}
 
       {activeTab === "profile" && (
-        <div className="space-y-6">
-          <h3 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">
-            Configurações da Unidade
-          </h3>
-          <ProfileManagement tenant={tenant} refresh={refreshTenant} />
-        </div>
+        <ProfileManagement tenant={tenant} refresh={refreshTenant} />
       )}
 
       {activeTab === "staff" && (

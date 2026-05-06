@@ -44,7 +44,7 @@ export default function LoyaltyPanel({ tenant, onUpdated }: LoyaltyPanelProps) {
     const fetchCustomers = async () => {
       try {
         const data = await apiJson<CustomerLoyalty[]>(`/api/admin/${tenant.id}/loyalty/customers`);
-        setCustomers(data);
+        setCustomers(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error("Erro ao buscar clientes fidelidade", err);
       }
@@ -72,13 +72,13 @@ export default function LoyaltyPanel({ tenant, onUpdated }: LoyaltyPanelProps) {
     }
   };
 
-  const sortedCustomers = [...customers]
+  const sortedCustomers = Array.isArray(customers) ? [...customers]
     .filter(c => c.customerPhone.includes(searchTerm))
     .sort((a, b) => {
       const valA = sortBy === "points" ? a.points : sortBy === "spent" ? a.totalSpent : a.ordersCount;
       const valB = sortBy === "points" ? b.points : sortBy === "spent" ? b.totalSpent : b.ordersCount;
       return sortOrder === "desc" ? valB - valA : valA - valB;
-    });
+    }) : [];
 
   const sendPromo = (phone: string) => {
     const message = encodeURIComponent(`Olá! Notamos que você é um de nossos clientes favoritos. 🌟\n\nComo agradecimento, aqui está um cupom de 10% de desconto para seu próximo pedido: CLIENTE_VIP10\n\nPeça agora: ${window.location.origin}/${tenant.slug}`);
@@ -86,52 +86,52 @@ export default function LoyaltyPanel({ tenant, onUpdated }: LoyaltyPanelProps) {
   };
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <SectionTitle 
-          title="Fidelidade & CRM"
-          description="Transforme clientes casuais em fãs do seu negócio."
-          icon={Heart}
-        />
-        <div className="flex bg-slate-100 p-1 rounded-xl">
-          <button 
-            onClick={() => setActiveSubTab("config")}
-            className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${
-              activeSubTab === "config" ? 'bg-white shadow-sm text-[#C9A227]' : 'text-slate-400 hover:text-slate-600'
-            }`}
-          >
-            Configurações
-          </button>
-          <button 
-            onClick={() => setActiveSubTab("customers")}
-            className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${
-              activeSubTab === "customers" ? 'bg-white shadow-sm text-[#C9A227]' : 'text-slate-400 hover:text-slate-600'
-            }`}
-          >
-            Clientes (CRM)
-          </button>
-        </div>
-      </div>
+    <div className="space-y-6">
+      <SectionTitle 
+        title="Fidelidade & CRM"
+        description="Transforme clientes casuais em fãs do seu negócio."
+        icon={Heart}
+        action={
+          <div className="flex bg-slate-100 p-1 rounded-xl w-full sm:w-auto">
+            <button 
+              onClick={() => setActiveSubTab("config")}
+              className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                activeSubTab === "config" ? 'bg-white shadow-sm text-[#C9A227]' : 'text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              Configurações
+            </button>
+            <button 
+              onClick={() => setActiveSubTab("customers")}
+              className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                activeSubTab === "customers" ? 'bg-white shadow-sm text-[#C9A227]' : 'text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              Clientes
+            </button>
+          </div>
+        }
+      />
 
       {activeSubTab === "config" ? (
         <div className="grid grid-cols-12 gap-8">
           <div className="col-span-12 lg:col-span-8 space-y-6">
             <ContentCard>
-              <div className="flex items-center justify-between mb-8">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
                 <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-[#C9A227]/10 flex items-center justify-center">
+                  <div className="w-12 h-12 rounded-2xl bg-[#C9A227]/10 flex items-center justify-center shrink-0">
                     <Gift className="w-6 h-6 text-[#C9A227]" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-black text-slate-800">Regras de Pontuação</h3>
-                    <p className="text-xs text-slate-400">Como seus clientes ganham e gastam pontos.</p>
+                    <h3 className="text-base sm:text-lg font-black text-slate-800">Regras de Pontuação</h3>
+                    <p className="text-[11px] sm:text-xs text-slate-400">Como seus clientes ganham e gastam pontos.</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center justify-between sm:justify-end gap-3 bg-slate-50 sm:bg-transparent p-3 sm:p-0 rounded-xl">
                   <span className="text-[10px] font-black uppercase text-slate-400">Sistema Ativo</span>
                   <button 
                     onClick={() => setConfig({ ...config, enabled: !config.enabled })}
-                    className={`w-12 h-6 rounded-full transition-all relative ${config.enabled ? 'bg-green-500' : 'bg-slate-200'}`}
+                    className={`w-12 h-6 rounded-full transition-all relative shrink-0 ${config.enabled ? 'bg-green-500' : 'bg-slate-200'}`}
                   >
                     <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${config.enabled ? 'left-7' : 'left-1'}`} />
                   </button>
