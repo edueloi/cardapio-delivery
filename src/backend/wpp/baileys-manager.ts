@@ -445,6 +445,12 @@ async function handleIncomingMessage(tenantId: string, remoteJid: string, text: 
     return;
   }
 
+  // Throttle: bot won't reply twice within 3s to same person (except in human mode)
+  if (Date.now() - conv.lastBotAt < 3_000) {
+    console.log(`[Baileys][${tenantId}] ⏳ Ignorando mensagem automática por throttle (menos de 3s).`);
+    return;
+  }
+
 
   const openNow = isOpenNow(tenant as any);
   const hours = parseBusinessHours((tenant as any).businessHours);
