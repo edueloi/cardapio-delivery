@@ -27,17 +27,30 @@ interface ActiveSession {
 
 // Conversation state per customer
 interface ConvState {
-  step: "idle" | "menu" | "waiting_order" | "waiting_human_info";
+  step: "idle" | "menu" | "waiting_order" | "waiting_name" | "waiting_phone" | "waiting_subject" | "waiting_approval" | "in_human_service";
   lastMessageAt: number;
   lastBotAt: number;
-  pausedUntil?: number; // timestamp until bot stays silent
+  pausedUntil?: number;
+  pendingHumanData?: {
+    name?: string;
+    phone?: string;
+    subject?: string;
+  };
+}
+
+// Tracks which client an attendant is currently managing
+interface AttendantState {
+  currentClientId?: string; // the phone number of the client being attended or approved
+  tenantId: string;
 }
 
 const sessions = new Map<string, ActiveSession>();
 const convStates = new Map<string, ConvState>(); // key: tenantId:phone
+const attendantStates = new Map<string, AttendantState>(); // key: ownerPhone
 const sendingLocks = new Map<string, Promise<void>>();
 const SESSIONS_DIR = path.join(process.cwd(), "wpp-sessions");
-const CONV_TIMEOUT_MS = 25 * 60 * 1000; // 25 min idle resets conversation
+const CONV_TIMEOUT_MS = 25 * 60 * 1000; 
+const HUMAN_INACTIVITY_TIMEOUT = 10 * 60 * 1000; // 10 min silence ends human service
 
 // ─── Business hours helpers ───────────────────────────────────────────────────
 
@@ -345,28 +358,93 @@ async function handleIncomingMessage(tenantId: string, remoteJid: string, text: 
 
   const phone = jidToPhone(remoteJid);
   const conv = getConvState(tenantId, phone);
-
-  // Trava de Atendimento Humano (Glow-Cut Style)
-  if (conv.pausedUntil && Date.now() < conv.pausedUntil) {
-    console.log(`[Baileys][${tenantId}] 🤐 Robô pausado para atendimento humano com ${phone}.`);
-    return;
-  }
-
   const baseUrl = (process.env.APP_URL || "http://localhost:3000").replace(/\/$/, "");
   const menuLink = `${baseUrl}/${tenant.slug}`;
   const normalized = text.toLowerCase().trim();
-
-  // Throttle: bot won't reply twice within 3s to same person
-  if (Date.now() - conv.lastBotAt < 3_000) {
-    console.log(`[Baileys][${tenantId}] ⏳ Ignorando mensagem por throttle (menos de 3s).`);
-    return;
-  }
 
   const send = async (msg: string, delay = 0) => {
     console.log(`[Baileys][${tenantId}] 🤖 Enviando resposta para ${remoteJid} (delay: ${delay}ms)...`);
     setConvState(tenantId, phone, { lastBotAt: Date.now() });
     await sendMessage(tenantId, remoteJid, msg, delay);
   };
+
+  // ── Comando de Encerrar Atendimento (*sair) ──────────────────────────────
+  if (normalized === "*sair") {
+    // 1. Se quem digitou foi o CLIENTE que estava em atendimento
+    if (conv.step === "in_human_service") {
+      setConvState(tenantId, phone, { step: "idle" });
+      await send(`✅ Atendimento encerrado. O robô assumiu novamente o controle.`);
+      await handleIncomingMessage(tenantId, remoteJid, "ola"); // Volta para o menu
+      return;
+    }
+    
+    // 2. Se quem digitou foi o DONO (Atendente)
+    const tnt = await prisma.tenant.findFirst({ where: { whatsapp: phone } });
+    if (tnt) {
+      for (const [key, state] of convStates.entries()) {
+        if (key.startsWith(`${tnt.id}:`) && state.step === "in_human_service") {
+          const cId = key.split(":")[1];
+          setConvState(tnt.id, cId, { step: "idle" });
+          await sendMessage(tnt.id, cId, `✅ *Atendimento encerrado por nossa equipe.* O robô voltou para te ajudar!`);
+          await handleIncomingMessage(tnt.id, `${cId}@s.whatsapp.net`, "ola");
+          await send(`✅ *Atendimento de ${cId} encerrado com sucesso!*`);
+          return;
+        }
+      }
+    }
+  }
+
+  // ── Lógica de Resposta do Atendente (ACEITAR/RECUSAR/ESPELHO) ──────────
+  const attendant = attendantStates.get(phone);
+  if (attendant) {
+    const clientId = attendant.currentClientId;
+    if (clientId) {
+      const clientConv = getConvState(attendant.tenantId, clientId);
+
+      // Se o atendente digitar 1 para ACEITAR
+      if (normalized === "1" && clientConv.step === "waiting_approval") {
+        setConvState(attendant.tenantId, clientId, { step: "in_human_service", lastMessageAt: Date.now() });
+        await sendMessage(attendant.tenantId, clientId, `✅ *Um atendente assumiu esta conversa e já vai te responder!*`);
+        await send(`✅ *Sucesso! Você assumiu o atendimento de ${clientId}.*\n\nTudo o que você digitar aqui agora será enviado para o cliente.\n\nPara encerrar, digite *sair.`);
+        return;
+      } 
+      
+      // Se o atendente digitar 2 para RECUSAR
+      if (normalized === "2" && clientConv.step === "waiting_approval") {
+        setConvState(attendant.tenantId, clientId, { step: "idle" });
+        attendantStates.delete(phone);
+        await sendMessage(attendant.tenantId, clientId, `🙏 *Pedimos desculpas, mas nossos atendentes estão todos ocupados no momento.*\n\nVocê pode continuar usando nosso menu automático:`);
+        await handleIncomingMessage(attendant.tenantId, `${clientId}@s.whatsapp.net`, "ola");
+        await send(`❌ *Atendimento de ${clientId} recusado.*`);
+        return;
+      }
+
+      // MODO ESPELHO: Se já estiver em atendimento, envia o que o atendente digitar para o cliente
+      if (clientConv.step === "in_human_service" && normalized !== "*sair") {
+        await sendMessage(attendant.tenantId, clientId, text); // Envia o texto puro para o cliente
+        console.log(`[Baileys][${tenantId}] 📤 Proxy Atendente -> Cliente: ${text}`);
+        return;
+      }
+    }
+  }
+
+  // Se o cliente estiver em atendimento humano, manda o que ele digitar para o dono
+  if (conv.step === "in_human_service" && normalized !== "*sair") {
+    const rawOwnerPhone = tenant.whatsapp || "";
+    const cleanOwnerPhone = rawOwnerPhone.replace(/\D/g, "");
+    if (cleanOwnerPhone) {
+      await sendMessage(tenantId, cleanOwnerPhone, `👤 *CLIENTE (${phone}):*\n${text}`);
+      console.log(`[Baileys][${tenantId}] 📥 Proxy Cliente -> Atendente: ${text}`);
+    }
+    // Atualiza o tempo da última mensagem para não cair no timeout de 10 min
+    setConvState(tenantId, phone, { ...conv, lastMessageAt: Date.now() });
+    return;
+  }
+  if (conv.pausedUntil && Date.now() < conv.pausedUntil) {
+    console.log(`[Baileys][${tenantId}] 🤐 Robô pausado para atendimento humano com ${phone}.`);
+    return;
+  }
+
 
   const openNow = isOpenNow(tenant as any);
   const hours = parseBusinessHours((tenant as any).businessHours);
@@ -420,15 +498,8 @@ async function handleIncomingMessage(tenantId: string, remoteJid: string, text: 
   };
 
   const sendHuman = async () => {
-    await send(
-      `🤝 *Para agilizar seu atendimento, por favor me informe em uma única mensagem:*\n\n` +
-      `👤 *Seu Nome:*\n` +
-      `📞 *Telefone para Contato:*\n` +
-      `📝 *Assunto / Dúvida:*\n\n` +
-      `_Assim que você enviar, um atendente humano irá assumir._`,
-      1500
-    );
-    setConvState(tenantId, phone, { step: "waiting_human_info" });
+    await send(`🤝 Para te transferir para um atendente, preciso de 3 informações rápidas.\n\nQual é o seu *Nome Completo*?`, 1000);
+    setConvState(tenantId, phone, { step: "waiting_name", pendingHumanData: {} });
   };
 
   const sendExit = async () => {
@@ -438,26 +509,59 @@ async function handleIncomingMessage(tenantId: string, remoteJid: string, text: 
 
   const intent = detectIntent(normalized);
 
-  // ── Step: coletando dados para o humano ───────────────────────────────────
-  if (conv.step === "waiting_human_info") {
+  // ── Step: Triagem Humana (Etapas) ──────────────────────────────────────────
+  if (conv.step === "waiting_name") {
+    setConvState(tenantId, phone, { 
+      step: "waiting_phone", 
+      pendingHumanData: { ...conv.pendingHumanData, name: text } 
+    });
+    await send(`Legal, *${text}*! agora me informe seu *Telefone de Contato* (com DDD):`, 800);
+    return;
+  }
+
+  if (conv.step === "waiting_phone") {
+    setConvState(tenantId, phone, { 
+      step: "waiting_subject", 
+      pendingHumanData: { ...conv.pendingHumanData, phone: text } 
+    });
+    await send(`Para finalizar, qual o *Assunto* ou sua *Dúvida*?`, 800);
+    return;
+  }
+
+  if (conv.step === "waiting_subject") {
     const rawOwnerPhone = tenant.whatsapp || "";
     const cleanOwnerPhone = rawOwnerPhone.replace(/\D/g, "");
     
-    // Responde ao cliente
-    await send(`✅ *Obrigado! Seus dados foram enviados. Aguarde um instante que já vamos te chamar.*`, 1200);
-    
-    // Pausa o robô (Estilo Glow-Cut)
-    setConvState(tenantId, phone, { step: "idle", pausedUntil: Date.now() + (60 * 60 * 1000) });
+    const finalData = { ...conv.pendingHumanData, subject: text };
+    setConvState(tenantId, phone, { step: "waiting_approval", pendingHumanData: finalData });
 
-    // Notifica o dono com os detalhes enviados
+    await send(`✅ *Perfeito! Seus dados foram enviados para nossa equipe.*\n\nAguarde um instante que já vamos te dar um retorno.`, 1200);
+
     if (cleanOwnerPhone) {
-      const notifyMsg = `🚨 *NOVO CHAMADO DE ATENDIMENTO*\n\n` +
-        `📱 *Cliente:* ${phone}\n` +
-        `📋 *Dados Informados:* \n"${text}"\n\n` +
-        `🔗 *Clique para atender agora:* \nhttps://wa.me/${phone}`;
+      const notifyMsg = `🚨 *NOVA SOLICITAÇÃO DE ATENDIMENTO*\n\n` +
+        `👤 *Nome:* ${finalData.name}\n` +
+        `📞 *Telefone:* ${finalData.phone}\n` +
+        `📝 *Assunto:* ${finalData.subject}\n\n` +
+        `--------------------------------\n` +
+        `Digite *1* para ACEITAR e falar com o cliente.\n` +
+        `Digite *2* para RECUSAR (Ocupado).`;
       
+      // Vincula o dono ao cliente para ele poder responder 1 ou 2
+      attendantStates.set(cleanOwnerPhone, { currentClientId: phone, tenantId });
       await sendMessage(tenantId, cleanOwnerPhone, notifyMsg);
     }
+    return;
+  }
+
+  // ── Step: Em atendimento humano ───────────────────────────────────────────
+  if (conv.step === "in_human_service") {
+    // Se o cliente digitar *sair ou passar 10 min
+    if (normalized === "*sair" || (Date.now() - conv.lastMessageAt > HUMAN_INACTIVITY_TIMEOUT)) {
+      await send(`✅ Atendimento finalizado. O robô assumiu novamente o controle.\n\nComo posso te ajudar agora?`, 1000);
+      await sendMenu();
+      return;
+    }
+    // Caso contrário, o bot fica mudo
     return;
   }
 
