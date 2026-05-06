@@ -600,7 +600,6 @@ async function handleIncomingMessage(tenantId: string, remoteJid: string, text: 
 }
 
   // No intent matched — ignore silently (spam, stickers, reactions)
-}
 
 // ─── initSession ─────────────────────────────────────────────────────────────
 
