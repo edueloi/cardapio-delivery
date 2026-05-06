@@ -595,11 +595,9 @@ async function handleIncomingMessage(tenantId: string, remoteJid: string, text: 
   if (intent === "human") { await sendHuman(); return; }
   if (intent === "exit") { await sendExit(); return; }
 
-  // Fallback para qualquer mensagem inicial não reconhecida ou se estiver idle
-  if (conv.step === "idle" || intent === "greeting") {
-    await sendMenu();
-    return;
-  }
+  // Fallback definitivo: qualquer mensagem não processada desperta o robô com o menu
+  await sendMenu();
+}
 
   // No intent matched — ignore silently (spam, stickers, reactions)
 }
