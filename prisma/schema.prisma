@@ -277,3 +277,23 @@ model OrderItem {
 
   @@map("order_items")
 }
+
+model Feature {
+  id          String   @id @default(cuid())
+  key         String?
+  title       String
+  description String
+  priority    String?
+  category    String?
+  assignedTo  String?
+  type        String
+  tags        Json?
+  points      Int      @default(0)
+  deadline    DateTime?
+  activities  String?  @db.Text
+  isValidated Int?     @default(0)
+  validatedBy String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("features")
+}
