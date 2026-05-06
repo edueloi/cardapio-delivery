@@ -2,23 +2,28 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+async function columnExists(table, column) {
+  const result = await prisma.$queryRawUnsafe(`
+    SELECT COUNT(*) as count 
+    FROM information_schema.columns 
+    WHERE table_name = '${table}' AND column_name = '${column}'
+  `);
+  // Em algumas versões do MySQL o count vem como BigInt ou Number
+  return Number(result[0].count) > 0;
+}
+
 async function main() {
-  console.log('🔄 Iniciando migrações de segurança...');
+  console.log('🔄 Iniciando migrações de segurança (Compatibilidade Máxima)...');
 
   try {
     // 1. Verificar e adicionar coluna payment_methods na tabela tenants
     console.log('--- Verificando tabela tenants ---');
-    await prisma.$executeRawUnsafe(`
-      ALTER TABLE tenants 
-      ADD COLUMN IF NOT EXISTS payment_methods TEXT
-    `).catch(err => {
-      // Alguns bancos MySQL antigos não suportam ADD COLUMN IF NOT EXISTS
-      if (err.message.includes('Duplicate column name')) {
-        console.log('✅ Coluna payment_methods já existe.');
-      } else {
-        throw err;
-      }
-    });
+    if (!(await columnExists('tenants', 'payment_methods'))) {
+      console.log('➕ Adicionando coluna payment_methods...');
+      await prisma.$executeRawUnsafe('ALTER TABLE tenants ADD COLUMN payment_methods TEXT');
+    } else {
+      console.log('✅ Coluna payment_methods já existe.');
+    }
 
     // 2. Garantir que a tabela features exista
     console.log('--- Verificando tabela features ---');
@@ -43,16 +48,12 @@ async function main() {
     `);
 
     // 3. Verificar coluna isValidated na tabela features
-    await prisma.$executeRawUnsafe(`
-      ALTER TABLE features 
-      ADD COLUMN IF NOT EXISTS isValidated INT DEFAULT 0
-    `).catch(err => {
-      if (err.message.includes('Duplicate column name')) {
-        console.log('✅ Coluna isValidated já existe.');
-      } else {
-        console.log('⚠️ Aviso ao adicionar isValidated:', err.message);
-      }
-    });
+    if (!(await columnExists('features', 'isValidated'))) {
+      console.log('➕ Adicionando coluna isValidated...');
+      await prisma.$executeRawUnsafe('ALTER TABLE features ADD COLUMN isValidated INT DEFAULT 0');
+    } else {
+      console.log('✅ Coluna isValidated já existe.');
+    }
 
     console.log('\n✅ Migrações concluídas com sucesso!');
   } catch (error) {
