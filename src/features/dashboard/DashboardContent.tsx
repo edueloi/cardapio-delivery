@@ -23,6 +23,7 @@ import {
   StaffList,
   TableManagement,
 } from "./DashboardPanels";
+import PDVPanel from "./PDVPanel";
 import { WhatsAppManagementPanel, WhatsAppOverviewCard } from "./WhatsAppPanel";
 import { type DashboardOrderTabId, type DashboardTabId } from "./types";
 
@@ -288,6 +289,9 @@ export default function DashboardContent({
         <div className="space-y-6">
           <TableManagement tenant={tenant} />
         </div>
+      )}
+      {activeTab === "pos" && (
+        <PDVPanel tenant={tenant} onOrderCreated={refreshTenant} />
       )}
     </>
   );

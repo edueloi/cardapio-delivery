@@ -8,13 +8,29 @@
   --color-brand-navy:    #0D1B3E;
   --color-brand-gold:    #C9A227;
   --color-brand-gold-lt: #E8B93A;
+  /* Brand Gold Colors */
+  --color-brand-gold:    #C9A227;
+  --color-brand-gold-lt: #E8B93A;
   --color-brand-gold-dk: #A8841C;
 
-  /* amber overrides → dourado Develoi */
+  /* VUCA Premium Colors (Updated to Gold) */
+  --color-vuca-orange: #C9A227;
+  --color-vuca-orange-hover: #E8B93A;
+  --color-vuca-orange-grad: #A8841C;
+  --color-vuca-dark: #0b0f14;
+  --color-vuca-card: #161d27;
+  --color-vuca-card-hover: #1c2532;
+  --color-vuca-sidebar: #111827;
+  --color-vuca-modal-mobile: #fafafa;
+  --color-vuca-modal-desktop: #0f1722;
+  --color-vuca-input-mobile: #f4f5f7;
+  --color-vuca-text-desc: #9ca3af;
+
+  /* amber overrides → VUCA Gold */
   --color-amber-50:  #fdf8e8;
   --color-amber-100: #faefc0;
   --color-amber-200: #f5de82;
-  --color-amber-400: #C9A227;
+  --color-amber-400: #E8B93A;
   --color-amber-500: #C9A227;
   --color-amber-600: #A8841C;
   --color-amber-700: #7a6014;
@@ -49,7 +65,7 @@
     @apply w-full h-9 rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-0
            text-xs font-bold text-zinc-800 placeholder:text-zinc-400/60
            outline-none transition-all duration-200 shadow-[0_1px_2px_rgba(0,0,0,0.02)]
-           focus:border-[#C9A227] focus:ring-4 focus:ring-[#C9A227]/5 focus:bg-white
+           focus:border-[#ff5a1f] focus:ring-4 focus:ring-[#ff5a1f]/5 focus:bg-white
            disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
@@ -59,7 +75,7 @@
 }
 
 .shadow-xl {
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
 }
 
 .backdrop-blur-sm {
@@ -70,4 +86,21 @@
   100% {
     transform: translateX(100%);
   }
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
 }

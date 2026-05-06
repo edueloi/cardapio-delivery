@@ -1,4 +1,4 @@
-import type { LucideIcon } from "lucide-react";
+import type { LucideIcon, LayoutDashboard, Receipt, Clock, ClipboardList, History, Utensils, Package, BarChart3, MessageSquare, UserCog, Users, Settings } from "lucide-react";
 
 export type DashboardTabId =
   | "overview"
@@ -10,7 +10,8 @@ export type DashboardTabId =
   | "whatsapp"
   | "profile"
   | "staff"
-  | "tables";
+  | "tables"
+  | "pos";
 
 export type DashboardOrderTabId = "pending" | "preparing" | "shipped";
 
@@ -25,6 +26,7 @@ export const TAB_TO_PATH: Record<DashboardTabId, string> = {
   "profile": "configuracoes",
   "staff": "equipe",
   "tables": "mesas",
+  "pos": "pdv",
 };
 
 export const PATH_TO_TAB: Record<string, DashboardTabId> = Object.fromEntries(

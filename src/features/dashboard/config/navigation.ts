@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   MessageSquare,
   Package,
+  Receipt,
   Settings,
   Utensils,
 } from "lucide-react";
@@ -17,6 +18,7 @@ export const DASHBOARD_NAVIGATION: DashboardNavigationGroup[] = [
     label: "Operação",
     items: [
       { id: "overview", label: "Visão Geral", tab: "overview", icon: LayoutDashboard },
+      { id: "pos", label: "PDV (Venda Rápida)", tab: "pos", icon: Receipt },
       { id: "orders", label: "Painel de Pedidos", tab: "live-orders", icon: Clock },
       { id: "tables", label: "Mesas e QR Code", tab: "tables", icon: ClipboardList },
       { id: "history", label: "Histórico", tab: "history", icon: History },
