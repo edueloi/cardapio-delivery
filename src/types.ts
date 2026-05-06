@@ -28,6 +28,7 @@ export interface DeliveryConfig {
 export interface PaymentMethodConfig {
   enabled: boolean;
   label: string;
+  acceptedBrands?: string[];
 }
 
 export interface PaymentConfig {
@@ -41,6 +42,7 @@ export interface PaymentConfig {
     label: string;
     allowChange: boolean;
   };
+  acceptedBrands?: string[];
 }
 
 export interface Tenant {
@@ -58,6 +60,26 @@ export interface Tenant {
   categories?: Category[];
   wppInstance?: WppInstance | null;
   wppBotConfig?: WppBotConfig | null;
+  loyaltyConfig?: LoyaltyConfig | null;
+}
+
+export interface LoyaltyConfig {
+  id: string;
+  tenantId: string;
+  enabled: boolean;
+  pointsPerReal: number;        // e.g. 1 point per R$ 1.00
+  minPointsToRedeem: number;    // e.g. 50 points
+  redemptionRatio: number;      // e.g. 0.10 (10 points = R$ 1.00)
+  maxRedemptionValue?: number;  // max discount per order
+}
+
+export interface CustomerLoyalty {
+  id: string;
+  tenantId: string;
+  customerPhone: string;
+  points: number;
+  totalSpent: number;
+  ordersCount: number;
 }
 
 export interface Account {
@@ -177,6 +199,19 @@ export interface OrderItem {
   price: number;
   notes?: string;
   product?: Product;
+}
+
+export interface Comanda {
+  id: string;
+  tenantId: string;
+  number: string;      // The physical card number or name
+  customerName?: string;
+  tableId?: string;    // Optional link to a table
+  status: 'OPEN' | 'CLOSED';
+  total: number;
+  createdAt: string;
+  updatedAt: string;
+  items: OrderItem[];
 }
 
 export interface CashRegister {

@@ -27,11 +27,27 @@ import {
   AlertTriangle,
   CalendarClock,
   ArrowRightLeft,
-  Plus
+  Plus,
+  CreditCard,
+  QrCode,
+  Banknote,
+  Truck,
+  Store,
+  Clock3,
+  Bell,
+  LayoutGrid,
+  ListChecks,
+  Timer,
+  Search,
+  Filter,
+  Eye,
+  FileText,
+  FileDown,
+  Download
 } from "lucide-react";
 import socket from "../../lib/socket";
 import { apiFetch, apiJson } from "../../lib/api";
-import { Order, Tenant, CashRegister, DeliveryConfig, DeliveryZone } from "../../types";
+import { Order, Tenant, CashRegister, DeliveryConfig, DeliveryZone, PaymentConfig } from "../../types";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   Button, 
@@ -541,7 +557,20 @@ interface AddressForm {
 
 const EMPTY_ADDR: AddressForm = { cep: "", street: "", number: "", complement: "", neighborhood: "", city: "", state: "", country: "Brasil" };
 
+const CARD_BRANDS_LIST = [
+  { id: 'visa', label: 'Visa' },
+  { id: 'mastercard', label: 'Mastercard' },
+  { id: 'elo', label: 'Elo' },
+  { id: 'amex', label: 'American Express' },
+  { id: 'hipercard', label: 'Hipercard' },
+  { id: 'vr', label: 'VR Refeição' },
+  { id: 'sodexo', label: 'Sodexo' },
+  { id: 'ticket', label: 'Ticket' },
+  { id: 'alelo', label: 'Alelo' }
+];
+
 export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, refresh: () => void }) {
+  const [activeTab, setActiveTab] = useState<"general" | "hours" | "delivery" | "payments">("general");
   const [form, setForm] = useState({
     name: tenant?.name || "",
     description: tenant?.description || "",
@@ -625,302 +654,411 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
   const setA = (field: keyof AddressForm, value: string) => setAddr(a => ({ ...a, [field]: value }));
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <ContentCard padding="lg">
-        <form onSubmit={handleUpdate} className="space-y-6">
-          {/* Basic info */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <ImageUploader label="Logo / Imagem da Unidade" value={form.logoUrl} onChange={(val) => setForm({...form, logoUrl: val})} description="Aparecerá no topo do cardápio digital." />
-            <div className="space-y-4">
-              <Input label="Nome do estabelecimento" value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="Ex: Pastel do Edu" />
-              <Input label="WhatsApp de contato" value={form.whatsapp} onChange={e => setForm({...form, whatsapp: maskPhone(e.target.value)})} placeholder="(00) 00000-0000" hint="Digite apenas o DDD + Número" />
-            </div>
-          </div>
-          <Input label="Slogan / Descrição curta" value={form.description} onChange={e => setForm({...form, description: e.target.value})} placeholder="Ex: Os melhores pastéis da cidade" />
+    <div className="max-w-4xl mx-auto space-y-6 pb-20">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <SectionTitle 
+          title="Configurações" 
+          description="Gerencie as informações e regras do seu estabelecimento" 
+          icon={Settings} 
+        />
+        <div className="flex bg-slate-100 p-1 rounded-xl">
+          {[
+            { id: "general", label: "Loja", icon: Store },
+            { id: "hours", label: "Horários", icon: Clock3 },
+            { id: "delivery", label: "Entrega", icon: Truck },
+            { id: "payments", label: "Pagamentos", icon: Wallet },
+          ].map((tab) => (
+            <button 
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                activeTab === tab.id ? 'bg-white shadow-sm text-[#C9A227]' : 'text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              <tab.icon className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">{tab.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
 
-          {/* Address */}
-          <div>
-            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-3">Endereço</p>
-            <div className="space-y-3">
-              {/* CEP */}
-              <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
-                <Input
-                  label="CEP"
-                  value={addr.cep}
-                  onChange={e => { setA("cep", e.target.value); setCepError(""); }}
-                  onBlur={e => fetchCep(e.target.value)}
-                  placeholder="00000-000"
-                  wrapperClassName="w-full sm:w-44"
-                  error={cepError || undefined}
-                />
-                <Button type="button" variant="outline" size="sm" loading={cepLoading}
-                  onClick={() => fetchCep(addr.cep)} className="w-full sm:w-auto mb-0.5">
-                  Buscar CEP
-                </Button>
+      <form onSubmit={handleUpdate} className="space-y-6">
+        {activeTab === "general" && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+            <ContentCard padding="lg">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                <ImageUploader label="Logo / Imagem da Unidade" value={form.logoUrl} onChange={(val) => setForm({...form, logoUrl: val})} description="Aparecerá no topo do cardápio digital." />
+                <div className="space-y-4">
+                  <Input label="Nome do estabelecimento" value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="Ex: Pastel do Edu" />
+                  <Input label="WhatsApp de contato" value={form.whatsapp} onChange={e => setForm({...form, whatsapp: maskPhone(e.target.value)})} placeholder="(00) 00000-0000" hint="Digite apenas o DDD + Número" />
+                </div>
               </div>
+              <Input label="Slogan / Descrição curta" value={form.description} onChange={e => setForm({...form, description: e.target.value})} placeholder="Ex: Os melhores pastéis da cidade" />
+            </ContentCard>
 
-              {/* Street + number */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <Input label="Logradouro" value={addr.street} onChange={e => setA("street", e.target.value)} placeholder="Rua, Av, Travessa..." wrapperClassName="md:col-span-2" />
-                <Input label="Número" value={addr.number} onChange={e => setA("number", e.target.value)} placeholder="123" />
-              </div>
+            <ContentCard padding="lg">
+              <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-6">Localização</p>
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
+                  <Input
+                    label="CEP"
+                    value={addr.cep}
+                    onChange={e => { setA("cep", e.target.value); setCepError(""); }}
+                    onBlur={e => fetchCep(e.target.value)}
+                    placeholder="00000-000"
+                    wrapperClassName="w-full sm:w-44"
+                    error={cepError || undefined}
+                  />
+                  <Button type="button" variant="outline" size="sm" loading={cepLoading}
+                    onClick={() => fetchCep(addr.cep)} className="w-full sm:w-auto mb-0.5">
+                    Buscar CEP
+                  </Button>
+                </div>
 
-              {/* Complement + neighborhood */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <Input label="Complemento" value={addr.complement} onChange={e => setA("complement", e.target.value)} placeholder="Apto, Sala, Bloco..." />
-                <Input label="Bairro" value={addr.neighborhood} onChange={e => setA("neighborhood", e.target.value)} placeholder="Bairro" />
-              </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Input label="Logradouro" value={addr.street} onChange={e => setA("street", e.target.value)} placeholder="Rua, Av, Travessa..." wrapperClassName="md:col-span-2" />
+                  <Input label="Número" value={addr.number} onChange={e => setA("number", e.target.value)} placeholder="123" />
+                </div>
 
-              {/* City + state + country */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <Input label="Cidade" value={addr.city} onChange={e => setA("city", e.target.value)} placeholder="Cidade" />
-                <Input label="Estado (UF)" value={addr.state} onChange={e => setA("state", e.target.value.toUpperCase().slice(0,2))} placeholder="SP" />
-                <Input label="País" value={addr.country} onChange={e => setA("country", e.target.value)} placeholder="Brasil" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Input label="Complemento" value={addr.complement} onChange={e => setA("complement", e.target.value)} placeholder="Apto, Sala, Bloco..." />
+                  <Input label="Bairro" value={addr.neighborhood} onChange={e => setA("neighborhood", e.target.value)} placeholder="Bairro" />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Input label="Cidade" value={addr.city} onChange={e => setA("city", e.target.value)} placeholder="Cidade" />
+                  <Input label="Estado (UF)" value={addr.state} onChange={e => setA("state", e.target.value.toUpperCase().slice(0,2))} placeholder="SP" />
+                  <Input label="País" value={addr.country} onChange={e => setA("country", e.target.value)} placeholder="Brasil" />
+                </div>
               </div>
 
               {/* Preview */}
               {(addr.street || addr.city) && (
-                <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-500 font-medium">
+                <div className="mt-4 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-500 font-medium">
                   📍 {buildAddressString(addr)}
                 </div>
               )}
-            </div>
-          </div>
+            </ContentCard>
 
-          {/* isOpen toggle */}
-          <div className="rounded-2xl border border-slate-200 p-5 flex items-center justify-between gap-4">
-            <div>
-              <p className="text-sm font-black text-slate-900">Estabelecimento aberto agora</p>
-              <p className="text-xs text-slate-500 mt-0.5">Desativar fecha o cardápio imediatamente e o bot avisa clientes.</p>
-            </div>
-            <Switch checked={form.isOpen} onCheckedChange={v => setForm(f => ({ ...f, isOpen: v }))} />
-          </div>
+            <ContentCard padding="lg">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-black text-slate-900">Status do Estabelecimento</p>
+                  <p className="text-xs text-slate-500 mt-1">Forçar fechamento imediato do cardápio digital.</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className={`text-[10px] font-black uppercase tracking-widest ${form.isOpen ? 'text-green-500' : 'text-red-500'}`}>
+                    {form.isOpen ? 'Loja Aberta' : 'Loja Fechada'}
+                  </span>
+                  <Switch checked={form.isOpen} onCheckedChange={v => setForm(f => ({ ...f, isOpen: v }))} />
+                </div>
+              </div>
+            </ContentCard>
+          </motion.div>
+        )}
 
-          {/* Business hours */}
-          <div>
-            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-3">Horários de funcionamento</p>
-            <div className="rounded-2xl border border-slate-200 overflow-hidden divide-y divide-slate-100">
-              {DAY_KEYS_UI.map(day => {
-                const d = hours[day] ?? { enabled: false, open: "08:00", close: "22:00", breakEnabled: false, breakStart: "12:00", breakEnd: "13:00" };
-                return (
-                  <div key={day} className={`transition-colors ${d.enabled ? "bg-white" : "bg-slate-50/60"}`}>
-                    <div className="px-4 py-4 space-y-4">
-                      {/* Linha 1: Toggle + Nome do Dia */}
-                      <div className="flex items-center gap-3">
-                        <Switch checked={d.enabled} onCheckedChange={v => setDay(day, "enabled", v)} />
-                        <span className={`text-sm font-black shrink-0 ${d.enabled ? "text-slate-800" : "text-slate-400"}`}>
-                          {DAY_LABELS[day]}
-                        </span>
-                        {!d.enabled && <span className="text-xs font-bold text-slate-300 ml-auto">Fechado</span>}
+        {activeTab === "hours" && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+            <ContentCard padding="lg">
+              <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-6">Horários de Funcionamento</p>
+              <div className="rounded-2xl border border-slate-200 overflow-hidden divide-y divide-slate-100">
+                {DAY_KEYS_UI.map(day => {
+                  const d = hours[day] ?? { enabled: false, open: "08:00", close: "22:00", breakEnabled: false, breakStart: "12:00", breakEnd: "13:00" };
+                  return (
+                    <div key={day} className={`transition-colors ${d.enabled ? "bg-white" : "bg-slate-50/60"}`}>
+                      <div className="px-6 py-6 space-y-4">
+                        <div className="flex items-center gap-4">
+                          <Switch checked={d.enabled} onCheckedChange={v => setDay(day, "enabled", v)} />
+                          <span className={`text-sm font-black shrink-0 ${d.enabled ? "text-slate-800" : "text-slate-400"}`}>
+                            {DAY_LABELS[day]}
+                          </span>
+                          {!d.enabled && <span className="text-[10px] font-black uppercase tracking-widest text-slate-300 ml-auto">Fechado</span>}
+                        </div>
+
+                        {d.enabled && (
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                            <div className="flex items-center gap-2 flex-1">
+                              <TimeInput value={d.open} onChange={v => setDay(day, "open", v)} />
+                              <span className="text-slate-300 font-bold text-sm">–</span>
+                              <TimeInput value={d.close} onChange={v => setDay(day, "close", v)} />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setDay(day, "breakEnabled", !d.breakEnabled)}
+                              className={`h-[44px] px-4 rounded-xl flex items-center justify-center gap-2 border text-[10px] font-black uppercase tracking-widest transition-all w-full sm:w-auto ${d.breakEnabled ? "bg-amber-50 border-amber-300 text-amber-600" : "bg-white border-slate-200 text-slate-400 hover:border-[#C9A227] hover:text-[#C9A227]"}`}
+                            >
+                              {d.breakEnabled ? <Clock className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                              <span>{d.breakEnabled ? "Remover Pausa" : "Adicionar Intervalo"}</span>
+                            </button>
+                          </div>
+                        )}
                       </div>
 
-                      {d.enabled && (
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-3 pl-[44px] sm:pl-0">
-                          {/* Horários */}
-                          <div className="flex items-center gap-2 flex-1">
-                            <TimeInput value={d.open} onChange={v => setDay(day, "open", v)} />
-                            <span className="text-slate-300 font-bold text-sm">–</span>
-                            <TimeInput value={d.close} onChange={v => setDay(day, "close", v)} />
+                      {d.enabled && d.breakEnabled && (
+                        <div className="bg-amber-50/30 px-6 py-6 border-t border-amber-100/50">
+                          <div className="flex flex-col gap-4">
+                            <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Pausa Automática</span>
+                            <div className="flex items-center gap-2">
+                              <TimeInput value={d.breakStart ?? "12:00"} onChange={v => setDay(day, "breakStart", v)} colorClass="text-amber-700" bgClass="bg-amber-50/50" borderClass="border-amber-200" />
+                              <span className="text-amber-300 font-bold text-sm">–</span>
+                              <TimeInput value={d.breakEnd ?? "13:00"} onChange={v => setDay(day, "breakEnd", v)} colorClass="text-amber-700" bgClass="bg-amber-50/50" borderClass="border-amber-200" />
+                            </div>
                           </div>
-                          {/* Botão Intervalo */}
-                          <button
-                            type="button"
-                            onClick={() => setDay(day, "breakEnabled", !d.breakEnabled)}
-                            className={`h-[38px] px-3 rounded-xl flex items-center justify-center gap-1.5 border text-xs font-black transition-all w-full sm:w-auto ${d.breakEnabled ? "bg-amber-50 border-amber-300 text-amber-600" : "border-slate-200 text-slate-400 hover:border-amber-300 hover:text-amber-500"}`}
-                          >
-                            <span>{d.breakEnabled ? "⏸" : "+"}</span>
-                            <span>{d.breakEnabled ? "Remover Pausa" : "Adicionar Intervalo"}</span>
-                          </button>
                         </div>
                       )}
                     </div>
-
-                    {/* Linha do intervalo */}
-                    {d.enabled && d.breakEnabled && (
-                      <div className="bg-amber-50/50 px-4 py-4 border-t border-amber-100/50 space-y-3">
-                        <div className="flex flex-col gap-3 pl-[44px] sm:pl-[calc(0.75rem+96px+0.75rem)]">
-                          <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Pausa (Início e Fim)</span>
-                          <div className="flex items-center gap-2">
-                            <TimeInput value={d.breakStart ?? "12:00"} onChange={v => setDay(day, "breakStart", v)} colorClass="text-amber-700" bgClass="bg-amber-50" borderClass="border-amber-200" />
-                            <span className="text-amber-300 font-bold text-sm">–</span>
-                            <TimeInput value={d.breakEnd ?? "13:00"} onChange={v => setDay(day, "breakEnd", v)} colorClass="text-amber-700" bgClass="bg-amber-50" borderClass="border-amber-200" />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Delivery config */}
-          <div>
-            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-3">Taxa de Entrega</p>
-            <div className="space-y-3">
-              {/* Mode selector */}
-              <div className="flex gap-2 flex-wrap">
-                {([
-                  { id: "free", label: "Grátis" },
-                  { id: "fixed", label: "Taxa Fixa" },
-                  { id: "zones", label: "Por Bairro/CEP" },
-                ] as const).map(opt => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => setDelivery(d => ({ ...d, mode: opt.id }))}
-                    className={`px-4 py-2 rounded-xl text-xs font-black transition-all border ${delivery.mode === opt.id ? "bg-[#0D1B3E] text-white border-[#0D1B3E]" : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"}`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
+                  );
+                })}
               </div>
+            </ContentCard>
+          </motion.div>
+        )}
 
-              {delivery.mode === "fixed" && (
-                <div className="flex items-center gap-3 bg-slate-50 rounded-xl p-4 border border-slate-200">
-                  <span className="text-sm font-bold text-slate-600 shrink-0">Valor único:</span>
-                  <div className="flex items-center gap-1">
-                    <span className="text-sm font-bold text-slate-400">R$</span>
-                    <input
-                      type="number" min="0" step="0.50"
-                      value={delivery.fixedFee ?? ""}
-                      onChange={e => setDelivery(d => ({ ...d, fixedFee: parseFloat(e.target.value) || 0 }))}
-                      className="w-24 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400"
-                      placeholder="0,00"
-                    />
-                  </div>
-                  <span className="text-xs text-slate-400">cobrado para todos os endereços</span>
+        {activeTab === "delivery" && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+            <ContentCard padding="lg">
+              <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-6">Regras de Entrega</p>
+              <div className="space-y-8">
+                <div className="flex gap-2 flex-wrap">
+                  {([
+                    { id: "free", label: "Grátis", icon: CheckCircle2 },
+                    { id: "fixed", label: "Taxa Fixa", icon: CircleDollarSign },
+                    { id: "zones", label: "Por Bairro/CEP", icon: Truck },
+                  ] as const).map(opt => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setDelivery(d => ({ ...d, mode: opt.id }))}
+                      className={`flex items-center gap-3 px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border ${delivery.mode === opt.id ? "bg-[#0D1B3E] text-white border-[#0D1B3E] shadow-xl shadow-slate-900/10" : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"}`}
+                    >
+                      <opt.icon className="w-4 h-4" />
+                      {opt.label}
+                    </button>
+                  ))}
                 </div>
-              )}
 
-              {delivery.mode === "zones" && (
-                <div className="space-y-3">
-                  {/* Default fee for unlisted */}
-                  <div className="flex items-center gap-3 bg-slate-50 rounded-xl p-3 border border-slate-200 flex-wrap">
-                    <span className="text-xs font-bold text-slate-600">Bairros não listados:</span>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" checked={delivery.allowUnlisted !== false} onChange={e => setDelivery(d => ({ ...d, allowUnlisted: e.target.checked }))} className="rounded" />
-                      <span className="text-xs text-slate-500">Aceitar pedidos</span>
-                    </label>
-                    {delivery.allowUnlisted !== false && (
-                      <div className="flex items-center gap-1">
-                        <span className="text-xs text-slate-400">Taxa:</span>
-                        <span className="text-xs font-bold text-slate-400">R$</span>
+                {delivery.mode === "fixed" && (
+                  <div className="bg-slate-50 rounded-2xl p-8 border border-slate-200 flex items-center gap-6">
+                    <div className="w-14 h-14 rounded-2xl bg-white border border-slate-100 flex items-center justify-center text-slate-400 shadow-sm">
+                      <CircleDollarSign className="w-8 h-8" />
+                    </div>
+                    <div className="flex-1 space-y-2">
+                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Valor Único de Entrega</label>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xl font-black text-slate-400">R$</span>
+                        <input
+                          type="number" min="0" step="0.50"
+                          value={delivery.fixedFee ?? ""}
+                          onChange={e => setDelivery(d => ({ ...d, fixedFee: parseFloat(e.target.value) || 0 }))}
+                          className="w-32 bg-white border border-slate-200 rounded-xl px-4 py-3 text-lg font-black text-slate-800 focus:border-[#C9A227] outline-none transition-all shadow-sm"
+                          placeholder="0,00"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {delivery.mode === "zones" && (
+                  <div className="space-y-6">
+                    <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 flex items-center justify-between gap-4">
+                      <div className="space-y-1">
+                        <p className="text-sm font-black text-slate-800">Cobranca fallback</p>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Para locais não cadastrados</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-slate-400">R$</span>
                         <input
                           type="number" min="0" step="0.50"
                           value={delivery.defaultFee ?? ""}
                           onChange={e => setDelivery(d => ({ ...d, defaultFee: parseFloat(e.target.value) || 0 }))}
-                          className="w-20 bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-amber-400"
+                          className="w-24 bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-black text-slate-800 focus:border-[#C9A227] outline-none"
                           placeholder="0,00"
                         />
                       </div>
-                    )}
-                  </div>
-
-                  {/* Zone list */}
-                  {(delivery.zones ?? []).map((zone, idx) => (
-                    <div key={zone.id} className="bg-white border border-slate-200 rounded-xl p-3 flex items-start gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-sm font-black text-slate-800">{zone.label}</span>
-                          <span className="text-sm font-black text-amber-500">{zone.fee === 0 ? "Grátis" : `R$ ${zone.fee.toFixed(2)}`}</span>
-                        </div>
-                        <p className="text-xs text-slate-400 mt-1 truncate">
-                          {zone.ceps.map(c => {
-                            const fmt = c.replace(/\D/g, "");
-                            return fmt.length === 8 ? `${fmt.slice(0,5)}-${fmt.slice(5)}` : c;
-                          }).join(", ")}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setDelivery(d => ({ ...d, zones: d.zones?.filter((_, i) => i !== idx) }))}
-                        className="w-7 h-7 rounded-lg bg-red-50 text-red-400 flex items-center justify-center hover:bg-red-100 transition-colors shrink-0"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
                     </div>
-                  ))}
 
-                  {/* Add zone — CEP lookup */}
-                  <ZoneAdder onAdd={zone => setDelivery(d => ({ ...d, zones: [...(d.zones ?? []), zone] }))} />
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Payment methods */}
-          <div>
-            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-3">Formas de Pagamento</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {([
-                { key: 'pix', label: 'Pix', icon: '💎' },
-                { key: 'credit', label: 'Cartão de Crédito', icon: '💳' },
-                { key: 'debit', label: 'Cartão de Débito', icon: '💳' },
-                { key: 'meal', label: 'Vale Refeição (VR)', icon: '🍱' },
-                { key: 'food', label: 'Vale Alimentação (VA)', icon: '🛒' },
-              ] as const).map(item => (
-                <div key={item.key} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-2xl transition-all hover:border-amber-200">
-                  <div className="flex items-center gap-3">
-                    <span className="text-xl">{item.icon}</span>
-                    <span className="text-sm font-black text-slate-800">{item.label}</span>
-                  </div>
-                  <Switch 
-                    checked={payments[item.key as keyof PaymentConfig]?.enabled ?? false} 
-                    onCheckedChange={v => setPayments(p => ({ ...p, [item.key]: { ...(p[item.key as keyof PaymentConfig] || { label: item.label }), enabled: v } }))} 
-                  />
-                </div>
-              ))}
-              
-              {/* Dinheiro */}
-              <div className="col-span-1 sm:col-span-2 space-y-3 bg-slate-50 border border-slate-200 rounded-2xl p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="text-xl">💵</span>
-                    <span className="text-sm font-black text-slate-800">Dinheiro</span>
-                  </div>
-                  <Switch 
-                    checked={payments.cash?.enabled ?? false} 
-                    onCheckedChange={v => setPayments(p => ({ ...p, cash: { ...(p.cash || { label: "Dinheiro", allowChange: true }), enabled: v } }))} 
-                  />
-                </div>
-                {payments.cash?.enabled && (
-                  <div className="pl-11 flex items-center gap-3">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        checked={payments.cash?.allowChange !== false} 
-                        onChange={e => setPayments(p => ({ ...p, cash: { ...p.cash!, allowChange: e.target.checked } }))} 
-                        className="rounded text-amber-500 focus:ring-amber-500"
-                      />
-                      <span className="text-xs font-bold text-slate-500">Perguntar sobre troco no checkout</span>
-                    </label>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Zonas de Entrega</p>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase">{delivery.zones?.length || 0} zonas</span>
+                      </div>
+                      {delivery.zones?.map((zone, idx) => (
+                        <div key={zone.id} className="bg-white border border-slate-100 rounded-2xl p-5 flex items-center justify-between group hover:border-[#C9A227]/30 transition-all">
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-[#C9A227]/10 group-hover:text-[#C9A227] transition-all">
+                              <Truck className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-slate-800">{zone.label}</p>
+                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">CEP: {zone.ceps.join(", ")}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <span className="text-sm font-black text-[#C9A227]">{zone.fee === 0 ? "GRÁTIS" : fmt(zone.fee)}</span>
+                            <button 
+                              type="button"
+                              onClick={() => setDelivery(d => ({ ...d, zones: d.zones?.filter((_, i) => i !== idx) }))}
+                              className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      <ZoneAdder onAdd={z => setDelivery(d => ({ ...d, zones: [...(d.zones || []), z] }))} />
+                    </div>
                   </div>
                 )}
               </div>
+            </ContentCard>
+          </motion.div>
+        )}
+
+        {activeTab === "payments" && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+            <ContentCard padding="lg">
+              <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-6">Meios de Pagamento Disponíveis</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {[
+                  { id: "pix", label: "PIX Dinâmico", icon: QrCode, desc: "Aprovação instantânea" },
+                  { id: "credit", label: "Cartão de Crédito", icon: CreditCard, desc: "Visa, Master, Elo..." },
+                  { id: "debit", label: "Cartão de Débito", icon: CreditCard, desc: "Pagamento à vista" },
+                  { id: "meal", label: "Vale Refeição (VR)", icon: Utensils, desc: "Sodexo, Alelo, VR" },
+                  { id: "food", label: "Vale Alimentação (VA)", icon: Package, desc: "Ticket, Alelo" },
+                ].map((method) => (
+                  <div 
+                    key={method.id}
+                    className={`p-5 rounded-2xl border transition-all flex items-center justify-between ${
+                      payments[method.id as keyof PaymentConfig]?.enabled ? 'bg-white border-[#C9A227]/30 shadow-md shadow-[#C9A227]/5' : 'bg-slate-50 border-slate-100 opacity-60'
+                    }`}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                        payments[method.id as keyof PaymentConfig]?.enabled ? 'bg-[#C9A227]/10 text-[#C9A227]' : 'bg-slate-200 text-slate-400'
+                      }`}>
+                        <method.icon className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-black text-slate-800">{method.label}</p>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{method.desc}</p>
+                      </div>
+                    </div>
+                    <Switch 
+                      checked={payments[method.id as keyof PaymentConfig]?.enabled} 
+                      onCheckedChange={v => setPayments({
+                        ...payments,
+                        [method.id]: { ...(payments[method.id as keyof PaymentConfig] as any || { label: method.label }), enabled: v }
+                      })}
+                    />
+                  </div>
+                ))}
+
+                <div className={`p-5 rounded-2xl border transition-all sm:col-span-2 ${
+                  payments.cash?.enabled ? 'bg-white border-[#C9A227]/30 shadow-md shadow-[#C9A227]/5' : 'bg-slate-50 border-slate-100 opacity-60'
+                }`}>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-4">
+                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                        payments.cash?.enabled ? 'bg-[#C9A227]/10 text-[#C9A227]' : 'bg-slate-200 text-slate-400'
+                      }`}>
+                        <Banknote className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-black text-slate-800">Dinheiro no Local</p>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Pagamento na entrega ou balcão</p>
+                      </div>
+                    </div>
+                    <Switch 
+                      checked={payments.cash?.enabled} 
+                      onCheckedChange={v => setPayments({
+                        ...payments,
+                        cash: { ...(payments.cash || { label: "Dinheiro", allowChange: true }), enabled: v }
+                      })}
+                    />
+                  </div>
+                  {payments.cash?.enabled && (
+                    <label className="flex items-center gap-3 px-4 py-3 bg-slate-50 rounded-xl cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={payments.cash?.allowChange !== false}
+                        onChange={e => setPayments({
+                          ...payments,
+                          cash: { ...payments.cash!, allowChange: e.target.checked }
+                        })}
+                        className="w-4 h-4 rounded accent-[#C9A227]"
+                      />
+                      <span className="text-xs font-bold text-slate-600">Perguntar sobre troco no checkout</span>
+                    </label>
+                  )}
+                </div>
+              </div>
+            </ContentCard>
+
+            <ContentCard padding="lg">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Bandeiras Aceitas</p>
+                  <p className="text-xs text-slate-500 mt-1">Marque as bandeiras que seu estabelecimento aceita na maquininha.</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                {CARD_BRANDS_LIST.map(brand => {
+                  const isEnabled = (payments as any).acceptedBrands?.includes(brand.id);
+                  return (
+                    <button
+                      key={brand.id}
+                      type="button"
+                      onClick={() => {
+                        const current = (payments as any).acceptedBrands || [];
+                        const next = isEnabled 
+                          ? current.filter((id: string) => id !== brand.id)
+                          : [...current, brand.id];
+                        setPayments({ ...payments, acceptedBrands: next } as any);
+                      }}
+                      className={`p-4 rounded-2xl border text-center transition-all ${
+                        isEnabled ? 'bg-[#0D1B3E] border-[#0D1B3E] text-white shadow-lg' : 'bg-white border-slate-100 text-slate-400 hover:border-slate-300'
+                      }`}
+                    >
+                      <p className="text-[10px] font-black uppercase tracking-widest">{brand.label}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </ContentCard>
+          </motion.div>
+        )}
+
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 w-full max-w-4xl px-4">
+          <div className="bg-white/80 backdrop-blur-md border border-slate-200/50 p-4 rounded-[2rem] shadow-2xl flex items-center justify-between gap-4">
+            <div className="hidden sm:block pl-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Status das Alterações</p>
+              <p className="text-xs font-bold text-slate-800">
+                {saved ? "✅ Tudo salvo!" : saving ? "⏳ Salvando..." : "✍️ Alterações pendentes"}
+              </p>
+            </div>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Button 
+                type="button" 
+                variant="ghost" 
+                onClick={() => refresh()}
+                className="flex-1 sm:flex-none"
+              >
+                Descartar
+              </Button>
+              <Button 
+                type="submit" 
+                variant="primary" 
+                loading={saving}
+                className="flex-1 sm:min-w-[200px]"
+                iconLeft={<CheckCircle2 className="w-4 h-4" />}
+              >
+                {saved ? "Salvo com Sucesso" : "Salvar Alterações"}
+              </Button>
             </div>
           </div>
-
-          {/* Link */}
-          <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-[10px] font-black uppercase text-blue-600 tracking-widest mb-1">Link do cardápio</p>
-              <p className="text-sm font-bold text-blue-800 break-all">{window.location.origin}/{tenant?.slug}</p>
-            </div>
-            <Button type="button" variant="outline" size="xs" className="w-full sm:w-auto"
-              onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/${tenant?.slug}`); }}>
-              Copiar link
-            </Button>
-          </div>
-
-          <div className="pt-2 flex items-center justify-end gap-3">
-            {saved && <span className="text-sm font-bold text-green-600">✓ Salvo!</span>}
-            <Button type="submit" loading={saving} iconLeft={<CheckCircle2 className="w-4 h-4" />}>
-              Salvar alterações
-            </Button>
-          </div>
-        </form>
-      </ContentCard>
+        </div>
+      </form>
     </div>
   );
 }
@@ -2375,5 +2513,333 @@ export function TableManagement({
         </section>
       </div>
     </ContentCard>
+  );
+}
+
+export function KitchenKDSPanel({ 
+  orders, 
+  updateStatus 
+}: { 
+  orders: Order[]; 
+  updateStatus: (id: string, status: string) => void 
+}) {
+  const [viewMode, setViewMode] = useState<"grid" | "consolidated">("grid");
+  const preparingOrders = orders.filter(o => o.status === "PREPARING");
+
+  // Calculate consolidated items
+  const consolidated = preparingOrders.reduce((acc: Record<string, { name: string; quantity: number }>, order) => {
+    order.items.forEach(item => {
+      const key = item.productId;
+      if (!acc[key]) acc[key] = { name: item.product?.name || "Produto", quantity: 0 };
+      acc[key].quantity += item.quantity;
+    });
+    return acc;
+  }, {});
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <SectionTitle 
+          title="Cozinha (KDS)" 
+          description="Gestão de produção em tempo real" 
+          icon={Utensils} 
+        />
+        <div className="flex bg-slate-100 p-1 rounded-xl">
+          <button 
+            onClick={() => setViewMode("grid")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+              viewMode === "grid" ? 'bg-white shadow-sm text-[#C9A227]' : 'text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <LayoutGrid className="w-3.5 h-3.5" />
+            Cards
+          </button>
+          <button 
+            onClick={() => setViewMode("consolidated")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+              viewMode === "consolidated" ? 'bg-white shadow-sm text-[#C9A227]' : 'text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <ListChecks className="w-3.5 h-3.5" />
+            Resumo
+          </button>
+        </div>
+      </div>
+
+      {viewMode === "grid" ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {preparingOrders.map(order => (
+            <KDSTicket key={order.id} order={order} onComplete={() => updateStatus(order.id, 'SHIPPED')} />
+          ))}
+          {preparingOrders.length === 0 && (
+            <div className="col-span-full py-20 text-center space-y-4">
+              <div className="w-20 h-20 rounded-full bg-slate-50 flex items-center justify-center mx-auto text-slate-200">
+                <Clock className="w-10 h-10" />
+              </div>
+              <p className="text-sm font-black text-slate-400 uppercase tracking-widest">Nenhum pedido em preparo no momento</p>
+            </div>
+          )}
+        </div>
+      ) : (
+        <ContentCard>
+          <div className="space-y-4">
+            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 border-b border-slate-100 pb-4">
+              Total de Itens para Produção
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Object.entries(consolidated).map(([id, item]) => (
+                <div key={id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                  <span className="text-sm font-black text-slate-800">{item.name}</span>
+                  <span className="text-lg font-black text-[#C9A227] bg-white w-10 h-10 rounded-xl flex items-center justify-center shadow-sm border border-[#C9A227]/10">
+                    {item.quantity}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </ContentCard>
+      )}
+    </div>
+  );
+}
+
+function KDSTicket({ order, onComplete }: { order: Order; onComplete: () => void }) {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    const start = new Date(order.createdAt).getTime();
+    const timer = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - start) / 60000));
+    }, 10000);
+    setElapsed(Math.floor((Date.now() - start) / 60000));
+    return () => clearInterval(timer);
+  }, [order.createdAt]);
+
+  const getUrgencyColor = () => {
+    if (elapsed > 20) return "border-red-500 bg-red-50/30";
+    if (elapsed > 10) return "border-amber-500 bg-amber-50/30";
+    return "border-slate-200 bg-white";
+  };
+
+  return (
+    <motion.div 
+      layout
+      className={`border-2 rounded-3xl p-5 space-y-4 flex flex-col shadow-sm transition-colors ${getUrgencyColor()}`}
+    >
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-lg font-black text-slate-800">#{order.id.slice(-4).toUpperCase()}</span>
+            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+              order.orderType === 'DELIVERY' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
+            }`}>
+              {order.orderType === 'DELIVERY' ? 'Delivery' : order.orderType === 'DINE_IN' ? `Mesa ${order.tableId}` : 'Retirada'}
+            </span>
+          </div>
+          <p className="text-xs font-bold text-slate-400 mt-1">{order.customerName}</p>
+        </div>
+        <div className="flex flex-col items-end">
+          <div className={`flex items-center gap-1.5 text-xs font-black px-3 py-1 rounded-full ${
+            elapsed > 15 ? 'text-red-600 bg-red-100 animate-pulse' : 'text-slate-500 bg-slate-100'
+          }`}>
+            <Timer className="w-3.5 h-3.5" />
+            {elapsed} min
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 space-y-2.5">
+        {order.items.map((item, idx) => (
+          <div key={idx} className="flex items-start gap-3 p-3 bg-white/60 rounded-2xl border border-slate-100/50">
+            <span className="text-sm font-black text-[#C9A227] min-w-[20px]">{item.quantity}x</span>
+            <div className="flex-1">
+              <p className="text-sm font-bold text-slate-800 leading-tight">{item.product?.name}</p>
+              {item.notes && (
+                <div className="mt-1 flex items-start gap-1.5 text-[10px] font-black text-amber-600 uppercase tracking-tight italic">
+                  <Bell className="w-3 h-3 shrink-0 mt-0.5" />
+                  <span>{item.notes}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <Button 
+        onClick={onComplete}
+        variant="primary" 
+        className="w-full py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-slate-900/10 active:scale-95"
+      >
+        Concluir Pedido
+      </Button>
+    </motion.div>
+  );
+}
+
+export function OrderHistoryPanel({ 
+  orders, 
+  slug 
+}: { 
+  orders: Order[]; 
+  slug: string;
+}) {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [paymentFilter, setPaymentFilter] = useState<string>("all");
+
+  const filtered = orders
+    .filter(o => o.status === 'DELIVERED' || o.status === 'CANCELLED')
+    .filter(o => {
+      const matchSearch = o.id.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          o.customerName.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchType = typeFilter === 'all' || o.orderType === typeFilter;
+      const matchPayment = paymentFilter === 'all' || o.paymentMethod === paymentFilter;
+      return matchSearch && matchType && matchPayment;
+    })
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  const totalSales = filtered.reduce((acc, o) => acc + (o.status === 'DELIVERED' ? o.total : 0), 0);
+  const totalOrders = filtered.length;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <SectionTitle 
+          title="Histórico de Pedidos" 
+          description="Relatório detalhado de vendas finalizadas" 
+          icon={History} 
+        />
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" className="hidden sm:flex gap-2">
+            <Download className="w-4 h-4" /> Exportar CSV
+          </Button>
+        </div>
+      </div>
+
+      <StatGrid cols={2} className="mb-6">
+        <StatCard 
+          title="Vendas Filtradas" 
+          value={fmt(totalSales)} 
+          icon={CircleDollarSign} 
+          color="success" 
+        />
+        <StatCard 
+          title="Total de Pedidos" 
+          value={totalOrders} 
+          icon={Package} 
+          color="info" 
+        />
+      </StatGrid>
+
+      <ContentCard>
+        <div className="space-y-6">
+          <div className="flex flex-col lg:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input 
+                type="text" 
+                placeholder="Buscar por ID ou nome do cliente..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 pl-12 pr-4 text-sm focus:border-[#C9A227] outline-none transition-all"
+              />
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <select 
+                value={typeFilter}
+                onChange={e => setTypeFilter(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider text-slate-600 outline-none focus:border-[#C9A227]"
+              >
+                <option value="all">Todos os Tipos</option>
+                <option value="DELIVERY">Delivery</option>
+                <option value="DINE_IN">Mesa</option>
+                <option value="PICKUP">Retirada</option>
+              </select>
+              <select 
+                value={paymentFilter}
+                onChange={e => setPaymentFilter(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider text-slate-600 outline-none focus:border-[#C9A227]"
+              >
+                <option value="all">Pagamento</option>
+                <option value="PIX">Pix</option>
+                <option value="CREDIT">Cartão Crédito</option>
+                <option value="DEBIT">Cartão Débito</option>
+                <option value="CASH">Dinheiro</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-separate border-spacing-y-2">
+              <thead>
+                <tr className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  <th className="px-4 py-2">ID</th>
+                  <th className="px-4 py-2">Horário</th>
+                  <th className="px-4 py-2">Cliente</th>
+                  <th className="px-4 py-2">Tipo</th>
+                  <th className="px-4 py-2 text-center">Status</th>
+                  <th className="px-4 py-2 text-center">Pagamento</th>
+                  <th className="px-4 py-2 text-right">Valor</th>
+                  <th className="px-4 py-2 text-right"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(order => (
+                  <tr key={order.id} className="group hover:bg-slate-50/80 transition-colors">
+                    <td className="px-4 py-4 bg-white border-y border-l border-slate-100 rounded-l-2xl">
+                      <span className="text-xs font-black text-slate-800">#{order.id.slice(-4).toUpperCase()}</span>
+                    </td>
+                    <td className="px-4 py-4 bg-white border-y border-slate-100">
+                      <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
+                        <Clock className="w-3 h-3" />
+                        {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </td>
+                    <td className="px-4 py-4 bg-white border-y border-slate-100">
+                      <p className="text-xs font-bold text-slate-700 truncate max-w-[120px]">{order.customerName}</p>
+                    </td>
+                    <td className="px-4 py-4 bg-white border-y border-slate-100">
+                      <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">
+                        {order.orderType === 'DELIVERY' ? 'Delivery' : order.orderType === 'DINE_IN' ? `Mesa ${order.tableId}` : 'Retirada'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4 bg-white border-y border-slate-100 text-center">
+                      <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${
+                        order.status === 'DELIVERED' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                      }`}>
+                        {order.status === 'DELIVERED' ? 'Concluído' : 'Cancelado'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4 bg-white border-y border-slate-100 text-center">
+                      <PaymentBadge method={order.paymentMethod.toLowerCase() as any} size="sm" />
+                    </td>
+                    <td className="px-4 py-4 bg-white border-y border-slate-100 text-right">
+                      <span className="text-xs font-black text-slate-800 tabular-nums">{fmt(order.total)}</span>
+                    </td>
+                    <td className="px-4 py-4 bg-white border-y border-r border-slate-100 rounded-r-2xl text-right">
+                      <Link 
+                        to={`/dashboard/${slug}/historico/${order.id}`}
+                        className="p-2 text-slate-300 hover:text-[#C9A227] transition-colors inline-block"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {filtered.length === 0 && (
+              <div className="py-20 text-center space-y-4">
+                <div className="w-20 h-20 rounded-full bg-slate-50 flex items-center justify-center mx-auto text-slate-200">
+                  <History className="w-10 h-10" />
+                </div>
+                <p className="text-sm font-black text-slate-400 uppercase tracking-widest">Nenhum pedido encontrado nos filtros</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </ContentCard>
+    </div>
   );
 }

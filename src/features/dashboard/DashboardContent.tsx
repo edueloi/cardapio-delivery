@@ -17,13 +17,16 @@ import type { Order, Tenant } from "../../types";
 import {
   FinancePanel,
   InventoryPanel,
+  KitchenKDSPanel,
   MenuManagement,
+  OrderHistoryPanel,
   OrdersList,
   ProfileManagement,
   StaffList,
   TableManagement,
 } from "./DashboardPanels";
 import PDVPanel from "./PDVPanel";
+import LoyaltyPanel from "./LoyaltyPanel";
 import { WhatsAppManagementPanel, WhatsAppOverviewCard } from "./WhatsAppPanel";
 import { type DashboardOrderTabId, type DashboardTabId } from "./types";
 
@@ -39,7 +42,7 @@ interface DashboardContentProps {
   refreshTenant: () => Promise<void>;
   updateStatus: (orderId: string, status: string) => void | Promise<void>;
   activeOrderId?: string;
-  checkoutRequests?: Array<{ tableId: string }>;
+  checkoutRequests?: Array<{ tableId: string; customerName: string; timestamp: number }>;
   onClearTable?: (tableId: string) => void;
 }
 
@@ -202,17 +205,9 @@ export default function DashboardContent({
 
       {activeTab === "history" && (
         <PageWrapper>
-          <SectionTitle
-            title="Histórico de Pedidos"
-            description="Todos os pedidos processados hoje"
-            icon={Clock}
-            className="mb-5 hidden sm:flex"
-          />
-          <OrdersList
-            filteredOrders={filteredOrders}
-            updateStatus={updateStatus}
+          <OrderHistoryPanel
+            orders={orders}
             slug={slug}
-            activeOrderId={activeOrderId}
           />
         </PageWrapper>
       )}
@@ -291,7 +286,19 @@ export default function DashboardContent({
         </div>
       )}
       {activeTab === "pos" && (
-        <PDVPanel tenant={tenant} onOrderCreated={refreshTenant} />
+        <PDVPanel 
+          tenant={tenant} 
+          onOrderCreated={refreshTenant} 
+          checkoutRequests={checkoutRequests}
+          onClearTable={onClearTable}
+          orders={orders}
+        />
+      )}
+      {activeTab === "loyalty" && (
+        <LoyaltyPanel tenant={tenant} onUpdated={refreshTenant} />
+      )}
+      {activeTab === "kds" && (
+        <KitchenKDSPanel orders={orders} updateStatus={updateStatus} />
       )}
     </>
   );
