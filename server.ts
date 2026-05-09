@@ -221,6 +221,7 @@ async function requireTenantFromInventoryItem(req: express.Request, res: express
 app.use(cors());
 app.use(express.json());
 app.use("/uploads", express.static(uploadDir));
+app.use("/downloads", express.static(path.join(process.cwd(), "public", "downloads")));
 app.use(authMiddleware);
 
 io.on("connection", (socket) => {
