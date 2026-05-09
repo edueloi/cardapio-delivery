@@ -146,6 +146,7 @@ export interface Product {
   imageUrl?: string;
   categoryId: string;
   available: boolean;
+  pdvOnly?: boolean;
   autoDisableWhenOutOfStock?: boolean;
   inventoryItemId?: string | null;
   inventoryItem?: InventoryItem | null;

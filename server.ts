@@ -700,8 +700,8 @@ app.get("/api/tenants/:slug", async (req, res) => {
         categories: {
           include: {
             products: {
-              where: { available: true },
-              include: { 
+              where: { available: true, pdvOnly: false },
+              include: {
                 variants: true,
                 inventoryItem: true
               },
@@ -1078,7 +1078,7 @@ app.delete("/api/categories/:id", requireAuth, async (req, res) => {
 });
 
 app.post("/api/products", requireAuth, async (req, res) => {
-  const { name, description, price, imageUrl, categoryId, tenantId, variants, inventoryItemId } = req.body;
+  const { name, description, price, imageUrl, categoryId, tenantId, variants, inventoryItemId, pdvOnly } = req.body;
   const tenant = await requireTenantById(req, res, tenantId);
   if (!tenant) return;
 
@@ -1092,6 +1092,7 @@ app.post("/api/products", requireAuth, async (req, res) => {
         categoryId,
         tenantId: tenant.id,
         available: true,
+        pdvOnly: Boolean(pdvOnly),
         inventoryItemId: inventoryItemId || null,
         variants: Array.isArray(variants)
           ? {
@@ -1117,7 +1118,7 @@ app.patch("/api/products/:id", requireAuth, async (req, res) => {
   const scoped = await requireTenantFromProduct(req, res, req.params.id);
   if (!scoped) return;
 
-  const { name, description, price, imageUrl, variants, inventoryItemId, available, autoDisableWhenOutOfStock } = req.body;
+  const { name, description, price, imageUrl, variants, inventoryItemId, available, autoDisableWhenOutOfStock, pdvOnly } = req.body;
 
   try {
     const product = await prisma.$transaction(async (tx) => {
@@ -1133,6 +1134,7 @@ app.patch("/api/products/:id", requireAuth, async (req, res) => {
           inventoryItemId: inventoryItemId || null,
           ...(available !== undefined && { available: Boolean(available) }),
           ...(autoDisableWhenOutOfStock !== undefined && { autoDisableWhenOutOfStock: Boolean(autoDisableWhenOutOfStock) }),
+          ...(pdvOnly !== undefined && { pdvOnly: Boolean(pdvOnly) }),
           variants: Array.isArray(variants)
             ? {
                 create: variants.map((variant: any) => ({

@@ -121,6 +121,15 @@ async function main() {
       }
     }
 
+    // 8. Coluna pdv_only em products
+    console.log('--- Verificando coluna pdv_only em products ---');
+    if (!(await columnExists('products', 'pdv_only'))) {
+      console.log('➕ Adicionando coluna pdv_only em products...');
+      await prisma.$executeRawUnsafe('ALTER TABLE products ADD COLUMN pdv_only TINYINT(1) DEFAULT 0');
+    } else {
+      console.log('✅ Coluna pdv_only em products já existe.');
+    }
+
     console.log('\n✅ Migrações concluídas com sucesso!');
   } catch (error) {
     console.error('\n❌ Erro durante a migração:', error.message);

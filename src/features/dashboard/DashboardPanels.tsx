@@ -1125,7 +1125,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
   const [prodForm, setProdForm] = useState({
     name: "", description: "", price: "", imageUrl: "", inventoryItemId: "",
-    available: true, autoDisableWhenOutOfStock: false,
+    available: true, pdvOnly: false, autoDisableWhenOutOfStock: false,
     variants: [] as { name: string, price: string, description: string, inventoryItemId: string }[]
   });
 
@@ -1178,7 +1178,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
 
   const openNewProduct = (categoryId: string) => {
     setEditingProduct(null);
-    setProdForm({ name: "", description: "", price: "", imageUrl: "", inventoryItemId: "", available: true, autoDisableWhenOutOfStock: false, variants: [] });
+    setProdForm({ name: "", description: "", price: "", imageUrl: "", inventoryItemId: "", available: true, pdvOnly: false, autoDisableWhenOutOfStock: false, variants: [] });
     setProdModal({ open: true, categoryId });
   };
 
@@ -1188,6 +1188,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
       name: prod.name, description: prod.description || "", price: String(prod.price),
       imageUrl: prod.imageUrl || "", inventoryItemId: prod.inventoryItemId || "",
       available: prod.available !== false,
+      pdvOnly: prod.pdvOnly || false,
       autoDisableWhenOutOfStock: prod.autoDisableWhenOutOfStock || false,
       variants: prod.variants?.map((v: any) => ({ name: v.name, price: String(v.price), description: v.description || "", inventoryItemId: v.inventoryItemId || "" })) || []
     });
@@ -1511,6 +1512,20 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
               className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${prodForm.available ? 'bg-green-500' : 'bg-slate-200'}`}
             >
               <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition duration-200 ${prodForm.available ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between py-1 border-t border-slate-100">
+            <div>
+              <p className="text-sm font-bold text-slate-700">Exclusivo PDV</p>
+              <p className="text-xs text-slate-400">Visível apenas no PDV, não aparece no cardápio online</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setProdForm(f => ({ ...f, pdvOnly: !f.pdvOnly }))}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${prodForm.pdvOnly ? 'bg-blue-500' : 'bg-slate-200'}`}
+            >
+              <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition duration-200 ${prodForm.pdvOnly ? 'translate-x-5' : 'translate-x-0'}`} />
             </button>
           </div>
 
