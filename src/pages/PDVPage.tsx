@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { apiJson } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import socket from "../lib/socket";
@@ -9,7 +9,8 @@ import { X } from "lucide-react";
 
 export default function PDVPage() {
   const { slug } = useParams<{ slug: string }>();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [checkoutRequests, setCheckoutRequests] = useState<Array<{ tableId: string; customerName: string; timestamp: number }>>([]);
@@ -31,6 +32,11 @@ export default function PDVPage() {
   };
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!isAuthenticated) {
+      navigate(`/login?redirect=/pdv/${slug}`);
+      return;
+    }
     fetchTenant();
     socket.on("new-order", (newOrder: Order) => {
       setOrders((prev) => [newOrder, ...prev]);
@@ -48,7 +54,7 @@ export default function PDVPage() {
       socket.off("order-status-updated");
       socket.off("checkout-requested");
     };
-  }, [slug]);
+  }, [slug, authLoading, isAuthenticated]);
 
   const handleClearTable = async (tableId: string) => {
     if (!tenant) return;

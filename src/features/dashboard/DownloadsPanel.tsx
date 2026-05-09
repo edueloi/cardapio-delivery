@@ -133,8 +133,23 @@ export default function DownloadsPanel() {
         </ContentCard>
       </div>
 
+      {/* Windows SmartScreen warning */}
+      <div className="mt-6 bg-amber-50 border border-amber-200 rounded-2xl p-5">
+        <h4 className="text-sm font-black text-amber-800 mb-1 flex items-center gap-2">
+          ⚠️ Windows pode bloquear o arquivo ao instalar
+        </h4>
+        <p className="text-sm text-amber-700 mb-3">
+          O Windows Defender SmartScreen pode exibir um aviso de segurança. Isso é normal para aplicativos sem certificado digital. Para instalar:
+        </p>
+        <ol className="space-y-1.5 text-sm text-amber-700">
+          <li className="flex items-center gap-2"><ArrowRight className="w-3.5 h-3.5 shrink-0" /> Clique em <strong>"Mais informações"</strong> na tela de aviso</li>
+          <li className="flex items-center gap-2"><ArrowRight className="w-3.5 h-3.5 shrink-0" /> Em seguida clique em <strong>"Executar assim mesmo"</strong></li>
+          <li className="flex items-center gap-2"><ArrowRight className="w-3.5 h-3.5 shrink-0" /> A instalação prosseguirá normalmente</li>
+        </ol>
+      </div>
+
       {/* Login info */}
-      <div className="mt-6 bg-[#0D1B3E]/5 border border-[#0D1B3E]/10 rounded-2xl p-5">
+      <div className="mt-4 bg-[#0D1B3E]/5 border border-[#0D1B3E]/10 rounded-2xl p-5">
         <h4 className="text-sm font-black text-[#0D1B3E] mb-1 flex items-center gap-2">
           <Globe className="w-4 h-4" />
           Como fazer login no app
