@@ -6,3 +6,8 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Electron installers — upload manually via deploy script
+public/downloads/*.exe
+public/downloads/*.dmg
+public/downloads/*.AppImage

@@ -225,4 +225,33 @@ export interface CashRegister {
   expectedBalance?: number;
   status: 'OPEN' | 'CLOSED';
   notes?: string;
+  operatorName?: string | null;
+}
+
+export interface CashMovement {
+  id: string;
+  cashRegisterId: string;
+  tenantId: string;
+  type: string;
+  amount: number;
+  description?: string | null;
+  orderId?: string | null;
+  operatorName?: string | null;
+  createdAt: string;
+}
+
+export interface Customer {
+  id: string;
+  tenantId: string;
+  name: string;
+  phone: string;
+  email?: string | null;
+  address?: string | null;
+  notes?: string | null;
+  loyaltyPoints: number;
+  totalSpent: number;
+  ordersCount: number;
+  lastOrderAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }

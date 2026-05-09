@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   MessageSquare,
   Utensils,
+  ExternalLink,
 } from "lucide-react";
 import {
   ContentCard,
@@ -12,10 +13,10 @@ import {
   SectionTitle,
   StatCard,
   StatGrid,
+  Button,
 } from "../../components";
 import type { Order, Tenant } from "../../types";
 import {
-  FinancePanel,
   InventoryPanel,
   KitchenKDSPanel,
   MenuManagement,
@@ -27,6 +28,10 @@ import {
 } from "./DashboardPanels";
 import PDVPanel from "./PDVPanel";
 import LoyaltyPanel from "./LoyaltyPanel";
+import CashFlowPanel from "./CashFlowPanel";
+import CustomerCRMPanel from "./CustomerCRMPanel";
+import ReportsPanel from "./ReportsPanel";
+import DownloadsPanel from "./DownloadsPanel";
 import { WhatsAppManagementPanel, WhatsAppOverviewCard } from "./WhatsAppPanel";
 import { type DashboardOrderTabId, type DashboardTabId } from "./types";
 
@@ -228,10 +233,19 @@ export default function DashboardContent({
       )}
 
       {activeTab === "finance" && (
-        <div className="space-y-6">
-          <h3 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">Fluxo de Caixa</h3>
-          <FinancePanel slug={slug} tenant={tenant} />
-        </div>
+        <CashFlowPanel slug={slug} tenant={tenant} />
+      )}
+
+      {activeTab === "customers" && (
+        <CustomerCRMPanel slug={slug} tenant={tenant} />
+      )}
+
+      {activeTab === "reports" && (
+        <ReportsPanel slug={slug} tenant={tenant} />
+      )}
+
+      {activeTab === "downloads" && (
+        <DownloadsPanel />
       )}
 
       {activeTab === "whatsapp" && (
@@ -281,13 +295,31 @@ export default function DashboardContent({
         </div>
       )}
       {activeTab === "pos" && (
-        <PDVPanel 
-          tenant={tenant} 
-          onOrderCreated={refreshTenant} 
-          checkoutRequests={checkoutRequests}
-          onClearTable={onClearTable}
-          orders={orders}
-        />
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-xl font-black text-slate-800 uppercase tracking-widest">PDV — Caixa</h3>
+              <p className="text-xs text-slate-400 mt-0.5">Venda rápida integrada ao painel</p>
+            </div>
+            {!(window as any).pdvDesktop && (
+              <Button
+                variant="secondary"
+                size="sm"
+                iconLeft={<ExternalLink className="w-4 h-4" />}
+                onClick={() => window.open(`/pdv/${slug}`, "_blank", "width=1280,height=800")}
+              >
+                Abrir em Tela Cheia
+              </Button>
+            )}
+          </div>
+          <PDVPanel
+            tenant={tenant}
+            onOrderCreated={refreshTenant}
+            checkoutRequests={checkoutRequests}
+            onClearTable={onClearTable}
+            orders={orders}
+          />
+        </div>
       )}
       {activeTab === "loyalty" && (
         <LoyaltyPanel tenant={tenant} onUpdated={refreshTenant} />

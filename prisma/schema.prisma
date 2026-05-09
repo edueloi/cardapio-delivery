@@ -32,6 +32,7 @@ model Tenant {
   inventoryItems      InventoryItem[]
   wppInstance WppInstance?
   wppBotConfig WppBotConfig?
+  customers   Customer[]
 
   @@map("tenants")
 }
@@ -140,10 +141,49 @@ model CashRegister {
   expectedBalance Float?    @map("expected_balance")
   status          String    @default("OPEN") // OPEN, CLOSED
   notes           String?
+  operatorName    String?   @map("operator_name")
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant    Tenant          @relation(fields: [tenantId], references: [id])
+  movements CashMovement[]
 
   @@map("cash_registers")
+}
+
+model CashMovement {
+  id             String   @id @default(cuid())
+  cashRegisterId String   @map("cash_register_id")
+  tenantId       String   @map("tenant_id")
+  type           String   // SANGRIA, SUPRIMENTO, PAYMENT_CASH, PAYMENT_PIX, PAYMENT_CREDIT, PAYMENT_DEBIT, PAYMENT_VR
+  amount         Float
+  description    String?
+  orderId        String?  @map("order_id")
+  operatorName   String?  @map("operator_name")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  cashRegister CashRegister @relation(fields: [cashRegisterId], references: [id], onDelete: Cascade)
+
+  @@map("cash_movements")
+}
+
+model Customer {
+  id           String   @id @default(cuid())
+  tenantId     String   @map("tenant_id")
+  name         String
+  phone        String
+  email        String?
+  address      String?
+  notes        String?
+  loyaltyPoints Int     @default(0) @map("loyalty_points")
+  totalSpent   Float    @default(0) @map("total_spent")
+  ordersCount  Int      @default(0) @map("orders_count")
+  lastOrderAt  DateTime? @map("last_order_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, phone])
+  @@map("customers")
 }
 
 model User {
@@ -251,7 +291,12 @@ model Order {
   orderType    String   @default("DELIVERY") @map("order_type")
   tableId      String?  @map("table_id")
   paymentMethod String  @default("CASH") @map("payment_method")
-  paymentDetail String? @map("payment_detail")
+  paymentDetail String? @map("payment_detail") @db.Text
+  discount     Float?   @default(0)
+  discountType String?  @map("discount_type") // PERCENT, FIXED
+  notes        String?  @db.Text
+  operatorName String?  @map("operator_name")
+  customerId   String?  @map("customer_id")
   total        Float
   tenantId     String   @map("tenant_id")
   createdAt    DateTime @default(now()) @map("created_at")

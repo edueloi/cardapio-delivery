@@ -8,7 +8,9 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
 import { Server } from "socket.io";
-import { prisma } from "./src/lib/prisma";
+import { prisma as _prisma } from "./src/lib/prisma";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const prisma = _prisma as any;
 import {
   authMiddleware,
   createAuthSession,
@@ -1625,6 +1627,404 @@ app.delete("/api/inventory/items/:id", requireAuth, async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to delete item" });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// CASH MOVEMENTS (Sangria / Suprimento)
+// ─────────────────────────────────────────────────────────────
+
+app.post("/api/tenants/:slug/cash/movement", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  if (!tenant) return;
+
+  try {
+    const currentCash = await prisma.cashRegister.findFirst({
+      where: { tenantId: tenant.id, status: "OPEN" },
+      orderBy: { openedAt: "desc" },
+    });
+    if (!currentCash) return res.status(400).json({ error: "Nenhum caixa aberto." });
+
+    const { type, amount, description, operatorName } = req.body;
+    if (!type || !amount) return res.status(400).json({ error: "type e amount são obrigatórios." });
+    if (!["SANGRIA", "SUPRIMENTO"].includes(type)) return res.status(400).json({ error: "Tipo inválido." });
+
+    const movement = await prisma.cashMovement.create({
+      data: {
+        cashRegisterId: currentCash.id,
+        tenantId: tenant.id,
+        type,
+        amount: parseFloat(amount),
+        description,
+        operatorName,
+      },
+    });
+    res.json(movement);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao registrar movimento." });
+  }
+});
+
+app.get("/api/tenants/:slug/cash/movements", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  if (!tenant) return;
+
+  try {
+    const currentCash = await prisma.cashRegister.findFirst({
+      where: { tenantId: tenant.id, status: "OPEN" },
+      orderBy: { openedAt: "desc" },
+    });
+    if (!currentCash) return res.json([]);
+
+    const movements = await prisma.cashMovement.findMany({
+      where: { cashRegisterId: currentCash.id },
+      orderBy: { createdAt: "asc" },
+    });
+    res.json(movements);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao buscar movimentos." });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// CUSTOMERS (CRM)
+// ─────────────────────────────────────────────────────────────
+
+app.get("/api/tenants/:slug/customers", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  if (!tenant) return;
+
+  try {
+    const { search, page = "1", limit = "50" } = req.query as Record<string, string>;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const where: any = { tenantId: tenant.id };
+    if (search) {
+      where.OR = [
+        { name: { contains: search } },
+        { phone: { contains: search } },
+        { email: { contains: search } },
+      ];
+    }
+
+    const [customers, total] = await Promise.all([
+      prisma.customer.findMany({
+        where,
+        orderBy: { totalSpent: "desc" },
+        skip,
+        take: parseInt(limit),
+      }),
+      prisma.customer.count({ where }),
+    ]);
+
+    res.json({ customers, total, page: parseInt(page), limit: parseInt(limit) });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao buscar clientes." });
+  }
+});
+
+app.get("/api/tenants/:slug/customers/by-phone/:phone", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  if (!tenant) return;
+
+  try {
+    const customer = await prisma.customer.findUnique({
+      where: { tenantId_phone: { tenantId: tenant.id, phone: req.params.phone } },
+    });
+    res.json(customer || null);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao buscar cliente." });
+  }
+});
+
+app.post("/api/tenants/:slug/customers", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  if (!tenant) return;
+
+  try {
+    const { name, phone, email, address, notes } = req.body;
+    if (!name || !phone) return res.status(400).json({ error: "Nome e telefone são obrigatórios." });
+
+    const customer = await prisma.customer.upsert({
+      where: { tenantId_phone: { tenantId: tenant.id, phone } },
+      create: { tenantId: tenant.id, name, phone, email, address, notes },
+      update: { name, email, address, notes },
+    });
+    res.json(customer);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao salvar cliente." });
+  }
+});
+
+app.patch("/api/tenants/:slug/customers/:id", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  if (!tenant) return;
+
+  try {
+    const existing = await prisma.customer.findFirst({ where: { id: req.params.id, tenantId: tenant.id } });
+    if (!existing) return res.status(404).json({ error: "Cliente não encontrado." });
+
+    const { name, phone, email, address, notes } = req.body;
+    const customer = await prisma.customer.update({
+      where: { id: req.params.id },
+      data: { name, phone, email, address, notes },
+    });
+    res.json(customer);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao atualizar cliente." });
+  }
+});
+
+app.get("/api/tenants/:slug/customers/:id/orders", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  if (!tenant) return;
+
+  try {
+    const customer = await prisma.customer.findFirst({ where: { id: req.params.id, tenantId: tenant.id } });
+    if (!customer) return res.status(404).json({ error: "Cliente não encontrado." });
+
+    const orders = await prisma.order.findMany({
+      where: { tenantId: tenant.id, customerPhone: customer.phone },
+      include: { items: { include: { product: true } } },
+      orderBy: { createdAt: "desc" },
+      take: 30,
+    });
+    res.json(orders);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao buscar pedidos do cliente." });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// FINANCIAL REPORTS
+// ─────────────────────────────────────────────────────────────
+
+app.get("/api/tenants/:slug/reports/summary", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  if (!tenant) return;
+
+  try {
+    const { from, to } = req.query as Record<string, string>;
+    const dateFrom = from ? new Date(from) : new Date(new Date().setHours(0, 0, 0, 0));
+    const dateTo = to ? new Date(to) : new Date(new Date().setHours(23, 59, 59, 999));
+
+    const orders = await prisma.order.findMany({
+      where: {
+        tenantId: tenant.id,
+        status: { notIn: ["CANCELLED"] },
+        createdAt: { gte: dateFrom, lte: dateTo },
+      },
+      include: { items: { include: { product: true } } },
+    });
+
+    const totalRevenue = orders.reduce((s, o) => s + o.total, 0);
+    const totalOrders = orders.length;
+    const averageTicket = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+    // Revenue by payment method
+    const byPaymentMethod: Record<string, { count: number; total: number }> = {};
+    for (const order of orders) {
+      const pm = order.paymentMethod;
+      if (!byPaymentMethod[pm]) byPaymentMethod[pm] = { count: 0, total: 0 };
+      byPaymentMethod[pm].count++;
+      byPaymentMethod[pm].total += order.total;
+    }
+
+    // Revenue by order type
+    const byOrderType: Record<string, { count: number; total: number }> = {};
+    for (const order of orders) {
+      const ot = order.orderType;
+      if (!byOrderType[ot]) byOrderType[ot] = { count: 0, total: 0 };
+      byOrderType[ot].count++;
+      byOrderType[ot].total += order.total;
+    }
+
+    // Top products
+    const productSales: Record<string, { name: string; qty: number; total: number }> = {};
+    for (const order of orders) {
+      for (const item of order.items) {
+        const pid = item.productId;
+        if (!productSales[pid]) productSales[pid] = { name: item.product?.name || pid, qty: 0, total: 0 };
+        productSales[pid].qty += item.quantity;
+        productSales[pid].total += item.price * item.quantity;
+      }
+    }
+    const topProducts = Object.entries(productSales)
+      .map(([id, v]) => ({ id, ...v }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 10);
+
+    // Hourly distribution
+    const hourlyMap: Record<number, number> = {};
+    for (const order of orders) {
+      const h = new Date(order.createdAt).getHours();
+      hourlyMap[h] = (hourlyMap[h] || 0) + order.total;
+    }
+    const hourly = Array.from({ length: 24 }, (_, h) => ({ hour: h, total: hourlyMap[h] || 0 }));
+
+    res.json({ totalRevenue, totalOrders, averageTicket, byPaymentMethod, byOrderType, topProducts, hourly, dateFrom, dateTo });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao gerar relatório." });
+  }
+});
+
+app.get("/api/tenants/:slug/reports/daily", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  if (!tenant) return;
+
+  try {
+    const days = parseInt((req.query.days as string) || "30");
+    const from = new Date();
+    from.setDate(from.getDate() - days);
+    from.setHours(0, 0, 0, 0);
+
+    const orders = await prisma.order.findMany({
+      where: { tenantId: tenant.id, status: { notIn: ["CANCELLED"] }, createdAt: { gte: from } },
+      select: { createdAt: true, total: true },
+    });
+
+    const dailyMap: Record<string, { date: string; total: number; count: number }> = {};
+    for (const order of orders) {
+      const d = order.createdAt.toISOString().slice(0, 10);
+      if (!dailyMap[d]) dailyMap[d] = { date: d, total: 0, count: 0 };
+      dailyMap[d].total += order.total;
+      dailyMap[d].count++;
+    }
+
+    const result = Object.values(dailyMap).sort((a, b) => a.date.localeCompare(b.date));
+    res.json(result);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao buscar dados diários." });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// PDV: create order with discount + customer sync
+// ─────────────────────────────────────────────────────────────
+
+app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  if (!tenant) return;
+
+  try {
+    const {
+      customerName,
+      customerPhone,
+      orderType,
+      tableId,
+      paymentMethod,
+      paymentMetadata,
+      items,
+      discount,
+      discountType,
+      notes,
+      operatorName,
+    } = req.body;
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: "Nenhum item no pedido." });
+    }
+
+    // Fetch products and calculate totals
+    const productIds = items.map((i: any) => i.productId);
+    const products = await prisma.product.findMany({ where: { id: { in: productIds } } });
+    const productMap = Object.fromEntries(products.map((p) => [p.id, p]));
+
+    let subtotal = 0;
+    const orderItems: any[] = [];
+    for (const item of items) {
+      const product = productMap[item.productId];
+      if (!product) return res.status(400).json({ error: `Produto ${item.productId} não encontrado.` });
+      const price = item.price ?? product.price;
+      subtotal += price * item.quantity;
+      orderItems.push({ productId: item.productId, quantity: item.quantity, price, notes: item.notes });
+    }
+
+    let discountAmount = 0;
+    if (discount && parseFloat(discount) > 0) {
+      discountAmount = discountType === "PERCENT" ? subtotal * (parseFloat(discount) / 100) : parseFloat(discount);
+    }
+    const total = Math.max(0, subtotal - discountAmount);
+
+    // Upsert customer if phone provided
+    let customerId: string | undefined;
+    if (customerPhone && customerPhone !== "00000000000" && customerName) {
+      const customer = await prisma.customer.upsert({
+        where: { tenantId_phone: { tenantId: tenant.id, phone: customerPhone } },
+        create: { tenantId: tenant.id, name: customerName, phone: customerPhone, totalSpent: total, ordersCount: 1, lastOrderAt: new Date() },
+        update: { totalSpent: { increment: total }, ordersCount: { increment: 1 }, lastOrderAt: new Date() },
+      });
+      customerId = customer.id;
+    }
+
+    const order = await prisma.order.create({
+      data: {
+        tenantId: tenant.id,
+        customerName: customerName || "Venda PDV",
+        customerPhone: customerPhone || "00000000000",
+        orderType: orderType || "TAKEAWAY",
+        tableId: tableId || null,
+        paymentMethod: paymentMethod || "CASH",
+        paymentDetail: paymentMetadata ? JSON.stringify(paymentMetadata) : null,
+        discount: discountAmount,
+        discountType: discountType || null,
+        notes: notes || null,
+        operatorName: operatorName || null,
+        customerId: customerId || null,
+        status: "DELIVERED",
+        total,
+        items: { create: orderItems },
+      },
+      include: { items: { include: { product: true } } },
+    });
+
+    // Register cash movement for the payment
+    const currentCash = await prisma.cashRegister.findFirst({
+      where: { tenantId: tenant.id, status: "OPEN" },
+      orderBy: { openedAt: "desc" },
+    });
+    if (currentCash) {
+      const pmType = `PAYMENT_${paymentMethod}`;
+      await prisma.cashMovement.create({
+        data: {
+          cashRegisterId: currentCash.id,
+          tenantId: tenant.id,
+          type: pmType,
+          amount: total,
+          description: `Venda PDV #${order.id.slice(-6).toUpperCase()}`,
+          orderId: order.id,
+          operatorName: operatorName || null,
+        },
+      });
+    }
+
+    // Deduct inventory
+    for (const item of order.items) {
+      if (item.product?.inventoryItemId) {
+        await prisma.inventoryItem.update({
+          where: { id: item.product.inventoryItemId },
+          data: {
+            quantity: { decrement: item.quantity },
+            movements: { create: { type: "OUT", quantity: item.quantity, reason: "SALE", orderId: order.id } },
+          },
+        }).catch(() => {}); // non-blocking
+      }
+    }
+
+    io.to(`tenant-${tenant.id}`).emit("order:new", order);
+    res.json(order);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao criar pedido PDV." });
   }
 });
 

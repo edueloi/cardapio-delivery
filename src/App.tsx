@@ -14,6 +14,7 @@ import Register from "./pages/Register";
 import LoadingScreen from "./components/LoadingScreen";
 import LandingPage from "./pages/LandingPage";
 import PublicDashboard from "./features/public-dashboard";
+import PDVPage from "./pages/PDVPage";
 
 function AnimatedRoutes() {
   const location = useLocation();
@@ -69,6 +70,15 @@ function AnimatedRoutes() {
         />
 
         <Route path="/:slug/display" element={<PublicDashboard />} />
+
+        <Route
+          path="/pdv/:slug"
+          element={
+            <AuthGuard>
+              <PDVPage />
+            </AuthGuard>
+          }
+        />
 
         <Route
           path="/:slug/mesa/:tableId"
