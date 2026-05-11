@@ -92,7 +92,7 @@ export default function PDVPanel({
 
   const filteredProducts = useMemo(() => {
     let products: Product[] = [];
-    tenant.categories.forEach((cat) => {
+    tenant.categories?.forEach((cat) => {
       if (!selectedCategoryId || cat.id === selectedCategoryId) {
         products = [...products, ...cat.products];
       }
@@ -325,9 +325,9 @@ export default function PDVPanel({
                       : "bg-white text-slate-500 border-slate-200 hover:border-slate-300 hover:text-slate-700"
                   }`}
                 >
-                  Todos ({tenant.categories.reduce((s, c) => s + c.products.length, 0)})
+                  Todos ({tenant.categories?.reduce((s, c) => s + c.products.length, 0) ?? 0})
                 </button>
-                {tenant.categories.map((cat) => (
+                {tenant.categories?.map((cat) => (
                   <button
                     key={cat.id}
                     onClick={() => setSelectedCategoryId(selectedCategoryId === cat.id ? null : cat.id)}
