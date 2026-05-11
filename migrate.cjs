@@ -21,6 +21,36 @@ const migrations = [
     check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'auto_disable_when_out_of_stock'",
     run: "ALTER TABLE products ADD COLUMN auto_disable_when_out_of_stock TINYINT(1) NOT NULL DEFAULT 0",
   },
+  {
+    name: 'add_orders_discount',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'discount'",
+    run: "ALTER TABLE orders ADD COLUMN discount DOUBLE NULL DEFAULT 0",
+  },
+  {
+    name: 'add_orders_discount_type',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'discount_type'",
+    run: "ALTER TABLE orders ADD COLUMN discount_type VARCHAR(191) NULL",
+  },
+  {
+    name: 'add_orders_notes',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'notes'",
+    run: "ALTER TABLE orders ADD COLUMN notes TEXT NULL",
+  },
+  {
+    name: 'add_orders_operator_name',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'operator_name'",
+    run: "ALTER TABLE orders ADD COLUMN operator_name VARCHAR(191) NULL",
+  },
+  {
+    name: 'add_orders_customer_id',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'customer_id'",
+    run: "ALTER TABLE orders ADD COLUMN customer_id VARCHAR(191) NULL",
+  },
+  {
+    name: 'add_orders_payment_detail',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'payment_detail'",
+    run: "ALTER TABLE orders ADD COLUMN payment_detail TEXT NULL",
+  },
 ];
 
 async function run() {
