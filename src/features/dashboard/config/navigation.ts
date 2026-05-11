@@ -11,6 +11,7 @@ import {
   Package,
   Receipt,
   Settings,
+  Star,
   Users,
   Utensils,
   Wallet,
@@ -50,9 +51,10 @@ export const DASHBOARD_NAVIGATION: DashboardNavigationGroup[] = [
     id: "clientes",
     label: "Clientes & Marketing",
     items: [
-      { id: "customers", label: "Clientes — CRM",     tab: "customers",    icon: Users },
-      { id: "loyalty",   label: "Fidelidade",         tab: "loyalty",      icon: Heart },
-      { id: "whatsapp",  label: "WhatsApp",           tab: "whatsapp",     icon: MessageSquare },
+      { id: "customers",   label: "Clientes — CRM",  tab: "customers",    icon: Users },
+      { id: "loyalty",    label: "Fidelidade",        tab: "loyalty",      icon: Heart },
+      { id: "promotions", label: "Promoções",         tab: "promotions",   icon: Star },
+      { id: "whatsapp",   label: "WhatsApp",          tab: "whatsapp",     icon: MessageSquare },
     ],
   },
   {

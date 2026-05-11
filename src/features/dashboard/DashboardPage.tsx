@@ -9,7 +9,7 @@ import DashboardContent from "./DashboardContent";
 import { DASHBOARD_NAVIGATION } from "./config/navigation";
 import { type DashboardOrderTabId, type DashboardTabId, PATH_TO_TAB, TAB_TO_PATH } from "./types";
 import { motion, AnimatePresence } from "motion/react";
-import { Receipt, X } from "lucide-react";
+import { Bell, Receipt, X } from "lucide-react";
 
 export default function DashboardPage() {
   const { slug, tab: tabParam, orderId } = useParams<{ slug: string; tab?: string; orderId?: string }>();
@@ -21,6 +21,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [checkoutRequests, setCheckoutRequests] = useState<Array<{ tableId: string; customerName: string; timestamp: number }>>([]);
+  const [waiterCalls, setWaiterCalls] = useState<Array<{ tableId: string; customerName: string; note: string; requestBill: boolean; timestamp: number }>>([]);
 
   const activeTab: DashboardTabId = (tabParam ? PATH_TO_TAB[tabParam] : undefined) ?? (orderId ? "history" : "overview");
 
@@ -108,10 +109,19 @@ export default function DashboardPage() {
       ]);
     });
 
+    socket.on("waiter-called", ({ tableId, customerName, note, requestBill }) => {
+      new Audio("/notification.mp3").play().catch(() => undefined);
+      setWaiterCalls(prev => [
+        { tableId, customerName, note, requestBill, timestamp: Date.now() },
+        ...prev
+      ]);
+    });
+
     return () => {
       socket.off("new-order");
       socket.off("order-status-updated");
       socket.off("checkout-requested");
+      socket.off("waiter-called");
     };
   }, [slug]);
 
@@ -213,11 +223,44 @@ export default function DashboardPage() {
           activeOrderId={orderId}
           checkoutRequests={checkoutRequests}
           onClearTable={handleClearTable}
+          waiterCalls={waiterCalls}
+          onDismissWaiterCall={(ts) => setWaiterCalls(prev => prev.filter(w => w.timestamp !== ts))}
         />
       </DashboardShell>
 
-      <div className="fixed bottom-6 right-6 z-[200] space-y-4 w-full max-w-xs pointer-events-none">
+      <div className="fixed bottom-6 right-6 z-[200] space-y-3 w-full max-w-xs pointer-events-none">
         <AnimatePresence>
+          {waiterCalls.map((w) => (
+            <motion.div
+              key={w.timestamp}
+              initial={{ opacity: 0, x: 100, scale: 0.9 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.5, transition: { duration: 0.2 } }}
+              className="pointer-events-auto bg-amber-500 text-black p-4 rounded-2xl shadow-2xl flex flex-col gap-2"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-black/10 flex items-center justify-center animate-pulse">
+                    <Bell className="w-4 h-4" />
+                  </div>
+                  <span className="text-xs font-black uppercase tracking-widest">
+                    {w.requestBill ? "Pedir Conta — " : "Garçom — "}Mesa {w.tableId}
+                  </span>
+                </div>
+                <button onClick={() => setWaiterCalls(prev => prev.filter(c => c.timestamp !== w.timestamp))} className="p-1 hover:bg-black/10 rounded-lg transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <p className="text-xs font-bold opacity-70">{w.customerName}</p>
+              {w.note && <p className="text-xs bg-black/10 rounded-xl px-3 py-2 italic">{w.note}</p>}
+              <button
+                onClick={() => setWaiterCalls(prev => prev.filter(c => c.timestamp !== w.timestamp))}
+                className="w-full bg-black text-amber-400 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black/80 transition-colors"
+              >
+                Ciente
+              </button>
+            </motion.div>
+          ))}
           {checkoutRequests.map((req) => (
             <motion.div
               key={req.timestamp}
@@ -233,7 +276,7 @@ export default function DashboardPage() {
                   </div>
                   <span className="text-xs font-black uppercase tracking-widest">Fechar Mesa {req.tableId}</span>
                 </div>
-                <button 
+                <button
                   onClick={() => setCheckoutRequests(prev => prev.filter(r => r.timestamp !== req.timestamp))}
                   className="p-1 hover:bg-white/10 rounded-lg transition-colors"
                 >
@@ -244,7 +287,7 @@ export default function DashboardPage() {
                 <p className="text-[10px] font-bold opacity-60 uppercase">Cliente</p>
                 <p className="text-sm font-black">{req.customerName}</p>
               </div>
-              <button 
+              <button
                 onClick={() => {
                   navigateToTab("live-orders");
                   setCheckoutRequests(prev => prev.filter(r => r.timestamp !== req.timestamp));

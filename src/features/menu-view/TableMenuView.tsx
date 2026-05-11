@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useParams } from "react-router-dom";
-import { 
-  ShoppingCart, Plus, Minus, X, Send, Loader2, 
+import {
+  ShoppingCart, Plus, Minus, X, Send, Loader2,
   ChevronRight, Utensils, Phone, User, CheckCircle2,
   Receipt, History, Check, Search, Smartphone, Bell,
   ChevronLeft,
@@ -9,7 +9,8 @@ import {
   BookOpen,
   ShoppingBag,
   MapPin,
-  MoreHorizontal
+  MoreHorizontal,
+  Users
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import socket from "../../lib/socket";
@@ -23,7 +24,7 @@ export default function TableMenuView() {
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState<"checkin" | "menu" | "success">("checkin");
-  const [customer, setCustomer] = useState({ name: "", phone: "" });
+  const [customer, setCustomer] = useState({ name: "", phone: "", guests: "1" });
   const [cart, setCart] = useState<any[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [qty, setQty] = useState(1);
@@ -31,8 +32,14 @@ export default function TableMenuView() {
   const [isOrdering, setIsOrdering] = useState(false);
 
   const [orders, setOrders] = useState<any[]>([]);
+  const [promotions, setPromotions] = useState<any[]>([]);
+  const [promoIndex, setPromoIndex] = useState(0);
   const [showBill, setShowBill] = useState(false);
   const [showQR, setShowQR] = useState(false);
+  const [showWaiterModal, setShowWaiterModal] = useState(false);
+  const [waiterNote, setWaiterNote] = useState("");
+  const [waiterRequestBill, setWaiterRequestBill] = useState(false);
+  const [waiterSent, setWaiterSent] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -59,9 +66,23 @@ export default function TableMenuView() {
       })
       .catch(() => setLoading(false));
 
+    fetch(`/api/tenants/${slug}/promotions`)
+      .then(r => r.json())
+      .then(data => Array.isArray(data) && setPromotions(data))
+      .catch(() => {});
+
     const savedCart = localStorage.getItem(`table_cart_${slug}_${tableId}`);
     if (savedCart) {
       try { setCart(JSON.parse(savedCart)); } catch (e) { console.error("Failed to parse saved cart"); }
+    }
+
+    // Restore session — if name+phone saved, skip checkin
+    const savedName = localStorage.getItem(`table_name_${slug}_${tableId}`);
+    const savedPhone = localStorage.getItem(`table_phone_${slug}_${tableId}`);
+    const savedGuests = localStorage.getItem(`table_guests_${slug}_${tableId}`);
+    if (savedName && savedPhone) {
+      setCustomer({ name: savedName, phone: savedPhone, guests: savedGuests || "1" });
+      setStep("menu");
     }
   }, [slug, tableId]);
 
@@ -107,8 +128,9 @@ export default function TableMenuView() {
         if (data.length === 0 && step === "menu") {
           localStorage.removeItem(`table_name_${slug}_${tableId}`);
           localStorage.removeItem(`table_phone_${slug}_${tableId}`);
+          localStorage.removeItem(`table_guests_${slug}_${tableId}`);
           localStorage.removeItem(`table_cart_${slug}_${tableId}`);
-          setCustomer({ name: "", phone: "" });
+          setCustomer({ name: "", phone: "", guests: "1" });
           setCart([]);
           setStep("checkin");
         }
@@ -117,6 +139,12 @@ export default function TableMenuView() {
   };
 
   const totalBill = orders.reduce((acc, order) => acc + (order.total || 0), 0);
+
+  useEffect(() => {
+    if (promotions.length <= 1) return;
+    const t = setInterval(() => setPromoIndex(i => (i + 1) % promotions.length), 5000);
+    return () => clearInterval(t);
+  }, [promotions.length]);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -141,6 +169,7 @@ export default function TableMenuView() {
     if (customer.name && customer.phone) {
       localStorage.setItem(`table_name_${slug}_${tableId}`, customer.name);
       localStorage.setItem(`table_phone_${slug}_${tableId}`, customer.phone);
+      localStorage.setItem(`table_guests_${slug}_${tableId}`, customer.guests);
       setStep("menu");
     }
   };
@@ -156,6 +185,7 @@ export default function TableMenuView() {
       orderType: "DINE_IN",
       tableId: tableId,
       paymentMethod: "CASH",
+      guestCount: parseInt(customer.guests) || 1,
       items: cart.map(item => ({
         productId: item.productId,
         productVariantId: item.variantId,
@@ -226,7 +256,7 @@ export default function TableMenuView() {
               <form onSubmit={handleCheckin} className="space-y-4">
                 <div className="relative">
                   <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
-                  <input 
+                  <input
                     required
                     value={customer.name}
                     onChange={e => setCustomer({...customer, name: e.target.value})}
@@ -236,7 +266,7 @@ export default function TableMenuView() {
                 </div>
                 <div className="relative">
                   <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
-                  <input 
+                  <input
                     required
                     value={customer.phone}
                     onChange={handlePhoneChange}
@@ -244,6 +274,25 @@ export default function TableMenuView() {
                     type="tel"
                     className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white placeholder:text-white/20 focus:border-amber-500/50 focus:outline-none transition-all"
                   />
+                </div>
+                <div className="bg-white/5 border border-white/10 rounded-2xl py-3 px-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3 text-white/40">
+                    <Users className="w-4 h-4" />
+                    <span className="text-white/60 text-sm">Pessoas na mesa</span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <button
+                      type="button"
+                      onClick={() => setCustomer(c => ({ ...c, guests: String(Math.max(1, parseInt(c.guests) - 1)) }))}
+                      className="w-8 h-8 rounded-full bg-white/10 hover:bg-amber-500/20 text-white flex items-center justify-center transition-all active:scale-90 text-lg font-bold leading-none"
+                    >−</button>
+                    <span className="text-white font-bold text-xl w-6 text-center">{customer.guests}</span>
+                    <button
+                      type="button"
+                      onClick={() => setCustomer(c => ({ ...c, guests: String(Math.min(20, parseInt(c.guests) + 1)) }))}
+                      className="w-8 h-8 rounded-full bg-white/10 hover:bg-amber-500/20 text-white flex items-center justify-center transition-all active:scale-90 text-lg font-bold leading-none"
+                    >+</button>
+                  </div>
                 </div>
                 <button className="w-full bg-amber-500 hover:bg-amber-400 text-black font-black py-4 rounded-2xl transition-all shadow-xl shadow-amber-500/30 active:scale-95 uppercase tracking-widest text-xs">
                   Entrar no Restaurante
@@ -260,11 +309,15 @@ export default function TableMenuView() {
           {/* Sidebar Desktop (Keep Dark) */}
           <aside className="hidden lg:flex w-64 xl:w-72 flex-col bg-[#111827] border-r border-white/[0.06] h-full shrink-0 z-50 relative transition-all">
             <div className="p-6 xl:p-8 flex flex-col h-full">
-              {/* Logo VUCA Style */}
+              {/* Logo */}
               <div className="mb-12">
-                <div className="text-white font-black text-3xl leading-[0.8] tracking-tighter uppercase">
-                  VU<br />CA
-                </div>
+                {tenant.logoUrl ? (
+                  <img src={tenant.logoUrl} className="h-12 w-auto object-contain mb-2" alt={tenant.name} />
+                ) : (
+                  <div className="text-white font-black text-xl leading-tight tracking-tight uppercase line-clamp-2">
+                    {tenant.name}
+                  </div>
+                )}
                 <p className="text-[10px] font-black text-white/20 tracking-[0.3em] mt-2 uppercase">Mesa {tableId}</p>
               </div>
 
@@ -312,30 +365,70 @@ export default function TableMenuView() {
           </aside>
 
           <div className="flex-1 flex flex-col h-full overflow-hidden relative bg-white lg:bg-[#0b0f14]">
-            {/* Mobile Header (Search Style as in Image) */}
-            <header className="sticky top-0 z-40 bg-white p-4 lg:hidden shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="text-red-600 font-black text-xl leading-none tracking-tighter">
-                  VU<br />CA
+            {/* Mobile/Tablet Header */}
+            <header className="sticky top-0 z-40 lg:hidden shrink-0 bg-[#0b0f14]/95 backdrop-blur-xl border-b border-white/[0.06]">
+              <div className="flex items-center justify-between px-4 py-3 gap-3">
+                {/* Logo + Mesa */}
+                <div className="flex items-center gap-3 shrink-0">
+                  {tenant.logoUrl ? (
+                    <img src={tenant.logoUrl} className="w-9 h-9 rounded-xl object-cover" />
+                  ) : (
+                    <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                      <Utensils className="w-4 h-4 text-amber-500" />
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-[10px] font-black text-white/30 uppercase tracking-widest leading-none">{tableId === 'Balcao' ? 'Balcão' : `Mesa ${tableId}`}</p>
+                    <p className="text-sm font-bold text-white leading-tight truncate max-w-[100px]">{tenant.name}</p>
+                  </div>
                 </div>
-                <div className="flex-1 bg-[#f4f5f7] rounded-xl flex items-center px-3 py-2 gap-2">
-                  <Search className="w-4 h-4 text-zinc-400" />
-                  <input 
-                    type="text" 
-                    placeholder="Buscar produtos" 
+
+                {/* Search */}
+                <div className="flex-1 bg-white/5 border border-white/10 rounded-xl flex items-center px-3 py-2 gap-2 focus-within:border-amber-500/40 transition-all">
+                  <Search className="w-3.5 h-3.5 text-white/30 shrink-0" />
+                  <input
+                    type="text"
+                    placeholder="Buscar..."
                     value={searchTerm}
                     onChange={e => setSearchTerm(e.target.value)}
-                    className="bg-transparent border-none outline-none text-sm w-full placeholder:text-zinc-400"
+                    className="bg-transparent border-none outline-none text-sm w-full text-white placeholder:text-white/20"
                   />
-                  {searchTerm && (
-                    <button onClick={() => setSearchTerm("")} className="p-1">
-                      <X className="w-3 h-3 text-zinc-400" />
-                    </button>
-                  )}
+                  {searchTerm && <button onClick={() => setSearchTerm("")}><X className="w-3 h-3 text-white/30" /></button>}
                 </div>
-                <button className="p-2">
-                  <MoreVertical className="w-5 h-5 text-zinc-400" />
-                </button>
+
+                {/* Actions */}
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => { setShowWaiterModal(true); setWaiterSent(false); setWaiterNote(""); setWaiterRequestBill(false); }}
+                    className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/60 hover:text-amber-400 transition-all active:scale-90"
+                  >
+                    <Bell className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setShowBill(true)}
+                    className="relative flex items-center gap-1.5 bg-amber-500 text-black px-3 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all"
+                  >
+                    <Receipt className="w-3.5 h-3.5" />
+                    {fmt(totalBill)}
+                  </button>
+                </div>
+              </div>
+
+              {/* Categories Horizontal Scroll */}
+              <div className="flex gap-2 px-4 pb-3 overflow-x-auto scrollbar-hide">
+                {tenant.categories?.map(cat => (
+                  <button
+                    key={cat.id}
+                    onClick={() => { setSelectedCategoryId(cat.id); setShowBill(false); setSelectedProduct(null); }}
+                    className={`shrink-0 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all ${
+                      selectedCategoryId === cat.id && !showBill && !selectedProduct
+                        ? 'bg-amber-500 text-black'
+                        : 'bg-white/5 text-white/50 hover:text-white hover:bg-white/10'
+                    }`}
+                  >
+                    {cat.name}
+                  </button>
+                ))}
               </div>
             </header>
 
@@ -372,13 +465,8 @@ export default function TableMenuView() {
                       )}
                     </div>
                   </div>
-                  <button 
-                    onClick={() => {
-                      if (tenant) {
-                        socket.emit("request-waiter", { tenantId: tenant.id, tableId, customerName: customer.name });
-                        showToast("Garçom chamado!");
-                      }
-                    }}
+                  <button
+                    onClick={() => { setShowWaiterModal(true); setWaiterSent(false); setWaiterNote(""); setWaiterRequestBill(false); }}
                     className="flex items-center gap-2 text-white hover:text-[#C9A227] transition-all group"
                   >
                     <Bell className="w-5 h-5 group-hover:text-[#C9A227]" />
@@ -408,112 +496,204 @@ export default function TableMenuView() {
               </div>
             </header>
 
-            <div className="flex-1 overflow-y-auto lg:p-12 relative custom-scrollbar pb-24 lg:pb-12">
-              {/* Mobile Restaurant Info (As in Image) */}
-              <div className="lg:hidden p-4 space-y-4">
-                <div className="h-32 bg-zinc-100 rounded-xl overflow-hidden relative">
-                  <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/food.png')] bg-repeat" />
-                </div>
-                <div className="flex items-start gap-4 -mt-12 relative px-2">
-                  <div className="w-20 h-20 rounded-full bg-white p-1 shadow-lg border border-zinc-100 overflow-hidden">
-                    <img src={tenant.logoUrl || "/placeholder.png"} className="w-full h-full object-cover rounded-full" />
-                  </div>
-                  <div className="pt-8">
-                    <h1 className="text-lg font-bold text-zinc-900">{tenant.name}</h1>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded">Aberto</span>
-                      <div className="flex items-center text-[10px] text-zinc-400 gap-1">
-                        <span className="text-amber-500">★</span> 5.0 • 0 km
-                      </div>
-                    </div>
-                  </div>
-                </div>
+            <div className="flex-1 overflow-y-auto lg:p-12 relative custom-scrollbar pb-32 lg:pb-12 bg-[#0b0f14] lg:min-h-0">
 
-                <div className="bg-zinc-100/80 rounded-xl p-4 flex items-start gap-3 border border-zinc-200">
-                  <div className="w-5 h-5 rounded-full bg-zinc-400 flex items-center justify-center text-white shrink-0 mt-0.5 italic font-serif text-xs">i</div>
-                  <p className="text-[11px] text-zinc-600 font-medium leading-relaxed">
-                    Este restaurante está aceitando pedidos no momento, você já pode realizar suas escolhas.
-                  </p>
+              {/* Promotions Carousel / Fallback Banner — só na primeira categoria ou sem filtro */}
+              {!showBill && !selectedProduct && (!selectedCategoryId || selectedCategoryId === tenant.categories?.[0]?.id) && (
+                <div className="hidden lg:block w-full h-[280px] rounded-[2rem] overflow-hidden relative mb-8 shadow-2xl">
+                  <AnimatePresence mode="wait">
+                    {promotions.length > 0 ? (
+                      <motion.div
+                        key={promoIndex}
+                        initial={{ opacity: 0, x: 40 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -40 }}
+                        transition={{ duration: 0.5 }}
+                        className="absolute inset-0"
+                      >
+                        <img
+                          src={promotions[promoIndex].imageUrl || "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&q=80&w=1200"}
+                          className="w-full h-full object-cover"
+                          alt={promotions[promoIndex].title}
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
+                        <div className="absolute bottom-6 left-8 right-8 flex justify-between items-end">
+                          <div className="space-y-2">
+                            <div className="bg-amber-500 text-black px-3 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest w-fit">
+                              Promoção
+                            </div>
+                            <h2 className="text-3xl font-serif text-white tracking-tight">{promotions[promoIndex].title}</h2>
+                            {promotions[promoIndex].description && (
+                              <p className="text-white/60 max-w-md text-sm leading-relaxed line-clamp-1">{promotions[promoIndex].description}</p>
+                            )}
+                          </div>
+                          {promotions[promoIndex].product && (
+                            <div className="text-right">
+                              <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest mb-1">A partir de</p>
+                              <p className="text-3xl font-black text-white tracking-tighter">{fmt(promotions[promoIndex].product.price)}</p>
+                            </div>
+                          )}
+                        </div>
+                        {/* Dots */}
+                        {promotions.length > 1 && (
+                          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
+                            {promotions.map((_: any, i: number) => (
+                              <button
+                                key={i}
+                                onClick={() => setPromoIndex(i)}
+                                className={`w-2 h-2 rounded-full transition-all ${i === promoIndex ? 'bg-amber-500 w-6' : 'bg-white/30'}`}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </motion.div>
+                    ) : (
+                      <motion.div key="fallback" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0">
+                        <img
+                          src={tenant.categories?.[0]?.products?.[0]?.imageUrl || "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&q=80&w=1200"}
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
+                        <div className="absolute bottom-6 left-8 right-8 flex justify-between items-end">
+                          <div className="space-y-2">
+                            <div className="bg-amber-500 text-black px-3 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest w-fit">
+                              Destaque do Dia
+                            </div>
+                            <h2 className="text-3xl font-serif text-white tracking-tight">{tenant.categories?.[0]?.products?.[0]?.name}</h2>
+                            <p className="text-white/60 max-w-md text-sm line-clamp-1">{tenant.categories?.[0]?.products?.[0]?.description}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest mb-1">A partir de</p>
+                            <p className="text-3xl font-black text-white tracking-tighter">{fmt(tenant.categories?.[0]?.products?.[0]?.price || 0)}</p>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
-              </div>
+              )}
 
-              {/* Desktop Category Banner */}
-              {(!selectedCategoryId || selectedCategoryId === tenant.categories?.[0]?.id) && !showBill && !selectedProduct && (
-                <div className="hidden lg:block w-full h-[380px] rounded-[2.5rem] overflow-hidden relative mb-12 shadow-2xl">
-                  <img 
-                    src={tenant.categories?.[0]?.products?.[0]?.imageUrl || "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&q=80&w=1200"} 
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
-                  <div className="absolute bottom-12 left-12 right-12 flex justify-between items-end">
-                    <div className="space-y-3">
-                      <div className="bg-amber-500 text-black px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest w-fit">
-                        Destaque do Dia
+              {/* Mobile Promotions Carousel */}
+              {promotions.length > 0 && !showBill && !selectedProduct && (
+                <div className="lg:hidden relative w-full h-52 overflow-hidden mb-4">
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={promoIndex}
+                      initial={{ opacity: 0, x: 30 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -30 }}
+                      transition={{ duration: 0.4 }}
+                      className="absolute inset-0"
+                    >
+                      <img
+                        src={promotions[promoIndex].imageUrl || "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&q=80&w=800"}
+                        className="w-full h-full object-cover"
+                        alt={promotions[promoIndex].title}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+                      <div className="absolute bottom-4 left-5 right-5 flex justify-between items-end">
+                        <div className="space-y-1">
+                          <div className="bg-amber-500 text-black px-3 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest w-fit">Promoção</div>
+                          <h2 className="text-xl font-serif text-white tracking-tight">{promotions[promoIndex].title}</h2>
+                        </div>
+                        {promotions[promoIndex].product && (
+                          <p className="text-2xl font-black text-white">{fmt(promotions[promoIndex].product.price)}</p>
+                        )}
                       </div>
-                      <h2 className="text-5xl font-serif text-white tracking-tight">{tenant.categories?.[0]?.products?.[0]?.name}</h2>
-                      <p className="text-white/60 max-w-xl text-sm leading-relaxed">{tenant.categories?.[0]?.products?.[0]?.description}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-1">A partir de</p>
-                      <p className="text-4xl font-black text-white tracking-tighter">{fmt(tenant.categories?.[0]?.products?.[0]?.price || 0)}</p>
-                    </div>
-                  </div>
+                      {promotions.length > 1 && (
+                        <div className="absolute top-3 right-3 flex gap-1.5">
+                          {promotions.map((_: any, i: number) => (
+                            <button key={i} onClick={() => setPromoIndex(i)} className={`w-1.5 h-1.5 rounded-full transition-all ${i === promoIndex ? 'bg-amber-500 w-4' : 'bg-white/40'}`} />
+                          ))}
+                        </div>
+                      )}
+                    </motion.div>
+                  </AnimatePresence>
                 </div>
               )}
 
               {/* Categories & Products */}
-              <div className="px-6 py-8 space-y-12 max-w-md mx-auto lg:max-w-none lg:p-0">
-                {tenant.categories?.filter(cat => 
-                  (!selectedCategoryId || cat.id === selectedCategoryId || !isDesktop) && 
+              <div className="p-4 lg:p-0 space-y-8 lg:space-y-12">
+                {tenant.categories?.filter(cat =>
+                  (!selectedCategoryId || cat.id === selectedCategoryId || !isDesktop) &&
                   (!searchTerm || cat.products.some(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.description?.toLowerCase().includes(searchTerm.toLowerCase())))
                 ).map(cat => (
-                  <section key={cat.id} className={`space-y-6 ${selectedCategoryId && selectedCategoryId !== cat.id && !searchTerm ? 'lg:hidden' : ''} px-4 lg:px-0`}>
-                    <h2 className="text-sm font-black text-zinc-900 uppercase tracking-widest flex items-center gap-3 lg:text-[#C9A227] lg:text-sm lg:tracking-[0.2em]">
+                  <section key={cat.id} className={`space-y-4 lg:space-y-6 ${selectedCategoryId && selectedCategoryId !== cat.id && !searchTerm ? 'lg:hidden' : ''}`}>
+                    <h2 className="text-[11px] font-black text-amber-500 uppercase tracking-[0.2em] flex items-center gap-3">
                       {cat.name}
-                      <div className="h-px flex-1 bg-zinc-100 lg:hidden" />
-                      <div className="hidden lg:block h-px flex-1 bg-white/[0.06]" />
+                      <div className="h-px flex-1 bg-white/[0.06]" />
                     </h2>
-                    
-                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3 lg:gap-6">
-                      {cat.products.filter(p => 
-                        !searchTerm || 
-                        p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+
+                    {/* Mobile/Tablet: 2-column grid of cards */}
+                    <div className="grid grid-cols-2 gap-3 lg:hidden">
+                      {cat.products.filter(p =>
+                        !searchTerm ||
+                        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                         p.description?.toLowerCase().includes(searchTerm.toLowerCase())
                       ).map(p => (
-                        <div key={p.id}>
-                          {/* Mobile List Style (Horizontal) */}
-                          <button 
-                            onClick={() => setSelectedProduct(p)}
-                            className="w-full flex items-center gap-4 py-4 bg-white border-b border-zinc-100 lg:hidden text-left active:bg-zinc-50 transition-colors"
-                          >
-                            <div className="flex-1 space-y-1">
-                              <h3 className="text-sm font-bold text-zinc-900">{p.name}</h3>
-                              <p className="text-[11px] text-zinc-400 font-medium line-clamp-2 leading-relaxed">{p.description}</p>
-                              <p className="text-sm font-black text-zinc-900 mt-1">{fmt(p.price)}</p>
+                        <motion.button
+                          key={p.id}
+                          whileTap={{ scale: 0.97 }}
+                          onClick={() => setSelectedProduct(p)}
+                          className="group text-left bg-[#161d27] border border-white/[0.06] rounded-2xl overflow-hidden hover:border-amber-500/30 transition-all active:bg-[#1c2532]"
+                        >
+                          <div className="aspect-[4/3] overflow-hidden bg-white/5">
+                            <img
+                              src={p.imageUrl || "/placeholder.png"}
+                              className="w-full h-full object-cover group-active:scale-105 transition-transform duration-300"
+                            />
+                          </div>
+                          <div className="p-3 space-y-1">
+                            <h3 className="text-[13px] font-bold text-white leading-tight line-clamp-2">{p.name}</h3>
+                            {p.description && (
+                              <p className="text-[10px] text-white/40 line-clamp-1 leading-relaxed">{p.description}</p>
+                            )}
+                            <div className="flex items-center justify-between pt-1">
+                              <p className="text-sm font-black text-amber-400">{fmt(p.price)}</p>
+                              <div className="w-6 h-6 rounded-full bg-amber-500 flex items-center justify-center">
+                                <Plus className="w-3.5 h-3.5 text-black" />
+                              </div>
                             </div>
-                            <div className="w-20 h-20 rounded-xl overflow-hidden shrink-0 border border-zinc-50">
-                              <img src={p.imageUrl || "/placeholder.png"} className="w-full h-full object-cover" />
-                            </div>
-                          </button>
+                          </div>
+                        </motion.button>
+                      ))}
+                    </div>
 
-                          {/* Desktop Card Style (Premium Dark) */}
-                          <motion.div 
-                            whileHover={{ y: -3 }}
-                            transition={{ duration: 0.2 }}
-                            whileTap={{ scale: 0.98 }}
-                            onClick={() => setSelectedProduct(p)}
-                            className="hidden lg:flex group gap-6 p-6 rounded-[2.5rem] bg-[#161d27] border border-white/[0.06] hover:bg-[#1c2532] hover:border-[#C9A227]/30 transition-all cursor-pointer items-center"
-                          >
-                            <div className="flex-1 space-y-2">
-                              <h3 className="font-bold text-white group-hover:text-[#C9A227] transition-colors text-lg">{p.name}</h3>
-                              <p className="text-sm text-[#9ca3af] line-clamp-2 leading-relaxed">{p.description}</p>
-                              <p className="text-base font-black text-[#C9A227] pt-1">{fmt(p.price)}</p>
+                    {/* Desktop: cards */}
+                    <div className="hidden lg:grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5">
+                      {cat.products.filter(p =>
+                        !searchTerm ||
+                        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        p.description?.toLowerCase().includes(searchTerm.toLowerCase())
+                      ).map(p => (
+                        <motion.div
+                          key={p.id}
+                          whileHover={{ y: -4, scale: 1.01 }}
+                          whileTap={{ scale: 0.97 }}
+                          onClick={() => setSelectedProduct(p)}
+                          className="group flex flex-col rounded-3xl bg-[#161d27] border border-white/[0.06] hover:bg-[#1c2532] hover:border-[#C9A227]/30 transition-all cursor-pointer overflow-hidden"
+                        >
+                          <div className="aspect-[4/3] overflow-hidden bg-white/5 shrink-0">
+                            <img
+                              src={p.imageUrl || "/placeholder.png"}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                            />
+                          </div>
+                          <div className="flex-1 p-5 space-y-2 flex flex-col justify-between">
+                            <div>
+                              <h3 className="font-bold text-white group-hover:text-[#C9A227] transition-colors text-base leading-tight">{p.name}</h3>
+                              {p.description && (
+                                <p className="text-xs text-[#9ca3af] line-clamp-2 leading-relaxed mt-1">{p.description}</p>
+                              )}
                             </div>
-                            <div className="w-28 h-28 rounded-[1.5rem] overflow-hidden bg-white/5">
-                              <img src={p.imageUrl || "/placeholder.png"} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                            <div className="flex items-center justify-between pt-2">
+                              <p className="text-base font-black text-[#C9A227]">{fmt(p.price)}</p>
+                              <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 group-hover:bg-amber-500 group-hover:text-black transition-all">
+                                <Plus className="w-4 h-4" />
+                              </div>
                             </div>
-                          </motion.div>
-                        </div>
+                          </div>
+                        </motion.div>
                       ))}
                     </div>
                   </section>
@@ -521,29 +701,24 @@ export default function TableMenuView() {
               </div>
             </div>
 
-            {/* Mobile Bottom Navigation (As in Image) */}
-            <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-zinc-100 px-4 py-3 flex items-center justify-between z-40 pb-safe">
-              <button className="flex flex-col items-center gap-1 text-zinc-400">
-                <BookOpen className="w-5 h-5" />
-                <span className="text-[9px] font-bold">Cardápio</span>
-              </button>
-              <button className="flex flex-col items-center gap-1 text-red-500">
-                <ShoppingBag className="w-5 h-5" />
-                <span className="text-[9px] font-bold">Delivery</span>
-              </button>
-              <button className="flex flex-col items-center gap-1 text-zinc-400">
-                <History className="w-5 h-5" />
-                <span className="text-[9px] font-bold">Espera</span>
-              </button>
-              <button className="flex flex-col items-center gap-1 text-zinc-400">
-                <MapPin className="w-5 h-5" />
-                <span className="text-[9px] font-bold">Mesa</span>
-              </button>
-              <button className="flex flex-col items-center gap-1 text-zinc-400">
-                <MoreHorizontal className="w-5 h-5" />
-                <span className="text-[9px] font-bold">Mais</span>
-              </button>
-            </nav>
+            {/* Mobile Cart FAB */}
+            {cart.length > 0 && (
+              <div className="lg:hidden fixed bottom-6 left-4 right-4 z-40">
+                <motion.button
+                  initial={{ y: 20, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  onClick={handleOrder}
+                  disabled={isOrdering}
+                  className="w-full bg-amber-500 hover:bg-amber-400 text-black font-black py-4 px-6 rounded-2xl shadow-2xl shadow-amber-500/30 flex items-center justify-between active:scale-[0.98] transition-all disabled:opacity-70"
+                >
+                  <span className="bg-black/10 text-black text-xs font-black w-7 h-7 rounded-xl flex items-center justify-center">{cart.reduce((a, i) => a + i.quantity, 0)}</span>
+                  <span className="uppercase tracking-widest text-sm">
+                    {isOrdering ? "Enviando..." : "Enviar Pedido"}
+                  </span>
+                  <span className="font-black">{fmt(total)}</span>
+                </motion.button>
+              </div>
+            )}
 
             {/* ── QR CODE MODAL (Order by Phone) ────────────────────────────── */}
             <AnimatePresence>
@@ -583,6 +758,95 @@ export default function TableMenuView() {
                       </div>
                     </div>
                   </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* ── WAITER MODAL ──────────────────────────────────────────────── */}
+            <AnimatePresence>
+              {showWaiterModal && (
+                <motion.div
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-[120] bg-black/70 backdrop-blur-xl flex items-center justify-center p-6 lg:absolute lg:inset-0 lg:z-50"
+                >
+                  <motion.div
+                    initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.92, opacity: 0 }}
+                    className="bg-[#111827] border border-white/10 rounded-[2.5rem] p-8 max-w-sm w-full space-y-6 shadow-2xl relative"
+                  >
+                    <button
+                      onClick={() => setShowWaiterModal(false)}
+                      className="absolute top-6 right-6 w-9 h-9 rounded-full bg-white/5 flex items-center justify-center text-white/40 hover:text-white transition-all active:scale-90"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+
+                    {waiterSent ? (
+                      <div className="text-center space-y-4 py-4">
+                        <div className="w-16 h-16 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto">
+                          <CheckCircle2 className="w-8 h-8 text-amber-500" />
+                        </div>
+                        <h3 className="text-xl font-bold text-white">Garçom avisado!</h3>
+                        <p className="text-white/40 text-sm">Aguarde, já vamos até você.</p>
+                        <button
+                          onClick={() => setShowWaiterModal(false)}
+                          className="w-full bg-amber-500 hover:bg-amber-400 text-black font-black py-3 rounded-2xl transition-all active:scale-95 uppercase tracking-widest text-xs mt-4"
+                        >Fechar</button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="space-y-1">
+                          <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 mb-3">
+                            <Bell className="w-6 h-6" />
+                          </div>
+                          <h3 className="text-xl font-bold text-white">Chamar Garçom</h3>
+                          <p className="text-white/30 text-sm">Mesa {tableId} — {customer.name}</p>
+                        </div>
+
+                        <label className="flex items-center gap-3 cursor-pointer group">
+                          <div
+                            onClick={() => setWaiterRequestBill(v => !v)}
+                            className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${waiterRequestBill ? 'bg-amber-500 border-amber-500' : 'bg-white/5 border-white/20 group-hover:border-amber-500/50'}`}
+                          >
+                            {waiterRequestBill && <Check className="w-3.5 h-3.5 text-black" />}
+                          </div>
+                          <span className="text-white/80 text-sm font-medium">Solicitar a conta</span>
+                        </label>
+
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-white/30">Observação (opcional)</label>
+                          <textarea
+                            value={waiterNote}
+                            onChange={e => setWaiterNote(e.target.value)}
+                            placeholder="Ex: precisamos de mais guardanapos, trocar o pedido..."
+                            rows={3}
+                            className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white text-sm placeholder:text-white/20 focus:border-amber-500/50 focus:outline-none resize-none transition-all"
+                          />
+                        </div>
+
+                        <div className="flex gap-3 pt-2">
+                          <button
+                            onClick={() => setShowWaiterModal(false)}
+                            className="flex-1 bg-white/5 hover:bg-white/10 text-white/60 font-black py-3 rounded-2xl transition-all active:scale-95 uppercase tracking-widest text-xs"
+                          >Cancelar</button>
+                          <button
+                            onClick={() => {
+                              if (tenant) {
+                                socket.emit("request-waiter", {
+                                  tenantId: tenant.id,
+                                  tableId,
+                                  customerName: customer.name,
+                                  note: waiterNote,
+                                  requestBill: waiterRequestBill,
+                                });
+                                setWaiterSent(true);
+                              }
+                            }}
+                            className="flex-1 bg-amber-500 hover:bg-amber-400 text-black font-black py-3 rounded-2xl transition-all shadow-lg shadow-amber-500/20 active:scale-95 uppercase tracking-widest text-xs"
+                          >Chamar</button>
+                        </div>
+                      </>
+                    )}
+                  </motion.div>
                 </motion.div>
               )}
             </AnimatePresence>

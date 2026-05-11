@@ -2577,18 +2577,24 @@ export function TableManagement({
   );
 }
 
-export function KitchenKDSPanel({ 
-  orders, 
-  updateStatus 
-}: { 
-  orders: Order[]; 
-  updateStatus: (id: string, status: string) => void 
+export function KitchenKDSPanel({
+  orders,
+  updateStatus,
+  waiterCalls = [],
+  onDismissWaiterCall,
+}: {
+  orders: Order[];
+  updateStatus: (id: string, status: string) => void;
+  waiterCalls?: Array<{ tableId: string; customerName: string; note: string; requestBill: boolean; timestamp: number }>;
+  onDismissWaiterCall?: (ts: number) => void;
 }) {
   const [viewMode, setViewMode] = useState<"grid" | "consolidated">("grid");
+  const pendingOrders = orders.filter(o => o.status === "PENDING");
   const preparingOrders = orders.filter(o => o.status === "PREPARING");
+  const kitchenOrders = [...pendingOrders, ...preparingOrders];
 
-  // Calculate consolidated items
-  const consolidated = preparingOrders.reduce((acc: Record<string, { name: string; quantity: number }>, order) => {
+  // Calculate consolidated items (pending + preparing)
+  const consolidated = kitchenOrders.reduce((acc: Record<string, { name: string; quantity: number }>, order) => {
     order.items.forEach(item => {
       const key = item.productId;
       if (!acc[key]) acc[key] = { name: item.product?.name || "Produto", quantity: 0 };
@@ -2599,11 +2605,37 @@ export function KitchenKDSPanel({
 
   return (
     <div className="space-y-6">
+      {/* Waiter Call Alerts */}
+      {waiterCalls.length > 0 && (
+        <div className="space-y-2">
+          {waiterCalls.map(w => (
+            <div key={w.timestamp} className="flex items-center gap-3 bg-amber-50 border border-amber-300 rounded-2xl px-4 py-3">
+              <div className="w-9 h-9 rounded-full bg-amber-400 flex items-center justify-center shrink-0 animate-pulse">
+                <Bell className="w-4 h-4 text-black" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-black text-amber-800 uppercase tracking-widest">
+                  {w.requestBill ? "Pedir Conta" : "Chamada"} — Mesa {w.tableId}
+                </p>
+                <p className="text-sm font-bold text-amber-700 truncate">{w.customerName}</p>
+                {w.note && <p className="text-xs text-amber-600 italic truncate">{w.note}</p>}
+              </div>
+              <button
+                onClick={() => onDismissWaiterCall?.(w.timestamp)}
+                className="shrink-0 px-3 py-1.5 bg-amber-400 hover:bg-amber-500 text-black text-[10px] font-black uppercase rounded-xl transition-all"
+              >
+                Ciente
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <SectionTitle 
-          title="Cozinha (KDS)" 
-          description="Gestão de produção em tempo real" 
-          icon={Utensils} 
+        <SectionTitle
+          title="Cozinha (KDS)"
+          description="Gestão de produção em tempo real"
+          icon={Utensils}
         />
         <div className="flex bg-slate-100 p-1 rounded-xl">
           <button 
@@ -2628,35 +2660,84 @@ export function KitchenKDSPanel({
       </div>
 
       {viewMode === "grid" ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {preparingOrders.map(order => (
-            <KDSTicket key={order.id} order={order} onComplete={() => updateStatus(order.id, 'SHIPPED')} />
-          ))}
-          {preparingOrders.length === 0 && (
-            <div className="col-span-full py-20 text-center space-y-4">
-              <div className="w-20 h-20 rounded-full bg-slate-50 flex items-center justify-center mx-auto text-slate-200">
-                <Clock className="w-10 h-10" />
+        <div className="space-y-6">
+          {/* Pending (new orders) */}
+          {pendingOrders.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-yellow-400 animate-pulse" />
+                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-yellow-600">
+                  Novos Pedidos ({pendingOrders.length})
+                </p>
               </div>
-              <p className="text-sm font-black text-slate-400 uppercase tracking-widest">Nenhum pedido em preparo no momento</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {pendingOrders.map(order => (
+                  <KDSTicket
+                    key={order.id}
+                    order={order}
+                    onComplete={() => updateStatus(order.id, 'PREPARING')}
+                    actionLabel="Iniciar Preparo"
+                    highlight="yellow"
+                  />
+                ))}
+              </div>
             </div>
           )}
+
+          {/* Preparing */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-orange-400 animate-pulse" />
+              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-orange-600">
+                Em Preparo ({preparingOrders.length})
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {preparingOrders.map(order => (
+                <KDSTicket
+                  key={order.id}
+                  order={order}
+                  onComplete={() => updateStatus(order.id, 'SHIPPED')}
+                  actionLabel="Concluir Pedido"
+                  highlight="orange"
+                />
+              ))}
+              {preparingOrders.length === 0 && pendingOrders.length === 0 && (
+                <div className="col-span-full py-20 text-center space-y-4">
+                  <div className="w-20 h-20 rounded-full bg-slate-50 flex items-center justify-center mx-auto text-slate-200">
+                    <Clock className="w-10 h-10" />
+                  </div>
+                  <p className="text-sm font-black text-slate-400 uppercase tracking-widest">Nenhum pedido na cozinha no momento</p>
+                </div>
+              )}
+              {preparingOrders.length === 0 && pendingOrders.length > 0 && (
+                <div className="col-span-full py-10 text-center">
+                  <p className="text-sm text-slate-400">Nenhum pedido em preparo</p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       ) : (
         <ContentCard>
           <div className="space-y-4">
             <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 border-b border-slate-100 pb-4">
-              Total de Itens para Produção
+              Total de Itens para Produção (Novos + Em Preparo)
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {Object.entries(consolidated).map(([id, item]) => (
-                <div key={id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-200">
-                  <span className="text-sm font-black text-slate-800">{item.name}</span>
-                  <span className="text-lg font-black text-[#C9A227] bg-white w-10 h-10 rounded-xl flex items-center justify-center shadow-sm border border-[#C9A227]/10">
-                    {item.quantity}
-                  </span>
-                </div>
-              ))}
-            </div>
+            {Object.keys(consolidated).length === 0 ? (
+              <p className="text-sm text-slate-400 text-center py-8">Nenhum item na fila</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {Object.entries(consolidated).map(([id, item]) => (
+                  <div key={id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                    <span className="text-sm font-black text-slate-800">{item.name}</span>
+                    <span className="text-lg font-black text-[#C9A227] bg-white w-10 h-10 rounded-xl flex items-center justify-center shadow-sm border border-[#C9A227]/10">
+                      {item.quantity}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </ContentCard>
       )}
@@ -2664,7 +2745,12 @@ export function KitchenKDSPanel({
   );
 }
 
-function KDSTicket({ order, onComplete }: { order: Order; onComplete: () => void }) {
+function KDSTicket({ order, onComplete, actionLabel = "Concluir Pedido", highlight = "orange" }: {
+  order: Order;
+  onComplete: () => void;
+  actionLabel?: string;
+  highlight?: "yellow" | "orange";
+}) {
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
@@ -2677,13 +2763,14 @@ function KDSTicket({ order, onComplete }: { order: Order; onComplete: () => void
   }, [order.createdAt]);
 
   const getUrgencyColor = () => {
+    if (highlight === "yellow") return "border-yellow-300 bg-yellow-50";
     if (elapsed > 20) return "border-red-500 bg-red-50/30";
     if (elapsed > 10) return "border-amber-500 bg-amber-50/30";
     return "border-slate-200 bg-white";
   };
 
   return (
-    <motion.div 
+    <motion.div
       layout
       className={`border-2 rounded-3xl p-5 space-y-4 flex flex-col shadow-sm transition-colors ${getUrgencyColor()}`}
     >
@@ -2726,12 +2813,12 @@ function KDSTicket({ order, onComplete }: { order: Order; onComplete: () => void
         ))}
       </div>
 
-      <Button 
+      <Button
         onClick={onComplete}
-        variant="primary" 
-        className="w-full py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-slate-900/10 active:scale-95"
+        variant="primary"
+        className={`w-full py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl active:scale-95 ${highlight === "yellow" ? "!bg-yellow-400 !text-black hover:!bg-yellow-300" : ""}`}
       >
-        Concluir Pedido
+        {actionLabel}
       </Button>
     </motion.div>
   );

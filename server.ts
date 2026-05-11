@@ -63,6 +63,11 @@ io.on("connection", (socket) => {
     io.to(`tenant-${tenantId}`).emit("checkout-requested", { tableId, customerName });
   });
 
+  socket.on("request-waiter", ({ tenantId, tableId, customerName, note, requestBill }) => {
+    console.log(`Table ${tableId} called waiter (bill=${requestBill})`);
+    io.to(`tenant-${tenantId}`).emit("waiter-called", { tableId, customerName, note, requestBill });
+  });
+
   socket.on("disconnect", () => {
     console.log("Client disconnected:", socket.id);
   });
@@ -2030,6 +2035,103 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
     res.status(500).json({ error: "Falha ao criar pedido PDV." });
   }
 });
+
+// ── PROMOTIONS ──────────────────────────────────────────────────────────────
+
+app.get("/api/tenants/:slug/promotions", async (req, res) => {
+  const { slug } = req.params;
+  try {
+    const tenant = await prisma.tenant.findUnique({ where: { slug } });
+    if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+    const now = new Date();
+    const promotions = await prisma.promotion.findMany({
+      where: {
+        tenantId: tenant.id,
+        active: true,
+        OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+        AND: [{ OR: [{ endsAt: null }, { endsAt: { gte: now } }] }],
+      },
+      orderBy: { sortOrder: "asc" },
+      include: { product: { select: { id: true, name: true, price: true, imageUrl: true } } },
+    });
+    res.json(promotions);
+  } catch (e) {
+    res.status(500).json({ error: "Erro ao buscar promoções" });
+  }
+});
+
+app.get("/api/admin/:tenantId/promotions", requireAuth, async (req, res) => {
+  const { tenantId } = req.params;
+  try {
+    const promotions = await prisma.promotion.findMany({
+      where: { tenantId },
+      orderBy: { sortOrder: "asc" },
+      include: { product: { select: { id: true, name: true, price: true, imageUrl: true } } },
+    });
+    res.json(promotions);
+  } catch (e) {
+    res.status(500).json({ error: "Erro ao buscar promoções" });
+  }
+});
+
+app.post("/api/admin/:tenantId/promotions", requireAuth, async (req, res) => {
+  const { tenantId } = req.params;
+  const { title, description, imageUrl, linkProductId, active, startsAt, endsAt, sortOrder } = req.body;
+  try {
+    const promo = await prisma.promotion.create({
+      data: {
+        tenantId,
+        title,
+        description: description || null,
+        imageUrl: imageUrl || null,
+        linkProductId: linkProductId || null,
+        active: active !== false,
+        startsAt: startsAt ? new Date(startsAt) : null,
+        endsAt: endsAt ? new Date(endsAt) : null,
+        sortOrder: sortOrder || 0,
+      },
+    });
+    res.json(promo);
+  } catch (e) {
+    res.status(500).json({ error: "Erro ao criar promoção" });
+  }
+});
+
+app.patch("/api/admin/promotions/:id", requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const { title, description, imageUrl, linkProductId, active, startsAt, endsAt, sortOrder } = req.body;
+  try {
+    const promo = await prisma.promotion.update({
+      where: { id },
+      data: {
+        ...(title !== undefined && { title }),
+        ...(description !== undefined && { description }),
+        ...(imageUrl !== undefined && { imageUrl }),
+        ...(linkProductId !== undefined && { linkProductId: linkProductId || null }),
+        ...(active !== undefined && { active }),
+        ...(startsAt !== undefined && { startsAt: startsAt ? new Date(startsAt) : null }),
+        ...(endsAt !== undefined && { endsAt: endsAt ? new Date(endsAt) : null }),
+        ...(sortOrder !== undefined && { sortOrder }),
+      },
+    });
+    res.json(promo);
+  } catch (e) {
+    res.status(500).json({ error: "Erro ao atualizar promoção" });
+  }
+});
+
+app.delete("/api/admin/promotions/:id", requireAuth, async (req, res) => {
+  const { id } = req.params;
+  try {
+    await prisma.promotion.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: "Erro ao deletar promoção" });
+  }
+});
+
+// Socket event for waiter call with note and account request
+// (handled client-side via socket.emit("request-waiter", {...}))
 
 if (process.env.NODE_ENV !== "production") {
   const vite = await createViteServer({

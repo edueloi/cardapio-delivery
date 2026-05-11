@@ -32,6 +32,7 @@ import CashFlowPanel from "./CashFlowPanel";
 import CustomerCRMPanel from "./CustomerCRMPanel";
 import ReportsPanel from "./ReportsPanel";
 import DownloadsPanel from "./DownloadsPanel";
+import PromotionsPanel from "./PromotionsPanel";
 import { WhatsAppManagementPanel, WhatsAppOverviewCard } from "./WhatsAppPanel";
 import { type DashboardOrderTabId, type DashboardTabId } from "./types";
 
@@ -49,6 +50,8 @@ interface DashboardContentProps {
   activeOrderId?: string;
   checkoutRequests?: Array<{ tableId: string; customerName: string; timestamp: number }>;
   onClearTable?: (tableId: string) => void;
+  waiterCalls?: Array<{ tableId: string; customerName: string; note: string; requestBill: boolean; timestamp: number }>;
+  onDismissWaiterCall?: (ts: number) => void;
 }
 
 export default function DashboardContent({
@@ -62,9 +65,10 @@ export default function DashboardContent({
   filteredOrders,
   refreshTenant,
   updateStatus,
-  activeOrderId,
   checkoutRequests,
   onClearTable,
+  waiterCalls,
+  onDismissWaiterCall,
 }: DashboardContentProps) {
   const pendingOrders = orders.filter((order) => order.status === "PENDING").length;
   const preparingOrders = orders.filter((order) => order.status === "PREPARING").length;
@@ -324,8 +328,11 @@ export default function DashboardContent({
       {activeTab === "loyalty" && (
         <LoyaltyPanel tenant={tenant} onUpdated={refreshTenant} />
       )}
+      {activeTab === "promotions" && (
+        <PromotionsPanel tenant={tenant} />
+      )}
       {activeTab === "kds" && (
-        <KitchenKDSPanel orders={orders} updateStatus={updateStatus} />
+        <KitchenKDSPanel orders={orders} updateStatus={updateStatus} waiterCalls={waiterCalls} onDismissWaiterCall={onDismissWaiterCall} />
       )}
     </>
   );

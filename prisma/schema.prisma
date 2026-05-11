@@ -33,6 +33,7 @@ model Tenant {
   wppInstance WppInstance?
   wppBotConfig WppBotConfig?
   customers   Customer[]
+  promotions  Promotion[]
 
   @@map("tenants")
 }
@@ -265,6 +266,7 @@ model Product {
   inventoryItem InventoryItem? @relation(fields: [inventoryItemId], references: [id])
   variants  ProductVariant[]
   items     OrderItem[]
+  promotions Promotion[]
 
   @@map("products")
 }
@@ -322,6 +324,26 @@ model OrderItem {
   product Product @relation(fields: [productId], references: [id])
 
   @@map("order_items")
+}
+
+model Promotion {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  title       String
+  description String?  @db.Text
+  imageUrl    String?  @map("image_url")
+  linkProductId String? @map("link_product_id")
+  active      Boolean  @default(true)
+  sortOrder   Int      @default(0) @map("sort_order")
+  startsAt    DateTime? @map("starts_at")
+  endsAt      DateTime? @map("ends_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [linkProductId], references: [id], onDelete: SetNull)
+
+  @@map("promotions")
 }
 
 model Feature {
