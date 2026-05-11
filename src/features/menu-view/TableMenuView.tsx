@@ -500,76 +500,50 @@ export default function TableMenuView() {
             <div className="flex-1 overflow-y-auto lg:p-12 relative custom-scrollbar pb-32 lg:pb-12 bg-[#0b0f14] lg:min-h-0">
 
               {/* Promotions Carousel / Fallback Banner — só na primeira categoria ou sem filtro */}
-              {!showBill && !selectedProduct && (!selectedCategoryId || selectedCategoryId === tenant.categories?.[0]?.id) && (
+              {promotions.length > 0 && !showBill && !selectedProduct && (!selectedCategoryId || selectedCategoryId === tenant.categories?.[0]?.id) && (
                 <div className="hidden lg:block w-full h-[280px] rounded-[2rem] overflow-hidden relative mb-8 shadow-2xl">
                   <AnimatePresence mode="wait">
-                    {promotions.length > 0 ? (
-                      <motion.div
-                        key={promoIndex}
-                        initial={{ opacity: 0, x: 40 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -40 }}
-                        transition={{ duration: 0.5 }}
-                        className="absolute inset-0"
-                      >
-                        <img
-                          src={promotions[promoIndex].imageUrl || "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&q=80&w=1200"}
-                          className="w-full h-full object-cover"
-                          alt={promotions[promoIndex].title}
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
-                        <div className="absolute bottom-6 left-8 right-8 flex justify-between items-end">
-                          <div className="space-y-2">
-                            <div className="bg-amber-500 text-black px-3 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest w-fit">
-                              Promoção
-                            </div>
-                            <h2 className="text-3xl font-serif text-white tracking-tight">{promotions[promoIndex].title}</h2>
-                            {promotions[promoIndex].description && (
-                              <p className="text-white/60 max-w-md text-sm leading-relaxed line-clamp-1">{promotions[promoIndex].description}</p>
-                            )}
+                    <motion.div
+                      key={promoIndex}
+                      initial={{ opacity: 0, x: 40 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -40 }}
+                      transition={{ duration: 0.5 }}
+                      className="absolute inset-0"
+                    >
+                      {promotions[promoIndex].imageUrl ? (
+                        <img src={promotions[promoIndex].imageUrl} className="w-full h-full object-cover" alt={promotions[promoIndex].title} />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-amber-900/40 to-zinc-900" />
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
+                      <div className="absolute bottom-6 left-8 right-8 flex justify-between items-end">
+                        <div className="space-y-2">
+                          <div className="bg-amber-500 text-black px-3 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest w-fit">
+                            Promoção
                           </div>
-                          {promotions[promoIndex].product && (
-                            <div className="text-right">
-                              <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest mb-1">A partir de</p>
-                              <p className="text-3xl font-black text-white tracking-tighter">{fmt(promotions[promoIndex].product.price)}</p>
-                            </div>
+                          <h2 className="text-3xl font-serif text-white tracking-tight">{promotions[promoIndex].title}</h2>
+                          {promotions[promoIndex].description && (
+                            <p className="text-white/60 max-w-md text-sm leading-relaxed line-clamp-1">{promotions[promoIndex].description}</p>
                           )}
                         </div>
-                        {/* Dots */}
-                        {promotions.length > 1 && (
-                          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
-                            {promotions.map((_: any, i: number) => (
-                              <button
-                                key={i}
-                                onClick={() => setPromoIndex(i)}
-                                className={`w-2 h-2 rounded-full transition-all ${i === promoIndex ? 'bg-amber-500 w-6' : 'bg-white/30'}`}
-                              />
-                            ))}
-                          </div>
-                        )}
-                      </motion.div>
-                    ) : (
-                      <motion.div key="fallback" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0">
-                        <img
-                          src={tenant.categories?.[0]?.products?.[0]?.imageUrl || "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&q=80&w=1200"}
-                          className="w-full h-full object-cover"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
-                        <div className="absolute bottom-6 left-8 right-8 flex justify-between items-end">
-                          <div className="space-y-2">
-                            <div className="bg-amber-500 text-black px-3 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest w-fit">
-                              Destaque do Dia
-                            </div>
-                            <h2 className="text-3xl font-serif text-white tracking-tight">{tenant.categories?.[0]?.products?.[0]?.name}</h2>
-                            <p className="text-white/60 max-w-md text-sm line-clamp-1">{tenant.categories?.[0]?.products?.[0]?.description}</p>
-                          </div>
+                        {promotions[promoIndex].product && (
                           <div className="text-right">
                             <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest mb-1">A partir de</p>
-                            <p className="text-3xl font-black text-white tracking-tighter">{fmt(tenant.categories?.[0]?.products?.[0]?.price || 0)}</p>
+                            <p className="text-3xl font-black text-white tracking-tighter">{fmt(promotions[promoIndex].product.price)}</p>
                           </div>
+                        )}
+                      </div>
+                      {promotions.length > 1 && (
+                        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
+                          {promotions.map((_: any, i: number) => (
+                            <button key={i} onClick={() => setPromoIndex(i)}
+                              className={`w-2 h-2 rounded-full transition-all ${i === promoIndex ? 'bg-amber-500 w-6' : 'bg-white/30'}`}
+                            />
+                          ))}
                         </div>
-                      </motion.div>
-                    )}
+                      )}
+                    </motion.div>
                   </AnimatePresence>
                 </div>
               )}
@@ -586,11 +560,11 @@ export default function TableMenuView() {
                       transition={{ duration: 0.4 }}
                       className="absolute inset-0"
                     >
-                      <img
-                        src={promotions[promoIndex].imageUrl || "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&q=80&w=800"}
-                        className="w-full h-full object-cover"
-                        alt={promotions[promoIndex].title}
-                      />
+                      {promotions[promoIndex].imageUrl ? (
+                        <img src={promotions[promoIndex].imageUrl} className="w-full h-full object-cover" alt={promotions[promoIndex].title} />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-amber-900/40 to-zinc-900" />
+                      )}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
                       <div className="absolute bottom-4 left-5 right-5 flex justify-between items-end">
                         <div className="space-y-1">
