@@ -49,7 +49,7 @@ export default function PromotionsPanel({ tenant }: Props) {
     setLoading(true);
     try {
       const data = await apiFetch(`/api/admin/${tenant.id}/promotions`).then(r => r.json());
-      setPromotions(data);
+      setPromotions(Array.isArray(data) ? data : []);
     } finally {
       setLoading(false);
     }

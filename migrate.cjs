@@ -51,6 +51,27 @@ const migrations = [
     check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'payment_detail'",
     run: "ALTER TABLE orders ADD COLUMN payment_detail TEXT NULL",
   },
+  {
+    name: 'create_promotions_table',
+    check: "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'promotions'",
+    run: `CREATE TABLE promotions (
+      id VARCHAR(191) NOT NULL,
+      tenant_id VARCHAR(191) NOT NULL,
+      title VARCHAR(191) NOT NULL,
+      description TEXT NULL,
+      image_url VARCHAR(191) NULL,
+      link_product_id VARCHAR(191) NULL,
+      active TINYINT(1) NOT NULL DEFAULT 1,
+      sort_order INT NOT NULL DEFAULT 0,
+      starts_at DATETIME(3) NULL,
+      ends_at DATETIME(3) NULL,
+      created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (id),
+      INDEX promotions_tenant_id_idx (tenant_id),
+      CONSTRAINT promotions_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE ON UPDATE CASCADE
+    )`,
+  },
 ];
 
 async function run() {
