@@ -420,49 +420,83 @@ export default function PDVPanel({
         )}
 
         {/* Tables Tab */}
-        {activeTab === "tables" && (
-          <div className="flex-1 overflow-y-auto p-6 custom-scrollbar bg-slate-50">
-            {checkoutRequests.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center space-y-4 opacity-30">
-                <div className="w-20 h-20 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center">
-                  <Receipt className="w-8 h-8 text-slate-400" />
+        {activeTab === "tables" && (() => {
+          // Build active tables from orders (PENDING, PREPARING, SHIPPED = still open)
+          const activeTableMap = new Map<string, { tableId: string; customerName: string; total: number; orderCount: number; lastAt: string; wantsCheckout: boolean }>();
+          orders.forEach((o) => {
+            if (!o.tableId || o.orderType !== "DINE_IN") return;
+            if (o.status === "DELIVERED" || o.status === "CANCELLED") return;
+            const existing = activeTableMap.get(o.tableId);
+            if (existing) {
+              existing.total += o.total;
+              existing.orderCount += 1;
+              if (o.createdAt > existing.lastAt) existing.lastAt = o.createdAt;
+            } else {
+              activeTableMap.set(o.tableId, {
+                tableId: o.tableId,
+                customerName: o.customerName,
+                total: o.total,
+                orderCount: 1,
+                lastAt: o.createdAt,
+                wantsCheckout: checkoutRequests.some(r => r.tableId === o.tableId),
+              });
+            }
+          });
+          // Mark checkout requests even if no order yet in state
+          checkoutRequests.forEach((r) => {
+            if (!activeTableMap.has(r.tableId)) {
+              activeTableMap.set(r.tableId, { tableId: r.tableId, customerName: r.customerName, total: 0, orderCount: 0, lastAt: new Date(r.timestamp).toISOString(), wantsCheckout: true });
+            } else {
+              activeTableMap.get(r.tableId)!.wantsCheckout = true;
+            }
+          });
+          const activeTables = Array.from(activeTableMap.values()).sort((a, b) => Number(a.tableId) - Number(b.tableId));
+
+          return (
+            <div className="flex-1 overflow-y-auto p-6 custom-scrollbar bg-slate-50">
+              {activeTables.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center space-y-4 opacity-30">
+                  <div className="w-20 h-20 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center">
+                    <Utensils className="w-8 h-8 text-slate-400" />
+                  </div>
+                  <p className="text-sm font-black uppercase tracking-widest text-slate-500">
+                    Nenhuma mesa com pedido ativo
+                  </p>
                 </div>
-                <p className="text-sm font-black uppercase tracking-widest text-slate-500">
-                  Nenhuma mesa aguardando fechamento
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                {checkoutRequests.map((req) => (
-                  <button
-                    key={req.timestamp}
-                    onClick={() => handleLoadTable(req.tableId)}
-                    className="bg-white p-6 rounded-3xl border-2 border-slate-100 hover:border-[#C9A227] hover:shadow-xl transition-all text-left space-y-4 group"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="w-12 h-12 rounded-2xl bg-red-50 text-red-500 flex items-center justify-center group-hover:bg-[#C9A227] group-hover:text-white transition-colors">
-                        <Utensils className="w-6 h-6" />
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {activeTables.map((tbl) => (
+                    <button
+                      key={tbl.tableId}
+                      onClick={() => handleLoadTable(tbl.tableId)}
+                      className={`bg-white p-6 rounded-3xl border-2 hover:shadow-xl transition-all text-left space-y-4 group ${tbl.wantsCheckout ? 'border-red-300 hover:border-red-500' : 'border-slate-100 hover:border-[#C9A227]'}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${tbl.wantsCheckout ? 'bg-red-50 text-red-500 group-hover:bg-red-500 group-hover:text-white' : 'bg-amber-50 text-amber-500 group-hover:bg-[#C9A227] group-hover:text-white'}`}>
+                          <Utensils className="w-6 h-6" />
+                        </div>
+                        {tbl.wantsCheckout && (
+                          <span className="text-[9px] font-black uppercase tracking-widest text-red-500 bg-red-50 px-2 py-1 rounded-full">Pedir Conta</span>
+                        )}
                       </div>
-                      <span className="text-[10px] font-black uppercase text-slate-400">
-                        {new Date(req.timestamp).toLocaleTimeString("pt-BR")}
-                      </span>
-                    </div>
-                    <div>
-                      <h4 className="text-2xl font-black text-slate-800">Mesa {req.tableId}</h4>
-                      <p className="text-xs font-bold text-slate-400">{req.customerName}</p>
-                    </div>
-                    <div className="pt-4 border-t border-slate-50 flex items-center justify-between">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-[#C9A227]">
-                        Ver Itens
-                      </span>
-                      <ChevronRight className="w-4 h-4 text-[#C9A227]" />
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+                      <div>
+                        <h4 className="text-2xl font-black text-slate-800">Mesa {tbl.tableId}</h4>
+                        <p className="text-xs font-bold text-slate-400">{tbl.customerName}</p>
+                      </div>
+                      <div className="pt-4 border-t border-slate-50 flex items-center justify-between">
+                        <span className="text-sm font-black text-slate-700">{fmt(tbl.total)}</span>
+                        <div className="flex items-center gap-1 text-[#C9A227]">
+                          <span className="text-[10px] font-black uppercase tracking-widest">Abrir</span>
+                          <ChevronRight className="w-4 h-4" />
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Comandas Tab */}
         {activeTab === "comandas" && (

@@ -289,12 +289,11 @@ export default function DashboardPage() {
               </div>
               <button
                 onClick={() => {
-                  navigateToTab("live-orders");
-                  setCheckoutRequests(prev => prev.filter(r => r.timestamp !== req.timestamp));
+                  navigateToTab("pos");
                 }}
                 className="w-full bg-white text-red-600 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-50 transition-colors"
               >
-                Ver Detalhes
+                Abrir no PDV
               </button>
             </motion.div>
           ))}
