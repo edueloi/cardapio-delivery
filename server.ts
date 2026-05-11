@@ -1083,7 +1083,7 @@ app.delete("/api/categories/:id", requireAuth, async (req, res) => {
 });
 
 app.post("/api/products", requireAuth, async (req, res) => {
-  const { name, description, price, imageUrl, categoryId, tenantId, variants, inventoryItemId, pdvOnly } = req.body;
+  const { name, description, price, imageUrl, categoryId, tenantId, variants, inventoryItemId, pdvOnly, extras } = req.body;
   const tenant = await requireTenantById(req, res, tenantId);
   if (!tenant) return;
 
@@ -1099,6 +1099,7 @@ app.post("/api/products", requireAuth, async (req, res) => {
         available: true,
         pdvOnly: Boolean(pdvOnly),
         inventoryItemId: inventoryItemId || null,
+        extras: extras ? (typeof extras === 'string' ? extras : JSON.stringify(extras)) : null,
         variants: Array.isArray(variants)
           ? {
               create: variants.map((variant: any) => ({
@@ -1123,7 +1124,7 @@ app.patch("/api/products/:id", requireAuth, async (req, res) => {
   const scoped = await requireTenantFromProduct(req, res, req.params.id);
   if (!scoped) return;
 
-  const { name, description, price, imageUrl, variants, inventoryItemId, available, autoDisableWhenOutOfStock, pdvOnly } = req.body;
+  const { name, description, price, imageUrl, variants, inventoryItemId, available, autoDisableWhenOutOfStock, pdvOnly, extras } = req.body;
 
   try {
     const product = await prisma.$transaction(async (tx) => {
@@ -1137,6 +1138,7 @@ app.patch("/api/products/:id", requireAuth, async (req, res) => {
           price: parseFloat(price),
           imageUrl,
           inventoryItemId: inventoryItemId || null,
+          extras: extras !== undefined ? (typeof extras === 'string' ? extras : JSON.stringify(extras)) : undefined,
           ...(available !== undefined && { available: Boolean(available) }),
           ...(autoDisableWhenOutOfStock !== undefined && { autoDisableWhenOutOfStock: Boolean(autoDisableWhenOutOfStock) }),
           ...(pdvOnly !== undefined && { pdvOnly: Boolean(pdvOnly) }),

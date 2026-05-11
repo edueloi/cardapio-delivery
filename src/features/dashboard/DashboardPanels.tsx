@@ -1126,8 +1126,10 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
   const [prodForm, setProdForm] = useState({
     name: "", description: "", price: "", imageUrl: "", inventoryItemId: "",
     available: true, pdvOnly: false, autoDisableWhenOutOfStock: false,
-    variants: [] as { name: string, price: string, description: string, inventoryItemId: string }[]
+    variants: [] as { name: string, price: string, description: string, inventoryItemId: string }[],
+    extras: [] as { id: string, label: string, price: string }[]
   });
+  const [extraInput, setExtraInput] = useState({ label: "", price: "" });
 
   useEffect(() => {
     if (tenant) {
@@ -1178,20 +1180,28 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
 
   const openNewProduct = (categoryId: string) => {
     setEditingProduct(null);
-    setProdForm({ name: "", description: "", price: "", imageUrl: "", inventoryItemId: "", available: true, pdvOnly: false, autoDisableWhenOutOfStock: false, variants: [] });
+    setProdForm({ name: "", description: "", price: "", imageUrl: "", inventoryItemId: "", available: true, pdvOnly: false, autoDisableWhenOutOfStock: false, variants: [], extras: [] });
+    setExtraInput({ label: "", price: "" });
     setProdModal({ open: true, categoryId });
   };
 
   const openEditProduct = (prod: any) => {
     setEditingProduct(prod);
+    let parsedExtras: { id: string, label: string, price: string }[] = [];
+    try {
+      const raw = prod.extras ? JSON.parse(prod.extras) : [];
+      parsedExtras = raw.map((e: any) => ({ id: e.id, label: e.label, price: String(e.price ?? 0) }));
+    } catch {}
     setProdForm({
       name: prod.name, description: prod.description || "", price: String(prod.price),
       imageUrl: prod.imageUrl || "", inventoryItemId: prod.inventoryItemId || "",
       available: prod.available !== false,
       pdvOnly: prod.pdvOnly || false,
       autoDisableWhenOutOfStock: prod.autoDisableWhenOutOfStock || false,
-      variants: prod.variants?.map((v: any) => ({ name: v.name, price: String(v.price), description: v.description || "", inventoryItemId: v.inventoryItemId || "" })) || []
+      variants: prod.variants?.map((v: any) => ({ name: v.name, price: String(v.price), description: v.description || "", inventoryItemId: v.inventoryItemId || "" })) || [],
+      extras: parsedExtras
     });
+    setExtraInput({ label: "", price: "" });
     setProdModal({ open: true, categoryId: prod.categoryId });
   };
 
@@ -1205,7 +1215,12 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
     const res = await apiFetch(url, {
       method: editingProduct ? 'PATCH' : 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...prodForm, categoryId: prodModal.categoryId, tenantId: tenant?.id })
+      body: JSON.stringify({
+        ...prodForm,
+        extras: JSON.stringify(prodForm.extras.map(e => ({ id: e.id, label: e.label, price: parseFloat(e.price) || 0 }))),
+        categoryId: prodModal.categoryId,
+        tenantId: tenant?.id
+      })
     });
     const saved = await res.json();
     if (editingProduct) {
@@ -1527,6 +1542,53 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
             >
               <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition duration-200 ${prodForm.pdvOnly ? 'translate-x-5' : 'translate-x-0'}`} />
             </button>
+          </div>
+
+          {/* Adicionais / Extras */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">Adicionais / Observações</span>
+            </div>
+            <p className="text-xs text-slate-400 mb-3">Ex: Gelo, Limão, Sem Cebola, Molho extra. O cliente seleciona antes de adicionar ao carrinho.</p>
+            <div className="flex gap-2 mb-3">
+              <input
+                placeholder="Nome (ex: Gelo)"
+                value={extraInput.label}
+                onChange={e => setExtraInput(prev => ({ ...prev, label: e.target.value }))}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && extraInput.label.trim()) {
+                    e.preventDefault();
+                    setProdForm(prev => ({ ...prev, extras: [...prev.extras, { id: crypto.randomUUID(), label: extraInput.label.trim(), price: extraInput.price }] }));
+                    setExtraInput({ label: "", price: "" });
+                  }
+                }}
+                className="flex-1 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 min-w-0"
+              />
+              <input
+                placeholder="R$ (0 = grátis)"
+                value={extraInput.price}
+                onChange={e => setExtraInput(prev => ({ ...prev, price: e.target.value }))}
+                className="w-28 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400"
+              />
+              <button
+                onClick={() => {
+                  if (!extraInput.label.trim()) return;
+                  setProdForm(prev => ({ ...prev, extras: [...prev.extras, { id: crypto.randomUUID(), label: extraInput.label.trim(), price: extraInput.price }] }));
+                  setExtraInput({ label: "", price: "" });
+                }}
+                className="px-3 py-2 bg-amber-500 text-white rounded-xl text-sm font-black hover:bg-amber-600"
+              >+</button>
+            </div>
+            {prodForm.extras.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {prodForm.extras.map((ex) => (
+                  <span key={ex.id} className="inline-flex items-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold px-3 py-1.5 rounded-full">
+                    {ex.label}{parseFloat(ex.price) > 0 ? ` +R$${parseFloat(ex.price).toFixed(2)}` : ' (grátis)'}
+                    <button onClick={() => setProdForm(prev => ({ ...prev, extras: prev.extras.filter(e => e.id !== ex.id) }))} className="hover:text-red-500 ml-0.5">×</button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Variantes */}

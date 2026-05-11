@@ -29,6 +29,7 @@ export default function TableMenuView() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [qty, setQty] = useState(1);
   const [notes, setNotes] = useState("");
+  const [selectedExtras, setSelectedExtras] = useState<{ id: string, label: string, price: number }[]>([]);
   const [isOrdering, setIsOrdering] = useState(false);
 
   const [orders, setOrders] = useState<any[]>([]);
@@ -634,7 +635,7 @@ export default function TableMenuView() {
                         <motion.button
                           key={p.id}
                           whileTap={{ scale: 0.97 }}
-                          onClick={() => setSelectedProduct(p)}
+                          onClick={() => { setSelectedProduct(p); setSelectedExtras([]); setQty(1); setNotes(""); }}
                           className="group text-left bg-[#161d27] border border-white/[0.06] rounded-2xl overflow-hidden hover:border-amber-500/30 transition-all active:bg-[#1c2532]"
                         >
                           <div className="aspect-[4/3] overflow-hidden bg-white/5">
@@ -670,7 +671,7 @@ export default function TableMenuView() {
                           key={p.id}
                           whileHover={{ y: -4, scale: 1.01 }}
                           whileTap={{ scale: 0.97 }}
-                          onClick={() => setSelectedProduct(p)}
+                          onClick={() => { setSelectedProduct(p); setSelectedExtras([]); setQty(1); setNotes(""); }}
                           className="group flex flex-col rounded-3xl bg-[#161d27] border border-white/[0.06] hover:bg-[#1c2532] hover:border-[#C9A227]/30 transition-all cursor-pointer overflow-hidden"
                         >
                           <div className="aspect-[4/3] overflow-hidden bg-white/5 shrink-0">
@@ -998,11 +999,12 @@ export default function TableMenuView() {
                       alt={selectedProduct.name}
                     />
                     
-                    <button 
+                    <button
                       onClick={() => {
                         setSelectedProduct(null);
                         setQty(1);
                         setNotes("");
+                        setSelectedExtras([]);
                       }}
                       className="absolute top-6 left-6 w-10 h-10 rounded-full bg-white/10 backdrop-blur-xl flex items-center justify-center text-white lg:bg-black/40 lg:border lg:border-white/10"
                     >
@@ -1045,29 +1047,48 @@ export default function TableMenuView() {
 
                       {/* Customization (Light Style for Mobile) */}
                       <div className="space-y-6">
-                        <div className="space-y-4">
-                          <div className="flex items-center justify-between">
-                            <h4 className="text-sm font-bold text-zinc-900 lg:text-amber-500 lg:uppercase lg:tracking-[0.2em]">Gostaria de acrescentar algo?</h4>
-                            <span className="bg-zinc-100 text-zinc-400 text-[10px] px-2 py-0.5 rounded lg:hidden">Opcional</span>
-                          </div>
-                          
-                          <div className="space-y-3">
-                            <div className="flex items-center justify-between p-4 bg-zinc-50 border border-zinc-100 rounded-xl lg:bg-white/5 lg:border-white/10">
-                              <span className="text-sm text-zinc-700 lg:text-white">Opção Exemplo</span>
-                              <Plus className="w-4 h-4 text-red-500" />
+                        {(() => {
+                          let parsedExtras: { id: string, label: string, price: number }[] = [];
+                          try { parsedExtras = selectedProduct.extras ? JSON.parse(selectedProduct.extras) : []; } catch {}
+                          return parsedExtras.length > 0 ? (
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between">
+                                <h4 className="text-sm font-bold text-zinc-900 lg:text-amber-500 lg:uppercase lg:tracking-[0.2em]">Adicionais</h4>
+                                <span className="bg-zinc-100 text-zinc-400 text-[10px] px-2 py-0.5 rounded lg:hidden">Opcional</span>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {parsedExtras.map((ex) => {
+                                  const isSelected = selectedExtras.some(e => e.id === ex.id);
+                                  return (
+                                    <button
+                                      key={ex.id}
+                                      onClick={() => setSelectedExtras(prev =>
+                                        isSelected ? prev.filter(e => e.id !== ex.id) : [...prev, ex]
+                                      )}
+                                      className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all ${
+                                        isSelected
+                                          ? 'bg-amber-500 text-black border-amber-500 lg:bg-amber-500 lg:border-amber-500 lg:text-black'
+                                          : 'bg-zinc-50 text-zinc-700 border-zinc-200 lg:bg-white/5 lg:text-white/70 lg:border-white/10 hover:border-amber-400'
+                                      }`}
+                                    >
+                                      {ex.label}{ex.price > 0 ? ` +${fmt(ex.price)}` : ''}
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             </div>
-                          </div>
-                        </div>
-                        
+                          ) : null;
+                        })()}
+
                         <div className="space-y-3">
                           <p className="text-sm font-bold text-zinc-900 lg:text-white/30 lg:uppercase lg:tracking-widest">Observações</p>
-                          <textarea 
+                          <textarea
                             value={notes}
                             onChange={e => setNotes(e.target.value)}
                             placeholder="Insira aqui suas observações"
                             className="w-full bg-zinc-50 border border-zinc-200 rounded-xl p-4 text-sm text-zinc-900 placeholder:text-zinc-300 focus:outline-none focus:border-red-500 transition-all min-h-[100px] resize-none lg:bg-white/5 lg:border-white/10 lg:text-white"
                           />
-                          <div className="text-right text-[10px] text-zinc-400">0/140</div>
+                          <div className="text-right text-[10px] text-zinc-400">{notes.length}/140</div>
                         </div>
                       </div>
 
@@ -1094,12 +1115,24 @@ export default function TableMenuView() {
 
                     {/* Bottom Action Bar */}
                     <div className="sticky bottom-0 p-4 bg-white border-t border-zinc-100 lg:p-12 lg:bg-zinc-900/50 lg:border-none">
-                      <button 
+                      <button
                         onClick={() => {
-                          setCart([...cart, { productId: selectedProduct.id, name: selectedProduct.name, price: selectedProduct.price, quantity: qty, notes }]);
+                          const extrasLabel = selectedExtras.length > 0
+                            ? selectedExtras.map(e => e.price > 0 ? `${e.label} (+${fmt(e.price)})` : e.label).join(', ')
+                            : '';
+                          const extrasPrice = selectedExtras.reduce((s, e) => s + e.price, 0);
+                          const fullNotes = [extrasLabel, notes].filter(Boolean).join(' | ');
+                          setCart([...cart, {
+                            productId: selectedProduct.id,
+                            name: selectedProduct.name,
+                            price: selectedProduct.price + extrasPrice,
+                            quantity: qty,
+                            notes: fullNotes
+                          }]);
                           setSelectedProduct(null);
                           setQty(1);
                           setNotes("");
+                          setSelectedExtras([]);
                         }}
                         className="w-full h-14 rounded-xl bg-gradient-to-r from-[#C9A227] to-[#A8841C] text-black font-bold text-sm shadow-lg active:scale-[0.98] transition-all flex items-center justify-between px-6 lg:h-16 lg:rounded-2xl lg:px-10 lg:text-xs lg:uppercase lg:tracking-[0.2em]"
                       >
@@ -1107,7 +1140,7 @@ export default function TableMenuView() {
                           <ShoppingBag className="w-5 h-5" />
                           <span>Adicionar</span>
                         </div>
-                        <span className="text-base font-black">{fmt(selectedProduct.price * qty)}</span>
+                        <span className="text-base font-black">{fmt((selectedProduct.price + selectedExtras.reduce((s, e) => s + e.price, 0)) * qty)}</span>
                       </button>
                     </div>
                   </div>

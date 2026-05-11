@@ -258,6 +258,7 @@ model Product {
   available   Boolean  @default(true)
   pdvOnly     Boolean  @default(false) @map("pdv_only")
   autoDisableWhenOutOfStock Boolean @default(false) @map("auto_disable_when_out_of_stock")
+  extras      String?  @db.Text // JSON: ProductExtra[]
   createdAt   DateTime @default(now()) @map("created_at")
   inventoryItemId String? @map("inventory_item_id")
 

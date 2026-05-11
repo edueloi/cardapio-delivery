@@ -138,6 +138,12 @@ export interface Category {
   products: Product[];
 }
 
+export interface ProductExtra {
+  id: string;       // uuid gerado no front
+  label: string;    // "Gelo", "Limão", "Sem Cebola"
+  price?: number;   // 0 = gratuito
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -151,6 +157,7 @@ export interface Product {
   inventoryItemId?: string | null;
   inventoryItem?: InventoryItem | null;
   variants?: ProductVariant[];
+  extras?: string | null; // JSON: ProductExtra[]
 }
 
 export interface InventoryItem {
