@@ -86,19 +86,19 @@ const migrations = [
     name: 'create_invite_tokens_table',
     check: "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'invite_tokens'",
     run: `CREATE TABLE invite_tokens (
-      id VARCHAR(191) NOT NULL,
-      token VARCHAR(191) NOT NULL UNIQUE,
-      created_by_id VARCHAR(191) NOT NULL,
+      id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      token VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL UNIQUE,
+      created_by_id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
       used_at DATETIME(3) NULL,
-      used_by_email VARCHAR(191) NULL,
+      used_by_email VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
       expires_at DATETIME(3) NOT NULL,
-      note TEXT NULL,
+      note TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
       created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       PRIMARY KEY (id),
       INDEX invite_tokens_token_idx (token),
       INDEX invite_tokens_created_by_id_idx (created_by_id),
       CONSTRAINT invite_tokens_created_by_id_fkey FOREIGN KEY (created_by_id) REFERENCES accounts(id) ON DELETE CASCADE ON UPDATE CASCADE
-    )`,
+    ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
   },
 ];
 
