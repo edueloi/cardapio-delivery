@@ -14,7 +14,7 @@ import { Bell, Receipt, X } from "lucide-react";
 export default function DashboardPage() {
   const { slug, tab: tabParam, orderId } = useParams<{ slug: string; tab?: string; orderId?: string }>();
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { logout, account } = useAuth();
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [subTab, setSubTab] = useState<DashboardOrderTabId>("pending");
@@ -208,6 +208,7 @@ export default function DashboardPage() {
           setIsMobileMenuOpen(false);
         }}
         onLogout={logout}
+        isSuperAdmin={!!(account as any)?.isSuperAdmin}
       >
         <DashboardContent
           tenant={tenant}

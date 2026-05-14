@@ -1,4 +1,4 @@
-import { Download, Monitor, Globe, CheckCircle2, ArrowRight, Package2 } from "lucide-react";
+import { Download, Monitor, Globe, CheckCircle2, ArrowRight, Package2, Smartphone, Share, Plus, MoreHorizontal } from "lucide-react";
 import { PageWrapper, SectionTitle, ContentCard } from "../../components";
 
 const VERSION = "1.0.0";
@@ -57,6 +57,96 @@ export default function DownloadsPanel() {
         icon={Download}
         className="mb-6"
       />
+
+      {/* ── App Celular (PWA) ── */}
+      <div className="bg-gradient-to-br from-[#0D1B3E] to-[#1a2f5a] rounded-2xl p-6 mb-6 flex flex-col sm:flex-row items-center gap-6">
+        <img
+          src="/images/app_celular.png"
+          alt="App MenuFlow no celular"
+          className="w-32 h-32 object-contain drop-shadow-2xl shrink-0"
+        />
+        <div className="flex-1 text-center sm:text-left">
+          <div className="flex items-center gap-2 justify-center sm:justify-start mb-1">
+            <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-[#C9A227] text-black">Grátis</span>
+            <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-white/10 text-white">iOS & Android</span>
+          </div>
+          <h3 className="text-xl font-black text-white mb-1">MenuFlow no Celular</h3>
+          <p className="text-sm text-slate-300 mb-4 leading-relaxed">
+            Adicione o painel à tela inicial do seu celular e use como um app nativo — sem baixar nada da loja.
+          </p>
+          <a
+            href={window.location.origin + "/painel"}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 bg-[#C9A227] hover:bg-[#b8911f] text-black font-black text-sm uppercase tracking-widest py-3 px-6 rounded-xl transition-colors"
+          >
+            <Smartphone className="w-4 h-4" />
+            Abrir no Celular
+          </a>
+        </div>
+      </div>
+
+      {/* Instruções PWA por plataforma */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+        {/* iOS */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center">
+              <Smartphone className="w-4 h-4 text-slate-600" />
+            </div>
+            <div>
+              <p className="text-sm font-black text-slate-800">iPhone / iPad</p>
+              <p className="text-[10px] text-slate-400 uppercase tracking-wider">Safari</p>
+            </div>
+          </div>
+          <ol className="space-y-2.5">
+            {[
+              { icon: <Globe className="w-3.5 h-3.5 shrink-0 text-[#C9A227]" />, text: <>Abra o painel no <strong>Safari</strong></> },
+              { icon: <Share className="w-3.5 h-3.5 shrink-0 text-[#C9A227]" />, text: <>Toque no ícone de <strong>Compartilhar</strong> (quadrado com seta)</> },
+              { icon: <Plus className="w-3.5 h-3.5 shrink-0 text-[#C9A227]" />, text: <>Selecione <strong>"Adicionar à Tela Inicial"</strong></> },
+              { icon: <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-green-500" />, text: <>Toque em <strong>Adicionar</strong> — pronto!</> },
+            ].map((s, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm text-slate-600">
+                {s.icon}
+                <span>{s.text}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        {/* Android */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center">
+              <Smartphone className="w-4 h-4 text-slate-600" />
+            </div>
+            <div>
+              <p className="text-sm font-black text-slate-800">Android</p>
+              <p className="text-[10px] text-slate-400 uppercase tracking-wider">Chrome</p>
+            </div>
+          </div>
+          <ol className="space-y-2.5">
+            {[
+              { icon: <Globe className="w-3.5 h-3.5 shrink-0 text-[#C9A227]" />, text: <>Abra o painel no <strong>Chrome</strong></> },
+              { icon: <MoreHorizontal className="w-3.5 h-3.5 shrink-0 text-[#C9A227]" />, text: <>Toque nos <strong>3 pontos</strong> no canto superior direito</> },
+              { icon: <Plus className="w-3.5 h-3.5 shrink-0 text-[#C9A227]" />, text: <>Selecione <strong>"Adicionar à tela inicial"</strong></> },
+              { icon: <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-green-500" />, text: <>Confirme e o ícone aparece na tela!</> },
+            ].map((s, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm text-slate-600">
+                {s.icon}
+                <span>{s.text}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </div>
+
+      {/* Divisor */}
+      <div className="flex items-center gap-4 mb-6">
+        <div className="flex-1 h-px bg-slate-200" />
+        <span className="text-xs font-black text-slate-400 uppercase tracking-widest">App Desktop Windows</span>
+        <div className="flex-1 h-px bg-slate-200" />
+      </div>
 
       {/* Download cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">

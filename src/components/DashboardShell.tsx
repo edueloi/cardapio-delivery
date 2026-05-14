@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { type LucideIcon, LogOut, Menu, Monitor, Utensils, X } from "lucide-react";
+import { type LucideIcon, LogOut, Menu, Monitor, Utensils, X, ShieldCheck } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 
 interface DashboardNavigationItem {
@@ -27,6 +27,7 @@ interface DashboardShellProps {
   onCloseMobileMenu: () => void;
   onSelectTab: (tab: string) => void;
   onLogout?: () => void;
+  isSuperAdmin?: boolean;
   children: ReactNode;
 }
 
@@ -40,6 +41,7 @@ export default function DashboardShell({
   onCloseMobileMenu,
   onSelectTab,
   onLogout,
+  isSuperAdmin = false,
   children,
 }: DashboardShellProps) {
   const tenantInitial = tenantName?.[0] || "G";
@@ -129,7 +131,7 @@ export default function DashboardShell({
           ))}
         </nav>
 
-        {/* Ver cardápio + logout */}
+        {/* Ver cardápio + super admin + logout */}
         <div className="p-4 border-t border-white/10 space-y-1">
           <Link
             to={`/${slug}`}
@@ -138,6 +140,15 @@ export default function DashboardShell({
             <Utensils className="w-4 h-4 shrink-0" />
             <span className="text-xs font-bold uppercase tracking-widest">Ver Cardápio</span>
           </Link>
+          {isSuperAdmin && (
+            <Link
+              to="/superadmin"
+              className="flex items-center gap-3 w-full p-2.5 text-amber-400/80 hover:text-amber-400 transition-colors rounded-xl hover:bg-amber-400/10 border border-amber-400/20"
+            >
+              <ShieldCheck className="w-4 h-4 shrink-0" />
+              <span className="text-xs font-bold uppercase tracking-widest">Super Admin</span>
+            </Link>
+          )}
           {onLogout && (
             <button
               onClick={onLogout}
