@@ -353,7 +353,7 @@ app.post("/api/auth/register", async (req, res) => {
 
     res.json({
       token,
-      account: { id: account.id, name: account.name, email: account.email },
+      account: { id: account.id, name: account.name, email: account.email, isSuperAdmin: account.isSuperAdmin ?? false },
       tenants,
     });
   } catch (error) {
@@ -385,7 +385,7 @@ app.post("/api/auth/login", async (req, res) => {
 
     res.json({
       token,
-      account: { id: account.id, name: account.name, email: account.email },
+      account: { id: account.id, name: account.name, email: account.email, isSuperAdmin: account.isSuperAdmin ?? false },
       tenants,
     });
   } catch (error) {
@@ -407,6 +407,155 @@ app.post("/api/auth/logout", requireAuth, async (req, res) => {
   }
 
   res.json({ success: true });
+});
+
+// ── INVITE / REGISTER VIA LINK ──────────────────────────────────────────────
+
+// Valida token de convite (público — usado na tela de cadastro)
+app.get("/api/auth/invite/:token", async (req, res) => {
+  try {
+    const invite = await prisma.inviteToken.findUnique({
+      where: { token: req.params.token },
+    });
+    if (!invite) return res.status(404).json({ error: "Convite não encontrado." });
+    if (invite.usedAt) return res.status(410).json({ error: "Este convite já foi utilizado." });
+    if (new Date() > new Date(invite.expiresAt)) return res.status(410).json({ error: "Este convite expirou." });
+    res.json({ valid: true, note: invite.note });
+  } catch (error) {
+    res.status(500).json({ error: "Falha ao validar convite." });
+  }
+});
+
+// Cadastro via convite (único uso, com validade)
+app.post("/api/auth/register-invite", async (req, res) => {
+  const { token, name, email, password, establishmentName, establishmentSlug } = req.body;
+  if (!token || !name || !email || !password) {
+    return res.status(400).json({ error: "Dados incompletos." });
+  }
+  try {
+    const invite = await prisma.inviteToken.findUnique({ where: { token } });
+    if (!invite) return res.status(404).json({ error: "Convite não encontrado." });
+    if (invite.usedAt) return res.status(410).json({ error: "Este convite já foi utilizado." });
+    if (new Date() > new Date(invite.expiresAt)) return res.status(410).json({ error: "Este convite expirou." });
+
+    const normalizedEmail = normalizeEmail(email);
+    const existing = await prisma.account.findUnique({ where: { email: normalizedEmail } });
+    if (existing) return res.status(400).json({ error: "E-mail já cadastrado." });
+
+    let tenantData: { name: string; slug: string } | null = null;
+    if (establishmentName) {
+      const slug = sanitizeSlug(establishmentSlug || establishmentName);
+      if (!slug) return res.status(400).json({ error: "Slug inválido." });
+      const existingTenant = await prisma.tenant.findUnique({ where: { slug } });
+      if (existingTenant) return res.status(400).json({ error: "Esse link já está em uso." });
+      tenantData = { name: String(establishmentName).trim(), slug };
+    }
+
+    const { account, tenant } = await prisma.$transaction(async (tx: any) => {
+      const account = await tx.account.create({
+        data: { name: String(name).trim(), email: normalizedEmail, passwordHash: hashPassword(String(password)) },
+      });
+      let tenant = null;
+      if (tenantData) {
+        tenant = await tx.tenant.create({ data: tenantData });
+        await tx.tenantMembership.create({
+          data: { accountId: account.id, tenantId: tenant.id, role: "OWNER" },
+        });
+      }
+      await tx.inviteToken.update({
+        where: { token },
+        data: { usedAt: new Date(), usedByEmail: normalizedEmail },
+      });
+      return { account, tenant };
+    });
+
+    if (tenant) {
+      try { await ensureWppSetup(tenant.id, tenant.name); } catch {}
+    }
+
+    const authToken = await createAuthSession(account.id);
+    const tenants = await listAccountTenants(account.id);
+    res.json({ token: authToken, account: { id: account.id, name: account.name, email: account.email, isSuperAdmin: account.isSuperAdmin ?? false }, tenants });
+  } catch (error) {
+    console.error("ERRO register-invite:", error);
+    res.status(500).json({ error: "Falha ao criar conta." });
+  }
+});
+
+// ── SUPER ADMIN ──────────────────────────────────────────────────────────────
+
+function requireSuperAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const account = currentAccount(req) as any;
+  if (!account) return res.status(401).json({ error: "Login obrigatório." });
+  if (!account.isSuperAdmin) return res.status(403).json({ error: "Acesso restrito ao super admin." });
+  next();
+}
+
+// Lista todas as contas
+app.get("/api/superadmin/accounts", requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    const accounts = await prisma.account.findMany({
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true, name: true, email: true, isSuperAdmin: true, createdAt: true,
+        memberships: { select: { role: true, tenant: { select: { id: true, name: true, slug: true } } } },
+      },
+    });
+    res.json(accounts);
+  } catch (error) {
+    res.status(500).json({ error: "Falha ao listar contas." });
+  }
+});
+
+// Remove uma conta (não pode remover a si mesmo)
+app.delete("/api/superadmin/accounts/:id", requireAuth, requireSuperAdmin, async (req, res) => {
+  const me = currentAccount(req)!;
+  if (req.params.id === me.id) return res.status(400).json({ error: "Você não pode remover sua própria conta." });
+  try {
+    await prisma.account.delete({ where: { id: req.params.id } });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: "Falha ao remover conta." });
+  }
+});
+
+// Lista os convites gerados
+app.get("/api/superadmin/invites", requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    const invites = await prisma.inviteToken.findMany({
+      orderBy: { createdAt: "desc" },
+      include: { createdBy: { select: { name: true, email: true } } },
+    });
+    res.json(invites);
+  } catch (error) {
+    res.status(500).json({ error: "Falha ao listar convites." });
+  }
+});
+
+// Gera novo convite
+app.post("/api/superadmin/invites", requireAuth, requireSuperAdmin, async (req, res) => {
+  const me = currentAccount(req)!;
+  const { note, expiresInHours = 48 } = req.body;
+  try {
+    const token = [...Array(32)].map(() => Math.random().toString(36)[2]).join('');
+    const expiresAt = new Date(Date.now() + Number(expiresInHours) * 60 * 60 * 1000);
+    const invite = await prisma.inviteToken.create({
+      data: { token, createdById: me.id, expiresAt, note: note || null },
+    });
+    res.json(invite);
+  } catch (error) {
+    res.status(500).json({ error: "Falha ao gerar convite." });
+  }
+});
+
+// Revoga/deleta um convite (se ainda não usado)
+app.delete("/api/superadmin/invites/:id", requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    await prisma.inviteToken.delete({ where: { id: req.params.id } });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: "Falha ao revogar convite." });
+  }
 });
 
 app.get("/api/owner/tenants", requireAuth, async (req, res) => {

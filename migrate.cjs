@@ -77,6 +77,29 @@ const migrations = [
       CONSTRAINT promotions_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE ON UPDATE CASCADE
     )`,
   },
+  {
+    name: 'add_accounts_is_super_admin',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'accounts' AND COLUMN_NAME = 'is_super_admin'",
+    run: "ALTER TABLE accounts ADD COLUMN is_super_admin TINYINT(1) NOT NULL DEFAULT 0",
+  },
+  {
+    name: 'create_invite_tokens_table',
+    check: "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'invite_tokens'",
+    run: `CREATE TABLE invite_tokens (
+      id VARCHAR(191) NOT NULL,
+      token VARCHAR(191) NOT NULL UNIQUE,
+      created_by_id VARCHAR(191) NOT NULL,
+      used_at DATETIME(3) NULL,
+      used_by_email VARCHAR(191) NULL,
+      expires_at DATETIME(3) NOT NULL,
+      note TEXT NULL,
+      created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (id),
+      INDEX invite_tokens_token_idx (token),
+      INDEX invite_tokens_created_by_id_idx (created_by_id),
+      CONSTRAINT invite_tokens_created_by_id_fkey FOREIGN KEY (created_by_id) REFERENCES accounts(id) ON DELETE CASCADE ON UPDATE CASCADE
+    )`,
+  },
 ];
 
 async function run() {

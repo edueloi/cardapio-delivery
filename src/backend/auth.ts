@@ -1,6 +1,8 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import type { NextFunction, Request, Response } from "express";
-import { prisma } from "../lib/prisma";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+import { prisma as _prisma } from "../lib/prisma";
+const prisma = _prisma as any;
 
 const SESSION_TTL_DAYS = 30;
 
@@ -8,6 +10,7 @@ export interface AuthAccount {
   id: string;
   email: string;
   name: string;
+  isSuperAdmin: boolean;
 }
 
 export interface AuthenticatedRequest extends Request {
@@ -62,6 +65,7 @@ export async function getSessionAccount(token: string): Promise<AuthAccount | nu
           id: true,
           email: true,
           name: true,
+          isSuperAdmin: true,
         },
       },
     },

@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Eye, EyeOff, Lock, Mail, Store } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { Button, Input } from "../../components";
 import { useAuth } from "../../lib/auth";
 import { resolvePostAuthPath } from "./authRedirect";
@@ -97,13 +97,9 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-8 text-center">
-            <div className="text-sm text-slate-400 mb-2">Ainda não tem conta?</div>
-            <Link 
-              to={`/cadastro?next=${encodeURIComponent(next)}`} 
-              className="inline-block font-bold text-[#D49E00] hover:text-[#B38600] transition-colors"
-            >
-              Criar meu acesso agora
-            </Link>
+            <p className="text-xs text-slate-400">
+              Para criar uma conta, solicite um convite ao administrador.
+            </p>
           </div>
         </div>
       </div>

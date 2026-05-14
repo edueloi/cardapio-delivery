@@ -39,15 +39,17 @@ model Tenant {
 }
 
 model Account {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String
-  passwordHash String   @map("password_hash")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id             String   @id @default(cuid())
+  email          String   @unique
+  name           String
+  passwordHash   String   @map("password_hash")
+  isSuperAdmin   Boolean  @default(false) @map("is_super_admin")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
-  memberships TenantMembership[]
-  sessions    AuthSession[]
+  memberships  TenantMembership[]
+  sessions     AuthSession[]
+  inviteTokens InviteToken[]
 
   @@map("accounts")
 }
@@ -76,6 +78,21 @@ model AuthSession {
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@map("auth_sessions")
+}
+
+model InviteToken {
+  id          String   @id @default(cuid())
+  token       String   @unique
+  createdById String   @map("created_by_id")
+  usedAt      DateTime? @map("used_at")
+  usedByEmail String?  @map("used_by_email")
+  expiresAt   DateTime @map("expires_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  note        String?  // observação opcional (ex: "Para João da pizzaria X")
+
+  createdBy Account @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@map("invite_tokens")
 }
 
 model InventoryCategory {

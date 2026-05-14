@@ -15,6 +15,8 @@ import LoadingScreen from "./components/LoadingScreen";
 import LandingPage from "./pages/LandingPage";
 import PublicDashboard from "./features/public-dashboard";
 import PDVPage from "./pages/PDVPage";
+import SuperAdminPage from "./features/superadmin/SuperAdminPage";
+import InviteRegisterPage from "./features/auth/InviteRegisterPage";
 
 function AnimatedRoutes() {
   const location = useLocation();
@@ -34,6 +36,15 @@ function AnimatedRoutes() {
       <Routes location={location} key={routeKey}>
         <Route path="/login" element={<Login />} />
         <Route path="/cadastro" element={<Register />} />
+        <Route path="/cadastro/:token" element={<InviteRegisterPage />} />
+        <Route
+          path="/superadmin"
+          element={
+            <AuthGuard>
+              <SuperAdminPage />
+            </AuthGuard>
+          }
+        />
 
         <Route
           path="/painel"
