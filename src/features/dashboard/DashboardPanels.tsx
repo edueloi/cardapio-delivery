@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { 
   ClipboardList, 
   Utensils, 
   CheckCircle2, 
   Clock, 
-  ChevronRight, 
+  ChevronRight,
+  ChevronLeft,
   Phone,
   MessageSquare,
   LayoutDashboard,
@@ -70,7 +71,14 @@ import {
   Textarea,
   Switch,
   StatCardColor,
-  GridTable
+  GridTable,
+  FilterLine,
+  FilterLineSection,
+  FilterLineItem,
+  FilterLineSearch,
+  FilterLineDateRange,
+  DatePicker,
+  usePagination
 } from "../../components";
 import { DASHBOARD_NAVIGATION } from "./config/navigation";
 import { type DashboardOrderTabId, type DashboardTabId } from "./types";
@@ -2886,170 +2894,358 @@ function KDSTicket({ order, onComplete, actionLabel = "Concluir Pedido", highlig
   );
 }
 
-export function OrderHistoryPanel({ 
-  orders, 
-  slug 
-}: { 
-  orders: Order[]; 
+const HISTORY_PREFS_KEY = 'orderHistory_prefs_v1';
+
+function loadHistoryPrefs(slug: string) {
+  try {
+    const raw = localStorage.getItem(`${HISTORY_PREFS_KEY}_${slug}`);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch { return null; }
+}
+
+function saveHistoryPrefs(slug: string, prefs: object) {
+  try {
+    localStorage.setItem(`${HISTORY_PREFS_KEY}_${slug}`, JSON.stringify(prefs));
+  } catch {}
+}
+
+function exportOrdersCSV(orders: Order[]) {
+  const header = ['ID', 'Data', 'Horário', 'Cliente', 'Telefone', 'Tipo', 'Mesa', 'Status', 'Pagamento', 'Total'];
+  const rows = orders.map(o => [
+    `#${o.id.slice(-6).toUpperCase()}`,
+    new Date(o.createdAt).toLocaleDateString('pt-BR'),
+    new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    o.customerName,
+    o.customerPhone || '',
+    o.orderType === 'DELIVERY' ? 'Delivery' : o.orderType === 'DINE_IN' ? 'Mesa' : 'Retirada',
+    o.tableId || '',
+    o.status === 'DELIVERED' ? 'Concluído' : 'Cancelado',
+    o.paymentMethod,
+    String(o.total),
+  ]);
+  const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `historico_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+const NOW = new Date();
+const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+export function OrderHistoryPanel({
+  orders,
+  slug
+}: {
+  orders: Order[];
   slug: string;
 }) {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [paymentFilter, setPaymentFilter] = useState<string>("all");
+  const prefs = loadHistoryPrefs(slug);
 
-  const filtered = orders
-    .filter(o => o.status === 'DELIVERED' || o.status === 'CANCELLED')
-    .filter(o => {
-      const matchSearch = o.id.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          o.customerName.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchType = typeFilter === 'all' || o.orderType === typeFilter;
-      const matchPayment = paymentFilter === 'all' || o.paymentMethod === paymentFilter;
-      return matchSearch && matchType && matchPayment;
-    })
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const [searchTerm, setSearchTerm] = useState<string>(prefs?.searchTerm ?? "");
+  const [typeFilter, setTypeFilter] = useState<string>(prefs?.typeFilter ?? "all");
+  const [paymentFilter, setPaymentFilter] = useState<string>(prefs?.paymentFilter ?? "all");
+  const [statusFilter, setStatusFilter] = useState<string>(prefs?.statusFilter ?? "all");
+  // date mode: 'range' | 'month'
+  const [dateMode, setDateMode] = useState<'range' | 'month'>(prefs?.dateMode ?? 'month');
+  const [dateFrom, setDateFrom] = useState<string | null>(prefs?.dateFrom ?? null);
+  const [dateTo, setDateTo] = useState<string | null>(prefs?.dateTo ?? null);
+  const [selMonth, setSelMonth] = useState<number>(prefs?.selMonth ?? NOW.getMonth());
+  const [selYear, setSelYear] = useState<number>(prefs?.selYear ?? NOW.getFullYear());
 
-  const totalSales = filtered.reduce((acc, o) => acc + (o.status === 'DELIVERED' ? o.total : 0), 0);
-  const totalOrders = filtered.length;
+  // persist prefs on change
+  useEffect(() => {
+    saveHistoryPrefs(slug, { searchTerm, typeFilter, paymentFilter, statusFilter, dateMode, dateFrom, dateTo, selMonth, selYear });
+  }, [slug, searchTerm, typeFilter, paymentFilter, statusFilter, dateMode, dateFrom, dateTo, selMonth, selYear]);
+
+  const filtered = useMemo(() => {
+    return orders
+      .filter(o => o.status === 'DELIVERED' || o.status === 'CANCELLED')
+      .filter(o => {
+        const d = new Date(o.createdAt);
+
+        if (dateMode === 'month') {
+          if (d.getMonth() !== selMonth || d.getFullYear() !== selYear) return false;
+        } else {
+          if (dateFrom) {
+            const from = new Date(dateFrom + 'T00:00:00');
+            if (d < from) return false;
+          }
+          if (dateTo) {
+            const to = new Date(dateTo + 'T23:59:59');
+            if (d > to) return false;
+          }
+        }
+
+        const q = searchTerm.toLowerCase();
+        const matchSearch = !q || o.id.toLowerCase().includes(q) || o.customerName.toLowerCase().includes(q);
+        const matchType = typeFilter === 'all' || o.orderType === typeFilter;
+        const matchPayment = paymentFilter === 'all' || o.paymentMethod === paymentFilter;
+        const matchStatus = statusFilter === 'all' || o.status === statusFilter;
+        return matchSearch && matchType && matchPayment && matchStatus;
+      })
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [orders, searchTerm, typeFilter, paymentFilter, statusFilter, dateMode, dateFrom, dateTo, selMonth, selYear]);
+
+  const totalSales = useMemo(() => filtered.reduce((acc, o) => acc + (o.status === 'DELIVERED' ? o.total : 0), 0), [filtered]);
+  const avgTicket = filtered.filter(o => o.status === 'DELIVERED').length > 0
+    ? totalSales / filtered.filter(o => o.status === 'DELIVERED').length
+    : 0;
+  const cancelled = filtered.filter(o => o.status === 'CANCELLED').length;
+
+  const { page, pageSize, setPage, setPageSize, paginatedData, totalPages } = usePagination(filtered, 20);
+
+  const yearOptions = useMemo(() => {
+    const years = new Set(orders.map(o => new Date(o.createdAt).getFullYear()));
+    years.add(NOW.getFullYear());
+    return Array.from(years).sort((a, b) => b - a);
+  }, [orders]);
+
+  const typeOptions = [
+    { value: 'all', label: 'Todos' },
+    { value: 'DELIVERY', label: 'Delivery' },
+    { value: 'DINE_IN', label: 'Mesa' },
+    { value: 'PICKUP', label: 'Retirada' },
+  ];
+  const paymentOptions = [
+    { value: 'all', label: 'Pagamento' },
+    { value: 'PIX', label: 'Pix' },
+    { value: 'CREDIT', label: 'Crédito' },
+    { value: 'DEBIT', label: 'Débito' },
+    { value: 'CASH', label: 'Dinheiro' },
+    { value: 'VR', label: 'VR/VA' },
+  ];
+  const statusOptions = [
+    { value: 'all', label: 'Status' },
+    { value: 'DELIVERED', label: 'Concluído' },
+    { value: 'CANCELLED', label: 'Cancelado' },
+  ];
+
+  const columns = useMemo(() => [
+    {
+      header: 'ID',
+      render: (o: Order) => (
+        <span className="text-xs font-black text-slate-800 tabular-nums">#{o.id.slice(-6).toUpperCase()}</span>
+      ),
+    },
+    {
+      header: 'Data / Hora',
+      render: (o: Order) => (
+        <div className="flex flex-col gap-0.5">
+          <span className="text-xs font-bold text-slate-700">
+            {new Date(o.createdAt).toLocaleDateString('pt-BR')}
+          </span>
+          <span className="text-[10px] text-slate-400 flex items-center gap-1">
+            <Clock className="w-3 h-3" />
+            {new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        </div>
+      ),
+    },
+    {
+      header: 'Cliente',
+      render: (o: Order) => (
+        <p className="text-xs font-bold text-slate-700 truncate max-w-[130px]">{o.customerName}</p>
+      ),
+    },
+    {
+      header: 'Tipo',
+      hideOnMobile: true,
+      render: (o: Order) => (
+        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+          {o.orderType === 'DELIVERY' ? 'Delivery' : o.orderType === 'DINE_IN' ? `Mesa ${o.tableId || ''}` : 'Retirada'}
+        </span>
+      ),
+    },
+    {
+      header: 'Status',
+      hideOnMobile: true,
+      render: (o: Order) => (
+        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
+          o.status === 'DELIVERED' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+        }`}>
+          {o.status === 'DELIVERED' ? 'Concluído' : 'Cancelado'}
+        </span>
+      ),
+    },
+    {
+      header: 'Pagamento',
+      hideOnMobile: true,
+      render: (o: Order) => <PaymentBadge method={o.paymentMethod.toLowerCase() as any} size="sm" />,
+    },
+    {
+      header: 'Valor',
+      render: (o: Order) => (
+        <span className="text-xs font-black text-slate-800 tabular-nums">{fmt(o.total)}</span>
+      ),
+    },
+    {
+      header: '',
+      render: (o: Order) => (
+        <Link
+          to={`/dashboard/${slug}/historico/${o.id}`}
+          className="p-2 text-slate-300 hover:text-amber-500 transition-colors inline-block"
+        >
+          <Eye className="w-4 h-4" />
+        </Link>
+      ),
+    },
+  ], [slug]);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <SectionTitle 
-          title="Histórico de Pedidos" 
-          description="Relatório detalhado de vendas finalizadas" 
-          icon={History} 
+        <SectionTitle
+          title="Histórico de Pedidos"
+          description="Relatório detalhado de vendas finalizadas"
+          icon={History}
         />
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="hidden sm:flex gap-2">
-            <Download className="w-4 h-4" /> Exportar CSV
-          </Button>
-        </div>
+        <Button variant="outline" size="sm" className="hidden sm:flex gap-2" onClick={() => exportOrdersCSV(filtered)}>
+          <Download className="w-4 h-4" /> Exportar CSV
+        </Button>
       </div>
 
-      <StatGrid cols={2} className="mb-6">
-        <StatCard 
-          title="Vendas Filtradas" 
-          value={fmt(totalSales)} 
-          icon={CircleDollarSign} 
-          color="success" 
-        />
-        <StatCard 
-          title="Total de Pedidos" 
-          value={totalOrders} 
-          icon={Package} 
-          color="info" 
-        />
+      <StatGrid cols={3} className="mb-2">
+        <StatCard title="Vendas Filtradas" value={fmt(totalSales)} icon={CircleDollarSign} color="success" />
+        <StatCard title="Total de Pedidos" value={filtered.length} icon={Package} color="info" />
+        <StatCard title="Ticket Médio" value={fmt(avgTicket)} icon={TrendingUp} color="warning" />
       </StatGrid>
 
-      <ContentCard>
-        <div className="space-y-6">
-          <div className="flex flex-col lg:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input 
-                type="text" 
-                placeholder="Buscar por ID ou nome do cliente..."
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 pl-12 pr-4 text-sm focus:border-[#C9A227] outline-none transition-all"
-              />
-            </div>
-            <div className="flex gap-2 flex-wrap">
-              <select 
-                value={typeFilter}
-                onChange={e => setTypeFilter(e.target.value)}
-                className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider text-slate-600 outline-none focus:border-[#C9A227]"
-              >
-                <option value="all">Todos os Tipos</option>
-                <option value="DELIVERY">Delivery</option>
-                <option value="DINE_IN">Mesa</option>
-                <option value="PICKUP">Retirada</option>
-              </select>
-              <select 
-                value={paymentFilter}
-                onChange={e => setPaymentFilter(e.target.value)}
-                className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider text-slate-600 outline-none focus:border-[#C9A227]"
-              >
-                <option value="all">Pagamento</option>
-                <option value="PIX">Pix</option>
-                <option value="CREDIT">Cartão Crédito</option>
-                <option value="DEBIT">Cartão Débito</option>
-                <option value="CASH">Dinheiro</option>
-              </select>
-            </div>
-          </div>
+      {/* Filter bar */}
+      <FilterLine>
+        {/* Linha 1: Modo de data + seletores */}
+        <FilterLineSection grow wrap>
+          {/* Segmentado Mês / Período */}
+          <FilterLineItem fullOnMobile={false}>
+            <FilterLineSegmented
+              value={dateMode}
+              onChange={v => { setDateMode(v as 'range' | 'month'); }}
+              options={[
+                { value: 'month', label: 'Por Mês' },
+                { value: 'range', label: 'Período' },
+              ]}
+              size="sm"
+            />
+          </FilterLineItem>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-separate border-spacing-y-2">
-              <thead>
-                <tr className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                  <th className="px-4 py-2">ID</th>
-                  <th className="px-4 py-2">Horário</th>
-                  <th className="px-4 py-2">Cliente</th>
-                  <th className="px-4 py-2">Tipo</th>
-                  <th className="px-4 py-2 text-center">Status</th>
-                  <th className="px-4 py-2 text-center">Pagamento</th>
-                  <th className="px-4 py-2 text-right">Valor</th>
-                  <th className="px-4 py-2 text-right"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(order => (
-                  <tr key={order.id} className="group hover:bg-slate-50/80 transition-colors">
-                    <td className="px-4 py-4 bg-white border-y border-l border-slate-100 rounded-l-2xl">
-                      <span className="text-xs font-black text-slate-800">#{order.id.slice(-4).toUpperCase()}</span>
-                    </td>
-                    <td className="px-4 py-4 bg-white border-y border-slate-100">
-                      <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
-                        <Clock className="w-3 h-3" />
-                        {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </div>
-                    </td>
-                    <td className="px-4 py-4 bg-white border-y border-slate-100">
-                      <p className="text-xs font-bold text-slate-700 truncate max-w-[120px]">{order.customerName}</p>
-                    </td>
-                    <td className="px-4 py-4 bg-white border-y border-slate-100">
-                      <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">
-                        {order.orderType === 'DELIVERY' ? 'Delivery' : order.orderType === 'DINE_IN' ? `Mesa ${order.tableId}` : 'Retirada'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 bg-white border-y border-slate-100 text-center">
-                      <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${
-                        order.status === 'DELIVERED' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                      }`}>
-                        {order.status === 'DELIVERED' ? 'Concluído' : 'Cancelado'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 bg-white border-y border-slate-100 text-center">
-                      <PaymentBadge method={order.paymentMethod.toLowerCase() as any} size="sm" />
-                    </td>
-                    <td className="px-4 py-4 bg-white border-y border-slate-100 text-right">
-                      <span className="text-xs font-black text-slate-800 tabular-nums">{fmt(order.total)}</span>
-                    </td>
-                    <td className="px-4 py-4 bg-white border-y border-r border-slate-100 rounded-r-2xl text-right">
-                      <Link 
-                        to={`/dashboard/${slug}/historico/${order.id}`}
-                        className="p-2 text-slate-300 hover:text-[#C9A227] transition-colors inline-block"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {filtered.length === 0 && (
-              <div className="py-20 text-center space-y-4">
-                <div className="w-20 h-20 rounded-full bg-slate-50 flex items-center justify-center mx-auto text-slate-200">
-                  <History className="w-10 h-10" />
+          {dateMode === 'month' ? (
+            <>
+              {/* Seletor de Mês */}
+              <FilterLineItem fullOnMobile={false}>
+                <div className="flex items-center gap-1 rounded-xl border border-zinc-200 bg-zinc-50 px-2 h-10">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (selMonth === 0) { setSelMonth(11); setSelYear(y => y - 1); }
+                      else setSelMonth(m => m - 1);
+                    }}
+                    className="p-1 text-zinc-400 hover:text-amber-500 transition-colors"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+                  <span className="text-xs font-black text-zinc-700 w-8 text-center">{MONTH_NAMES[selMonth]}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (selMonth === 11) { setSelMonth(0); setSelYear(y => y + 1); }
+                      else setSelMonth(m => m + 1);
+                    }}
+                    className="p-1 text-zinc-400 hover:text-amber-500 transition-colors"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
                 </div>
-                <p className="text-sm font-black text-slate-400 uppercase tracking-widest">Nenhum pedido encontrado nos filtros</p>
-              </div>
-            )}
-          </div>
-        </div>
-      </ContentCard>
+              </FilterLineItem>
+
+              {/* Seletor de Ano */}
+              <FilterLineItem fullOnMobile={false}>
+                <select
+                  value={selYear}
+                  onChange={e => { setSelYear(Number(e.target.value)); }}
+                  className="h-10 rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-xs font-black text-zinc-700 outline-none focus:border-amber-400"
+                >
+                  {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </FilterLineItem>
+            </>
+          ) : (
+            <FilterLineItem grow>
+              <FilterLineDateRange
+                from={dateFrom}
+                to={dateTo}
+                onFromChange={v => setDateFrom(v)}
+                onToChange={v => setDateTo(v)}
+              />
+            </FilterLineItem>
+          )}
+        </FilterLineSection>
+
+        {/* Linha 2: Busca + dropdowns */}
+        <FilterLineSection grow wrap>
+          <FilterLineItem grow>
+            <FilterLineSearch
+              value={searchTerm}
+              onChange={v => setSearchTerm(v)}
+              placeholder="Buscar por ID ou cliente..."
+            />
+          </FilterLineItem>
+
+          <FilterLineItem fullOnMobile={false}>
+            <select
+              value={typeFilter}
+              onChange={e => setTypeFilter(e.target.value)}
+              className="h-10 rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-xs font-black text-zinc-600 outline-none focus:border-amber-400"
+            >
+              {typeOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </FilterLineItem>
+
+          <FilterLineItem fullOnMobile={false}>
+            <select
+              value={paymentFilter}
+              onChange={e => setPaymentFilter(e.target.value)}
+              className="h-10 rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-xs font-black text-zinc-600 outline-none focus:border-amber-400"
+            >
+              {paymentOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </FilterLineItem>
+
+          <FilterLineItem fullOnMobile={false}>
+            <select
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              className="h-10 rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-xs font-black text-zinc-600 outline-none focus:border-amber-400"
+            >
+              {statusOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </FilterLineItem>
+        </FilterLineSection>
+      </FilterLine>
+
+      <GridTable
+        data={paginatedData}
+        columns={columns}
+        keyExtractor={o => o.id}
+        emptyMessage={
+          <EmptyState
+            icon={History}
+            title="Nenhum pedido encontrado"
+            description="Tente ajustar os filtros de data ou busca"
+          />
+        }
+        noDesktopCard={false}
+        pagination={{
+          total: filtered.length,
+          page,
+          pageSize,
+          onPageChange: setPage,
+          onPageSizeChange: setPageSize,
+        }}
+      />
     </div>
   );
 }
