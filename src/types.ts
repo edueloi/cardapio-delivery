@@ -54,6 +54,12 @@ export interface ScheduleDay {
   times: string[];   // ["09:00", "12:00", "18:00"]
 }
 
+export interface StoneConfig {
+  enabled: boolean;
+  secretKey: string;    // sk_live_... or sk_test_... from Pagar.me
+  stonecode: string;    // establishment code linking to physical terminal
+}
+
 export interface Tenant {
   id: string;
   name: string;
@@ -70,6 +76,7 @@ export interface Tenant {
   businessHours?: string | null;
   deliveryConfig?: string | null; // JSON string: DeliveryConfig
   paymentMethods?: string | null; // JSON string: PaymentConfig
+  stoneConfig?: string | null;    // JSON string: StoneConfig
   categories?: Category[];
   wppInstance?: WppInstance | null;
   wppBotConfig?: WppBotConfig | null;

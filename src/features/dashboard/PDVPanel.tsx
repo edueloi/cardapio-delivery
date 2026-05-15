@@ -1,14 +1,14 @@
-import React, { useState, useMemo, useCallback, useRef } from "react";
+import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import {
   Search, Plus, Minus, X, ShoppingCart,
   Trash2, CreditCard, Banknote, QrCode,
   CheckCircle2, Receipt, Package,
   ChevronRight, ArrowLeft,
   Utensils, Tag, User, Phone, Percent,
-  Printer, StickyNote, Hash, AlertCircle,
+  Printer, StickyNote, Hash, AlertCircle, Smartphone,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import type { Tenant, Product, Order, PaymentConfig } from "../../types";
+import type { Tenant, Product, Order, PaymentConfig, StoneConfig } from "../../types";
 import { apiJson } from "../../lib/api";
 
 const fmt = (n: number) =>
@@ -29,12 +29,13 @@ interface PDVPanelProps {
   orders?: Order[];
 }
 
-const PAYMENT_METHODS = [
+const BASE_PAYMENT_METHODS = [
   { id: "CASH",   label: "Dinheiro",      icon: Banknote,    desc: "Espécie" },
   { id: "DEBIT",  label: "Débito",        icon: CreditCard,  desc: "À vista" },
   { id: "CREDIT", label: "Crédito",       icon: CreditCard,  desc: "Parcelado" },
   { id: "PIX",    label: "PIX",           icon: QrCode,      desc: "Instantâneo" },
   { id: "VR",     label: "Refeição/VR",   icon: Receipt,     desc: "Ticket/VR" },
+  { id: "STONE",  label: "Maquininha",    icon: Smartphone,  desc: "Stone / Pagar.me" },
 ];
 
 export default function PDVPanel({
@@ -60,10 +61,16 @@ export default function PDVPanel({
   const [customerPhone, setCustomerPhone] = useState("");
 
   // Payment
-  const [paymentMethod, setPaymentMethod] = useState<"CASH" | "DEBIT" | "CREDIT" | "PIX" | "VR">("CASH");
+  const [paymentMethod, setPaymentMethod] = useState<"CASH" | "DEBIT" | "CREDIT" | "PIX" | "VR" | "STONE">("CASH");
   const [cardBrand, setCardBrand] = useState<string>("");
   const [amountReceived, setAmountReceived] = useState<string>("");
   const [installments, setInstallments] = useState<number>(1);
+
+  // Stone terminal flow
+  const [stonePaymentType, setStonePaymentType] = useState<"credit" | "debit" | "pix">("credit");
+  const [stoneStatus, setStoneStatus] = useState<"idle" | "sending" | "waiting" | "paid" | "failed">("idle");
+  const [stoneChargeId, setStoneChargeId] = useState<string | null>(null);
+  const stonePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Discount
   const [discountType, setDiscountType] = useState<"PERCENT" | "FIXED">("FIXED");
@@ -81,6 +88,17 @@ export default function PDVPanel({
     try { return tenant.paymentMethods ? JSON.parse(tenant.paymentMethods) as PaymentConfig : {}; }
     catch { return {}; }
   }, [tenant.paymentMethods]);
+
+  const stoneCfg = useMemo<StoneConfig | null>(() => {
+    try { return tenant.stoneConfig ? JSON.parse(tenant.stoneConfig) as StoneConfig : null; }
+    catch { return null; }
+  }, [tenant.stoneConfig]);
+
+  const PAYMENT_METHODS = useMemo(() =>
+    stoneCfg?.enabled
+      ? BASE_PAYMENT_METHODS
+      : BASE_PAYMENT_METHODS.filter((m) => m.id !== "STONE"),
+  [stoneCfg]);
 
   const CARD_BRANDS = useMemo(() => {
     const methodMap: Record<string, keyof PaymentConfig> = { CREDIT: "credit", DEBIT: "debit", VR: "meal" };
@@ -152,7 +170,13 @@ export default function PDVPanel({
     setDiscountValue("");
     setAmountReceived("");
     setCardBrand("");
+    setStoneStatus("idle");
+    setStoneChargeId(null);
+    if (stonePollRef.current) clearInterval(stonePollRef.current);
   };
+
+  // Cleanup stone polling on unmount
+  useEffect(() => () => { if (stonePollRef.current) clearInterval(stonePollRef.current); }, []);
 
   const handleLoadTable = (tableId: string) => {
     const tableOrders = orders.filter(
@@ -177,12 +201,14 @@ export default function PDVPanel({
     if (cart.length === 0) return;
     setIsProcessing(true);
 
+    const isStone = paymentMethod === "STONE";
+
     const orderData = {
       customerName: customerName || (selectedTableId ? `Mesa ${selectedTableId}` : "Venda PDV"),
       customerPhone: customerPhone || "00000000000",
       orderType: selectedTableId ? "DINE_IN" : "TAKEAWAY",
       tableId: selectedTableId || undefined,
-      paymentMethod,
+      paymentMethod: isStone ? `STONE_${stonePaymentType.toUpperCase()}` : paymentMethod,
       paymentMetadata: {
         amountReceived: paymentMethod === "CASH" ? Number(amountReceived) : total,
         change,
@@ -191,6 +217,8 @@ export default function PDVPanel({
       },
       discount: discountValue ? parseFloat(discountValue) : 0,
       discountType,
+      // Stone orders start as PENDING until terminal confirms
+      status: isStone ? "PENDING" : undefined,
       items: cart.map((item) => ({
         productId: item.product.id,
         quantity: item.quantity,
@@ -203,8 +231,14 @@ export default function PDVPanel({
       const order = await apiJson(`/api/tenants/${tenant.slug}/pdv/order`, {
         method: "POST",
         body: JSON.stringify(orderData),
-      });
+      }) as { id: string; [key: string]: unknown };
       lastOrderRef.current = order;
+
+      if (isStone) {
+        setIsProcessing(false);
+        await handleStonePay(order.id);
+        return;
+      }
 
       if (selectedTableId && onClearTable) await onClearTable(selectedTableId);
 
@@ -218,6 +252,46 @@ export default function PDVPanel({
       alert("Erro ao processar venda.");
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const handleStonePay = async (pendingOrderId: string) => {
+    setStoneStatus("sending");
+    try {
+      const result = await apiJson(`/api/tenants/${tenant.slug}/stone/charge`, {
+        method: "POST",
+        body: JSON.stringify({ orderId: pendingOrderId, amount: total, paymentType: stonePaymentType }),
+      }) as { chargeId: string; status: string };
+      setStoneChargeId(result.chargeId);
+      setStoneStatus("waiting");
+
+      // Poll every 5s for up to 3 minutes
+      let attempts = 0;
+      stonePollRef.current = setInterval(async () => {
+        attempts++;
+        try {
+          const poll = await apiJson(`/api/tenants/${tenant.slug}/stone/charge/${result.chargeId}`) as { status: string; chargeId: string };
+          if (poll.status === "paid") {
+            clearInterval(stonePollRef.current!);
+            stonePollRef.current = null;
+            setStoneStatus("paid");
+            setTimeout(() => {
+              clearCart();
+              setShowCheckout(false);
+              setShowSuccess(true);
+              setTimeout(() => setShowSuccess(false), 3000);
+              onOrderCreated?.();
+            }, 1500);
+          } else if (poll.status === "failed" || poll.status === "canceled" || attempts > 36) {
+            clearInterval(stonePollRef.current!);
+            stonePollRef.current = null;
+            setStoneStatus("failed");
+          }
+        } catch { /* ignore poll errors */ }
+      }, 5000);
+    } catch (err) {
+      console.error(err);
+      setStoneStatus("failed");
     }
   };
 
@@ -1028,27 +1102,113 @@ export default function PDVPanel({
                           </div>
                         </div>
                       )}
+
+                      {paymentMethod === "STONE" && (
+                        <div className="space-y-4">
+                          {stoneStatus === "idle" && (
+                            <>
+                              <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Tipo de pagamento</p>
+                              <div className="grid grid-cols-3 gap-2">
+                                {(["credit", "debit", "pix"] as const).map((t) => (
+                                  <button
+                                    key={t}
+                                    onClick={() => setStonePaymentType(t)}
+                                    className={`py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                                      stonePaymentType === t
+                                        ? "bg-[#C9A227] text-black"
+                                        : "bg-white/5 border border-white/10 text-white/60 hover:bg-white/10"
+                                    }`}
+                                  >
+                                    {t === "credit" ? "Crédito" : t === "debit" ? "Débito" : "PIX"}
+                                  </button>
+                                ))}
+                              </div>
+                              <div className="bg-white/5 rounded-2xl border border-white/10 p-4 flex items-start gap-3">
+                                <Smartphone className="w-5 h-5 text-[#C9A227] shrink-0 mt-0.5" />
+                                <p className="text-[10px] text-white/50 leading-relaxed">
+                                  O valor será enviado para a maquininha Stone. O cliente paga na maquinha e o sistema confirma automaticamente.
+                                </p>
+                              </div>
+                            </>
+                          )}
+
+                          {stoneStatus === "sending" && (
+                            <div className="flex flex-col items-center justify-center gap-4 py-8">
+                              <div className="w-12 h-12 border-2 border-[#C9A227] border-t-transparent rounded-full animate-spin" />
+                              <p className="text-[11px] font-black uppercase tracking-widest text-white/60">Enviando para maquininha...</p>
+                            </div>
+                          )}
+
+                          {stoneStatus === "waiting" && (
+                            <div className="flex flex-col items-center justify-center gap-4 py-6 text-center">
+                              <div className="w-16 h-16 bg-[#C9A227]/10 rounded-full flex items-center justify-center">
+                                <Smartphone className="w-8 h-8 text-[#C9A227] animate-pulse" />
+                              </div>
+                              <div>
+                                <p className="text-sm font-black uppercase tracking-widest text-white">Aguardando pagamento</p>
+                                <p className="text-[10px] text-white/40 mt-1">O cliente deve pagar na maquininha agora.</p>
+                              </div>
+                              <div className="flex items-center gap-2 text-[10px] text-white/30">
+                                <div className="w-1.5 h-1.5 bg-[#C9A227] rounded-full animate-pulse" />
+                                Verificando a cada 5 segundos...
+                              </div>
+                              <button
+                                onClick={() => { setStoneStatus("idle"); if (stonePollRef.current) clearInterval(stonePollRef.current); }}
+                                className="text-[10px] font-black text-red-400/60 hover:text-red-400 uppercase tracking-widest transition-colors mt-2"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          )}
+
+                          {stoneStatus === "paid" && (
+                            <div className="flex flex-col items-center justify-center gap-4 py-8 text-center">
+                              <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center">
+                                <CheckCircle2 className="w-8 h-8 text-green-400" />
+                              </div>
+                              <p className="text-sm font-black uppercase tracking-widest text-green-400">Pagamento confirmado!</p>
+                            </div>
+                          )}
+
+                          {stoneStatus === "failed" && (
+                            <div className="flex flex-col items-center justify-center gap-4 py-6 text-center">
+                              <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center">
+                                <AlertCircle className="w-8 h-8 text-red-400" />
+                              </div>
+                              <p className="text-sm font-black uppercase tracking-widest text-red-400">Pagamento falhou</p>
+                              <button
+                                onClick={() => setStoneStatus("idle")}
+                                className="text-[10px] font-black text-white/40 hover:text-white uppercase tracking-widest border border-white/10 px-4 py-2 rounded-xl transition-colors"
+                              >
+                                Tentar novamente
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
 
                   {/* Finalize button */}
-                  <button
-                    disabled={
-                      isProcessing ||
-                      (paymentMethod === "CASH" && amountReceived !== "" && Number(amountReceived) < total)
-                    }
-                    onClick={handleCheckout}
-                    className="w-full bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-5 rounded-2xl transition-all shadow-2xl shadow-[#C9A227]/40 flex items-center justify-center gap-3 uppercase tracking-widest text-sm"
-                  >
-                    {isProcessing ? (
-                      <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <>
-                        Finalizar Venda
-                        <CheckCircle2 className="w-5 h-5" />
-                      </>
-                    )}
-                  </button>
+                  {paymentMethod !== "STONE" || stoneStatus === "idle" ? (
+                    <button
+                      disabled={
+                        isProcessing ||
+                        (paymentMethod === "CASH" && amountReceived !== "" && Number(amountReceived) < total)
+                      }
+                      onClick={handleCheckout}
+                      className="w-full bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-5 rounded-2xl transition-all shadow-2xl shadow-[#C9A227]/40 flex items-center justify-center gap-3 uppercase tracking-widest text-sm"
+                    >
+                      {isProcessing ? (
+                        <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <>
+                          {paymentMethod === "STONE" ? "Enviar para Maquininha" : "Finalizar Venda"}
+                          {paymentMethod === "STONE" ? <Smartphone className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
+                        </>
+                      )}
+                    </button>
+                  ) : null}
                 </div>
               </motion.div>
             </motion.div>

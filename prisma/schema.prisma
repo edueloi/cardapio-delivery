@@ -23,6 +23,7 @@ model Tenant {
   businessHours String? @map("business_hours") @db.Text // JSON: { mon: {open:"08:00",close:"22:00",enabled:true}, ... }
   deliveryConfig String? @map("delivery_config") @db.Text // JSON: DeliveryConfig
   paymentMethods String? @map("payment_methods") @db.Text // JSON: PaymentConfig
+  stoneConfig    String? @map("stone_config") @db.Text // JSON: StoneConfig
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -360,8 +361,9 @@ model Order {
   operatorName  String?  @map("operator_name")
   customerId    String?  @map("customer_id")
   scheduledDate DateTime? @map("scheduled_date") @db.Date
-  scheduledTime String?   @map("scheduled_time") // HH:mm
-  total         Float
+  scheduledTime  String?   @map("scheduled_time") // HH:mm
+  stoneChargeId  String?   @map("stone_charge_id")
+  total          Float
   tenantId      String   @map("tenant_id")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")

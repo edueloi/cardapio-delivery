@@ -169,6 +169,16 @@ const migrations = [
       CONSTRAINT invite_tokens_created_by_id_fkey FOREIGN KEY (created_by_id) REFERENCES accounts(id) ON DELETE CASCADE ON UPDATE CASCADE
     ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
   },
+  {
+    name: 'add_tenants_stone_config',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenants' AND COLUMN_NAME = 'stone_config'",
+    run: "ALTER TABLE tenants ADD COLUMN stone_config TEXT NULL",
+  },
+  {
+    name: 'add_orders_stone_charge_id',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'stone_charge_id'",
+    run: "ALTER TABLE orders ADD COLUMN stone_charge_id VARCHAR(191) NULL",
+  },
 ];
 
 async function run() {

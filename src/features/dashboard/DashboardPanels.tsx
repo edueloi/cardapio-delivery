@@ -44,11 +44,12 @@ import {
   Eye,
   FileText,
   FileDown,
-  Download
+  Download,
+  Smartphone
 } from "lucide-react";
 import socket from "../../lib/socket";
 import { apiFetch, apiJson } from "../../lib/api";
-import { Order, Tenant, CashRegister, DeliveryConfig, DeliveryZone, PaymentConfig, PaymentMethodConfig } from "../../types";
+import { Order, Tenant, CashRegister, DeliveryConfig, DeliveryZone, PaymentConfig, PaymentMethodConfig, StoneConfig } from "../../types";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   Button, 
@@ -66,6 +67,7 @@ import {
   EmptyState,
   Modal,
   ModalFooter,
+  ConfirmModal,
   Input,
   Select,
   Textarea,
@@ -594,7 +596,7 @@ function parseScheduleDays(raw?: string | null) {
 }
 
 export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, refresh: () => void }) {
-  const [activeTab, setActiveTab] = useState<"general" | "hours" | "delivery" | "payments">("general");
+  const [activeTab, setActiveTab] = useState<"general" | "hours" | "delivery" | "payments" | "maquinhas">("general");
   const [form, setForm] = useState({
     name: tenant?.name || "",
     description: tenant?.description || "",
@@ -625,6 +627,11 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
     try { return tenant?.paymentMethods ? JSON.parse(tenant.paymentMethods) : DEFAULT_PAYMENTS; } catch { return DEFAULT_PAYMENTS; }
   });
 
+  const DEFAULT_STONE: StoneConfig = { enabled: false, secretKey: "", stonecode: "" };
+  const [stone, setStone] = useState<StoneConfig>(() => {
+    try { return tenant?.stoneConfig ? JSON.parse(tenant.stoneConfig) : DEFAULT_STONE; } catch { return DEFAULT_STONE; }
+  });
+
   useEffect(() => {
     if (tenant) {
       setForm({ name: tenant.name || "", description: tenant.description || "", logoUrl: tenant.logoUrl || "", whatsapp: maskPhone(tenant.whatsapp) || "", isOpen: tenant.isOpen ?? true, scheduleMode: tenant.scheduleMode ?? false, scheduleType: (tenant.scheduleType ?? "CLIENT_CHOOSES") as "CLIENT_CHOOSES" | "OWNER_DEFINES", scheduleNotes: tenant.scheduleNotes || "" });
@@ -633,6 +640,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
       try { setHours(tenant.businessHours ? JSON.parse(tenant.businessHours) : DEFAULT_HOURS); } catch { setHours(DEFAULT_HOURS); }
       setDelivery(parseDeliveryConfig(tenant.deliveryConfig));
       try { setPayments(tenant.paymentMethods ? JSON.parse(tenant.paymentMethods) : DEFAULT_PAYMENTS); } catch { setPayments(DEFAULT_PAYMENTS); }
+      try { setStone(tenant.stoneConfig ? JSON.parse(tenant.stoneConfig) : DEFAULT_STONE); } catch { setStone(DEFAULT_STONE); }
     }
   }, [tenant]);
 
@@ -664,6 +672,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
           businessHours: JSON.stringify(hours),
           deliveryConfig: JSON.stringify(delivery),
           paymentMethods: JSON.stringify(payments),
+          stoneConfig: JSON.stringify(stone),
           scheduleDays: JSON.stringify(scheduleDays),
         })
       });
@@ -697,6 +706,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
             { id: "hours", label: "Horários", icon: Clock3 },
             { id: "delivery", label: "Entrega", icon: Truck },
             { id: "payments", label: "Pagamentos", icon: Wallet },
+            { id: "maquinhas", label: "Maquinhas", icon: Smartphone },
           ].map((tab) => (
             <button 
               key={tab.id}
@@ -1204,6 +1214,95 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
           </motion.div>
         )}
 
+        {activeTab === "maquinhas" && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+            {/* Stone / Pagar.me */}
+            <ContentCard padding="lg">
+              <div className="flex items-center gap-4 mb-6">
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${stone.enabled ? "bg-[#00A859]/10 text-[#00A859]" : "bg-slate-100 text-slate-400"}`}>
+                  <Smartphone className="w-7 h-7" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-black text-slate-800">Stone / Pagar.me</p>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Maquininha física via API Pagar.me</p>
+                </div>
+                <Switch checked={stone.enabled} onCheckedChange={v => setStone({ ...stone, enabled: v })} />
+              </div>
+
+              {stone.enabled && (
+                <div className="space-y-4 pt-4 border-t border-slate-100">
+                  <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex gap-3">
+                    <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                    <div className="text-[10px] text-amber-700 leading-relaxed font-medium">
+                      <p className="font-black mb-1">Como configurar:</p>
+                      <ol className="list-decimal ml-3 space-y-1">
+                        <li>Acesse o <strong>Partner Hub da Stone</strong> ou painel do Pagar.me.</li>
+                        <li>Copie sua <strong>Secret Key</strong> (sk_live_... ou sk_test_...).</li>
+                        <li>O <strong>Stonecode</strong> é o código do estabelecimento que vincula ao terminal físico.</li>
+                        <li>Salve as configurações — a maquininha aparecerá como opção no PDV.</li>
+                      </ol>
+                    </div>
+                  </div>
+
+                  <Input
+                    label="Secret Key (Pagar.me)"
+                    value={stone.secretKey}
+                    onChange={e => setStone({ ...stone, secretKey: e.target.value })}
+                    placeholder="sk_live_xxxxxxxxxxxx"
+                    type="password"
+                  />
+                  <Input
+                    label="Stonecode (código do estabelecimento)"
+                    value={stone.stonecode}
+                    onChange={e => setStone({ ...stone, stonecode: e.target.value })}
+                    placeholder="Ex: 123456789"
+                  />
+
+                  <div className="bg-slate-50 rounded-2xl p-4 flex items-start gap-3 border border-slate-100">
+                    <div className="w-8 h-8 rounded-xl bg-[#00A859]/10 text-[#00A859] flex items-center justify-center shrink-0">
+                      <Smartphone className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-black text-slate-700 mb-1">Fluxo de pagamento</p>
+                      <p className="text-[10px] text-slate-500 leading-relaxed">
+                        No PDV, selecione "Maquininha" e o tipo (crédito, débito ou PIX). O sistema envia a cobrança automaticamente para o terminal físico. O cliente paga e o sistema confirma.
+                      </p>
+                    </div>
+                  </div>
+
+                  {stone.secretKey && (
+                    <div className="flex items-center gap-2 text-[10px] text-green-600 font-bold bg-green-50 border border-green-200 rounded-xl px-3 py-2">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Credenciais configuradas — salve para ativar.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!stone.enabled && (
+                <div className="text-center py-8 text-slate-400">
+                  <Smartphone className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                  <p className="text-[11px] font-black uppercase tracking-widest mb-1">Maquininha desativada</p>
+                  <p className="text-[10px]">Ative acima para configurar a integração com a Stone.</p>
+                </div>
+              )}
+            </ContentCard>
+
+            {/* Futuras integrações */}
+            <ContentCard padding="lg">
+              <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-4">Outras Maquininhas (em breve)</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 opacity-40 pointer-events-none select-none">
+                {["Cielo", "Rede", "GetNet", "PagSeguro", "Mercado Pago"].map(name => (
+                  <div key={name} className="p-4 rounded-2xl border border-slate-100 text-center">
+                    <CreditCard className="w-6 h-6 mx-auto mb-2 text-slate-300" />
+                    <p className="text-[10px] font-black text-slate-400 uppercase">{name}</p>
+                  </div>
+                ))}
+              </div>
+            </ContentCard>
+          </motion.div>
+        )}
+
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 w-full max-w-4xl px-4">
           <div className="bg-white/80 backdrop-blur-md border border-slate-200/50 p-4 rounded-[2rem] shadow-2xl flex items-center justify-between gap-4">
             <div className="hidden sm:block pl-4">
@@ -1247,6 +1346,10 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
   const [catModal, setCatModal] = useState<{ open: boolean; editing: { id: string; name: string } | null }>({ open: false, editing: null });
   const [catName, setCatName] = useState("");
   const [catSaving, setCatSaving] = useState(false);
+
+  // Delete confirm modals
+  const [deleteProductConfirm, setDeleteProductConfirm] = useState<string | null>(null);
+  const [deleteCategoryConfirm, setDeleteCategoryConfirm] = useState<{ id: string; name: string } | null>(null);
 
   // Product modal
   const [prodModal, setProdModal] = useState<{ open: boolean; categoryId: string | null }>({ open: false, categoryId: null });
@@ -1301,7 +1404,6 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
   };
 
   const deleteCategory = async (id: string) => {
-    if (!confirm("Excluir categoria e todos os produtos dela?")) return;
     await apiFetch(`/api/categories/${id}`, { method: 'DELETE' });
     if (selectedCat === id) setSelectedCat("all");
     setLocalCategories(cats => cats.filter(c => c.id !== id));
@@ -1368,7 +1470,6 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
   };
 
   const deleteProduct = async (id: string) => {
-    if (!confirm("Excluir produto?")) return;
     await apiFetch(`/api/products/${id}`, { method: 'DELETE' });
     setLocalCategories(cats => cats.map(cat => ({
       ...cat,
@@ -1551,7 +1652,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
                   <button onClick={() => openEditProduct(prod)} className="p-2 text-slate-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors">
                     <Settings className="w-4 h-4" />
                   </button>
-                  <button onClick={() => deleteProduct(prod.id)} className="p-2 text-slate-300 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors">
+                  <button onClick={() => setDeleteProductConfirm(prod.id)} className="p-2 text-slate-300 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -1578,7 +1679,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
         footer={
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             {catModal.editing && (
-              <Button variant="ghost" className="text-red-500 hover:bg-red-50 sm:mr-auto" onClick={() => { closeCatModal(); deleteCategory(catModal.editing!.id); }}>
+              <Button variant="ghost" className="text-red-500 hover:bg-red-50 sm:mr-auto" onClick={() => { closeCatModal(); setDeleteCategoryConfirm({ id: catModal.editing!.id, name: catName }); }}>
                 Excluir categoria
               </Button>
             )}
@@ -1742,6 +1843,28 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
           </div>
         </div>
       </Modal>
+
+      {/* Modal: confirmar exclusão de produto */}
+      <ConfirmModal
+        isOpen={!!deleteProductConfirm}
+        onClose={() => setDeleteProductConfirm(null)}
+        onConfirm={() => { deleteProduct(deleteProductConfirm!); setDeleteProductConfirm(null); }}
+        title="Excluir produto"
+        message="Tem certeza que deseja excluir este produto? Essa ação não pode ser desfeita."
+        confirmLabel="Excluir"
+        variant="danger"
+      />
+
+      {/* Modal: confirmar exclusão de categoria */}
+      <ConfirmModal
+        isOpen={!!deleteCategoryConfirm}
+        onClose={() => setDeleteCategoryConfirm(null)}
+        onConfirm={() => { deleteCategory(deleteCategoryConfirm!.id); setDeleteCategoryConfirm(null); }}
+        title="Excluir categoria"
+        message={<>Tem certeza que deseja excluir a categoria <strong>"{deleteCategoryConfirm?.name}"</strong> e todos os seus produtos? Essa ação não pode ser desfeita.</>}
+        confirmLabel="Excluir tudo"
+        variant="danger"
+      />
     </div>
   );
 }
