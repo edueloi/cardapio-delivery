@@ -23,6 +23,7 @@ import {
   Bike,
   Star,
   Sparkles,
+  CalendarDays,
 } from "lucide-react";
 import { motion, AnimatePresence, useScroll, useTransform } from "motion/react";
 import socket from "../../lib/socket";
@@ -145,6 +146,7 @@ export default function MenuViewPage() {
     cep: "", street: "", number: "", complement: "", neighborhood: "", city: "", state: "",
     paymentMethod: "CASH" as "PIX" | "CREDIT" | "DEBIT" | "MEAL" | "FOOD" | "CASH",
     paymentDetail: "",
+    scheduledDate: "",
   });
 
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
@@ -285,6 +287,7 @@ export default function MenuViewPage() {
           orderType: form.orderType,
           paymentMethod: form.paymentMethod,
           paymentDetail: form.paymentDetail,
+          scheduledDate: form.scheduledDate || null,
           tenantId: tenant?.id,
           deliveryFee,
           items: cart.map((item) => ({
@@ -938,12 +941,32 @@ export default function MenuViewPage() {
                         </div>
                       )}
 
+                      {/* Seletor de data — apenas quando Modo Encomenda ativo */}
+                      {tenant.scheduleMode && (
+                        <div className="space-y-2">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
+                            <CalendarDays className="w-3.5 h-3.5 text-amber-500" />
+                            Data do Pedido
+                          </p>
+                          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-2">
+                            <p className="text-xs text-amber-700 font-medium">Este é um pedido sob encomenda. Escolha a data de entrega ou retirada:</p>
+                            <input
+                              type="date"
+                              value={form.scheduledDate}
+                              min={new Date(Date.now() + 86400000).toISOString().split("T")[0]}
+                              onChange={e => setForm(f => ({ ...f, scheduledDate: e.target.value }))}
+                              className="w-full bg-white border border-amber-200 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20"
+                            />
+                          </div>
+                        </div>
+                      )}
+
                       <motion.button
                         whileTap={{ scale: 0.97 }}
-                        disabled={!form.name || form.phone.replace(/\D/g, "").length < 10 || (form.orderType === "DELIVERY" && deliveryBlocked)}
+                        disabled={!form.name || form.phone.replace(/\D/g, "").length < 10 || (form.orderType === "DELIVERY" && deliveryBlocked) || (!!tenant.scheduleMode && !form.scheduledDate)}
                         onClick={() => setCheckoutStep("payment")}
-                        className={`w-full py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all mt-2 ${form.name && form.phone.replace(/\D/g, "").length >= 10 && !deliveryBlocked ? "text-white shadow-lg" : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}
-                        style={form.name && form.phone.replace(/\D/g, "").length >= 10 && !deliveryBlocked ? { background: "linear-gradient(135deg, #0f0f1a 0%, #1e293b 100%)" } : {}}
+                        className={`w-full py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all mt-2 ${form.name && form.phone.replace(/\D/g, "").length >= 10 && !deliveryBlocked && (!tenant.scheduleMode || form.scheduledDate) ? "text-white shadow-lg" : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}
+                        style={form.name && form.phone.replace(/\D/g, "").length >= 10 && !deliveryBlocked && (!tenant.scheduleMode || form.scheduledDate) ? { background: "linear-gradient(135deg, #0f0f1a 0%, #1e293b 100%)" } : {}}
                       >
                         Continuar <ChevronRight className="w-4 h-4" />
                       </motion.button>
@@ -1016,6 +1039,14 @@ export default function MenuViewPage() {
                         )}
                         {form.orderType === "PICKUP" && (
                           <p className="text-xs text-slate-500">Retirada no local</p>
+                        )}
+                        {form.scheduledDate && (
+                          <div className="flex items-center gap-1.5 pt-1">
+                            <CalendarDays className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                            <span className="text-xs font-black text-amber-700">
+                              Encomenda para {new Date(form.scheduledDate + "T12:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })}
+                            </span>
+                          </div>
                         )}
                       </div>
 

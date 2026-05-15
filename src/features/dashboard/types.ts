@@ -3,6 +3,7 @@ import type { LucideIcon, LayoutDashboard, Receipt, Clock, ClipboardList, Histor
 export type DashboardTabId =
   | "overview"
   | "live-orders"
+  | "scheduled"
   | "history"
   | "menu"
   | "inventory"
@@ -24,6 +25,7 @@ export type DashboardOrderTabId = "pending" | "preparing" | "shipped";
 export const TAB_TO_PATH: Record<DashboardTabId, string> = {
   "overview": "visao-geral",
   "live-orders": "pedidos",
+  "scheduled": "agendamentos",
   "history": "historico",
   "menu": "cardapio",
   "inventory": "estoque",

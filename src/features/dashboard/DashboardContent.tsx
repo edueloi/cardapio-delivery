@@ -23,6 +23,7 @@ import {
   OrderHistoryPanel,
   OrdersList,
   ProfileManagement,
+  ScheduledOrdersPanel,
   StaffList,
   TableManagement,
 } from "./DashboardPanels";
@@ -210,6 +211,10 @@ export default function DashboardContent({
             </div>
           </div>
         </PageWrapper>
+      )}
+
+      {activeTab === "scheduled" && (
+        <ScheduledOrdersPanel orders={orders} updateStatus={updateStatus} slug={slug} />
       )}
 
       {activeTab === "history" && (

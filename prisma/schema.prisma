@@ -16,6 +16,7 @@ model Tenant {
   whatsapp    String?
   address     String?
   isOpen      Boolean  @default(true) @map("is_open")
+  scheduleMode Boolean  @default(false) @map("schedule_mode")
   businessHours String? @map("business_hours") @db.Text // JSON: { mon: {open:"08:00",close:"22:00",enabled:true}, ... }
   deliveryConfig String? @map("delivery_config") @db.Text // JSON: DeliveryConfig
   paymentMethods String? @map("payment_methods") @db.Text // JSON: PaymentConfig
@@ -315,13 +316,14 @@ model Order {
   paymentDetail String? @map("payment_detail") @db.Text
   discount     Float?   @default(0)
   discountType String?  @map("discount_type") // PERCENT, FIXED
-  notes        String?  @db.Text
-  operatorName String?  @map("operator_name")
-  customerId   String?  @map("customer_id")
-  total        Float
-  tenantId     String   @map("tenant_id")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  notes         String?  @db.Text
+  operatorName  String?  @map("operator_name")
+  customerId    String?  @map("customer_id")
+  scheduledDate DateTime? @map("scheduled_date") @db.Date
+  total         Float
+  tenantId      String   @map("tenant_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   tenant Tenant      @relation(fields: [tenantId], references: [id])
   items  OrderItem[]

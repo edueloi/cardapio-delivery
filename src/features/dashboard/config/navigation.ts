@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  CalendarDays,
   CircleDollarSign,
   ClipboardList,
   Clock,
@@ -26,6 +27,7 @@ export const DASHBOARD_NAVIGATION: DashboardNavigationGroup[] = [
       { id: "overview",  label: "Visão Geral",        tab: "overview",     icon: LayoutDashboard },
       { id: "pos",       label: "PDV — Caixa",        tab: "pos",          icon: Receipt },
       { id: "orders",    label: "Painel de Pedidos",  tab: "live-orders",  icon: Clock },
+      { id: "scheduled", label: "Agendamentos",       tab: "scheduled",    icon: CalendarDays },
       { id: "kds",       label: "Monitor de Cozinha", tab: "kds",          icon: Utensils },
       { id: "tables",    label: "Mesas e QR Code",    tab: "tables",       icon: ClipboardList },
       { id: "history",   label: "Histórico",          tab: "history",      icon: History },

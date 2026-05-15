@@ -654,7 +654,7 @@ app.patch("/api/owner/tenants/:tenantId", requireAuth, async (req, res) => {
   const tenant = await requireTenantById(req, res, req.params.tenantId);
   if (!tenant) return;
 
-  const { name, description, address, whatsapp, logoUrl, isOpen, businessHours, deliveryConfig, paymentMethods } = req.body;
+  const { name, description, address, whatsapp, logoUrl, isOpen, scheduleMode, businessHours, deliveryConfig, paymentMethods } = req.body;
   try {
     const updated = await prisma.tenant.update({
       where: { id: tenant.id },
@@ -665,6 +665,7 @@ app.patch("/api/owner/tenants/:tenantId", requireAuth, async (req, res) => {
         ...(whatsapp !== undefined && { whatsapp: whatsapp || null }),
         ...(logoUrl !== undefined && { logoUrl: logoUrl || null }),
         ...(isOpen !== undefined && { isOpen: Boolean(isOpen) }),
+        ...(scheduleMode !== undefined && { scheduleMode: Boolean(scheduleMode) }),
         ...(businessHours !== undefined && { 
           businessHours: (businessHours === null || businessHours === "null") ? null : 
                         (typeof businessHours === "string" ? businessHours : JSON.stringify(businessHours)) 
@@ -949,7 +950,7 @@ app.get("/api/admin/tenant/:slug", requireAuth, async (req, res) => {
 
 app.post("/api/orders", async (req, res) => {
   console.log("Incoming Order Body:", JSON.stringify(req.body, null, 2));
-  const { customerName, customerPhone, address, items, tenantId, orderType, paymentMethod, paymentDetail, tableId } = req.body;
+  const { customerName, customerPhone, address, items, tenantId, orderType, paymentMethod, paymentDetail, tableId, scheduledDate, notes } = req.body;
 
   try {
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
@@ -996,6 +997,8 @@ app.post("/api/orders", async (req, res) => {
         orderType: orderType || "DELIVERY",
         paymentMethod: paymentMethod || "CASH",
         paymentDetail,
+        notes: notes || null,
+        scheduledDate: scheduledDate ? new Date(scheduledDate) : null,
         total,
         tenantId,
         tableId: tableId || null,
@@ -1545,16 +1548,89 @@ app.get("/api/tenants/:slug/cash/history", requireAuth, async (req, res) => {
   if (!tenant) return;
 
   try {
+    const { from, to } = req.query as { from?: string; to?: string };
+    const where: any = { tenantId: tenant.id, status: "CLOSED" };
+    if (from || to) {
+      where.openedAt = {};
+      if (from) where.openedAt.gte = new Date(from + "T00:00:00");
+      if (to)   where.openedAt.lte = new Date(to   + "T23:59:59");
+    }
+
     const history = await prisma.cashRegister.findMany({
-      where: { tenantId: tenant.id, status: "CLOSED" },
+      where,
+      include: { movements: true },
       orderBy: { openedAt: "desc" },
-      take: 20,
+      take: 100,
     });
 
     res.json(history);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to fetch cash history" });
+  }
+});
+
+// Resumo financeiro por período (entradas automáticas via orders + movimentos manuais)
+app.get("/api/tenants/:slug/cash/summary", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  if (!tenant) return;
+
+  try {
+    const { from, to } = req.query as { from?: string; to?: string };
+    const dateFrom = from ? new Date(from + "T00:00:00") : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const dateTo   = to   ? new Date(to   + "T23:59:59") : new Date();
+
+    // Pedidos entregues no período
+    const orders = await prisma.order.findMany({
+      where: {
+        tenantId: tenant.id,
+        status: "DELIVERED",
+        createdAt: { gte: dateFrom, lte: dateTo },
+      },
+      select: { total: true, paymentMethod: true, createdAt: true, discount: true },
+    });
+
+    // Movimentos manuais (sangrias/suprimentos) no período
+    const movements = await prisma.cashMovement.findMany({
+      where: {
+        tenantId: tenant.id,
+        createdAt: { gte: dateFrom, lte: dateTo },
+        type: { in: ["SANGRIA", "SUPRIMENTO"] },
+      },
+      select: { type: true, amount: true, description: true, createdAt: true },
+    });
+
+    const totalRevenue = orders.reduce((s, o) => s + o.total, 0);
+    const totalSangrias = movements.filter(m => m.type === "SANGRIA").reduce((s, m) => s + m.amount, 0);
+    const totalSuprimentos = movements.filter(m => m.type === "SUPRIMENTO").reduce((s, m) => s + m.amount, 0);
+
+    // Agrupar receita por método
+    const byMethod: Record<string, number> = {};
+    for (const o of orders) {
+      const key = o.paymentMethod;
+      byMethod[key] = (byMethod[key] || 0) + o.total;
+    }
+
+    // Receita por dia (para gráfico)
+    const byDay: Record<string, number> = {};
+    for (const o of orders) {
+      const day = o.createdAt.toISOString().split("T")[0];
+      byDay[day] = (byDay[day] || 0) + o.total;
+    }
+
+    res.json({
+      totalRevenue,
+      orderCount: orders.length,
+      totalSangrias,
+      totalSuprimentos,
+      netBalance: totalRevenue + totalSuprimentos - totalSangrias,
+      byMethod,
+      byDay,
+      movements,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to fetch cash summary" });
   }
 });
 

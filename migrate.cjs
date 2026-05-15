@@ -83,6 +83,16 @@ const migrations = [
     run: "ALTER TABLE accounts ADD COLUMN is_super_admin TINYINT(1) NOT NULL DEFAULT 0",
   },
   {
+    name: 'add_orders_scheduled_date',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'scheduled_date'",
+    run: "ALTER TABLE orders ADD COLUMN scheduled_date DATE NULL",
+  },
+  {
+    name: 'add_tenants_schedule_mode',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenants' AND COLUMN_NAME = 'schedule_mode'",
+    run: "ALTER TABLE tenants ADD COLUMN schedule_mode TINYINT(1) NOT NULL DEFAULT 0",
+  },
+  {
     name: 'create_invite_tokens_table',
     check: "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'invite_tokens'",
     run: `CREATE TABLE invite_tokens (

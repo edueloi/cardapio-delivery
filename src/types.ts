@@ -55,6 +55,7 @@ export interface Tenant {
   whatsapp?: string;
   address?: string;
   isOpen?: boolean;
+  scheduleMode?: boolean;
   businessHours?: string | null;
   deliveryConfig?: string | null; // JSON string: DeliveryConfig
   paymentMethods?: string | null; // JSON string: PaymentConfig
@@ -194,6 +195,8 @@ export interface Order {
   tableId?: string;
   paymentMethod: 'PIX' | 'CREDIT' | 'DEBIT' | 'MEAL' | 'FOOD' | 'CASH';
   paymentDetail?: string;
+  scheduledDate?: string | null; // ISO date string YYYY-MM-DD
+  notes?: string | null;
   total: number;
   tenantId: string;
   createdAt: string;
