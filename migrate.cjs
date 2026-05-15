@@ -93,6 +93,65 @@ const migrations = [
     run: "ALTER TABLE tenants ADD COLUMN schedule_mode TINYINT(1) NOT NULL DEFAULT 0",
   },
   {
+    name: 'add_tenants_schedule_type',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenants' AND COLUMN_NAME = 'schedule_type'",
+    run: "ALTER TABLE tenants ADD COLUMN schedule_type VARCHAR(191) NOT NULL DEFAULT 'CLIENT_CHOOSES'",
+  },
+  {
+    name: 'add_tenants_schedule_days',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenants' AND COLUMN_NAME = 'schedule_days'",
+    run: "ALTER TABLE tenants ADD COLUMN schedule_days TEXT NULL",
+  },
+  {
+    name: 'add_tenants_schedule_notes',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenants' AND COLUMN_NAME = 'schedule_notes'",
+    run: "ALTER TABLE tenants ADD COLUMN schedule_notes TEXT NULL",
+  },
+  {
+    name: 'add_orders_scheduled_time',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'scheduled_time'",
+    run: "ALTER TABLE orders ADD COLUMN scheduled_time VARCHAR(10) NULL",
+  },
+  {
+    name: 'create_subscription_plans_table',
+    check: "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'subscription_plans'",
+    run: `CREATE TABLE subscription_plans (
+      id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      name VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      description TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
+      price DOUBLE NOT NULL DEFAULT 0,
+      duration_days INT NOT NULL DEFAULT 30,
+      features TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
+      is_active TINYINT(1) NOT NULL DEFAULT 1,
+      color VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '#C9A227',
+      created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (id)
+    ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+  },
+  {
+    name: 'create_subscriptions_table',
+    check: "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'subscriptions'",
+    run: `CREATE TABLE subscriptions (
+      id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      account_id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      plan_id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      status VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'ACTIVE',
+      starts_at DATETIME(3) NOT NULL,
+      expires_at DATETIME(3) NOT NULL,
+      price_paid DOUBLE NOT NULL DEFAULT 0,
+      notes TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
+      created_by_id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
+      created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (id),
+      INDEX subscriptions_account_id_idx (account_id),
+      INDEX subscriptions_plan_id_idx (plan_id),
+      CONSTRAINT subscriptions_account_id_fkey FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE ON UPDATE CASCADE,
+      CONSTRAINT subscriptions_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES subscription_plans(id) ON DELETE CASCADE ON UPDATE CASCADE
+    ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+  },
+  {
     name: 'create_invite_tokens_table',
     check: "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'invite_tokens'",
     run: `CREATE TABLE invite_tokens (

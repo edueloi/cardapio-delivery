@@ -1,73 +1,136 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ShieldCheck, Users, Link as LinkIcon, Plus, Trash2, Copy,
   Clock, CheckCircle2, XCircle, RefreshCw, LogOut, ChevronDown, ChevronUp,
+  Wallet, TrendingUp, Star, CalendarDays, Package, BarChart3,
+  ArrowUpRight, Crown, Zap, Building2, Mail, Edit3, X,
 } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "../../lib/auth";
 import { apiFetch, apiJson } from "../../lib/api";
-import { Button, Input, Modal, ModalFooter, EmptyState, StatCard, StatGrid } from "../../components";
+import {
+  Button, Input, Modal, ModalFooter, EmptyState,
+  StatCard, StatGrid, ContentCard, PageWrapper, SectionTitle,
+} from "../../components";
 
+// ─── Types ───────────────────────────────────────────────────────────────────
 interface Account {
-  id: string;
-  name: string;
-  email: string;
-  isSuperAdmin: boolean;
-  createdAt: string;
+  id: string; name: string; email: string; isSuperAdmin: boolean; createdAt: string;
   memberships: { role: string; tenant: { id: string; name: string; slug: string } }[];
 }
-
 interface Invite {
-  id: string;
-  token: string;
-  note: string | null;
-  usedAt: string | null;
-  usedByEmail: string | null;
-  expiresAt: string;
-  createdAt: string;
+  id: string; token: string; note: string | null; usedAt: string | null;
+  usedByEmail: string | null; expiresAt: string; createdAt: string;
   createdBy: { name: string; email: string };
 }
-
-function fmtDate(d: string) {
-  return new Date(d).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+interface Plan {
+  id: string; name: string; description: string | null; price: number;
+  durationDays: number; features: string | null; isActive: boolean; color: string;
+}
+interface Subscription {
+  id: string; accountId: string; planId: string; status: string;
+  startsAt: string; expiresAt: string; pricePaid: number; notes: string | null;
+  createdAt: string;
+  account: { id: string; name: string; email: string };
+  plan: Plan;
+}
+interface Stats {
+  accounts: number; tenants: number; invites: number;
+  totalRevenue: number; monthlyRevenue: number;
+  activeSubscriptions: number; expiredSubscriptions: number;
+  revenueByMonth: Record<string, number>;
+  subscriptions: Subscription[];
+  plans: Plan[];
 }
 
-function inviteUrl(token: string) {
-  return `${window.location.origin}/cadastro/${token}`;
+// ─── Formatters ───────────────────────────────────────────────────────────────
+const fmt = (n: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
+const fmtDate = (d: string) => new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
+const fmtShort = (d: string) => new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" });
+const monthLabel = (key: string) => {
+  const [y, m] = key.split("-");
+  return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString("pt-BR", { month: "short", year: "2-digit" });
+};
+
+function daysUntil(d: string) {
+  const diff = new Date(d).getTime() - Date.now();
+  return Math.ceil(diff / (1000 * 60 * 60 * 24));
 }
 
-function InviteStatusBadge({ invite }: { invite: Invite }) {
-  if (invite.usedAt) {
-    return (
-      <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-green-100 text-green-700">
-        <CheckCircle2 className="w-3 h-3" /> Usado
-      </span>
-    );
-  }
-  if (new Date() > new Date(invite.expiresAt)) {
-    return (
-      <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-red-100 text-red-700">
-        <XCircle className="w-3 h-3" /> Expirado
-      </span>
-    );
-  }
+function inviteUrl(token: string) { return `${window.location.origin}/cadastro/${token}`; }
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+function StatusBadge({ status, expiresAt }: { status: string; expiresAt?: string }) {
+  const expired = expiresAt && new Date(expiresAt) < new Date();
+  if (status === "CANCELLED") return (
+    <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
+      <X className="w-3 h-3" /> Cancelado
+    </span>
+  );
+  if (status === "TRIAL") return (
+    <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-violet-100 text-violet-700">
+      <Zap className="w-3 h-3" /> Trial
+    </span>
+  );
+  if (expired || status === "EXPIRED") return (
+    <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-red-100 text-red-700">
+      <XCircle className="w-3 h-3" /> Expirado
+    </span>
+  );
   return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
-      <Clock className="w-3 h-3" /> Aguardando
+    <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+      <CheckCircle2 className="w-3 h-3" /> Ativo
     </span>
   );
 }
 
+function InviteStatusBadge({ invite }: { invite: Invite }) {
+  if (invite.usedAt) return <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-green-100 text-green-700"><CheckCircle2 className="w-3 h-3" /> Usado</span>;
+  if (new Date() > new Date(invite.expiresAt)) return <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-red-100 text-red-700"><XCircle className="w-3 h-3" /> Expirado</span>;
+  return <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-100 text-amber-700"><Clock className="w-3 h-3" /> Aguardando</span>;
+}
+
+// Mini bar chart
+function RevenueChart({ data }: { data: Record<string, number> }) {
+  const entries = Object.entries(data).sort(([a], [b]) => a.localeCompare(b));
+  if (entries.length === 0) return null;
+  const max = Math.max(...entries.map(([, v]) => v), 1);
+  return (
+    <div className="flex items-end gap-1 h-14 w-full">
+      {entries.map(([key, val]) => {
+        const pct = Math.max((val / max) * 100, 4);
+        const isLast = key === entries[entries.length - 1][0];
+        return (
+          <div key={key} className="flex-1 flex flex-col items-center gap-1 group relative">
+            <div
+              className={`w-full rounded-t-lg transition-all ${isLast ? "bg-amber-400" : "bg-slate-200 group-hover:bg-amber-300"}`}
+              style={{ height: `${pct}%` }}
+            />
+            <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[9px] font-bold px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+              {monthLabel(key)}: {fmt(val)}
+            </div>
+            <span className="text-[8px] text-slate-400 font-bold">{monthLabel(key)}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 export default function SuperAdminPage() {
   const navigate = useNavigate();
   const { account, logout } = useAuth();
+  const isSuperAdmin = (account as any)?.isSuperAdmin;
 
+  const [stats, setStats] = useState<Stats | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"accounts" | "invites">("invites");
+  const [tab, setTab] = useState<"dashboard" | "accounts" | "subscriptions" | "plans" | "invites">("dashboard");
 
-  // modal novo convite
+  // Convites
   const [showNewInvite, setShowNewInvite] = useState(false);
   const [inviteNote, setInviteNote] = useState("");
   const [inviteHours, setInviteHours] = useState("48");
@@ -75,15 +138,25 @@ export default function SuperAdminPage() {
   const [newInviteUrl, setNewInviteUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // modal confirmar delete
+  // Delete
   const [deleteAccountId, setDeleteAccountId] = useState<string | null>(null);
   const [deleteInviteId, setDeleteInviteId] = useState<string | null>(null);
+  const [deleteSubId, setDeleteSubId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // expandir detalhes da conta
+  // Expandir
   const [expandedAccount, setExpandedAccount] = useState<string | null>(null);
 
-  const isSuperAdmin = (account as any)?.isSuperAdmin;
+  // Planos
+  const [showPlanModal, setShowPlanModal] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
+  const [planForm, setPlanForm] = useState({ name: "", description: "", price: "", durationDays: "30", features: "", color: "#C9A227" });
+  const [savingPlan, setSavingPlan] = useState(false);
+
+  // Assinaturas
+  const [showSubModal, setShowSubModal] = useState(false);
+  const [subForm, setSubForm] = useState({ accountId: "", planId: "", pricePaid: "", notes: "" });
+  const [savingSub, setSavingSub] = useState(false);
 
   useEffect(() => {
     if (!account) return;
@@ -91,31 +164,35 @@ export default function SuperAdminPage() {
     load();
   }, [account]);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [accRes, invRes] = await Promise.all([
+      const [statsRes, accRes, invRes] = await Promise.all([
+        apiFetch("/api/superadmin/stats"),
         apiFetch("/api/superadmin/accounts"),
         apiFetch("/api/superadmin/invites"),
       ]);
-      const [accData, invData] = await Promise.all([accRes.json(), invRes.json()]);
+      const [statsData, accData, invData] = await Promise.all([statsRes.json(), accRes.json(), invRes.json()]);
+      setStats(statsData);
       setAccounts(accData);
       setInvites(invData);
     } catch {}
     setLoading(false);
+  }, []);
+
+  function copyLink(url: string) {
+    navigator.clipboard.writeText(url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
   }
 
   async function handleCreateInvite() {
     setCreatingInvite(true);
     try {
       const invite = await apiJson<Invite>("/api/superadmin/invites", {
-        method: "POST",
-        body: JSON.stringify({ note: inviteNote.trim() || null, expiresInHours: Number(inviteHours) || 48 }),
+        method: "POST", body: JSON.stringify({ note: inviteNote.trim() || null, expiresInHours: Number(inviteHours) || 48 }),
       });
       setNewInviteUrl(inviteUrl(invite.token));
       setInvites(prev => [{ ...invite, createdBy: { name: account!.name, email: (account as any).email } }, ...prev]);
-      setInviteNote("");
-      setInviteHours("48");
+      setInviteNote(""); setInviteHours("48");
     } catch {}
     setCreatingInvite(false);
   }
@@ -127,8 +204,7 @@ export default function SuperAdminPage() {
       await apiJson(`/api/superadmin/accounts/${deleteAccountId}`, { method: "DELETE" });
       setAccounts(prev => prev.filter(a => a.id !== deleteAccountId));
     } catch {}
-    setDeleting(false);
-    setDeleteAccountId(null);
+    setDeleting(false); setDeleteAccountId(null);
   }
 
   async function handleRevokeInvite() {
@@ -138,114 +214,446 @@ export default function SuperAdminPage() {
       await apiJson(`/api/superadmin/invites/${deleteInviteId}`, { method: "DELETE" });
       setInvites(prev => prev.filter(i => i.id !== deleteInviteId));
     } catch {}
-    setDeleting(false);
-    setDeleteInviteId(null);
+    setDeleting(false); setDeleteInviteId(null);
   }
 
-  function copyLink(url: string) {
-    navigator.clipboard.writeText(url).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
+  async function handleSavePlan() {
+    setSavingPlan(true);
+    try {
+      const body = JSON.stringify({
+        name: planForm.name, description: planForm.description || null,
+        price: Number(planForm.price) || 0, durationDays: Number(planForm.durationDays) || 30,
+        features: planForm.features || null, color: planForm.color,
+      });
+      if (editingPlan) {
+        const updated = await apiJson<Plan>(`/api/superadmin/plans/${editingPlan.id}`, { method: "PATCH", body });
+        setStats(s => s ? { ...s, plans: s.plans.map(p => p.id === updated.id ? updated : p) } : s);
+      } else {
+        const created = await apiJson<Plan>("/api/superadmin/plans", { method: "POST", body });
+        setStats(s => s ? { ...s, plans: [...s.plans, created] } : s);
+      }
+      setShowPlanModal(false);
+    } catch {}
+    setSavingPlan(false);
   }
+
+  async function handleCreateSub() {
+    setSavingSub(true);
+    try {
+      const sub = await apiJson<Subscription>("/api/superadmin/subscriptions", {
+        method: "POST", body: JSON.stringify({ accountId: subForm.accountId, planId: subForm.planId, pricePaid: Number(subForm.pricePaid) || undefined, notes: subForm.notes || null }),
+      });
+      setStats(s => s ? { ...s, subscriptions: [sub, ...s.subscriptions], activeSubscriptions: s.activeSubscriptions + 1 } : s);
+      setShowSubModal(false); setSubForm({ accountId: "", planId: "", pricePaid: "", notes: "" });
+    } catch {}
+    setSavingSub(false);
+  }
+
+  async function handleCancelSub() {
+    if (!deleteSubId) return;
+    setDeleting(true);
+    try {
+      await apiJson(`/api/superadmin/subscriptions/${deleteSubId}`, { method: "DELETE" });
+      setStats(s => s ? { ...s, subscriptions: s.subscriptions.map(sub => sub.id === deleteSubId ? { ...sub, status: "CANCELLED" } : sub) } : s);
+    } catch {}
+    setDeleting(false); setDeleteSubId(null);
+  }
+
+  const openPlanModal = (plan?: Plan) => {
+    if (plan) {
+      setEditingPlan(plan);
+      setPlanForm({ name: plan.name, description: plan.description || "", price: String(plan.price), durationDays: String(plan.durationDays), features: plan.features || "", color: plan.color || "#C9A227" });
+    } else {
+      setEditingPlan(null);
+      setPlanForm({ name: "", description: "", price: "", durationDays: "30", features: "", color: "#C9A227" });
+    }
+    setShowPlanModal(true);
+  };
 
   const pendingInvites = invites.filter(i => !i.usedAt && new Date() <= new Date(i.expiresAt));
-  const usedInvites = invites.filter(i => !!i.usedAt);
+
+  const TABS = [
+    { id: "dashboard", label: "Dashboard", icon: BarChart3 },
+    { id: "accounts", label: "Contas", icon: Users },
+    { id: "subscriptions", label: "Assinaturas", icon: Crown },
+    { id: "plans", label: "Planos", icon: Package },
+    { id: "invites", label: "Convites", icon: LinkIcon },
+  ] as const;
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="text-slate-400 text-sm animate-pulse">Carregando painel...</div>
+      <div className="min-h-screen bg-zinc-50 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-amber-400 border-t-transparent rounded-full animate-spin" />
+          <p className="text-slate-400 text-sm font-medium">Carregando painel...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div className="min-h-screen bg-zinc-50">
       {/* Header */}
-      <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-20">
-        <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
+      <header className="bg-white border-b border-zinc-200 sticky top-0 z-20 shadow-sm">
+        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
-              <ShieldCheck className="w-4 h-4 text-amber-400" />
+            <div className="w-9 h-9 rounded-xl bg-[#0D1B3E] flex items-center justify-center">
+              <ShieldCheck className="w-5 h-5 text-amber-400" />
             </div>
             <div>
-              <p className="text-sm font-black text-white">Super Admin</p>
-              <p className="text-[10px] text-slate-500 uppercase tracking-widest">MenuFlow</p>
+              <p className="text-sm font-black text-slate-900">Super Admin</p>
+              <p className="text-[10px] text-slate-400 uppercase tracking-widest">MenuFlow</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={load}
-              className="p-2 text-slate-500 hover:text-slate-300 transition-colors"
-              title="Atualizar"
-            >
+          <div className="flex items-center gap-2">
+            <button onClick={load} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-zinc-100 rounded-xl transition-colors" title="Atualizar">
               <RefreshCw className="w-4 h-4" />
             </button>
             <button
-              onClick={() => { logout(); navigate("/login"); }}
-              className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-red-400 transition-colors"
+              onClick={() => navigate("/painel")}
+              className="hidden sm:flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors px-3 py-2 rounded-xl hover:bg-zinc-100"
             >
-              <LogOut className="w-4 h-4" /> Sair
+              <Building2 className="w-4 h-4" /> Ir ao Painel
+            </button>
+            <button
+              onClick={() => { logout(); navigate("/login"); }}
+              className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-red-600 transition-colors px-3 py-2 rounded-xl hover:bg-red-50"
+            >
+              <LogOut className="w-4 h-4" /> <span className="hidden sm:inline">Sair</span>
             </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-8 space-y-6">
-        {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            { label: "Contas", value: accounts.length, icon: Users, color: "text-blue-400", bg: "bg-blue-500/10" },
-            { label: "Convites ativos", value: pendingInvites.length, icon: Clock, color: "text-amber-400", bg: "bg-amber-500/10" },
-            { label: "Convites usados", value: usedInvites.length, icon: CheckCircle2, color: "text-green-400", bg: "bg-green-500/10" },
-            { label: "Estabelecimentos", value: accounts.reduce((a, c) => a + c.memberships.length, 0), icon: LinkIcon, color: "text-purple-400", bg: "bg-purple-500/10" },
-          ].map(s => (
-            <div key={s.label} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center gap-3">
-              <div className={`w-9 h-9 rounded-xl ${s.bg} flex items-center justify-center shrink-0`}>
-                <s.icon className={`w-4 h-4 ${s.color}`} />
-              </div>
-              <div>
-                <p className="text-2xl font-black text-white leading-none">{s.value}</p>
-                <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-0.5">{s.label}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Tab bar */}
-        <div className="flex gap-1 bg-slate-900 border border-slate-800 rounded-2xl p-1 w-fit">
-          {(["invites", "accounts"] as const).map(t => (
+      <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+        {/* Tabs */}
+        <div className="flex gap-1 bg-white border border-zinc-200 rounded-2xl p-1 overflow-x-auto">
+          {TABS.map(t => (
             <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
-                tab === t ? "bg-amber-500 text-slate-950" : "text-slate-500 hover:text-slate-300"
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
+                tab === t.id ? "bg-[#0D1B3E] text-amber-400 shadow-sm" : "text-slate-400 hover:text-slate-700 hover:bg-zinc-50"
               }`}
             >
-              {t === "invites" ? "Convites" : "Contas"}
+              <t.icon className="w-3.5 h-3.5 shrink-0" />
+              <span className="hidden sm:inline">{t.label}</span>
             </button>
           ))}
         </div>
 
-        {/* ── CONVITES ── */}
-        {tab === "invites" && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-black text-slate-300 uppercase tracking-widest">Links de Convite</h2>
-              <Button
-                size="sm"
-                onClick={() => { setShowNewInvite(true); setNewInviteUrl(null); }}
-                className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black"
-              >
-                <Plus className="w-4 h-4 mr-1" /> Gerar convite
-              </Button>
+        {/* ══ DASHBOARD ══ */}
+        {tab === "dashboard" && stats && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
+            <SectionTitle title="Dashboard" description="Visão geral da plataforma" icon={BarChart3} />
+
+            <StatGrid cols={4}>
+              <StatCard title="Contas" value={stats.accounts} icon={Users} color="info" delay={0} description="Total cadastradas" />
+              <StatCard title="Estabelecimentos" value={stats.tenants} icon={Building2} color="default" delay={0.05} description="Tenants ativos" />
+              <StatCard title="Assinaturas Ativas" value={stats.activeSubscriptions} icon={Crown} color="success" delay={0.1} description="Em vigor hoje" />
+              <StatCard title="Receita Total" value={fmt(stats.totalRevenue)} icon={Wallet} color="success" delay={0.15} description="Acumulado" />
+            </StatGrid>
+
+            <div className="grid grid-cols-12 gap-4">
+              {/* Gráfico receita */}
+              <div className="col-span-12 lg:col-span-8">
+                <ContentCard padding="lg">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Receita por mês</p>
+                      <p className="text-xl font-black text-slate-800 mt-0.5">{fmt(stats.monthlyRevenue)} <span className="text-xs text-slate-400 font-medium">este mês</span></p>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-green-600 bg-green-50 rounded-xl px-3 py-1.5">
+                      <TrendingUp className="w-3.5 h-3.5" />
+                      <span className="text-[10px] font-black uppercase">Receita</span>
+                    </div>
+                  </div>
+                  <RevenueChart data={stats.revenueByMonth} />
+                </ContentCard>
+              </div>
+
+              {/* Resumo rápido */}
+              <div className="col-span-12 lg:col-span-4 space-y-3">
+                <ContentCard padding="lg">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Status assinaturas</p>
+                  <div className="space-y-2">
+                    {[
+                      { label: "Ativas", value: stats.activeSubscriptions, color: "bg-green-500" },
+                      { label: "Expiradas", value: stats.expiredSubscriptions, color: "bg-red-400" },
+                      { label: "Total", value: stats.subscriptions.length, color: "bg-slate-300" },
+                    ].map(row => (
+                      <div key={row.label} className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2 h-2 rounded-full ${row.color}`} />
+                          <span className="text-sm text-slate-600">{row.label}</span>
+                        </div>
+                        <span className="text-sm font-black text-slate-800">{row.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </ContentCard>
+
+                <ContentCard padding="lg">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Convites</p>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-600">Pendentes</span>
+                    <span className="text-xl font-black text-amber-500">{pendingInvites.length}</span>
+                  </div>
+                </ContentCard>
+              </div>
             </div>
 
-            {invites.length === 0 ? (
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-10 text-center">
-                <p className="text-slate-500 text-sm">Nenhum convite gerado ainda.</p>
+            {/* Assinaturas recentes */}
+            {stats.subscriptions.length > 0 && (
+              <ContentCard padding="none">
+                <div className="px-5 py-4 border-b border-zinc-100 flex items-center justify-between">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Assinaturas Recentes</p>
+                  <button onClick={() => setTab("subscriptions")} className="text-[10px] font-black text-amber-500 hover:text-amber-600 flex items-center gap-1">
+                    Ver todas <ArrowUpRight className="w-3 h-3" />
+                  </button>
+                </div>
+                <div className="divide-y divide-zinc-50">
+                  {stats.subscriptions.slice(0, 5).map(sub => (
+                    <div key={sub.id} className="flex items-center gap-3 px-5 py-3 hover:bg-zinc-50 transition-colors">
+                      <div className="w-8 h-8 rounded-xl bg-zinc-100 flex items-center justify-center text-sm font-black text-slate-500 shrink-0">
+                        {sub.account.name[0]?.toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-slate-800 truncate">{sub.account.name}</p>
+                        <p className="text-[10px] text-slate-400 truncate">{sub.plan.name} · {fmtShort(sub.startsAt)} → {fmtShort(sub.expiresAt)}</p>
+                      </div>
+                      <StatusBadge status={sub.status} expiresAt={sub.expiresAt} />
+                      <span className="text-sm font-black text-slate-700 shrink-0">{fmt(sub.pricePaid)}</span>
+                    </div>
+                  ))}
+                </div>
+              </ContentCard>
+            )}
+          </motion.div>
+        )}
+
+        {/* ══ CONTAS ══ */}
+        {tab === "accounts" && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+            <SectionTitle title="Contas" description={`${accounts.length} conta${accounts.length !== 1 ? "s" : ""} cadastrada${accounts.length !== 1 ? "s" : ""}`} icon={Users} />
+
+            {accounts.length === 0 ? (
+              <EmptyState title="Nenhuma conta" description="Nenhuma conta cadastrada." icon={Users} />
+            ) : (
+              <div className="space-y-2">
+                {accounts.map(acc => {
+                  const isMe = acc.id === (account as any)?.id;
+                  const expanded = expandedAccount === acc.id;
+                  const accSubs = stats?.subscriptions.filter(s => s.accountId === acc.id) ?? [];
+                  const activeSub = accSubs.find(s => s.status === "ACTIVE" && new Date(s.expiresAt) > new Date());
+                  return (
+                    <ContentCard key={acc.id} padding="none">
+                      <div className="flex items-center gap-4 px-4 py-3">
+                        <div className="w-10 h-10 rounded-xl bg-zinc-100 flex items-center justify-center text-sm font-black text-slate-500 shrink-0">
+                          {acc.name[0]?.toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-black text-slate-800">{acc.name}</p>
+                            {acc.isSuperAdmin && (
+                              <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-700 border border-amber-200">Super Admin</span>
+                            )}
+                            {isMe && <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md bg-blue-100 text-blue-700">Você</span>}
+                            {activeSub && <StatusBadge status="ACTIVE" expiresAt={activeSub.expiresAt} />}
+                          </div>
+                          <div className="flex items-center gap-3 mt-0.5">
+                            <p className="text-xs text-slate-400 flex items-center gap-1"><Mail className="w-3 h-3" />{acc.email}</p>
+                            {activeSub && (
+                              <p className="text-[10px] text-slate-400 flex items-center gap-1">
+                                <CalendarDays className="w-3 h-3" />
+                                Expira {fmtDate(activeSub.expiresAt)}
+                                {daysUntil(activeSub.expiresAt) <= 7 && (
+                                  <span className="text-orange-500 font-bold">({daysUntil(activeSub.expiresAt)}d)</span>
+                                )}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className="text-[10px] text-slate-400 hidden sm:inline">{acc.memberships.length} tenant{acc.memberships.length !== 1 ? "s" : ""}</span>
+                          <button
+                            onClick={() => { setSubForm(f => ({ ...f, accountId: acc.id })); setTab("subscriptions"); setTimeout(() => setShowSubModal(true), 100); }}
+                            className="p-2 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-xl transition-colors"
+                            title="Criar assinatura"
+                          >
+                            <Crown className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => setExpandedAccount(expanded ? null : acc.id)} className="p-2 text-slate-400 hover:text-slate-600 rounded-xl transition-colors">
+                            {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                          </button>
+                          {!isMe && !acc.isSuperAdmin && (
+                            <button onClick={() => setDeleteAccountId(acc.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <AnimatePresence>
+                        {expanded && acc.memberships.length > 0 && (
+                          <motion.div initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }} className="overflow-hidden border-t border-zinc-100">
+                            <div className="px-4 py-3 space-y-2">
+                              {acc.memberships.map(m => (
+                                <div key={m.tenant.id} className="flex items-center justify-between text-xs">
+                                  <span className="font-bold text-slate-600">{m.tenant.name}</span>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-slate-400 font-mono">/{m.tenant.slug}</span>
+                                    <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md bg-zinc-100 text-slate-500">{m.role}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </ContentCard>
+                  );
+                })}
               </div>
+            )}
+          </motion.div>
+        )}
+
+        {/* ══ ASSINATURAS ══ */}
+        {tab === "subscriptions" && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+            <SectionTitle
+              title="Assinaturas"
+              description="Gerencie planos de acesso dos clientes"
+              icon={Crown}
+              action={
+                <Button size="sm" variant="primary" iconLeft={<Plus className="w-4 h-4" />} onClick={() => { setSubForm({ accountId: "", planId: "", pricePaid: "", notes: "" }); setShowSubModal(true); }}>
+                  Nova Assinatura
+                </Button>
+              }
+            />
+
+            {(!stats?.subscriptions || stats.subscriptions.length === 0) ? (
+              <EmptyState title="Sem assinaturas" description="Nenhuma assinatura criada ainda." icon={Crown} />
+            ) : (
+              <ContentCard padding="none">
+                <div className="divide-y divide-zinc-50">
+                  {stats!.subscriptions.map(sub => {
+                    const days = daysUntil(sub.expiresAt);
+                    const isExpiring = days <= 7 && days > 0 && sub.status === "ACTIVE";
+                    return (
+                      <div key={sub.id} className={`flex items-center gap-3 px-5 py-4 hover:bg-zinc-50 transition-colors ${isExpiring ? "bg-orange-50/50" : ""}`}>
+                        <div className="w-9 h-9 rounded-xl bg-zinc-100 flex items-center justify-center text-sm font-black text-slate-500 shrink-0">
+                          {sub.account.name[0]?.toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0 space-y-0.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-black text-slate-800">{sub.account.name}</p>
+                            <StatusBadge status={sub.status} expiresAt={sub.expiresAt} />
+                            {isExpiring && <span className="text-[10px] font-black text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full">Expira em {days}d</span>}
+                          </div>
+                          <p className="text-xs text-slate-400">{sub.account.email}</p>
+                          <div className="flex items-center gap-3 text-[10px] text-slate-400 flex-wrap">
+                            <span className="flex items-center gap-1"><Crown className="w-3 h-3 text-amber-400" />{sub.plan.name}</span>
+                            <span className="flex items-center gap-1"><CalendarDays className="w-3 h-3" />{fmtDate(sub.startsAt)} → {fmtDate(sub.expiresAt)}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-sm font-black text-slate-700">{fmt(sub.pricePaid)}</span>
+                          {sub.status === "ACTIVE" && (
+                            <button onClick={() => setDeleteSubId(sub.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors">
+                              <X className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </ContentCard>
+            )}
+          </motion.div>
+        )}
+
+        {/* ══ PLANOS ══ */}
+        {tab === "plans" && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+            <SectionTitle
+              title="Planos"
+              description="Configure os planos de assinatura disponíveis"
+              icon={Package}
+              action={
+                <Button size="sm" variant="primary" iconLeft={<Plus className="w-4 h-4" />} onClick={() => openPlanModal()}>
+                  Novo Plano
+                </Button>
+              }
+            />
+
+            {(!stats?.plans || stats.plans.length === 0) ? (
+              <EmptyState title="Sem planos" description="Crie o primeiro plano de assinatura." icon={Package} />
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {stats!.plans.map(plan => {
+                  const subCount = stats!.subscriptions.filter(s => s.planId === plan.id && s.status === "ACTIVE").length;
+                  const features = plan.features ? plan.features.split("\n").filter(Boolean) : [];
+                  return (
+                    <ContentCard key={plan.id} padding="lg">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${plan.color}20` }}>
+                          <Star className="w-5 h-5" style={{ color: plan.color }} />
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => openPlanModal(plan)} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-zinc-100 rounded-lg transition-colors">
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          {!plan.isActive && (
+                            <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md bg-zinc-100 text-zinc-500">Inativo</span>
+                          )}
+                        </div>
+                      </div>
+                      <h3 className="font-black text-slate-800 text-base">{plan.name}</h3>
+                      {plan.description && <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{plan.description}</p>}
+                      <div className="mt-3">
+                        <span className="text-2xl font-black" style={{ color: plan.color }}>{fmt(plan.price)}</span>
+                        <span className="text-xs text-slate-400 ml-1">/ {plan.durationDays}d</span>
+                      </div>
+                      {features.length > 0 && (
+                        <ul className="mt-3 space-y-1">
+                          {features.map((f, i) => (
+                            <li key={i} className="flex items-center gap-1.5 text-xs text-slate-600">
+                              <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />
+                              {f}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <div className="mt-4 pt-3 border-t border-zinc-100 flex items-center justify-between">
+                        <span className="text-[10px] text-slate-400">{subCount} assinante{subCount !== 1 ? "s" : ""} ativo{subCount !== 1 ? "s" : ""}</span>
+                        <span className="text-[10px] font-black text-slate-500">{plan.durationDays === 30 ? "Mensal" : plan.durationDays === 90 ? "Trimestral" : plan.durationDays === 365 ? "Anual" : `${plan.durationDays} dias`}</span>
+                      </div>
+                    </ContentCard>
+                  );
+                })}
+              </div>
+            )}
+          </motion.div>
+        )}
+
+        {/* ══ CONVITES ══ */}
+        {tab === "invites" && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+            <SectionTitle
+              title="Links de Convite"
+              description="Gere links de cadastro único para novos usuários"
+              icon={LinkIcon}
+              action={
+                <Button size="sm" variant="primary" iconLeft={<Plus className="w-4 h-4" />} onClick={() => { setShowNewInvite(true); setNewInviteUrl(null); }}>
+                  Gerar Convite
+                </Button>
+              }
+            />
+
+            {invites.length === 0 ? (
+              <EmptyState title="Nenhum convite" description="Nenhum convite gerado ainda." icon={LinkIcon} />
             ) : (
               <div className="space-y-2">
                 {invites.map(invite => {
@@ -253,195 +661,101 @@ export default function SuperAdminPage() {
                   const used = !!invite.usedAt;
                   const expired = !used && new Date() > new Date(invite.expiresAt);
                   const active = !used && !expired;
-
                   return (
-                    <div
-                      key={invite.id}
-                      className={`bg-slate-900 border rounded-2xl p-4 transition-all ${
-                        active ? "border-amber-500/30" : "border-slate-800 opacity-60"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0 space-y-1.5">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <InviteStatusBadge invite={invite} />
-                            {invite.note && (
-                              <span className="text-xs text-slate-400 font-medium">{invite.note}</span>
-                            )}
-                          </div>
-
-                          {active && (
-                            <div className="flex items-center gap-2 mt-2">
-                              <code className="text-[11px] text-amber-400 bg-slate-800 px-2 py-1 rounded-lg truncate max-w-xs font-mono">
-                                {url}
-                              </code>
-                              <button
-                                onClick={() => copyLink(url)}
-                                className="p-1.5 text-slate-500 hover:text-amber-400 transition-colors shrink-0"
-                                title="Copiar link"
-                              >
-                                <Copy className="w-3.5 h-3.5" />
-                              </button>
+                    <ContentCard key={invite.id} padding="none">
+                      <div className={`px-4 py-4 ${!active ? "opacity-60" : ""}`}>
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1 min-w-0 space-y-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <InviteStatusBadge invite={invite} />
+                              {invite.note && <span className="text-xs text-slate-500 font-medium">{invite.note}</span>}
                             </div>
-                          )}
-
-                          <div className="flex items-center gap-3 text-[10px] text-slate-600 flex-wrap mt-1">
-                            <span>Criado {fmtDate(invite.createdAt)}</span>
-                            <span>Expira {fmtDate(invite.expiresAt)}</span>
-                            {invite.usedByEmail && <span>Usado por <span className="text-slate-400">{invite.usedByEmail}</span></span>}
-                          </div>
-                        </div>
-
-                        {!used && (
-                          <button
-                            onClick={() => setDeleteInviteId(invite.id)}
-                            className="p-2 text-slate-600 hover:text-red-400 transition-colors shrink-0"
-                            title="Revogar convite"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── CONTAS ── */}
-        {tab === "accounts" && (
-          <div className="space-y-4">
-            <h2 className="text-sm font-black text-slate-300 uppercase tracking-widest">Contas Cadastradas</h2>
-
-            {accounts.length === 0 ? (
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-10 text-center">
-                <p className="text-slate-500 text-sm">Nenhuma conta encontrada.</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {accounts.map(acc => {
-                  const isMe = acc.id === (account as any)?.id;
-                  const expanded = expandedAccount === acc.id;
-                  return (
-                    <div key={acc.id} className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-                      <div className="flex items-center gap-4 p-4">
-                        <div className="w-9 h-9 rounded-xl bg-slate-800 flex items-center justify-center shrink-0 text-sm font-black text-slate-400">
-                          {acc.name[0]?.toUpperCase()}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-sm font-black text-white">{acc.name}</p>
-                            {acc.isSuperAdmin && (
-                              <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                                Super Admin
-                              </span>
+                            {active && (
+                              <div className="flex items-center gap-2">
+                                <code className="text-[11px] text-amber-600 bg-amber-50 border border-amber-200 px-2 py-1 rounded-lg truncate max-w-xs font-mono">
+                                  {url}
+                                </code>
+                                <button onClick={() => copyLink(url)} className="p-1.5 text-slate-400 hover:text-amber-500 transition-colors shrink-0" title="Copiar link">
+                                  <Copy className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             )}
-                            {isMe && (
-                              <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md bg-blue-500/20 text-blue-400">
-                                Você
-                              </span>
-                            )}
+                            <div className="flex items-center gap-3 text-[10px] text-slate-400 flex-wrap">
+                              <span>Criado {fmtDate(invite.createdAt)}</span>
+                              <span>Expira {fmtDate(invite.expiresAt)}</span>
+                              {invite.usedByEmail && <span>Usado por <span className="text-slate-600 font-bold">{invite.usedByEmail}</span></span>}
+                            </div>
                           </div>
-                          <p className="text-xs text-slate-500">{acc.email}</p>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-[10px] text-slate-600">{acc.memberships.length} tenant{acc.memberships.length !== 1 ? "s" : ""}</span>
-                          <button
-                            onClick={() => setExpandedAccount(expanded ? null : acc.id)}
-                            className="p-1.5 text-slate-600 hover:text-slate-300 transition-colors"
-                          >
-                            {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                          </button>
-                          {!isMe && !acc.isSuperAdmin && (
-                            <button
-                              onClick={() => setDeleteAccountId(acc.id)}
-                              className="p-1.5 text-slate-600 hover:text-red-400 transition-colors"
-                              title="Remover conta"
-                            >
+                          {!used && (
+                            <button onClick={() => setDeleteInviteId(invite.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors shrink-0">
                               <Trash2 className="w-4 h-4" />
                             </button>
                           )}
                         </div>
                       </div>
-
-                      {expanded && acc.memberships.length > 0 && (
-                        <div className="border-t border-slate-800 px-4 pb-4 pt-3 space-y-1.5">
-                          {acc.memberships.map(m => (
-                            <div key={m.tenant.id} className="flex items-center justify-between text-xs">
-                              <span className="text-slate-400 font-bold">{m.tenant.name}</span>
-                              <div className="flex items-center gap-2">
-                                <span className="text-[10px] text-slate-600 font-mono">/{m.tenant.slug}</span>
-                                <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-500">
-                                  {m.role}
-                                </span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                    </ContentCard>
                   );
                 })}
               </div>
             )}
-          </div>
+          </motion.div>
         )}
-      </main>
+      </div>
 
-      {/* Modal: Gerar convite */}
-      <Modal
-        isOpen={showNewInvite}
-        onClose={() => { setShowNewInvite(false); setNewInviteUrl(null); }}
-        title="Gerar link de convite"
-      >
-        <p className="text-sm text-slate-500 -mt-2 mb-4">O link pode ser usado <strong>uma única vez</strong> para criar uma conta no sistema.</p>
+      {/* ══ MODAIS ══ */}
+
+      {/* Modal: Novo convite */}
+      <Modal isOpen={showNewInvite} onClose={() => { setShowNewInvite(false); setNewInviteUrl(null); }} title="Gerar Link de Convite" size="sm">
+        <p className="text-sm text-slate-500 -mt-2 mb-4">Link de uso único para cadastro de nova conta.</p>
         {newInviteUrl ? (
           <div className="space-y-4">
             <div className="bg-green-50 border border-green-200 rounded-2xl p-4 text-center space-y-3">
               <CheckCircle2 className="w-8 h-8 text-green-500 mx-auto" />
-              <p className="text-sm font-black text-green-800">Convite gerado com sucesso!</p>
-              <code className="text-xs text-green-700 break-all font-mono">{newInviteUrl}</code>
+              <p className="text-sm font-black text-green-800">Convite gerado!</p>
+              <code className="text-xs text-green-700 break-all font-mono block">{newInviteUrl}</code>
             </div>
-            <Button
-              fullWidth
-              onClick={() => copyLink(newInviteUrl)}
-              className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black"
-            >
-              <Copy className="w-4 h-4 mr-2" />
+            <Button fullWidth variant="primary" iconLeft={<Copy className="w-4 h-4" />} onClick={() => copyLink(newInviteUrl)}>
               {copied ? "Copiado!" : "Copiar link"}
             </Button>
           </div>
         ) : (
-          <div className="space-y-4">
-            <Input
-              label="Observação (opcional)"
-              value={inviteNote}
-              onChange={e => setInviteNote(e.target.value)}
-              placeholder="Ex: Para João da Pizzaria Central"
-              hint="Ajuda a identificar para quem foi gerado"
-            />
+          <>
+            <div className="space-y-4">
+              <Input label="Observação (opcional)" value={inviteNote} onChange={e => setInviteNote(e.target.value)} placeholder="Ex: Para João da Pizzaria Central" hint="Ajuda a identificar para quem foi gerado" />
+              <div>
+                <label className="ds-label mb-2 block">Validade do link</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[{ label: "1h", value: "1" }, { label: "24h", value: "24" }, { label: "48h", value: "48" }, { label: "7 dias", value: "168" }].map(opt => (
+                    <button key={opt.value} type="button" onClick={() => setInviteHours(opt.value)}
+                      className={`py-2 rounded-xl text-xs font-black border transition-all ${inviteHours === opt.value ? "bg-[#0D1B3E] border-[#0D1B3E] text-amber-400" : "border-zinc-200 text-slate-600 hover:border-zinc-400"}`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <ModalFooter>
+              <Button variant="ghost" onClick={() => setShowNewInvite(false)}>Cancelar</Button>
+              <Button variant="primary" loading={creatingInvite} onClick={handleCreateInvite}>Gerar link</Button>
+            </ModalFooter>
+          </>
+        )}
+      </Modal>
+
+      {/* Modal: Criar/Editar plano */}
+      <Modal isOpen={showPlanModal} onClose={() => setShowPlanModal(false)} title={editingPlan ? "Editar Plano" : "Novo Plano"} size="sm">
+        <div className="space-y-4">
+          <Input label="Nome do plano" value={planForm.name} onChange={e => setPlanForm(f => ({ ...f, name: e.target.value }))} placeholder="Ex: Starter, Pro, Enterprise" />
+          <Input label="Descrição (opcional)" value={planForm.description} onChange={e => setPlanForm(f => ({ ...f, description: e.target.value }))} placeholder="Descrição resumida do plano" />
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Preço (R$)" type="number" value={planForm.price} onChange={e => setPlanForm(f => ({ ...f, price: e.target.value }))} placeholder="0,00" />
             <div>
-              <label className="text-xs font-black text-slate-700 uppercase tracking-wider block mb-1.5">
-                Validade do link
-              </label>
-              <div className="grid grid-cols-4 gap-2">
-                {[
-                  { label: "1h", value: "1" },
-                  { label: "24h", value: "24" },
-                  { label: "48h", value: "48" },
-                  { label: "7 dias", value: "168" },
-                ].map(opt => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setInviteHours(opt.value)}
-                    className={`py-2 rounded-xl text-xs font-black border transition-all ${
-                      inviteHours === opt.value
-                        ? "bg-amber-500 border-amber-500 text-white"
-                        : "border-slate-200 text-slate-600 hover:border-amber-300"
-                    }`}
+              <label className="ds-label mb-2 block">Duração</label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {[{ label: "30d", value: "30" }, { label: "60d", value: "60" }, { label: "90d", value: "90" }, { label: "365d", value: "365" }].map(opt => (
+                  <button key={opt.value} type="button" onClick={() => setPlanForm(f => ({ ...f, durationDays: opt.value }))}
+                    className={`py-1.5 rounded-lg text-xs font-black border transition-all ${planForm.durationDays === opt.value ? "bg-[#0D1B3E] border-[#0D1B3E] text-amber-400" : "border-zinc-200 text-slate-600 hover:border-zinc-400"}`}
                   >
                     {opt.label}
                   </button>
@@ -449,49 +763,94 @@ export default function SuperAdminPage() {
               </div>
             </div>
           </div>
-        )}
-
-        {!newInviteUrl && (
-          <ModalFooter>
-            <Button variant="ghost" onClick={() => setShowNewInvite(false)}>Cancelar</Button>
-            <Button
-              loading={creatingInvite}
-              onClick={handleCreateInvite}
-              className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black"
-            >
-              Gerar link
-            </Button>
-          </ModalFooter>
-        )}
-      </Modal>
-
-      {/* Modal: Confirmar remover conta */}
-      <Modal
-        isOpen={!!deleteAccountId}
-        onClose={() => setDeleteAccountId(null)}
-        title="Remover conta"
-      >
-        <p className="text-sm text-slate-500 -mt-2 mb-4">Esta ação é irreversível. A conta e todos os dados associados serão removidos.</p>
+          <div>
+            <label className="ds-label mb-1.5 block">Funcionalidades (uma por linha)</label>
+            <textarea
+              value={planForm.features}
+              onChange={e => setPlanForm(f => ({ ...f, features: e.target.value }))}
+              placeholder={"PDV ilimitado\nWhatsApp Bot\nRelatórios avançados"}
+              rows={4}
+              className="w-full rounded-[10px] border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-sm text-slate-800 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 resize-none"
+            />
+          </div>
+          <div className="flex items-center gap-3">
+            <div>
+              <label className="ds-label mb-1.5 block">Cor do plano</label>
+              <input type="color" value={planForm.color} onChange={e => setPlanForm(f => ({ ...f, color: e.target.value }))} className="h-10 w-20 rounded-xl border border-zinc-200 cursor-pointer" />
+            </div>
+          </div>
+        </div>
         <ModalFooter>
-          <Button variant="ghost" onClick={() => setDeleteAccountId(null)}>Cancelar</Button>
-          <Button variant="danger" loading={deleting} onClick={handleDeleteAccount}>
-            Remover conta
-          </Button>
+          <Button variant="ghost" onClick={() => setShowPlanModal(false)}>Cancelar</Button>
+          <Button variant="primary" loading={savingPlan} onClick={handleSavePlan}>{editingPlan ? "Salvar" : "Criar plano"}</Button>
         </ModalFooter>
       </Modal>
 
-      {/* Modal: Confirmar revogar convite */}
-      <Modal
-        isOpen={!!deleteInviteId}
-        onClose={() => setDeleteInviteId(null)}
-        title="Revogar convite"
-      >
+      {/* Modal: Nova assinatura */}
+      <Modal isOpen={showSubModal} onClose={() => setShowSubModal(false)} title="Nova Assinatura" size="sm">
+        <div className="space-y-4">
+          <div>
+            <label className="ds-label mb-1.5 block">Conta</label>
+            <select
+              value={subForm.accountId}
+              onChange={e => setSubForm(f => ({ ...f, accountId: e.target.value }))}
+              className="w-full h-10 rounded-[10px] border border-zinc-200 bg-zinc-50 px-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400"
+            >
+              <option value="">Selecione uma conta...</option>
+              {accounts.filter(a => !a.isSuperAdmin).map(a => (
+                <option key={a.id} value={a.id}>{a.name} — {a.email}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="ds-label mb-1.5 block">Plano</label>
+            <select
+              value={subForm.planId}
+              onChange={e => {
+                const plan = stats?.plans.find(p => p.id === e.target.value);
+                setSubForm(f => ({ ...f, planId: e.target.value, pricePaid: plan ? String(plan.price) : f.pricePaid }));
+              }}
+              className="w-full h-10 rounded-[10px] border border-zinc-200 bg-zinc-50 px-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400"
+            >
+              <option value="">Selecione um plano...</option>
+              {(stats?.plans ?? []).filter(p => p.isActive).map(p => (
+                <option key={p.id} value={p.id}>{p.name} — {fmt(p.price)} / {p.durationDays}d</option>
+              ))}
+            </select>
+          </div>
+          <Input label="Valor cobrado (R$)" type="number" value={subForm.pricePaid} onChange={e => setSubForm(f => ({ ...f, pricePaid: e.target.value }))} placeholder="0,00" hint="Deixe em branco para usar o preço do plano" />
+          <Input label="Observações (opcional)" value={subForm.notes} onChange={e => setSubForm(f => ({ ...f, notes: e.target.value }))} placeholder="Ex: Desconto de inauguração" />
+        </div>
+        <ModalFooter>
+          <Button variant="ghost" onClick={() => setShowSubModal(false)}>Cancelar</Button>
+          <Button variant="primary" loading={savingSub} onClick={handleCreateSub} disabled={!subForm.accountId || !subForm.planId}>Criar assinatura</Button>
+        </ModalFooter>
+      </Modal>
+
+      {/* Modal: Remover conta */}
+      <Modal isOpen={!!deleteAccountId} onClose={() => setDeleteAccountId(null)} title="Remover conta" size="sm">
+        <p className="text-sm text-slate-500 -mt-2 mb-4">Esta ação é irreversível. A conta e todos os dados associados serão removidos.</p>
+        <ModalFooter>
+          <Button variant="ghost" onClick={() => setDeleteAccountId(null)}>Cancelar</Button>
+          <Button variant="danger" loading={deleting} onClick={handleDeleteAccount}>Remover conta</Button>
+        </ModalFooter>
+      </Modal>
+
+      {/* Modal: Revogar convite */}
+      <Modal isOpen={!!deleteInviteId} onClose={() => setDeleteInviteId(null)} title="Revogar convite" size="sm">
         <p className="text-sm text-slate-500 -mt-2 mb-4">O link será invalidado e não poderá mais ser usado para criar conta.</p>
         <ModalFooter>
           <Button variant="ghost" onClick={() => setDeleteInviteId(null)}>Cancelar</Button>
-          <Button variant="danger" loading={deleting} onClick={handleRevokeInvite}>
-            Revogar convite
-          </Button>
+          <Button variant="danger" loading={deleting} onClick={handleRevokeInvite}>Revogar convite</Button>
+        </ModalFooter>
+      </Modal>
+
+      {/* Modal: Cancelar assinatura */}
+      <Modal isOpen={!!deleteSubId} onClose={() => setDeleteSubId(null)} title="Cancelar assinatura" size="sm">
+        <p className="text-sm text-slate-500 -mt-2 mb-4">A assinatura será cancelada. O acesso do cliente pode ser afetado.</p>
+        <ModalFooter>
+          <Button variant="ghost" onClick={() => setDeleteSubId(null)}>Cancelar</Button>
+          <Button variant="danger" loading={deleting} onClick={handleCancelSub}>Confirmar cancelamento</Button>
         </ModalFooter>
       </Modal>
     </div>

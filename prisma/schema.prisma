@@ -15,8 +15,11 @@ model Tenant {
   logoUrl     String?
   whatsapp    String?
   address     String?
-  isOpen      Boolean  @default(true) @map("is_open")
-  scheduleMode Boolean  @default(false) @map("schedule_mode")
+  isOpen        Boolean  @default(true) @map("is_open")
+  scheduleMode  Boolean  @default(false) @map("schedule_mode")
+  scheduleType  String   @default("CLIENT_CHOOSES") @map("schedule_type") // CLIENT_CHOOSES | OWNER_DEFINES
+  scheduleDays  String?  @map("schedule_days") @db.Text // JSON: ScheduleDay[]
+  scheduleNotes String?  @map("schedule_notes") @db.Text
   businessHours String? @map("business_hours") @db.Text // JSON: { mon: {open:"08:00",close:"22:00",enabled:true}, ... }
   deliveryConfig String? @map("delivery_config") @db.Text // JSON: DeliveryConfig
   paymentMethods String? @map("payment_methods") @db.Text // JSON: PaymentConfig
@@ -48,11 +51,48 @@ model Account {
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
-  memberships  TenantMembership[]
-  sessions     AuthSession[]
-  inviteTokens InviteToken[]
+  memberships   TenantMembership[]
+  sessions      AuthSession[]
+  inviteTokens  InviteToken[]
+  subscriptions Subscription[]
 
   @@map("accounts")
+}
+
+model SubscriptionPlan {
+  id           String   @id @default(cuid())
+  name         String
+  description  String?  @db.Text
+  price        Float    @default(0)
+  durationDays Int      @default(30) @map("duration_days")
+  features     String?  @db.Text
+  isActive     Boolean  @default(true) @map("is_active")
+  color        String?  @default("#C9A227")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  subscriptions Subscription[]
+
+  @@map("subscription_plans")
+}
+
+model Subscription {
+  id          String   @id @default(cuid())
+  accountId   String   @map("account_id")
+  planId      String   @map("plan_id")
+  status      String   @default("ACTIVE") // ACTIVE, EXPIRED, CANCELLED, TRIAL
+  startsAt    DateTime @map("starts_at")
+  expiresAt   DateTime @map("expires_at")
+  pricePaid   Float    @default(0) @map("price_paid")
+  notes       String?  @db.Text
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  account Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  plan    SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
 }
 
 model TenantMembership {
@@ -320,6 +360,7 @@ model Order {
   operatorName  String?  @map("operator_name")
   customerId    String?  @map("customer_id")
   scheduledDate DateTime? @map("scheduled_date") @db.Date
+  scheduledTime String?   @map("scheduled_time") // HH:mm
   total         Float
   tenantId      String   @map("tenant_id")
   createdAt     DateTime @default(now()) @map("created_at")

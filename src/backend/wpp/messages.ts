@@ -33,6 +33,8 @@ export async function sendOrderCreatedMessage(order: {
   orderType: string;
   paymentMethod?: string;
   address?: string | null;
+  scheduledDate?: string | null;
+  scheduledTime?: string | null;
   items: Array<{ quantity: number; price: number; notes?: string | null; product?: { name?: string | null } | null; productVariant?: { name?: string | null } | null }>;
 }, tenant: { name: string; slug: string }) {
   const allowed = await canSend(order.tenantId, "sendOrderCreated");
@@ -42,14 +44,23 @@ export async function sendOrderCreatedMessage(order: {
   const typeLabel = order.orderType === "PICKUP" ? "🏪 Retirada no balcão" : "🛵 Entrega";
   const payLabel: Record<string, string> = { PIX: "PIX", CREDIT: "Cartão de crédito", DEBIT: "Cartão de débito", MEAL: "Vale-refeição", CASH: "Dinheiro" };
 
+  let scheduledLine = "";
+  if (order.scheduledDate) {
+    const d = new Date(order.scheduledDate + "T12:00:00");
+    const dateStr = d.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
+    const timeStr = order.scheduledTime ? ` às ${order.scheduledTime}` : "";
+    scheduledLine = `\n📅 *Encomenda para:* ${dateStr}${timeStr}`;
+  }
+
   const text =
-    `✅ *Pedido recebido em ${tenant.name}!*\n\n` +
-    `Olá, ${order.customerName}! Seu pedido foi enviado para a cozinha. 👨‍🍳\n\n` +
+    `${order.scheduledDate ? "📦" : "✅"} *Pedido recebido em ${tenant.name}!*\n\n` +
+    `Olá, ${order.customerName}! Seu pedido foi ${order.scheduledDate ? "registrado como encomenda" : "enviado para a cozinha 👨‍🍳"}.\n\n` +
     `📋 *Resumo:*\n${formatItems(order.items)}\n\n` +
     `💰 *Total:* ${fmt(order.total)}\n` +
     `${typeLabel}\n` +
     (order.orderType === "DELIVERY" && order.address ? `📍 Entrega em: ${order.address}\n` : "") +
-    `💳 Pagamento: ${payLabel[order.paymentMethod || ""] || order.paymentMethod || "Não informado"}\n\n` +
+    `💳 Pagamento: ${payLabel[order.paymentMethod || ""] || order.paymentMethod || "Não informado"}` +
+    scheduledLine + `\n\n` +
     `Acompanhe seu pedido aqui:\n${baseUrl}/${tenant.slug}`;
 
   await sendMessage(order.tenantId, order.customerPhone, text);
@@ -64,6 +75,8 @@ export async function sendOwnerOrderAlert(order: {
   total: number;
   orderType: string;
   address?: string | null;
+  scheduledDate?: string | null;
+  scheduledTime?: string | null;
   items: Array<{ quantity: number; price: number; notes?: string | null; product?: { name?: string | null } | null; productVariant?: { name?: string | null } | null }>;
 }, tenant: { name: string; slug: string; whatsapp?: string | null }) {
   if (!tenant.whatsapp) return;
@@ -74,10 +87,19 @@ export async function sendOwnerOrderAlert(order: {
 
   const typeLabel = order.orderType === "PICKUP" ? "🏪 Retirada" : "🛵 Entrega";
 
+  let scheduledLine = "";
+  if (order.scheduledDate) {
+    const d = new Date(order.scheduledDate + "T12:00:00");
+    const dateStr = d.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
+    const timeStr = order.scheduledTime ? ` às ${order.scheduledTime}` : "";
+    scheduledLine = `\n📅 *ENCOMENDA para:* ${dateStr}${timeStr}`;
+  }
+
   const text =
-    `🔔 *Novo pedido recebido!*\n\n` +
+    `${order.scheduledDate ? "📦" : "🔔"} *${order.scheduledDate ? "Nova encomenda" : "Novo pedido"} recebido!*\n\n` +
     `👤 Cliente: ${order.customerName} (${order.customerPhone})\n` +
-    `${typeLabel}${order.orderType === "DELIVERY" && order.address ? ` → ${order.address}` : ""}\n\n` +
+    `${typeLabel}${order.orderType === "DELIVERY" && order.address ? ` → ${order.address}` : ""}` +
+    scheduledLine + `\n\n` +
     `📋 *Itens:*\n${formatItems(order.items)}\n\n` +
     `💰 *Total: ${fmt(order.total)}*`;
 

@@ -558,6 +558,141 @@ app.delete("/api/superadmin/invites/:id", requireAuth, requireSuperAdmin, async 
   }
 });
 
+// Dashboard stats do super admin
+app.get("/api/superadmin/stats", requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    const now = new Date();
+    const [accounts, tenants, subscriptions, plans, invites] = await Promise.all([
+      prisma.account.count(),
+      prisma.tenant.count(),
+      (prisma as any).subscription.findMany({
+        include: { plan: true, account: { select: { id: true, name: true, email: true } } },
+        orderBy: { createdAt: "desc" },
+      }),
+      (prisma as any).subscriptionPlan.findMany({ orderBy: { price: "asc" } }),
+      prisma.inviteToken.count(),
+    ]);
+
+    const activeSubscriptions = subscriptions.filter((s: any) => s.status === "ACTIVE" && new Date(s.expiresAt) > now);
+    const expiredSubscriptions = subscriptions.filter((s: any) => new Date(s.expiresAt) <= now);
+    const monthlyRevenue = subscriptions
+      .filter((s: any) => {
+        const d = new Date(s.createdAt);
+        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      })
+      .reduce((acc: number, s: any) => acc + s.pricePaid, 0);
+    const totalRevenue = subscriptions.reduce((acc: number, s: any) => acc + s.pricePaid, 0);
+
+    // Receita por mês (últimos 6 meses)
+    const revenueByMonth: Record<string, number> = {};
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      revenueByMonth[key] = 0;
+    }
+    subscriptions.forEach((s: any) => {
+      const d = new Date(s.createdAt);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      if (key in revenueByMonth) revenueByMonth[key] += s.pricePaid;
+    });
+
+    res.json({
+      accounts, tenants, invites, totalRevenue, monthlyRevenue,
+      activeSubscriptions: activeSubscriptions.length,
+      expiredSubscriptions: expiredSubscriptions.length,
+      revenueByMonth,
+      subscriptions,
+      plans,
+    });
+  } catch (error) {
+    console.error("ERRO superadmin/stats:", error);
+    res.status(500).json({ error: "Falha ao carregar stats." });
+  }
+});
+
+// Lista planos
+app.get("/api/superadmin/plans", requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    const plans = await (prisma as any).subscriptionPlan.findMany({ orderBy: { price: "asc" } });
+    res.json(plans);
+  } catch (error) { res.status(500).json({ error: "Falha ao listar planos." }); }
+});
+
+// Cria plano
+app.post("/api/superadmin/plans", requireAuth, requireSuperAdmin, async (req, res) => {
+  const { name, description, price, durationDays, features, color } = req.body;
+  try {
+    const plan = await (prisma as any).subscriptionPlan.create({
+      data: { name, description: description || null, price: Number(price) || 0, durationDays: Number(durationDays) || 30, features: features || null, color: color || "#C9A227" },
+    });
+    res.json(plan);
+  } catch (error) { res.status(500).json({ error: "Falha ao criar plano." }); }
+});
+
+// Edita plano
+app.patch("/api/superadmin/plans/:id", requireAuth, requireSuperAdmin, async (req, res) => {
+  const { name, description, price, durationDays, features, color, isActive } = req.body;
+  try {
+    const plan = await (prisma as any).subscriptionPlan.update({
+      where: { id: req.params.id },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(description !== undefined && { description }),
+        ...(price !== undefined && { price: Number(price) }),
+        ...(durationDays !== undefined && { durationDays: Number(durationDays) }),
+        ...(features !== undefined && { features }),
+        ...(color !== undefined && { color }),
+        ...(isActive !== undefined && { isActive: Boolean(isActive) }),
+      },
+    });
+    res.json(plan);
+  } catch (error) { res.status(500).json({ error: "Falha ao editar plano." }); }
+});
+
+// Remove plano
+app.delete("/api/superadmin/plans/:id", requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    await (prisma as any).subscriptionPlan.delete({ where: { id: req.params.id } });
+    res.json({ success: true });
+  } catch (error) { res.status(500).json({ error: "Falha ao remover plano." }); }
+});
+
+// Lista assinaturas
+app.get("/api/superadmin/subscriptions", requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    const subs = await (prisma as any).subscription.findMany({
+      include: { plan: true, account: { select: { id: true, name: true, email: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+    res.json(subs);
+  } catch (error) { res.status(500).json({ error: "Falha ao listar assinaturas." }); }
+});
+
+// Cria assinatura para uma conta
+app.post("/api/superadmin/subscriptions", requireAuth, requireSuperAdmin, async (req, res) => {
+  const me = currentAccount(req)!;
+  const { accountId, planId, pricePaid, notes, startsAt } = req.body;
+  try {
+    const plan = await (prisma as any).subscriptionPlan.findUnique({ where: { id: planId } });
+    if (!plan) return res.status(404).json({ error: "Plano não encontrado." });
+    const start = startsAt ? new Date(startsAt) : new Date();
+    const expires = new Date(start.getTime() + plan.durationDays * 24 * 60 * 60 * 1000);
+    const sub = await (prisma as any).subscription.create({
+      data: { accountId, planId, pricePaid: Number(pricePaid) || plan.price, notes: notes || null, startsAt: start, expiresAt: expires, createdById: me.id, status: "ACTIVE" },
+      include: { plan: true, account: { select: { id: true, name: true, email: true } } },
+    });
+    res.json(sub);
+  } catch (error) { res.status(500).json({ error: "Falha ao criar assinatura." }); }
+});
+
+// Cancela assinatura
+app.delete("/api/superadmin/subscriptions/:id", requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    await (prisma as any).subscription.update({ where: { id: req.params.id }, data: { status: "CANCELLED" } });
+    res.json({ success: true });
+  } catch (error) { res.status(500).json({ error: "Falha ao cancelar assinatura." }); }
+});
+
 app.get("/api/owner/tenants", requireAuth, async (req, res) => {
   const account = currentAccount(req)!;
   const tenants = await listAccountTenants(account.id);
@@ -654,7 +789,7 @@ app.patch("/api/owner/tenants/:tenantId", requireAuth, async (req, res) => {
   const tenant = await requireTenantById(req, res, req.params.tenantId);
   if (!tenant) return;
 
-  const { name, description, address, whatsapp, logoUrl, isOpen, scheduleMode, businessHours, deliveryConfig, paymentMethods } = req.body;
+  const { name, description, address, whatsapp, logoUrl, isOpen, scheduleMode, scheduleType, scheduleDays, scheduleNotes, businessHours, deliveryConfig, paymentMethods } = req.body;
   try {
     const updated = await prisma.tenant.update({
       where: { id: tenant.id },
@@ -666,6 +801,9 @@ app.patch("/api/owner/tenants/:tenantId", requireAuth, async (req, res) => {
         ...(logoUrl !== undefined && { logoUrl: logoUrl || null }),
         ...(isOpen !== undefined && { isOpen: Boolean(isOpen) }),
         ...(scheduleMode !== undefined && { scheduleMode: Boolean(scheduleMode) }),
+        ...(scheduleType !== undefined && { scheduleType: scheduleType || "CLIENT_CHOOSES" }),
+        ...(scheduleDays !== undefined && { scheduleDays: scheduleDays ? (typeof scheduleDays === "string" ? scheduleDays : JSON.stringify(scheduleDays)) : null }),
+        ...(scheduleNotes !== undefined && { scheduleNotes: scheduleNotes || null }),
         ...(businessHours !== undefined && { 
           businessHours: (businessHours === null || businessHours === "null") ? null : 
                         (typeof businessHours === "string" ? businessHours : JSON.stringify(businessHours)) 
@@ -950,7 +1088,7 @@ app.get("/api/admin/tenant/:slug", requireAuth, async (req, res) => {
 
 app.post("/api/orders", async (req, res) => {
   console.log("Incoming Order Body:", JSON.stringify(req.body, null, 2));
-  const { customerName, customerPhone, address, items, tenantId, orderType, paymentMethod, paymentDetail, tableId, scheduledDate, notes } = req.body;
+  const { customerName, customerPhone, address, items, tenantId, orderType, paymentMethod, paymentDetail, tableId, scheduledDate, scheduledTime, notes } = req.body;
 
   try {
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
@@ -999,6 +1137,7 @@ app.post("/api/orders", async (req, res) => {
         paymentDetail,
         notes: notes || null,
         scheduledDate: scheduledDate ? new Date(scheduledDate) : null,
+        scheduledTime: scheduledTime || null,
         total,
         tenantId,
         tableId: tableId || null,

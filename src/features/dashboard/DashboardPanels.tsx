@@ -583,6 +583,16 @@ const CARD_BRANDS_LIST = [
   { id: 'alelo', label: 'Alelo' }
 ];
 
+// ─── ScheduleDay default helpers ──────────────────────────────────────────────
+const WEEKDAY_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+const DEFAULT_SCHEDULE_DAYS = WEEKDAY_LABELS.map((label, i) => ({
+  weekday: i, label, enabled: false, times: ["09:00", "18:00"],
+}));
+
+function parseScheduleDays(raw?: string | null) {
+  try { return raw ? JSON.parse(raw) : DEFAULT_SCHEDULE_DAYS; } catch { return DEFAULT_SCHEDULE_DAYS; }
+}
+
 export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, refresh: () => void }) {
   const [activeTab, setActiveTab] = useState<"general" | "hours" | "delivery" | "payments">("general");
   const [form, setForm] = useState({
@@ -592,7 +602,10 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
     whatsapp: maskPhone(tenant?.whatsapp) || "",
     isOpen: tenant?.isOpen ?? true,
     scheduleMode: tenant?.scheduleMode ?? false,
+    scheduleType: (tenant?.scheduleType ?? "CLIENT_CHOOSES") as "CLIENT_CHOOSES" | "OWNER_DEFINES",
+    scheduleNotes: tenant?.scheduleNotes || "",
   });
+  const [scheduleDays, setScheduleDays] = useState<any[]>(() => parseScheduleDays(tenant?.scheduleDays));
   const [addr, setAddr] = useState<AddressForm>(() => parseAddress(tenant?.address) ?? { ...EMPTY_ADDR });
   const [cepLoading, setCepLoading] = useState(false);
   const [cepError, setCepError] = useState("");
@@ -614,7 +627,8 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
 
   useEffect(() => {
     if (tenant) {
-      setForm({ name: tenant.name || "", description: tenant.description || "", logoUrl: tenant.logoUrl || "", whatsapp: maskPhone(tenant.whatsapp) || "", isOpen: tenant.isOpen ?? true, scheduleMode: tenant.scheduleMode ?? false });
+      setForm({ name: tenant.name || "", description: tenant.description || "", logoUrl: tenant.logoUrl || "", whatsapp: maskPhone(tenant.whatsapp) || "", isOpen: tenant.isOpen ?? true, scheduleMode: tenant.scheduleMode ?? false, scheduleType: (tenant.scheduleType ?? "CLIENT_CHOOSES") as "CLIENT_CHOOSES" | "OWNER_DEFINES", scheduleNotes: tenant.scheduleNotes || "" });
+      setScheduleDays(parseScheduleDays(tenant.scheduleDays));
       setAddr(parseAddress(tenant.address) ?? { ...EMPTY_ADDR });
       try { setHours(tenant.businessHours ? JSON.parse(tenant.businessHours) : DEFAULT_HOURS); } catch { setHours(DEFAULT_HOURS); }
       setDelivery(parseDeliveryConfig(tenant.deliveryConfig));
@@ -643,13 +657,14 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
     try {
       await apiJson(`/api/owner/tenants/${tenant?.id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ 
-          ...form, 
+        body: JSON.stringify({
+          ...form,
           whatsapp: unmaskPhone(form.whatsapp),
-          address: JSON.stringify(addr), 
-          businessHours: JSON.stringify(hours), 
+          address: JSON.stringify(addr),
+          businessHours: JSON.stringify(hours),
           deliveryConfig: JSON.stringify(delivery),
-          paymentMethods: JSON.stringify(payments)
+          paymentMethods: JSON.stringify(payments),
+          scheduleDays: JSON.stringify(scheduleDays),
         })
       });
       await refresh();
@@ -770,17 +785,101 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                     <Switch checked={form.isOpen} onCheckedChange={v => setForm(f => ({ ...f, isOpen: v }))} />
                   </div>
                 </div>
-                <div className="flex items-center justify-between gap-4 pt-5">
-                  <div>
-                    <p className="text-sm font-black text-slate-900">Modo Encomenda</p>
-                    <p className="text-xs text-slate-500 mt-1">Clientes escolhem a data de entrega/retirada ao fazer o pedido.</p>
+                {/* ── Modo Encomenda ── */}
+                <div className="pt-5 border-t border-zinc-100">
+                  <div className="flex items-center justify-between gap-4 mb-4">
+                    <div>
+                      <p className="text-sm font-black text-slate-900">Modo Encomenda</p>
+                      <p className="text-xs text-slate-500 mt-0.5">Ative para receber pedidos agendados (encomendas).</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className={`text-[10px] font-black uppercase tracking-widest ${form.scheduleMode ? 'text-amber-500' : 'text-slate-300'}`}>
+                        {form.scheduleMode ? 'Ativo' : 'Inativo'}
+                      </span>
+                      <Switch checked={form.scheduleMode} onCheckedChange={v => setForm(f => ({ ...f, scheduleMode: v }))} />
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className={`text-[10px] font-black uppercase tracking-widest ${form.scheduleMode ? 'text-amber-500' : 'text-slate-300'}`}>
-                      {form.scheduleMode ? 'Ativo' : 'Inativo'}
-                    </span>
-                    <Switch checked={form.scheduleMode} onCheckedChange={v => setForm(f => ({ ...f, scheduleMode: v }))} />
-                  </div>
+
+                  {form.scheduleMode && (
+                    <div className="space-y-4 bg-amber-50 border border-amber-200 rounded-2xl p-4">
+                      {/* Tipo de agendamento */}
+                      <div>
+                        <p className="text-xs font-black text-amber-800 uppercase tracking-widest mb-2">Como funciona o agendamento?</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {([
+                            { value: "CLIENT_CHOOSES", label: "Cliente escolhe a data", desc: "O cliente seleciona qualquer data no checkout" },
+                            { value: "OWNER_DEFINES",  label: "Dias e horários fixos",  desc: "Você define quais dias/turnos aceita encomendas" },
+                          ] as const).map(opt => (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => setForm(f => ({ ...f, scheduleType: opt.value }))}
+                              className={`text-left p-3 rounded-xl border-2 transition-all ${form.scheduleType === opt.value ? "border-amber-400 bg-white" : "border-amber-200 bg-amber-50/50 hover:border-amber-300"}`}
+                            >
+                              <p className={`text-xs font-black ${form.scheduleType === opt.value ? "text-amber-700" : "text-slate-600"}`}>{opt.label}</p>
+                              <p className="text-[10px] text-slate-400 mt-0.5">{opt.desc}</p>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Dias e horários (só para OWNER_DEFINES) */}
+                      {form.scheduleType === "OWNER_DEFINES" && (
+                        <div>
+                          <p className="text-xs font-black text-amber-800 uppercase tracking-widest mb-2">Dias e turnos de entrega</p>
+                          <div className="space-y-2">
+                            {scheduleDays.map((day: any, idx: number) => (
+                              <div key={day.weekday} className={`rounded-xl border p-3 transition-all ${day.enabled ? "bg-white border-amber-200" : "bg-amber-50/40 border-amber-100"}`}>
+                                <div className="flex items-center gap-3 mb-2">
+                                  <Switch
+                                    checked={day.enabled}
+                                    onCheckedChange={v => setScheduleDays(days => days.map((d, i) => i === idx ? { ...d, enabled: v } : d))}
+                                  />
+                                  <span className={`text-xs font-black w-16 shrink-0 ${day.enabled ? "text-slate-800" : "text-slate-400"}`}>{day.label}</span>
+                                  {day.enabled && (
+                                    <div className="flex flex-wrap gap-1.5 flex-1">
+                                      {day.times.map((t: string, ti: number) => (
+                                        <div key={ti} className="flex items-center gap-1 bg-amber-100 border border-amber-200 rounded-lg px-2 py-0.5">
+                                          <TimeInput
+                                            value={t}
+                                            onChange={v => setScheduleDays(days => days.map((d, i) => i === idx ? { ...d, times: d.times.map((tt: string, tii: number) => tii === ti ? v : tt) } : d))}
+                                          />
+                                          {day.times.length > 1 && (
+                                            <button type="button" onClick={() => setScheduleDays(days => days.map((d, i) => i === idx ? { ...d, times: d.times.filter((_: string, tii: number) => tii !== ti) } : d))} className="text-amber-400 hover:text-red-500 transition-colors">
+                                              <X className="w-3 h-3" />
+                                            </button>
+                                          )}
+                                        </div>
+                                      ))}
+                                      <button
+                                        type="button"
+                                        onClick={() => setScheduleDays(days => days.map((d, i) => i === idx ? { ...d, times: [...d.times, "12:00"] } : d))}
+                                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg border border-dashed border-amber-300 text-amber-500 hover:border-amber-400 transition-colors text-[10px] font-bold"
+                                      >
+                                        <Plus className="w-3 h-3" /> horário
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Aviso para o cliente */}
+                      <div>
+                        <p className="text-xs font-black text-amber-800 uppercase tracking-widest mb-1.5">Mensagem para o cliente (opcional)</p>
+                        <textarea
+                          value={form.scheduleNotes}
+                          onChange={e => setForm(f => ({ ...f, scheduleNotes: e.target.value }))}
+                          placeholder="Ex: Aceitamos encomendas com mínimo 48h de antecedência. Pagamento antecipado via PIX."
+                          rows={2}
+                          className="w-full rounded-[10px] border border-amber-200 bg-white px-3 py-2 text-xs text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 resize-none"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </ContentCard>

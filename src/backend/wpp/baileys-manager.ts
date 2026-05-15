@@ -487,9 +487,12 @@ async function handleIncomingMessage(tenantId: string, remoteJid: string, text: 
   const name = tenant.name;
 
   const sendMenu = async () => {
-    const statusLine = openNow 
-      ? "✅ *Estamos abertos e prontos para te atender!*" 
-      : "🔴 *No momento estamos fechados, mas você pode ver nosso cardápio e deixar seu pedido agendado!*";
+    const scheduleMode = !!(tenant as any).scheduleMode;
+    const statusLine = scheduleMode
+      ? "📦 *Trabalhamos com encomendas! Faça seu pedido com data marcada.*"
+      : openNow
+        ? "✅ *Estamos abertos e prontos para te atender!*"
+        : "🔴 *No momento estamos fechados, mas você pode ver nosso cardápio e deixar seu pedido agendado!*";
     
     // 1. Saudação inicial vinda do painel ou padrão
     const welcome = tenant.wppBotConfig?.welcomeMessage?.trim() || `${greeting()}! 👋 Seja muito bem-vindo ao *${name}*`;
@@ -510,12 +513,38 @@ async function handleIncomingMessage(tenantId: string, remoteJid: string, text: 
   };
 
   const sendOrderInfo = async () => {
-    if (!openNow) {
+    const scheduleMode = !!(tenant as any).scheduleMode;
+    const scheduleType = (tenant as any).scheduleType ?? "CLIENT_CHOOSES";
+    const scheduleNotes = (tenant as any).scheduleNotes ?? "";
+
+    if (scheduleMode) {
+      // Monta texto dos dias disponíveis se OWNER_DEFINES
+      let daysText = "";
+      if (scheduleType === "OWNER_DEFINES") {
+        try {
+          const days: any[] = JSON.parse((tenant as any).scheduleDays || "[]");
+          const dayNames = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+          const enabled = days.filter((d: any) => d.enabled);
+          if (enabled.length > 0) {
+            daysText = "\n\n📅 *Dias de entrega disponíveis:*\n" + enabled.map((d: any) => {
+              const times = (d.times || []).join(", ");
+              return `• ${dayNames[d.weekday]}${times ? ` (${times})` : ""}`;
+            }).join("\n");
+          }
+        } catch {}
+      }
+      const notesText = scheduleNotes ? `\n\n_${scheduleNotes}_` : "";
+      await send(
+        `📦 *${name}* trabalha com *Encomendas!*\n\n` +
+        `Acesse o cardápio, monte seu pedido e escolha a data de entrega ou retirada:\n${menuLink}` +
+        daysText + notesText,
+        1500
+      );
+    } else if (!openNow) {
       await send(`⚠️ *${name}* está fechado no momento, mas você pode ver o cardápio e agendar aqui:\n${menuLink}`, 1500);
     } else {
       await send(`🍽️ Aqui está nosso cardápio:\n${menuLink}\n\nFaça seu pedido por lá! 👌`, 1500);
     }
-    // Removido loop automático para o menu para não 'atropelar' a conversa
   };
 
   const sendAddress = async () => {

@@ -46,6 +46,14 @@ export interface PaymentConfig {
   customBrands?: string[];
 }
 
+// scheduleType: CLIENT_CHOOSES = cliente escolhe qualquer data; OWNER_DEFINES = estabelecimento define dias/horários fixos
+export interface ScheduleDay {
+  weekday: number;   // 0=Dom 1=Seg ... 6=Sáb
+  label: string;     // "Segunda-feira"
+  enabled: boolean;
+  times: string[];   // ["09:00", "12:00", "18:00"]
+}
+
 export interface Tenant {
   id: string;
   name: string;
@@ -56,6 +64,9 @@ export interface Tenant {
   address?: string;
   isOpen?: boolean;
   scheduleMode?: boolean;
+  scheduleType?: "CLIENT_CHOOSES" | "OWNER_DEFINES";
+  scheduleDays?: string | null;  // JSON: ScheduleDay[]
+  scheduleNotes?: string | null;
   businessHours?: string | null;
   deliveryConfig?: string | null; // JSON string: DeliveryConfig
   paymentMethods?: string | null; // JSON string: PaymentConfig
@@ -196,6 +207,7 @@ export interface Order {
   paymentMethod: 'PIX' | 'CREDIT' | 'DEBIT' | 'MEAL' | 'FOOD' | 'CASH';
   paymentDetail?: string;
   scheduledDate?: string | null; // ISO date string YYYY-MM-DD
+  scheduledTime?: string | null; // HH:mm
   notes?: string | null;
   total: number;
   tenantId: string;
