@@ -52,10 +52,38 @@ export interface DashboardNavigationItem {
   label: string;
   tab: DashboardTabId;
   icon: LucideIcon;
+  ownerOnly?: boolean; // hidden from STAFF/ADMIN regardless of permissions
 }
 
 export interface DashboardNavigationGroup {
   id: string;
   label: string;
   items: DashboardNavigationItem[];
+}
+
+// Membership returned from /api/auth/me or tenant endpoint
+export interface MyMembership {
+  id: string;
+  role: "OWNER" | "ADMIN" | "STAFF";
+  name: string | null;
+  permissions: string[] | null; // null = all allowed (OWNER), array = explicit allowlist
+}
+
+// All tab ids that can be restricted by permissions
+export const ALL_PERMISSION_TABS: DashboardTabId[] = [
+  "overview", "pos", "live-orders", "scheduled", "kds", "tables",
+  "history", "menu", "inventory", "finance", "reports",
+  "customers", "loyalty", "promotions", "whatsapp",
+  "profile", "staff", "downloads",
+];
+
+// Tabs always visible to OWNER, never to non-owners regardless of permissions
+export const OWNER_ONLY_TABS: DashboardTabId[] = ["profile", "staff"];
+
+// Helper: can this membership access a given tab?
+export function canAccess(membership: MyMembership | null, tab: DashboardTabId): boolean {
+  if (!membership || membership.role === "OWNER") return true;
+  if (OWNER_ONLY_TABS.includes(tab)) return false;
+  if (membership.permissions === null) return true;
+  return membership.permissions.includes(tab);
 }

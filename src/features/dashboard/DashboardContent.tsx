@@ -35,7 +35,7 @@ import ReportsPanel from "./ReportsPanel";
 import DownloadsPanel from "./DownloadsPanel";
 import PromotionsPanel from "./PromotionsPanel";
 import { WhatsAppManagementPanel, WhatsAppOverviewCard } from "./WhatsAppPanel";
-import { type DashboardOrderTabId, type DashboardTabId } from "./types";
+import { type DashboardOrderTabId, type DashboardTabId, type MyMembership, canAccess } from "./types";
 
 interface DashboardContentProps {
   tenant: Tenant;
@@ -53,6 +53,22 @@ interface DashboardContentProps {
   onClearTable?: (tableId: string) => void;
   waiterCalls?: Array<{ tableId: string; customerName: string; note: string; requestBill: boolean; timestamp: number }>;
   onDismissWaiterCall?: (ts: number) => void;
+  membership?: MyMembership | null;
+}
+
+// Access-denied placeholder shown when a staff member navigates to a blocked tab directly
+function AccessDenied() {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center p-8">
+      <div className="w-20 h-20 rounded-3xl bg-red-50 flex items-center justify-center">
+        <svg className="w-10 h-10 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+      </div>
+      <div>
+        <p className="text-lg font-black text-slate-800 uppercase tracking-widest mb-1">Acesso restrito</p>
+        <p className="text-sm text-slate-400 max-w-xs">Você não tem permissão para acessar esta área. Contate o proprietário.</p>
+      </div>
+    </div>
+  );
 }
 
 export default function DashboardContent({
@@ -70,13 +86,18 @@ export default function DashboardContent({
   onClearTable,
   waiterCalls,
   onDismissWaiterCall,
+  membership,
 }: DashboardContentProps) {
+  const allowed = (tab: DashboardTabId) => canAccess(membership ?? null, tab);
   const pendingOrders = orders.filter((order) => order.status === "PENDING").length;
   const preparingOrders = orders.filter((order) => order.status === "PREPARING").length;
   const shippedOrders = orders.filter((order) => order.status === "SHIPPED").length;
   const deliveredOrders = orders.filter((order) => order.status === "DELIVERED").length;
   const totalSales = orders.reduce((acc, order) => acc + order.total, 0);
   const averageTicket = totalSales / (orders.length || 1);
+
+  // If the active tab is not accessible, show the access denied screen
+  if (!allowed(activeTab)) return <AccessDenied />;
 
   return (
     <>

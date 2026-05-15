@@ -63,8 +63,8 @@ export const DASHBOARD_NAVIGATION: DashboardNavigationGroup[] = [
     id: "administracao",
     label: "Administração",
     items: [
-      { id: "profile",    label: "Configurações",      tab: "profile",      icon: Settings },
-      { id: "staff",      label: "Equipe",             tab: "staff",        icon: ClipboardList },
+      { id: "profile",    label: "Configurações",      tab: "profile",      icon: Settings,      ownerOnly: true },
+      { id: "staff",      label: "Equipe",             tab: "staff",        icon: ClipboardList, ownerOnly: true },
       { id: "downloads",  label: "Downloads",          tab: "downloads",    icon: Download },
     ],
   },

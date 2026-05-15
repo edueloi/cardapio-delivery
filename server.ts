@@ -144,13 +144,13 @@ async function requireTenantById(req: express.Request, res: express.Response, te
     return null;
   }
 
-  const tenant = await getAuthorizedTenantById(account.id, tenantId);
-  if (!tenant) {
+  const result = await getAuthorizedTenantById(account.id, tenantId);
+  if (!result) {
     res.status(403).json({ error: "Você não tem acesso a este estabelecimento." });
     return null;
   }
 
-  return tenant;
+  return result.tenant;
 }
 
 async function requireTenantBySlug(req: express.Request, res: express.Response, slug: string) {
@@ -160,13 +160,13 @@ async function requireTenantBySlug(req: express.Request, res: express.Response, 
     return null;
   }
 
-  const tenant = await getAuthorizedTenantBySlug(account.id, slug);
-  if (!tenant) {
+  const result = await getAuthorizedTenantBySlug(account.id, slug);
+  if (!result) {
     res.status(403).json({ error: "Você não tem acesso a este estabelecimento." });
     return null;
   }
 
-  return tenant;
+  return result.tenant;
 }
 
 async function requireTenantFromProduct(req: express.Request, res: express.Response, productId: string) {
@@ -620,10 +620,15 @@ app.get("/api/superadmin/plans", requireAuth, requireSuperAdmin, async (req, res
 
 // Cria plano
 app.post("/api/superadmin/plans", requireAuth, requireSuperAdmin, async (req, res) => {
-  const { name, description, price, durationDays, features, color } = req.body;
+  const { name, description, price, durationDays, features, color, defaultStaffPermissions } = req.body;
   try {
     const plan = await (prisma as any).subscriptionPlan.create({
-      data: { name, description: description || null, price: Number(price) || 0, durationDays: Number(durationDays) || 30, features: features || null, color: color || "#C9A227" },
+      data: {
+        name, description: description || null,
+        price: Number(price) || 0, durationDays: Number(durationDays) || 30,
+        features: features || null, color: color || "#C9A227",
+        defaultStaffPermissions: defaultStaffPermissions ?? null,
+      },
     });
     res.json(plan);
   } catch (error) { res.status(500).json({ error: "Falha ao criar plano." }); }
@@ -631,7 +636,7 @@ app.post("/api/superadmin/plans", requireAuth, requireSuperAdmin, async (req, re
 
 // Edita plano
 app.patch("/api/superadmin/plans/:id", requireAuth, requireSuperAdmin, async (req, res) => {
-  const { name, description, price, durationDays, features, color, isActive } = req.body;
+  const { name, description, price, durationDays, features, color, isActive, defaultStaffPermissions } = req.body;
   try {
     const plan = await (prisma as any).subscriptionPlan.update({
       where: { id: req.params.id },
@@ -643,6 +648,7 @@ app.patch("/api/superadmin/plans/:id", requireAuth, requireSuperAdmin, async (re
         ...(features !== undefined && { features }),
         ...(color !== undefined && { color }),
         ...(isActive !== undefined && { isActive: Boolean(isActive) }),
+        ...(defaultStaffPermissions !== undefined && { defaultStaffPermissions: defaultStaffPermissions ?? null }),
       },
     });
     res.json(plan);
@@ -849,6 +855,144 @@ app.get("/api/owner/tenants/:tenantId", requireAuth, async (req, res) => {
   if (!tenant) return;
   res.json(tenant);
 });
+
+// ── STAFF / MEMBERSHIPS ──────────────────────────────────────────────────────
+
+// List all staff members for a tenant
+app.get("/api/owner/tenants/:tenantId/staff", requireAuth, async (req, res) => {
+  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  if (!tenant) return;
+
+  // Only OWNER can manage staff
+  const account = currentAccount(req)!;
+  const myMembership = await prisma.tenantMembership.findFirst({ where: { accountId: account.id, tenantId: tenant.id } });
+  if (!myMembership || myMembership.role !== "OWNER") return res.status(403).json({ error: "Apenas o proprietário pode gerenciar a equipe." });
+
+  const members = await prisma.tenantMembership.findMany({
+    where: { tenantId: tenant.id },
+    include: { account: { select: { id: true, email: true, name: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+
+  res.json(members.map((m: any) => ({
+    id: m.id,
+    role: m.role,
+    name: m.name ?? null,
+    permissions: m.permissions ? JSON.parse(m.permissions) : null,
+    createdAt: m.createdAt,
+    account: m.account,
+  })));
+});
+
+// Invite a new staff member by email
+app.post("/api/owner/tenants/:tenantId/staff/invite", requireAuth, async (req, res) => {
+  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  if (!tenant) return;
+
+  const account = currentAccount(req)!;
+  const myMembership = await prisma.tenantMembership.findFirst({ where: { accountId: account.id, tenantId: tenant.id } });
+  if (!myMembership || myMembership.role !== "OWNER") return res.status(403).json({ error: "Apenas o proprietário pode convidar membros." });
+
+  const { email, role, name, permissions } = req.body;
+  if (!email || !role) return res.status(400).json({ error: "email e role são obrigatórios." });
+  if (!["ADMIN", "STAFF"].includes(role)) return res.status(400).json({ error: "role deve ser ADMIN ou STAFF." });
+
+  // Find the account by email
+  const targetAccount = await prisma.account.findUnique({ where: { email: email.trim().toLowerCase() } });
+  if (!targetAccount) return res.status(404).json({ error: "Nenhuma conta encontrada com este e-mail. O usuário precisa se registrar primeiro." });
+
+  // Check if already a member
+  const existing = await prisma.tenantMembership.findFirst({ where: { accountId: targetAccount.id, tenantId: tenant.id } });
+  if (existing) return res.status(409).json({ error: "Este usuário já é membro deste estabelecimento." });
+
+  const member = await prisma.tenantMembership.create({
+    data: {
+      accountId: targetAccount.id,
+      tenantId: tenant.id,
+      role,
+      name: name || null,
+      permissions: permissions ? JSON.stringify(permissions) : null,
+    },
+    include: { account: { select: { id: true, email: true, name: true } } },
+  });
+
+  res.json({
+    id: (member as any).id,
+    role: (member as any).role,
+    name: (member as any).name ?? null,
+    permissions: (member as any).permissions ? JSON.parse((member as any).permissions) : null,
+    account: (member as any).account,
+  });
+});
+
+// Update staff member role/permissions/name
+app.patch("/api/owner/tenants/:tenantId/staff/:membershipId", requireAuth, async (req, res) => {
+  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  if (!tenant) return;
+
+  const account = currentAccount(req)!;
+  const myMembership = await prisma.tenantMembership.findFirst({ where: { accountId: account.id, tenantId: tenant.id } });
+  if (!myMembership || myMembership.role !== "OWNER") return res.status(403).json({ error: "Apenas o proprietário pode editar permissões." });
+
+  const target = await prisma.tenantMembership.findFirst({ where: { id: req.params.membershipId, tenantId: tenant.id } });
+  if (!target) return res.status(404).json({ error: "Membro não encontrado." });
+  if ((target as any).role === "OWNER") return res.status(400).json({ error: "Não é possível alterar o proprietário." });
+
+  const { role, name, permissions } = req.body;
+
+  const updated = await prisma.tenantMembership.update({
+    where: { id: req.params.membershipId },
+    data: {
+      ...(role && ["ADMIN", "STAFF"].includes(role) && { role }),
+      ...(name !== undefined && { name: name || null }),
+      ...(permissions !== undefined && { permissions: permissions === null ? null : JSON.stringify(permissions) }),
+    },
+    include: { account: { select: { id: true, email: true, name: true } } },
+  });
+
+  res.json({
+    id: (updated as any).id,
+    role: (updated as any).role,
+    name: (updated as any).name ?? null,
+    permissions: (updated as any).permissions ? JSON.parse((updated as any).permissions) : null,
+    account: (updated as any).account,
+  });
+});
+
+// Remove a staff member
+app.delete("/api/owner/tenants/:tenantId/staff/:membershipId", requireAuth, async (req, res) => {
+  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  if (!tenant) return;
+
+  const account = currentAccount(req)!;
+  const myMembership = await prisma.tenantMembership.findFirst({ where: { accountId: account.id, tenantId: tenant.id } });
+  if (!myMembership || myMembership.role !== "OWNER") return res.status(403).json({ error: "Apenas o proprietário pode remover membros." });
+
+  const target = await prisma.tenantMembership.findFirst({ where: { id: req.params.membershipId, tenantId: tenant.id } });
+  if (!target) return res.status(404).json({ error: "Membro não encontrado." });
+  if ((target as any).role === "OWNER") return res.status(400).json({ error: "Não é possível remover o proprietário." });
+
+  await prisma.tenantMembership.delete({ where: { id: req.params.membershipId } });
+  res.json({ ok: true });
+});
+
+// Get my own membership for a tenant (used by dashboard to load permissions)
+app.get("/api/owner/tenants/:tenantId/my-membership", requireAuth, async (req, res) => {
+  const account = currentAccount(req)!;
+  const membership = await prisma.tenantMembership.findFirst({
+    where: { accountId: account.id, tenantId: req.params.tenantId },
+  });
+  if (!membership) return res.status(404).json({ error: "Sem acesso." });
+
+  res.json({
+    id: (membership as any).id,
+    role: (membership as any).role,
+    name: (membership as any).name ?? null,
+    permissions: (membership as any).permissions ? JSON.parse((membership as any).permissions) : null,
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 app.get("/api/owner/tenants/:tenantId/wpp", requireAuth, async (req, res) => {
   const tenant = await requireTenantById(req, res, req.params.tenantId);

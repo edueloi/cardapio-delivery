@@ -7,7 +7,7 @@ import socket from "../../lib/socket";
 import type { Order, Tenant } from "../../types";
 import DashboardContent from "./DashboardContent";
 import { DASHBOARD_NAVIGATION } from "./config/navigation";
-import { type DashboardOrderTabId, type DashboardTabId, PATH_TO_TAB, TAB_TO_PATH } from "./types";
+import { type DashboardOrderTabId, type DashboardTabId, type MyMembership, PATH_TO_TAB, TAB_TO_PATH, canAccess, OWNER_ONLY_TABS } from "./types";
 import { motion, AnimatePresence } from "motion/react";
 import { Bell, Receipt, X } from "lucide-react";
 
@@ -18,6 +18,7 @@ export default function DashboardPage() {
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [subTab, setSubTab] = useState<DashboardOrderTabId>("pending");
+  const [membership, setMembership] = useState<MyMembership | null>(null);
   const [loading, setLoading] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [checkoutRequests, setCheckoutRequests] = useState<Array<{ tableId: string; customerName: string; timestamp: number }>>([]);
@@ -56,6 +57,13 @@ export default function DashboardPage() {
       setTenant(data);
       socket.emit("join-tenant", data.id);
       await fetchOrders(data.id);
+      // Fetch membership/permissions for this tenant
+      try {
+        const mem = await apiJson<MyMembership>(`/api/owner/tenants/${data.id}/my-membership`);
+        setMembership(mem);
+      } catch {
+        setMembership(null);
+      }
     } catch {
       setTenant(null);
       setOrders([]);
@@ -193,13 +201,22 @@ export default function DashboardPage() {
     );
   }
 
+  // Filter navigation based on membership permissions
+  const filteredNavigation = DASHBOARD_NAVIGATION.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => {
+      if (item.ownerOnly && membership?.role !== "OWNER") return false;
+      return canAccess(membership, item.tab);
+    }),
+  })).filter((group) => group.items.length > 0);
+
   return (
     <>
       <DashboardShell
         tenantName={tenant.name}
         slug={slug ?? ""}
         activeTab={activeTab}
-        navigationGroups={DASHBOARD_NAVIGATION}
+        navigationGroups={filteredNavigation}
         isMobileMenuOpen={isMobileMenuOpen}
         onToggleMobileMenu={() => setIsMobileMenuOpen((current) => !current)}
         onCloseMobileMenu={() => setIsMobileMenuOpen(false)}
@@ -226,6 +243,7 @@ export default function DashboardPage() {
           onClearTable={handleClearTable}
           waiterCalls={waiterCalls}
           onDismissWaiterCall={(ts) => setWaiterCalls(prev => prev.filter(w => w.timestamp !== ts))}
+          membership={membership}
         />
       </DashboardShell>
 

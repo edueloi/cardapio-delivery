@@ -27,6 +27,7 @@ interface Invite {
 interface Plan {
   id: string; name: string; description: string | null; price: number;
   durationDays: number; features: string | null; isActive: boolean; color: string;
+  defaultStaffPermissions: string | null; // JSON: string[] of tab ids, null = all
 }
 interface Subscription {
   id: string; accountId: string; planId: string; status: string;
@@ -151,6 +152,7 @@ export default function SuperAdminPage() {
   const [showPlanModal, setShowPlanModal] = useState(false);
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   const [planForm, setPlanForm] = useState({ name: "", description: "", price: "", durationDays: "30", features: "", color: "#C9A227" });
+  const [planDefaultPerms, setPlanDefaultPerms] = useState<string[] | null>(null);
   const [savingPlan, setSavingPlan] = useState(false);
 
   // Assinaturas
@@ -224,6 +226,7 @@ export default function SuperAdminPage() {
         name: planForm.name, description: planForm.description || null,
         price: Number(planForm.price) || 0, durationDays: Number(planForm.durationDays) || 30,
         features: planForm.features || null, color: planForm.color,
+        defaultStaffPermissions: planDefaultPerms === null ? null : JSON.stringify(planDefaultPerms),
       });
       if (editingPlan) {
         const updated = await apiJson<Plan>(`/api/superadmin/plans/${editingPlan.id}`, { method: "PATCH", body });
@@ -263,9 +266,11 @@ export default function SuperAdminPage() {
     if (plan) {
       setEditingPlan(plan);
       setPlanForm({ name: plan.name, description: plan.description || "", price: String(plan.price), durationDays: String(plan.durationDays), features: plan.features || "", color: plan.color || "#C9A227" });
+      setPlanDefaultPerms(plan.defaultStaffPermissions ? JSON.parse(plan.defaultStaffPermissions) : null);
     } else {
       setEditingPlan(null);
       setPlanForm({ name: "", description: "", price: "", durationDays: "30", features: "", color: "#C9A227" });
+      setPlanDefaultPerms(null);
     }
     setShowPlanModal(true);
   };
@@ -777,6 +782,53 @@ export default function SuperAdminPage() {
             <div>
               <label className="ds-label mb-1.5 block">Cor do plano</label>
               <input type="color" value={planForm.color} onChange={e => setPlanForm(f => ({ ...f, color: e.target.value }))} className="h-10 w-20 rounded-xl border border-zinc-200 cursor-pointer" />
+            </div>
+          </div>
+
+          {/* Permissões padrão para novos membros da equipe */}
+          <div>
+            <label className="ds-label mb-2 block">Permissões padrão de equipe (staff/admin)</label>
+            <p className="text-[10px] text-slate-400 mb-3">Define quais telas os membros adicionados por clientes deste plano poderão acessar por padrão.</p>
+            <div
+              onClick={() => setPlanDefaultPerms(null)}
+              className={`flex items-center gap-3 p-3 rounded-2xl border cursor-pointer transition-all mb-3 ${planDefaultPerms === null ? "bg-[#0D1B3E] border-[#0D1B3E] text-white" : "bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300"}`}
+            >
+              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${planDefaultPerms === null ? "border-white bg-white" : "border-slate-300"}`}>
+                {planDefaultPerms === null && <div className="w-2 h-2 rounded-full bg-[#0D1B3E]" />}
+              </div>
+              <span className="text-[10px] font-black uppercase tracking-widest">Acesso total por padrão</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { id: "overview", label: "Visão Geral" }, { id: "pos", label: "PDV — Caixa" },
+                { id: "live-orders", label: "Painel Pedidos" }, { id: "kds", label: "Monitor Cozinha" },
+                { id: "tables", label: "Mesas" }, { id: "history", label: "Histórico" },
+                { id: "menu", label: "Cardápio" }, { id: "inventory", label: "Estoque" },
+                { id: "finance", label: "Financeiro" }, { id: "reports", label: "Relatórios" },
+                { id: "customers", label: "CRM" }, { id: "whatsapp", label: "WhatsApp" },
+                { id: "downloads", label: "Downloads" },
+              ].map(tab => {
+                const enabled = planDefaultPerms === null || planDefaultPerms.includes(tab.id);
+                return (
+                  <button key={tab.id} type="button"
+                    onClick={() => {
+                      if (planDefaultPerms === null) {
+                        const all = ["overview","pos","live-orders","kds","tables","history","menu","inventory","finance","reports","customers","whatsapp","downloads"];
+                        setPlanDefaultPerms(all.filter(t => t !== tab.id));
+                      } else {
+                        const has = planDefaultPerms.includes(tab.id);
+                        setPlanDefaultPerms(has ? planDefaultPerms.filter(p => p !== tab.id) : [...planDefaultPerms, tab.id]);
+                      }
+                    }}
+                    className={`flex items-center gap-2 p-2.5 rounded-xl border text-left transition-all ${enabled ? "bg-white border-amber-300 text-slate-800" : "bg-slate-50 border-slate-100 text-slate-400"}`}
+                  >
+                    <div className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center shrink-0 ${enabled ? "bg-amber-400 border-amber-400" : "border-slate-300"}`}>
+                      {enabled && <CheckCircle2 className="w-2.5 h-2.5 text-white" />}
+                    </div>
+                    <span className="text-[9px] font-black leading-tight">{tab.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>

@@ -100,6 +100,8 @@ export async function listAccountTenants(accountId: string) {
   return memberships.map((membership) => ({
     membershipId: membership.id,
     role: membership.role,
+    memberName: (membership as any).name ?? null,
+    permissions: (membership as any).permissions ? JSON.parse((membership as any).permissions) : null,
     tenant: membership.tenant,
   }));
 }
@@ -120,7 +122,16 @@ export async function getAuthorizedTenantBySlug(accountId: string, slug: string)
     },
   });
 
-  return membership?.tenant ?? null;
+  if (!membership) return null;
+  return {
+    tenant: membership.tenant,
+    membership: {
+      id: membership.id,
+      role: membership.role as "OWNER" | "ADMIN" | "STAFF",
+      name: (membership as any).name ?? null,
+      permissions: (membership as any).permissions ? JSON.parse((membership as any).permissions) : null,
+    },
+  };
 }
 
 export async function getAuthorizedTenantById(accountId: string, tenantId: string) {
@@ -139,7 +150,16 @@ export async function getAuthorizedTenantById(accountId: string, tenantId: strin
     },
   });
 
-  return membership?.tenant ?? null;
+  if (!membership) return null;
+  return {
+    tenant: membership.tenant,
+    membership: {
+      id: membership.id,
+      role: membership.role as "OWNER" | "ADMIN" | "STAFF",
+      name: (membership as any).name ?? null,
+      permissions: (membership as any).permissions ? JSON.parse((membership as any).permissions) : null,
+    },
+  };
 }
 
 function readBearerToken(req: Request): string | null {

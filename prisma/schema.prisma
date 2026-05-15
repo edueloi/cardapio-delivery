@@ -61,16 +61,17 @@ model Account {
 }
 
 model SubscriptionPlan {
-  id           String   @id @default(cuid())
-  name         String
-  description  String?  @db.Text
-  price        Float    @default(0)
-  durationDays Int      @default(30) @map("duration_days")
-  features     String?  @db.Text
-  isActive     Boolean  @default(true) @map("is_active")
-  color        String?  @default("#C9A227")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id                      String   @id @default(cuid())
+  name                    String
+  description             String?  @db.Text
+  price                   Float    @default(0)
+  durationDays            Int      @default(30) @map("duration_days")
+  features                String?  @db.Text
+  isActive                Boolean  @default(true) @map("is_active")
+  color                   String?  @default("#C9A227")
+  defaultStaffPermissions String?  @db.Text @map("default_staff_permissions") // JSON: string[] tab ids
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
 
   subscriptions Subscription[]
 
@@ -97,11 +98,13 @@ model Subscription {
 }
 
 model TenantMembership {
-  id        String   @id @default(cuid())
-  accountId String   @map("account_id")
-  tenantId  String   @map("tenant_id")
-  role      String   @default("OWNER") // OWNER, ADMIN, STAFF
-  createdAt DateTime @default(now()) @map("created_at")
+  id          String   @id @default(cuid())
+  accountId   String   @map("account_id")
+  tenantId    String   @map("tenant_id")
+  role        String   @default("OWNER") // OWNER, ADMIN, STAFF
+  name        String?  // display name override (e.g. "João – Caixa")
+  permissions String?  @db.Text // JSON: string[] of allowed tab ids. null = all allowed (OWNER)
+  createdAt   DateTime @default(now()) @map("created_at")
 
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
   tenant   Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)

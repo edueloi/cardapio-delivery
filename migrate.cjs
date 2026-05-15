@@ -179,6 +179,21 @@ const migrations = [
     check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'stone_charge_id'",
     run: "ALTER TABLE orders ADD COLUMN stone_charge_id VARCHAR(191) NULL",
   },
+  {
+    name: 'add_memberships_permissions',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenant_memberships' AND COLUMN_NAME = 'permissions'",
+    run: "ALTER TABLE tenant_memberships ADD COLUMN permissions TEXT NULL",
+  },
+  {
+    name: 'add_memberships_name',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenant_memberships' AND COLUMN_NAME = 'name'",
+    run: "ALTER TABLE tenant_memberships ADD COLUMN name VARCHAR(191) NULL",
+  },
+  {
+    name: 'add_subscription_plans_default_permissions',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'subscription_plans' AND COLUMN_NAME = 'default_staff_permissions'",
+    run: "ALTER TABLE subscription_plans ADD COLUMN default_staff_permissions TEXT NULL",
+  },
 ];
 
 async function run() {
