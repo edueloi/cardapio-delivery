@@ -32,10 +32,16 @@
     </div>
     <div id="root"></div>
     <script>
-      // Remove splash from DOM after animation ends (only in standalone PWA mode)
       var splash = document.getElementById('pwa-splash');
       if (splash) {
-        splash.addEventListener('animationend', function() { splash.remove(); });
+        var isStandalone = window.matchMedia('(display-mode: standalone)').matches
+          || window.navigator.standalone === true;
+        if (!isStandalone) {
+          splash.remove();
+        } else {
+          splash.addEventListener('animationend', function() { splash.remove(); });
+          setTimeout(function() { splash.remove(); }, 3000);
+        }
       }
     </script>
     <script type="module" src="/src/main.tsx"></script>

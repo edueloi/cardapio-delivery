@@ -1336,28 +1336,57 @@ function InfoPanel({ tenant }: { tenant: Tenant }) {
     if (tenant.businessHours) hours = JSON.parse(tenant.businessHours);
   } catch {}
 
+  // Parse address JSON → readable string
+  const addressStr = (() => {
+    if (!tenant.address) return null;
+    try {
+      const a = JSON.parse(tenant.address);
+      const parts = [
+        a.street && a.number ? `${a.street}, ${a.number}` : a.street || "",
+        a.complement,
+        a.neighborhood,
+        a.city && a.state ? `${a.city} - ${a.state}` : a.city || a.state,
+        a.cep ? `CEP ${a.cep.replace(/(\d{5})(\d{3})/, "$1-$2")}` : "",
+      ].filter(Boolean);
+      return parts.length ? parts.join(", ") : null;
+    } catch {
+      // se não for JSON, exibe como está (string legível direta)
+      return typeof tenant.address === "string" && !tenant.address.startsWith("{") ? tenant.address : null;
+    }
+  })();
+
+  // Format whatsapp: remove 55 prefix, apply mask
+  const whatsappStr = (() => {
+    if (!tenant.whatsapp) return null;
+    const d = String(tenant.whatsapp).replace(/\D/g, "");
+    const clean = d.startsWith("55") && d.length >= 12 ? d.slice(2) : d;
+    if (clean.length === 11) return `(${clean.slice(0,2)}) ${clean.slice(2,7)}-${clean.slice(7)}`;
+    if (clean.length === 10) return `(${clean.slice(0,2)}) ${clean.slice(2,6)}-${clean.slice(6)}`;
+    return clean;
+  })();
+
   return (
     <div className="p-5 space-y-5 pb-8">
-      {tenant.address && (
+      {addressStr && (
         <div className="bg-white rounded-2xl border border-slate-100 p-4 flex gap-3 shadow-sm">
           <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
             <MapPin className="w-4 h-4 text-blue-500" />
           </div>
           <div>
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Endereço</p>
-            <p className="text-sm font-bold text-slate-800">{tenant.address}</p>
+            <p className="text-sm font-bold text-slate-800 leading-relaxed">{addressStr}</p>
           </div>
         </div>
       )}
 
-      {tenant.whatsapp && (
+      {whatsappStr && (
         <div className="bg-white rounded-2xl border border-slate-100 p-4 flex gap-3 shadow-sm">
           <div className="w-9 h-9 rounded-xl bg-green-50 flex items-center justify-center shrink-0">
             <MessageSquare className="w-4 h-4 text-green-500" />
           </div>
           <div>
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">WhatsApp</p>
-            <p className="text-sm font-bold text-slate-800">{tenant.whatsapp}</p>
+            <p className="text-sm font-bold text-slate-800">{whatsappStr}</p>
           </div>
         </div>
       )}

@@ -446,12 +446,11 @@ function ImageUploader({ value, onChange, label, description }: { value: string,
 const DAY_KEYS_UI = ["sun","mon","tue","wed","thu","fri","sat"] as const;
 const DAY_LABELS: Record<string, string> = { sun:"Domingo", mon:"Segunda", tue:"Terça", wed:"Quarta", thu:"Quinta", fri:"Sexta", sat:"Sábado" };
 
-function TimeInput({ value, onChange, colorClass = "text-slate-800", bgClass = "bg-white", borderClass = "border-slate-200" }: {
+function TimeInput({ value, onChange, label, accent = false }: {
   value: string;
   onChange: (v: string) => void;
-  colorClass?: string;
-  bgClass?: string;
-  borderClass?: string;
+  label?: string;
+  accent?: boolean;
 }) {
   const [raw, setRaw] = React.useState(value);
 
@@ -460,49 +459,56 @@ function TimeInput({ value, onChange, colorClass = "text-slate-800", bgClass = "
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     let v = e.target.value.replace(/[^\d]/g, "");
     if (v.length > 4) v = v.slice(0, 4);
-    
     let formatted = v;
-    if (v.length >= 3) {
-      formatted = v.slice(0, 2) + ":" + v.slice(2);
-    }
-    
+    if (v.length >= 3) formatted = v.slice(0, 2) + ":" + v.slice(2);
     setRaw(formatted);
-
     if (v.length === 4) {
       const hh = parseInt(v.slice(0, 2));
       const mm = parseInt(v.slice(2, 4));
-      if (hh <= 23 && mm <= 59) {
+      if (hh <= 23 && mm <= 59)
         onChange(`${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`);
-      }
     }
   }
 
   function handleBlur() {
-    // ao sair do campo, corrige e normaliza
     const digits = raw.replace(/[^\d]/g, "");
     if (digits.length === 4) {
-      let hh = Math.min(Number(digits.slice(0, 2)), 23);
-      let mm = Math.min(Number(digits.slice(2, 4)), 59);
+      const hh = Math.min(Number(digits.slice(0, 2)), 23);
+      const mm = Math.min(Number(digits.slice(2, 4)), 59);
       const normalized = `${String(hh).padStart(2,"0")}:${String(mm).padStart(2,"0")}`;
       setRaw(normalized);
       onChange(normalized);
     } else {
-      setRaw(value); // reverte se incompleto
+      setRaw(value);
     }
   }
 
   return (
-    <div className={`flex items-center ${bgClass} border ${borderClass} rounded-xl px-4 py-3 flex-1 min-w-[100px]`}>
-      <input
-        type="text"
-        inputMode="numeric"
-        maxLength={5}
-        value={raw}
-        onChange={handleChange}
-        onBlur={handleBlur}
-        placeholder="00:00"
-        className={`bg-transparent text-lg font-black focus:outline-none w-full text-center ${colorClass}`}
-      />
+    <div className="flex flex-col gap-1">
+      {label && <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">{label}</span>}
+      <div className={`
+        group relative flex items-center overflow-hidden transition-all duration-200
+        rounded-[10px] border shadow-sm
+        ${accent
+          ? "bg-amber-50 border-amber-200 focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-400/20"
+          : "bg-zinc-50 border-zinc-200 focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-500/10 focus-within:bg-white"
+        }
+      `}>
+        <input
+          type="text"
+          inputMode="numeric"
+          maxLength={5}
+          value={raw}
+          onChange={handleChange}
+          onBlur={handleBlur}
+          placeholder="00:00"
+          className={`
+            bg-transparent px-3 py-2 text-xs font-black tracking-widest
+            focus:outline-none w-[68px] text-center
+            ${accent ? "text-amber-700 placeholder:text-amber-300" : "text-zinc-800 placeholder:text-zinc-300"}
+          `}
+        />
+      </div>
     </div>
   );
 }
@@ -767,52 +773,53 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
         )}
 
         {activeTab === "hours" && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
             <ContentCard padding="lg">
-              <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-6">Horários de Funcionamento</p>
-              <div className="rounded-2xl border border-slate-200 overflow-hidden divide-y divide-slate-100">
+              <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-5">Horários de Funcionamento</p>
+              <div className="space-y-2">
                 {DAY_KEYS_UI.map(day => {
                   const d = hours[day] ?? { enabled: false, open: "08:00", close: "22:00", breakEnabled: false, breakStart: "12:00", breakEnd: "13:00" };
                   return (
-                    <div key={day} className={`transition-colors ${d.enabled ? "bg-white" : "bg-slate-50/60"}`}>
-                      <div className="px-6 py-6 space-y-4">
-                        <div className="flex items-center gap-4">
-                          <Switch checked={d.enabled} onCheckedChange={v => setDay(day, "enabled", v)} />
-                          <span className={`text-sm font-black shrink-0 ${d.enabled ? "text-slate-800" : "text-slate-400"}`}>
-                            {DAY_LABELS[day]}
-                          </span>
-                          {!d.enabled && <span className="text-[10px] font-black uppercase tracking-widest text-slate-300 ml-auto">Fechado</span>}
-                        </div>
-
-                        {d.enabled && (
-                          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                            <div className="flex items-center gap-2 flex-1">
-                              <TimeInput value={d.open} onChange={v => setDay(day, "open", v)} />
-                              <span className="text-slate-300 font-bold text-sm">–</span>
-                              <TimeInput value={d.close} onChange={v => setDay(day, "close", v)} />
+                    <div key={day} className={`rounded-xl border transition-all duration-200 ${d.enabled ? "bg-white border-zinc-200" : "bg-zinc-50 border-zinc-100"}`}>
+                      {/* Row principal */}
+                      <div className="flex items-center gap-3 px-4 py-3">
+                        <Switch checked={d.enabled} onCheckedChange={v => setDay(day, "enabled", v)} />
+                        <span className={`text-xs font-black w-[72px] shrink-0 ${d.enabled ? "text-zinc-800" : "text-zinc-400"}`}>
+                          {DAY_LABELS[day]}
+                        </span>
+                        {d.enabled ? (
+                          <>
+                            <div className="flex items-end gap-2 flex-1">
+                              <TimeInput label="Abertura" value={d.open} onChange={v => setDay(day, "open", v)} />
+                              <span className="text-zinc-300 font-bold text-sm pb-2 select-none">–</span>
+                              <TimeInput label="Fechamento" value={d.close} onChange={v => setDay(day, "close", v)} />
                             </div>
                             <button
                               type="button"
                               onClick={() => setDay(day, "breakEnabled", !d.breakEnabled)}
-                              className={`h-[44px] px-4 rounded-xl flex items-center justify-center gap-2 border text-[10px] font-black uppercase tracking-widest transition-all w-full sm:w-auto ${d.breakEnabled ? "bg-amber-50 border-amber-300 text-amber-600" : "bg-white border-slate-200 text-slate-400 hover:border-[#C9A227] hover:text-[#C9A227]"}`}
+                              className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg border text-[10px] font-black uppercase tracking-widest transition-all ${
+                                d.breakEnabled
+                                  ? "bg-amber-50 border-amber-200 text-amber-600"
+                                  : "bg-zinc-50 border-zinc-200 text-zinc-400 hover:border-amber-200 hover:text-amber-500"
+                              }`}
                             >
-                              {d.breakEnabled ? <Clock className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-                              <span>{d.breakEnabled ? "Remover Pausa" : "Adicionar Intervalo"}</span>
+                              {d.breakEnabled ? <Clock className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
+                              <span className="hidden sm:inline">{d.breakEnabled ? "Pausa" : "Intervalo"}</span>
                             </button>
-                          </div>
+                          </>
+                        ) : (
+                          <span className="ml-auto text-[10px] font-black uppercase tracking-widest text-zinc-300">Fechado</span>
                         )}
                       </div>
-
+                      {/* Pausa */}
                       {d.enabled && d.breakEnabled && (
-                        <div className="bg-amber-50/30 px-6 py-6 border-t border-amber-100/50">
-                          <div className="flex flex-col gap-4">
-                            <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Pausa Automática</span>
-                            <div className="flex items-center gap-2">
-                              <TimeInput value={d.breakStart ?? "12:00"} onChange={v => setDay(day, "breakStart", v)} colorClass="text-amber-700" bgClass="bg-amber-50/50" borderClass="border-amber-200" />
-                              <span className="text-amber-300 font-bold text-sm">–</span>
-                              <TimeInput value={d.breakEnd ?? "13:00"} onChange={v => setDay(day, "breakEnd", v)} colorClass="text-amber-700" bgClass="bg-amber-50/50" borderClass="border-amber-200" />
-                            </div>
+                        <div className="flex items-end gap-2 px-4 py-3 border-t border-amber-100 bg-amber-50/30">
+                          <div className="w-[111px] shrink-0 pb-2">
+                            <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Intervalo</span>
                           </div>
+                          <TimeInput label="Início" value={d.breakStart ?? "12:00"} onChange={v => setDay(day, "breakStart", v)} accent />
+                          <span className="text-amber-300 font-bold text-sm pb-2 select-none">–</span>
+                          <TimeInput label="Fim" value={d.breakEnd ?? "13:00"} onChange={v => setDay(day, "breakEnd", v)} accent />
                         </div>
                       )}
                     </div>
