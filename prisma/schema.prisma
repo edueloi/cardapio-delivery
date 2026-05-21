@@ -35,6 +35,8 @@ model Tenant {
   cashRegisters CashRegister[]
   inventoryCategories InventoryCategory[]
   inventoryItems      InventoryItem[]
+  productionRecipes   ProductionRecipe[]
+  productionRuns      ProductionRun[]
   wppInstance WppInstance?
   wppBotConfig WppBotConfig?
   customers   Customer[]
@@ -330,6 +332,7 @@ model Product {
   variants  ProductVariant[]
   items     OrderItem[]
   promotions Promotion[]
+  productionRecipes ProductionRecipe[]
 
   @@map("products")
 }
@@ -410,6 +413,53 @@ model Promotion {
   product Product? @relation(fields: [linkProductId], references: [id], onDelete: SetNull)
 
   @@map("promotions")
+}
+
+model ProductionRecipe {
+  id             String   @id @default(cuid())
+  tenantId       String   @map("tenant_id")
+  productId      String?  @map("product_id")
+  name           String
+  description    String?  @db.Text
+  outputQuantity Float    @default(1) @map("output_quantity")
+  outputUnit     String   @default("un") @map("output_unit")
+  instructions   String?  @db.Text
+  ingredients    String   @db.LongText
+  overheads      String?  @db.LongText
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  runs    ProductionRun[]
+
+  @@map("production_recipes")
+}
+
+model ProductionRun {
+  id                  String   @id @default(cuid())
+  tenantId            String   @map("tenant_id")
+  recipeId            String?  @map("recipe_id")
+  recipeName          String   @map("recipe_name")
+  batchCode           String   @map("batch_code")
+  quantityProduced    Float    @default(1) @map("quantity_produced")
+  unit                String   @default("un")
+  notes               String?  @db.Text
+  createdByName       String?  @map("created_by_name")
+  totalIngredientCost Float    @default(0) @map("total_ingredient_cost")
+  totalOverheadCost   Float    @default(0) @map("total_overhead_cost")
+  totalCost           Float    @default(0) @map("total_cost")
+  costPerOutput       Float    @default(0) @map("cost_per_output")
+  ingredientsSnapshot String   @map("ingredients_snapshot") @db.LongText
+  overheadsSnapshot   String?  @map("overheads_snapshot") @db.LongText
+  outputSnapshot      String?  @map("output_snapshot") @db.LongText
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  recipe ProductionRecipe? @relation(fields: [recipeId], references: [id], onDelete: SetNull)
+
+  @@map("production_runs")
 }
 
 model Feature {

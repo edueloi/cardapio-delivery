@@ -7,6 +7,7 @@ export type DashboardTabId =
   | "history"
   | "menu"
   | "inventory"
+  | "production"
   | "finance"
   | "whatsapp"
   | "profile"
@@ -29,6 +30,7 @@ export const TAB_TO_PATH: Record<DashboardTabId, string> = {
   "history": "historico",
   "menu": "cardapio",
   "inventory": "estoque",
+  "production": "producao",
   "finance": "financeiro",
   "whatsapp": "whatsapp",
   "profile": "configuracoes",
@@ -72,7 +74,7 @@ export interface MyMembership {
 // All tab ids that can be restricted by permissions
 export const ALL_PERMISSION_TABS: DashboardTabId[] = [
   "overview", "pos", "live-orders", "scheduled", "kds", "tables",
-  "history", "menu", "inventory", "finance", "reports",
+  "history", "menu", "inventory", "production", "finance", "reports",
   "customers", "loyalty", "promotions", "whatsapp",
   "profile", "staff", "downloads",
 ];

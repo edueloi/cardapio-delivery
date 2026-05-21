@@ -5,6 +5,7 @@ import {
   ClipboardList,
   Clock,
   Download,
+  Factory,
   Heart,
   History,
   LayoutDashboard,
@@ -39,6 +40,7 @@ export const DASHBOARD_NAVIGATION: DashboardNavigationGroup[] = [
     items: [
       { id: "menu",      label: "Cardápio",           tab: "menu",         icon: Utensils },
       { id: "inventory", label: "Estoque",            tab: "inventory",    icon: Package },
+      { id: "production", label: "Produção",          tab: "production",   icon: Factory },
     ],
   },
   {

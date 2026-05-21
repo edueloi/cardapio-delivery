@@ -23,6 +23,8 @@ import {
   type AuthenticatedRequest,
   verifyPassword,
 } from "./src/backend/auth";
+import { parseProductionRecipeRecord } from "./src/backend/production";
+import { registerProductionRoutes } from "./src/backend/production-routes";
 import {
   connectSession,
   disconnectSession,
@@ -228,6 +230,14 @@ app.use(express.json());
 app.use("/uploads", express.static(uploadDir));
 app.use("/downloads", express.static(path.join(process.cwd(), "public", "downloads")));
 app.use(authMiddleware);
+registerProductionRoutes({
+  app,
+  io,
+  prisma,
+  requireAuth,
+  requireTenantBySlug,
+  currentAccount,
+});
 
 io.on("connection", (socket) => {
   console.log("A user connected:", socket.id);
@@ -2149,6 +2159,33 @@ app.delete("/api/inventory/items/:id", requireAuth, async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to delete item" });
+  }
+});
+
+app.get("/api/tenants/:slug/production/recipes", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  if (!tenant) return;
+
+  try {
+    const recipes = await prisma.productionRecipe.findMany({
+      where: { tenantId: tenant.id },
+      include: {
+        product: {
+          include: {
+            inventoryItem: true,
+          },
+        },
+      },
+      orderBy: [
+        { active: "desc" },
+        { updatedAt: "desc" },
+      ],
+    });
+
+    res.json(recipes.map(parseProductionRecipeRecord));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao buscar receitas de produção." });
   }
 });
 

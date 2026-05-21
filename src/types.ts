@@ -194,6 +194,121 @@ export interface InventoryItem {
   usage: 'SALE' | 'INTERNAL';
 }
 
+export interface ProductionRecipeIngredient {
+  id: string;
+  inventoryItemId: string;
+  itemName: string;
+  quantity: number;
+  unit: string;
+  notes?: string | null;
+}
+
+export type ProductionOverheadType =
+  | "ENERGIA"
+  | "AGUA"
+  | "GAS"
+  | "MAO_DE_OBRA"
+  | "EMBALAGEM"
+  | "OUTROS";
+
+export type ProductionOverheadMode = "PER_RECIPE" | "PER_OUTPUT_UNIT";
+
+export interface ProductionRecipeOverhead {
+  id: string;
+  label: string;
+  type: ProductionOverheadType;
+  cost: number;
+  calculationMode: ProductionOverheadMode;
+  notes?: string | null;
+}
+
+export interface ProductionOutputSnapshot {
+  inventoryItemId?: string | null;
+  inventoryItemName?: string | null;
+  productId?: string | null;
+  productName?: string | null;
+  requestedQuantity: number;
+  requestedUnit: string;
+  convertedQuantity: number | null;
+  inventoryUnit?: string | null;
+  stockBefore?: number | null;
+  stockAfter?: number | null;
+  unitCostApplied?: number | null;
+  canRestock: boolean;
+  message?: string | null;
+}
+
+export interface ProductionRunIngredientSnapshot extends ProductionRecipeIngredient {
+  inventoryUnit: string;
+  requestedQuantity: number;
+  convertedQuantity: number | null;
+  stockBefore: number;
+  stockAfter: number;
+  unitCost: number;
+  totalCost: number;
+  shortageQuantity: number;
+  canConvert: boolean;
+  available: boolean;
+  message?: string | null;
+}
+
+export interface ProductionRunOverheadSnapshot extends ProductionRecipeOverhead {
+  totalCost: number;
+}
+
+export interface ProductionRecipe {
+  id: string;
+  tenantId: string;
+  productId?: string | null;
+  name: string;
+  description?: string | null;
+  outputQuantity: number;
+  outputUnit: string;
+  instructions?: string | null;
+  ingredients: ProductionRecipeIngredient[];
+  overheads: ProductionRecipeOverhead[];
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+  product?: Product | null;
+}
+
+export interface ProductionRun {
+  id: string;
+  tenantId: string;
+  recipeId?: string | null;
+  recipeName: string;
+  batchCode: string;
+  quantityProduced: number;
+  unit: string;
+  notes?: string | null;
+  createdByName?: string | null;
+  totalIngredientCost: number;
+  totalOverheadCost: number;
+  totalCost: number;
+  costPerOutput: number;
+  ingredientsSnapshot: ProductionRunIngredientSnapshot[];
+  overheadsSnapshot: ProductionRunOverheadSnapshot[];
+  outputSnapshot?: ProductionOutputSnapshot | null;
+  createdAt: string;
+  recipe?: ProductionRecipe | null;
+}
+
+export interface ProductionSimulation {
+  factor: number;
+  quantityProduced: number;
+  outputUnit: string;
+  totalIngredientCost: number;
+  totalOverheadCost: number;
+  totalCost: number;
+  costPerOutput: number;
+  hasIssues: boolean;
+  missingItems: number;
+  ingredients: ProductionRunIngredientSnapshot[];
+  overheads: ProductionRunOverheadSnapshot[];
+  outputSnapshot?: ProductionOutputSnapshot | null;
+}
+
 export interface ProductVariant {
   id: string;
   productId: string;
