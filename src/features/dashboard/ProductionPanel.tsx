@@ -20,6 +20,7 @@ import {
 import {
   Badge,
   Button,
+  Combobox,
   ContentCard,
   Divider,
   EmptyState,
@@ -66,6 +67,18 @@ const numberFormatter = new Intl.NumberFormat("pt-BR", {
   minimumFractionDigits: 0,
   maximumFractionDigits: 3,
 });
+
+const PRODUCTION_UNIT_OPTIONS = [
+  { value: "kg", label: "Quilograma", subtitle: "1 kg = 1000 g", group: "Peso", badge: "kg" },
+  { value: "g", label: "Grama", subtitle: "Medidas menores de massa", group: "Peso", badge: "g" },
+  { value: "mg", label: "Miligrama", subtitle: "Micromedidas de massa", group: "Peso", badge: "mg" },
+  { value: "l", label: "Litro", subtitle: "Volumes maiores", group: "Volume", badge: "l" },
+  { value: "ml", label: "Mililitro", subtitle: "Volumes menores", group: "Volume", badge: "ml" },
+  { value: "un", label: "Unidade", subtitle: "Peças individuais", group: "Contagem", badge: "un" },
+  { value: "dz", label: "Dúzia", subtitle: "12 unidades", group: "Contagem", badge: "dz" },
+  { value: "cm", label: "Centímetro", subtitle: "Medidas lineares pequenas", group: "Comprimento", badge: "cm" },
+  { value: "m", label: "Metro", subtitle: "Medidas lineares maiores", group: "Comprimento", badge: "m" },
+];
 
 type RecipeFilter = "all" | "active" | "critical" | "inactive";
 
@@ -199,7 +212,7 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
     if (selectedRecipe) {
       setPreviewQuantity(String(selectedRecipe.outputQuantity || 1));
     }
-  }, [selectedRecipe?.id]);
+  }, [selectedRecipe?.id, selectedRecipe?.outputQuantity]);
 
   const recipeSummaries: RecipeSummary[] = recipes.map((recipe) => ({
     recipe,
@@ -239,7 +252,7 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
 
   const monthlyRuns = runs.filter((run) => new Date(run.createdAt) >= monthStart);
   const monthlyCost = monthlyRuns.reduce((sum, run) => sum + run.totalCost, 0);
-  const monthlyQuantity = monthlyRuns.reduce((sum, run) => sum + run.quantityProduced, 0);
+  const activeRecipes = recipes.filter((recipe) => recipe.active).length;
   const criticalRecipes = recipeSummaries.filter((entry) => entry.simulation.missingItems > 0).length;
 
   if (!tenant) {
@@ -314,8 +327,8 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
           color={criticalRecipes > 0 ? "warning" : "success"}
         />
         <StatCard
-          title="Produção no Mês"
-          value={formatQuantity(monthlyQuantity, selectedRecipe?.outputUnit || "un")}
+          title="Receitas Ativas"
+          value={activeRecipes}
           icon={Package}
           color="success"
         />
@@ -323,7 +336,7 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
           title="Custo Produzido"
           value={formatCurrency(monthlyCost)}
           icon={CircleDollarSign}
-          color="primary"
+          color="warning"
         />
       </StatGrid>
 
@@ -1021,6 +1034,35 @@ function MetricPill({ label, value }: { label: string; value: string }) {
   );
 }
 
+function UnitCombobox({
+  label,
+  value,
+  onChange,
+  placeholder = "Selecione a unidade",
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="ds-label">{label}</label>
+      <Combobox
+        options={PRODUCTION_UNIT_OPTIONS}
+        value={value}
+        onChange={(nextValue) => onChange(String(Array.isArray(nextValue) ? nextValue[0] || "" : nextValue || ""))}
+        placeholder={placeholder}
+        searchPlaceholder="Buscar unidade..."
+        allowCustom
+        onCustomAdd={(customValue) => onChange(customValue)}
+        size="sm"
+        emptyMessage="Nenhuma unidade encontrada."
+      />
+    </div>
+  );
+}
+
 async function handleDeleteRecipe(slug: string, recipe: ProductionRecipe, refresh: () => Promise<void>) {
   const confirmed = window.confirm(`Excluir a receita "${recipe.name}"? O histórico de produções anteriores será preservado.`);
   if (!confirmed) return;
@@ -1217,11 +1259,10 @@ function RecipeEditorModal({
                 onChange={(event) => setOutputQuantity(event.target.value)}
                 required
               />
-              <Input
+              <UnitCombobox
                 label={`Unidade (${PRODUCTION_UNIT_SUGGESTIONS.join(", ")})`}
                 value={outputUnit}
-                onChange={(event) => setOutputUnit(event.target.value)}
-                required
+                onChange={setOutputUnit}
               />
             </FormRow>
           </div>
@@ -1235,7 +1276,7 @@ function RecipeEditorModal({
                 Use a unidade da receita e o sistema converte para a unidade cadastrada no estoque.
               </p>
             </div>
-            <Button variant="outline" size="sm" iconLeft={<Plus className="h-4 w-4" />} onClick={addIngredient}>
+            <Button type="button" variant="outline" size="sm" iconLeft={<Plus className="h-4 w-4" />} onClick={addIngredient}>
               Adicionar Insumo
             </Button>
           </div>
@@ -1249,6 +1290,7 @@ function RecipeEditorModal({
                     <p className="text-sm font-black text-slate-900">Insumo {index + 1}</p>
                     {ingredients.length > 1 && (
                       <IconButton
+                        type="button"
                         size="sm"
                         variant="ghost"
                         className="text-red-500 hover:text-red-700"
@@ -1273,7 +1315,7 @@ function RecipeEditorModal({
                                     ...row,
                                     inventoryItemId: event.target.value,
                                     itemName: item?.name || "",
-                                    unit: row.unit || item?.unit || "g",
+                                    unit: item?.unit || row.unit || "g",
                                   }
                                 : row,
                             ),
@@ -1303,19 +1345,18 @@ function RecipeEditorModal({
                           )
                         }
                       />
-                      <Input
+                      <UnitCombobox
                         label="Unidade da receita"
                         value={ingredient.unit}
-                        onChange={(event) =>
+                        onChange={(nextUnit) =>
                           setIngredients((current) =>
                             current.map((row) =>
                               row.id === ingredient.id
-                                ? { ...row, unit: event.target.value }
+                                ? { ...row, unit: nextUnit }
                                 : row,
                             ),
                           )
                         }
-                        placeholder="g, kg, ml, un..."
                       />
                     </FormRow>
                     <Textarea
@@ -1353,7 +1394,7 @@ function RecipeEditorModal({
                 Cadastre energia, água, gás, mão de obra, embalagem e demais despesas de produção.
               </p>
             </div>
-            <Button variant="outline" size="sm" iconLeft={<Plus className="h-4 w-4" />} onClick={addOverhead}>
+            <Button type="button" variant="outline" size="sm" iconLeft={<Plus className="h-4 w-4" />} onClick={addOverhead}>
               Adicionar Custo
             </Button>
           </div>
@@ -1369,6 +1410,7 @@ function RecipeEditorModal({
                   <div className="flex items-start justify-between gap-3">
                     <p className="text-sm font-black text-slate-900">Custo {index + 1}</p>
                     <IconButton
+                      type="button"
                       size="sm"
                       variant="ghost"
                       className="text-red-500 hover:text-red-700"

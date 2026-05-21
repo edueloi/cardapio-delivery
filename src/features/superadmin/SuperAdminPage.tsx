@@ -805,6 +805,7 @@ export default function SuperAdminPage() {
                 { id: "tables", label: "Mesas" }, { id: "history", label: "Histórico" },
                 { id: "menu", label: "Cardápio" }, { id: "inventory", label: "Estoque" },
                 { id: "finance", label: "Financeiro" }, { id: "reports", label: "Relatórios" },
+                { id: "production", label: "Produção" },
                 { id: "customers", label: "CRM" }, { id: "whatsapp", label: "WhatsApp" },
                 { id: "downloads", label: "Downloads" },
               ].map(tab => {
@@ -813,7 +814,7 @@ export default function SuperAdminPage() {
                   <button key={tab.id} type="button"
                     onClick={() => {
                       if (planDefaultPerms === null) {
-                        const all = ["overview","pos","live-orders","kds","tables","history","menu","inventory","finance","reports","customers","whatsapp","downloads"];
+                        const all = ["overview","pos","live-orders","kds","tables","history","menu","inventory","production","finance","reports","customers","whatsapp","downloads"];
                         setPlanDefaultPerms(all.filter(t => t !== tab.id));
                       } else {
                         const has = planDefaultPerms.includes(tab.id);

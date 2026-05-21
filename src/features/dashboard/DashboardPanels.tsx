@@ -341,6 +341,7 @@ const PERM_TABS = [
   { id: "history",     label: "Histórico",         group: "Operação" },
   { id: "menu",        label: "Cardápio",          group: "Catálogo" },
   { id: "inventory",   label: "Estoque",           group: "Catálogo" },
+  { id: "production",  label: "Produção",          group: "Catálogo" },
   { id: "finance",     label: "Fluxo de Caixa",    group: "Financeiro" },
   { id: "reports",     label: "Relatórios",        group: "Financeiro" },
   { id: "customers",   label: "Clientes CRM",      group: "Marketing" },

@@ -34,6 +34,7 @@ import CustomerCRMPanel from "./CustomerCRMPanel";
 import ReportsPanel from "./ReportsPanel";
 import DownloadsPanel from "./DownloadsPanel";
 import PromotionsPanel from "./PromotionsPanel";
+import ProductionPanel from "./ProductionPanel";
 import { WhatsAppManagementPanel, WhatsAppOverviewCard } from "./WhatsAppPanel";
 import { type DashboardOrderTabId, type DashboardTabId, type MyMembership, canAccess } from "./types";
 
@@ -317,6 +318,10 @@ export default function DashboardContent({
           </div>
           <InventoryPanel tenant={tenant} />
         </div>
+      )}
+
+      {activeTab === "production" && (
+        <ProductionPanel tenant={tenant} />
       )}
 
       {activeTab === "tables" && (
