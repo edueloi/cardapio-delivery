@@ -70,7 +70,7 @@ export function StatCard({
   className,
   delay = 0,
 }: StatCardProps) {
-  const c = colorMap[color];
+  const c = colorMap[color] ?? colorMap.default;
 
   return (
     <motion.div
