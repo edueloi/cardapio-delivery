@@ -30,6 +30,7 @@ interface WppFormState {
   isPaused: boolean;
   startTime: string;
   endTime: string;
+  preorderMessage: string;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -61,6 +62,7 @@ function buildForm(tenant: Tenant, instance: WppInstance | null, config: WppBotC
     isPaused: config?.isPaused || false,
     startTime: config?.startTime || "00:00",
     endTime: config?.endTime || "23:59",
+    preorderMessage: config?.preorderMessage || "",
   };
 }
 
@@ -255,6 +257,7 @@ export function WhatsAppManagementPanel({
           isPaused: form.isPaused,
           startTime: form.startTime,
           endTime: form.endTime,
+          preorderMessage: form.preorderMessage.trim() || null,
         }),
       });
 
@@ -486,6 +489,22 @@ export function WhatsAppManagementPanel({
             <p className="text-[10px] text-amber-600/70 mt-3 font-medium italic">
               * O bot só responderá automaticamente e enviará notificações dentro deste intervalo.
             </p>
+          </div>
+
+          <div className="mt-6 p-4 bg-slate-50 border border-slate-200 rounded-2xl">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-sm">📦</span>
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Mensagem para Encomendas</span>
+            </div>
+            <p className="text-[11px] text-slate-500 mb-2">Mensagem enviada ao cliente quando o pedido é uma encomenda (com data agendada). Deixe em branco para usar o texto padrão.</p>
+            <p className="text-[10px] text-slate-400 mb-2 font-mono">Variáveis: {"{nome}"} {"{data}"} {"{hora}"} {"{total}"}</p>
+            <textarea
+              value={form.preorderMessage}
+              onChange={e => setForm(f => ({ ...f, preorderMessage: e.target.value }))}
+              placeholder={`Ex: Olá, {nome}! Sua encomenda foi recebida 📦\nEntrega prevista para {data} às {hora}.\nTotal: {total}`}
+              rows={4}
+              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 resize-none font-mono"
+            />
           </div>
 
           <div className="mt-6">

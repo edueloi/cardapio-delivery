@@ -877,6 +877,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
     logoUrl: tenant?.logoUrl || "",
     whatsapp: maskPhone(tenant?.whatsapp) || "",
     isOpen: tenant?.isOpen ?? true,
+    orderMode: (tenant?.orderMode ?? "DELIVERY_ONLY") as "DELIVERY_ONLY" | "PREORDER_ONLY" | "BOTH",
     scheduleMode: tenant?.scheduleMode ?? false,
     scheduleType: (tenant?.scheduleType ?? "CLIENT_CHOOSES") as "CLIENT_CHOOSES" | "OWNER_DEFINES",
     scheduleNotes: tenant?.scheduleNotes || "",
@@ -908,7 +909,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
 
   useEffect(() => {
     if (tenant) {
-      setForm({ name: tenant.name || "", description: tenant.description || "", logoUrl: tenant.logoUrl || "", whatsapp: maskPhone(tenant.whatsapp) || "", isOpen: tenant.isOpen ?? true, scheduleMode: tenant.scheduleMode ?? false, scheduleType: (tenant.scheduleType ?? "CLIENT_CHOOSES") as "CLIENT_CHOOSES" | "OWNER_DEFINES", scheduleNotes: tenant.scheduleNotes || "" });
+      setForm({ name: tenant.name || "", description: tenant.description || "", logoUrl: tenant.logoUrl || "", whatsapp: maskPhone(tenant.whatsapp) || "", isOpen: tenant.isOpen ?? true, orderMode: (tenant.orderMode ?? "DELIVERY_ONLY") as "DELIVERY_ONLY" | "PREORDER_ONLY" | "BOTH", scheduleMode: tenant.scheduleMode ?? false, scheduleType: (tenant.scheduleType ?? "CLIENT_CHOOSES") as "CLIENT_CHOOSES" | "OWNER_DEFINES", scheduleNotes: tenant.scheduleNotes || "" });
       setScheduleDays(parseScheduleDays(tenant.scheduleDays));
       setAddr(parseAddress(tenant.address) ?? { ...EMPTY_ADDR });
       try { setHours(tenant.businessHours ? JSON.parse(tenant.businessHours) : DEFAULT_HOURS); } catch { setHours(DEFAULT_HOURS); }
@@ -1069,26 +1070,40 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                     <Switch checked={form.isOpen} onCheckedChange={v => setForm(f => ({ ...f, isOpen: v }))} />
                   </div>
                 </div>
-                {/* ── Modo Encomenda ── */}
+                {/* ── Modo de Operação (Delivery / Encomenda / Misto) ── */}
                 <div className="pt-5 border-t border-zinc-100">
-                  <div className="flex items-center justify-between gap-4 mb-4">
-                    <div>
-                      <p className="text-sm font-black text-slate-900">Modo Encomenda</p>
-                      <p className="text-xs text-slate-500 mt-0.5">Ative para receber pedidos agendados (encomendas).</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className={`text-[10px] font-black uppercase tracking-widest ${form.scheduleMode ? 'text-amber-500' : 'text-slate-300'}`}>
-                        {form.scheduleMode ? 'Ativo' : 'Inativo'}
-                      </span>
-                      <Switch checked={form.scheduleMode} onCheckedChange={v => setForm(f => ({ ...f, scheduleMode: v }))} />
-                    </div>
+                  <div className="mb-3">
+                    <p className="text-sm font-black text-slate-900">Modo de Operação</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Define como os clientes podem fazer pedidos no cardápio digital.</p>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
+                    {([
+                      { value: "DELIVERY_ONLY",  label: "Só Delivery",          desc: "Apenas entrega/retirada imediata", icon: "🛵" },
+                      { value: "PREORDER_ONLY",  label: "Só Encomenda",         desc: "Apenas pedidos agendados (sem entrega imediata)", icon: "📦" },
+                      { value: "BOTH",           label: "Delivery + Encomenda", desc: "Cliente escolhe entre entrega imediata ou encomenda", icon: "✨" },
+                    ] as const).map(opt => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setForm(f => ({
+                          ...f,
+                          orderMode: opt.value,
+                          scheduleMode: opt.value !== "DELIVERY_ONLY",
+                        }))}
+                        className={`text-left p-3 rounded-xl border-2 transition-all ${form.orderMode === opt.value ? "border-amber-400 bg-amber-50" : "border-slate-200 bg-white hover:border-amber-300"}`}
+                      >
+                        <p className="text-base mb-0.5">{opt.icon}</p>
+                        <p className={`text-xs font-black ${form.orderMode === opt.value ? "text-amber-700" : "text-slate-700"}`}>{opt.label}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5 leading-tight">{opt.desc}</p>
+                      </button>
+                    ))}
                   </div>
 
-                  {form.scheduleMode && (
+                  {form.orderMode !== "DELIVERY_ONLY" && (
                     <div className="space-y-4 bg-amber-50 border border-amber-200 rounded-2xl p-4">
                       {/* Tipo de agendamento */}
                       <div>
-                        <p className="text-xs font-black text-amber-800 uppercase tracking-widest mb-2">Como funciona o agendamento?</p>
+                        <p className="text-xs font-black text-amber-800 uppercase tracking-widest mb-2">Como o cliente escolhe a data de entrega?</p>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           {([
                             { value: "CLIENT_CHOOSES", label: "Cliente escolhe a data", desc: "O cliente seleciona qualquer data no checkout" },
@@ -1157,7 +1172,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                         <textarea
                           value={form.scheduleNotes}
                           onChange={e => setForm(f => ({ ...f, scheduleNotes: e.target.value }))}
-                          placeholder="Ex: Aceitamos encomendas com mínimo 48h de antecedência. Pagamento antecipado via PIX."
+                          placeholder="Ex: Encomendas entregues toda semana aos sábados a partir das 10h. Pedido mínimo 48h antes."
                           rows={2}
                           className="w-full rounded-[10px] border border-amber-200 bg-white px-3 py-2 text-xs text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 resize-none"
                         />
@@ -1632,6 +1647,11 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
   const [prodForm, setProdForm] = useState({
     name: "", description: "", price: "", imageUrl: "", inventoryItemId: "",
     available: true, pdvOnly: false, autoDisableWhenOutOfStock: false,
+    scheduleRuleEnabled: false,
+    scheduleRuleType: "weekday" as "weekday" | "daterange" | "both",
+    scheduleRuleWeekdays: [] as number[],
+    scheduleRuleStartDate: "",
+    scheduleRuleEndDate: "",
     variants: [] as { name: string, price: string, description: string, inventoryItemId: string }[],
     extras: [] as { id: string, label: string, price: string }[]
   });
@@ -1685,7 +1705,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
 
   const openNewProduct = (categoryId: string) => {
     setEditingProduct(null);
-    setProdForm({ name: "", description: "", price: "", imageUrl: "", inventoryItemId: "", available: true, pdvOnly: false, autoDisableWhenOutOfStock: false, variants: [], extras: [] });
+    setProdForm({ name: "", description: "", price: "", imageUrl: "", inventoryItemId: "", available: true, pdvOnly: false, autoDisableWhenOutOfStock: false, scheduleRuleEnabled: false, scheduleRuleType: "weekday", scheduleRuleWeekdays: [], scheduleRuleStartDate: "", scheduleRuleEndDate: "", variants: [], extras: [] });
     setExtraInput({ label: "", price: "" });
     setProdModal({ open: true, categoryId });
   };
@@ -1697,12 +1717,32 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
       const raw = prod.extras ? JSON.parse(prod.extras) : [];
       parsedExtras = raw.map((e: any) => ({ id: e.id, label: e.label, price: String(e.price ?? 0) }));
     } catch {}
+    let scheduleRuleEnabled = false;
+    let scheduleRuleType: "weekday" | "daterange" | "both" = "weekday";
+    let scheduleRuleWeekdays: number[] = [];
+    let scheduleRuleStartDate = "";
+    let scheduleRuleEndDate = "";
+    try {
+      if (prod.scheduleRule) {
+        const rule = JSON.parse(prod.scheduleRule);
+        scheduleRuleEnabled = true;
+        scheduleRuleType = rule.type || "weekday";
+        scheduleRuleWeekdays = rule.weekdays || [];
+        scheduleRuleStartDate = rule.startDate || "";
+        scheduleRuleEndDate = rule.endDate || "";
+      }
+    } catch {}
     setProdForm({
       name: prod.name, description: prod.description || "", price: String(prod.price),
       imageUrl: prod.imageUrl || "", inventoryItemId: prod.inventoryItemId || "",
       available: prod.available !== false,
       pdvOnly: prod.pdvOnly || false,
       autoDisableWhenOutOfStock: prod.autoDisableWhenOutOfStock || false,
+      scheduleRuleEnabled,
+      scheduleRuleType,
+      scheduleRuleWeekdays,
+      scheduleRuleStartDate,
+      scheduleRuleEndDate,
       variants: prod.variants?.map((v: any) => ({ name: v.name, price: String(v.price), description: v.description || "", inventoryItemId: v.inventoryItemId || "" })) || [],
       extras: parsedExtras
     });
@@ -1717,12 +1757,25 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
   const saveProduct = async () => {
     if (!prodForm.name || !prodModal.categoryId) return;
     const url = editingProduct ? `/api/products/${editingProduct.id}` : '/api/products';
+    let scheduleRule: string | null = null;
+    if (prodForm.scheduleRuleEnabled) {
+      const rule: any = { type: prodForm.scheduleRuleType };
+      if (prodForm.scheduleRuleType === "weekday" || prodForm.scheduleRuleType === "both") {
+        rule.weekdays = prodForm.scheduleRuleWeekdays;
+      }
+      if (prodForm.scheduleRuleType === "daterange" || prodForm.scheduleRuleType === "both") {
+        rule.startDate = prodForm.scheduleRuleStartDate;
+        rule.endDate = prodForm.scheduleRuleEndDate;
+      }
+      scheduleRule = JSON.stringify(rule);
+    }
     const res = await apiFetch(url, {
       method: editingProduct ? 'PATCH' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ...prodForm,
         extras: JSON.stringify(prodForm.extras.map(e => ({ id: e.id, label: e.label, price: parseFloat(e.price) || 0 }))),
+        scheduleRule,
         categoryId: prodModal.categoryId,
         tenantId: tenant?.id
       })
@@ -1885,6 +1938,9 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
                     {!prod.available && (
                       <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-white bg-slate-400 px-1.5 py-0.5 rounded-full shadow-sm">Inativo</span>
                     )}
+                    {(prod as any).scheduleRule && (
+                      <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-amber-700 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded-full">📅 Agendado</span>
+                    )}
                   </div>
                   <p className="text-xs text-slate-400 font-medium flex items-center gap-2">
                     {prod.variants?.length > 0
@@ -2046,6 +2102,102 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
             >
               <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition duration-200 ${prodForm.pdvOnly ? 'translate-x-5' : 'translate-x-0'}`} />
             </button>
+          </div>
+
+          {/* Disponibilidade Automática */}
+          <div className="border-t border-zinc-100 pt-4">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="text-sm font-bold text-slate-700">Disponibilidade Automática</p>
+                <p className="text-xs text-slate-400">Produto aparece/some do cardápio online automaticamente</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setProdForm(f => ({ ...f, scheduleRuleEnabled: !f.scheduleRuleEnabled }))}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${prodForm.scheduleRuleEnabled ? 'bg-amber-500' : 'bg-slate-200'}`}
+              >
+                <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition duration-200 ${prodForm.scheduleRuleEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+              </button>
+            </div>
+
+            {prodForm.scheduleRuleEnabled && (
+              <div className="space-y-3 bg-amber-50 border border-amber-200 rounded-2xl p-3">
+                {/* Tipo de regra */}
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-amber-800 mb-2">Tipo de regra</p>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {([
+                      { value: "weekday",   label: "Dia da semana" },
+                      { value: "daterange", label: "Período (datas)" },
+                      { value: "both",      label: "Os dois" },
+                    ] as const).map(opt => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setProdForm(f => ({ ...f, scheduleRuleType: opt.value }))}
+                        className={`text-[10px] font-black py-1.5 px-2 rounded-lg border-2 transition-all ${prodForm.scheduleRuleType === opt.value ? "border-amber-400 bg-white text-amber-700" : "border-amber-200 text-slate-500 hover:border-amber-300"}`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Dias da semana */}
+                {(prodForm.scheduleRuleType === "weekday" || prodForm.scheduleRuleType === "both") && (
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-amber-800 mb-2">Dias ativos</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"].map((label, idx) => {
+                        const active = prodForm.scheduleRuleWeekdays.includes(idx);
+                        return (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => setProdForm(f => ({
+                              ...f,
+                              scheduleRuleWeekdays: active
+                                ? f.scheduleRuleWeekdays.filter(d => d !== idx)
+                                : [...f.scheduleRuleWeekdays, idx]
+                            }))}
+                            className={`w-10 h-8 text-xs font-black rounded-lg border-2 transition-all ${active ? "border-amber-400 bg-amber-400 text-white" : "border-amber-200 bg-white text-slate-500 hover:border-amber-300"}`}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Período de datas */}
+                {(prodForm.scheduleRuleType === "daterange" || prodForm.scheduleRuleType === "both") && (
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-amber-800 mb-2">Período de visibilidade</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] text-slate-500 font-bold block mb-1">Data início</label>
+                        <input
+                          type="date"
+                          value={prodForm.scheduleRuleStartDate}
+                          onChange={e => setProdForm(f => ({ ...f, scheduleRuleStartDate: e.target.value }))}
+                          className="w-full bg-white border border-amber-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400/30"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-500 font-bold block mb-1">Data fim</label>
+                        <input
+                          type="date"
+                          value={prodForm.scheduleRuleEndDate}
+                          onChange={e => setProdForm(f => ({ ...f, scheduleRuleEndDate: e.target.value }))}
+                          className="w-full bg-white border border-amber-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400/30"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Adicionais / Extras */}

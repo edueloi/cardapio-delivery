@@ -20,6 +20,7 @@ model Tenant {
   scheduleType  String   @default("CLIENT_CHOOSES") @map("schedule_type") // CLIENT_CHOOSES | OWNER_DEFINES
   scheduleDays  String?  @map("schedule_days") @db.Text // JSON: ScheduleDay[]
   scheduleNotes String?  @map("schedule_notes") @db.Text
+  orderMode     String   @default("DELIVERY_ONLY") @map("order_mode") // DELIVERY_ONLY | PREORDER_ONLY | BOTH
   businessHours String? @map("business_hours") @db.Text // JSON: { mon: {open:"08:00",close:"22:00",enabled:true}, ... }
   deliveryConfig String? @map("delivery_config") @db.Text // JSON: DeliveryConfig
   paymentMethods String? @map("payment_methods") @db.Text // JSON: PaymentConfig
@@ -291,6 +292,7 @@ model WppBotConfig {
   isPaused         Boolean  @default(false) @map("is_paused")
   startTime        String?  @map("start_time") // HH:mm
   endTime          String?  @map("end_time")   // HH:mm
+  preorderMessage  String?  @map("preorder_message") @db.Text // custom message for preorders; supports {nome}, {data}, {hora}, {total}
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
 
@@ -323,6 +325,7 @@ model Product {
   pdvOnly     Boolean  @default(false) @map("pdv_only")
   autoDisableWhenOutOfStock Boolean @default(false) @map("auto_disable_when_out_of_stock")
   extras      String?  @db.Text // JSON: ProductExtra[]
+  scheduleRule String? @map("schedule_rule") @db.Text // JSON: ProductScheduleRule
   createdAt   DateTime @default(now()) @map("created_at")
   inventoryItemId String? @map("inventory_item_id")
 

@@ -46,12 +46,25 @@ export interface PaymentConfig {
   customBrands?: string[];
 }
 
+// orderMode: DELIVERY_ONLY = só delivery imediato; PREORDER_ONLY = só encomenda; BOTH = os dois
+export type OrderMode = "DELIVERY_ONLY" | "PREORDER_ONLY" | "BOTH";
+
 // scheduleType: CLIENT_CHOOSES = cliente escolhe qualquer data; OWNER_DEFINES = estabelecimento define dias/horários fixos
 export interface ScheduleDay {
   weekday: number;   // 0=Dom 1=Seg ... 6=Sáb
   label: string;     // "Segunda-feira"
   enabled: boolean;
   times: string[];   // ["09:00", "12:00", "18:00"]
+}
+
+// ProductScheduleRule: regra de visibilidade automática no cardápio público
+export interface ProductScheduleRule {
+  type: "weekday" | "daterange" | "both";
+  weekdays?: number[];        // 0=Dom … 6=Sáb
+  weekdayStartTime?: string;  // HH:mm — hora em que aparece no dia (omitir = 00:00)
+  weekdayEndTime?: string;    // HH:mm — hora em que some no dia (omitir = 23:59)
+  startDate?: string;         // YYYY-MM-DD — início do período
+  endDate?: string;           // YYYY-MM-DD — fim do período (inclusive)
 }
 
 export interface StoneConfig {
@@ -73,6 +86,7 @@ export interface Tenant {
   scheduleType?: "CLIENT_CHOOSES" | "OWNER_DEFINES";
   scheduleDays?: string | null;  // JSON: ScheduleDay[]
   scheduleNotes?: string | null;
+  orderMode?: OrderMode;
   businessHours?: string | null;
   deliveryConfig?: string | null; // JSON string: DeliveryConfig
   paymentMethods?: string | null; // JSON string: PaymentConfig
@@ -141,6 +155,7 @@ export interface WppBotConfig {
   isPaused: boolean;
   startTime?: string | null;
   endTime?: string | null;
+  preorderMessage?: string | null; // mensagem customizada para encomendas; suporta {nome}, {data}, {hora}, {total}
 }
 
 export interface WppSessionInfo {
@@ -177,6 +192,7 @@ export interface Product {
   inventoryItem?: InventoryItem | null;
   variants?: ProductVariant[];
   extras?: string | null; // JSON: ProductExtra[]
+  scheduleRule?: string | null; // JSON: ProductScheduleRule
 }
 
 export interface InventoryItem {

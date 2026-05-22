@@ -805,7 +805,7 @@ app.patch("/api/owner/tenants/:tenantId", requireAuth, async (req, res) => {
   const tenant = await requireTenantById(req, res, req.params.tenantId);
   if (!tenant) return;
 
-  const { name, description, address, whatsapp, logoUrl, isOpen, scheduleMode, scheduleType, scheduleDays, scheduleNotes, businessHours, deliveryConfig, paymentMethods, stoneConfig } = req.body;
+  const { name, description, address, whatsapp, logoUrl, isOpen, scheduleMode, scheduleType, scheduleDays, scheduleNotes, orderMode, businessHours, deliveryConfig, paymentMethods, stoneConfig } = req.body;
   try {
     const updated = await prisma.tenant.update({
       where: { id: tenant.id },
@@ -820,6 +820,7 @@ app.patch("/api/owner/tenants/:tenantId", requireAuth, async (req, res) => {
         ...(scheduleType !== undefined && { scheduleType: scheduleType || "CLIENT_CHOOSES" }),
         ...(scheduleDays !== undefined && { scheduleDays: scheduleDays ? (typeof scheduleDays === "string" ? scheduleDays : JSON.stringify(scheduleDays)) : null }),
         ...(scheduleNotes !== undefined && { scheduleNotes: scheduleNotes || null }),
+        ...(orderMode !== undefined && { orderMode: orderMode || "DELIVERY_ONLY" }),
         ...(businessHours !== undefined && { 
           businessHours: (businessHours === null || businessHours === "null") ? null : 
                         (typeof businessHours === "string" ? businessHours : JSON.stringify(businessHours)) 
@@ -1069,6 +1070,7 @@ app.patch("/api/owner/tenants/:tenantId/wpp/config", requireAuth, async (req, re
     isPaused,
     startTime,
     endTime,
+    preorderMessage,
   } = req.body;
 
   const [config, instance] = await Promise.all([
@@ -1084,6 +1086,7 @@ app.patch("/api/owner/tenants/:tenantId/wpp/config", requireAuth, async (req, re
         isPaused: !!isPaused,
         startTime: startTime || null,
         endTime: endTime || null,
+        preorderMessage: preorderMessage || null,
       },
       update: {
         ...(botEnabled !== undefined && { botEnabled: !!botEnabled }),
@@ -1094,6 +1097,7 @@ app.patch("/api/owner/tenants/:tenantId/wpp/config", requireAuth, async (req, re
         ...(isPaused !== undefined && { isPaused: !!isPaused }),
         ...(startTime !== undefined && { startTime: startTime || null }),
         ...(endTime !== undefined && { endTime: endTime || null }),
+        ...(preorderMessage !== undefined && { preorderMessage: preorderMessage || null }),
       },
     }),
     prisma.wppInstance.upsert({
@@ -1141,6 +1145,37 @@ app.get("/api/tenants/check-slug/:slug", async (req, res) => {
   res.json({ taken: !!existing });
 });
 
+function isProductActiveNow(scheduleRule: string | null): boolean {
+  if (!scheduleRule) return true;
+  try {
+    const rule = JSON.parse(scheduleRule) as { type: string; weekdays?: number[]; weekdayStartTime?: string; weekdayEndTime?: string; startDate?: string; endDate?: string };
+    const now = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+    const todayWeekday = now.getDay();
+    const todayStr = now.toISOString().split("T")[0];
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+    const checkWeekday = (): boolean => {
+      if (!rule.weekdays || rule.weekdays.length === 0) return false;
+      if (!rule.weekdays.includes(todayWeekday)) return false;
+      const startMin = rule.weekdayStartTime ? parseInt(rule.weekdayStartTime.split(":")[0]) * 60 + parseInt(rule.weekdayStartTime.split(":")[1]) : 0;
+      const endMin = rule.weekdayEndTime ? parseInt(rule.weekdayEndTime.split(":")[0]) * 60 + parseInt(rule.weekdayEndTime.split(":")[1]) : 23 * 60 + 59;
+      return nowMinutes >= startMin && nowMinutes <= endMin;
+    };
+
+    const checkDaterange = (): boolean => {
+      if (!rule.startDate || !rule.endDate) return false;
+      return todayStr >= rule.startDate && todayStr <= rule.endDate;
+    };
+
+    if (rule.type === "weekday") return checkWeekday();
+    if (rule.type === "daterange") return checkDaterange();
+    if (rule.type === "both") return checkWeekday() && checkDaterange();
+    return true;
+  } catch {
+    return true;
+  }
+}
+
 app.get("/api/tenants/:slug", async (req, res) => {
   const { slug } = req.params;
 
@@ -1166,11 +1201,12 @@ app.get("/api/tenants/:slug", async (req, res) => {
       return res.status(404).json({ error: "Tenant not found" });
     }
 
-    // Filter out products with zero stock
+    // Filter out products with zero stock or inactive schedule rule
     const filteredCategories = tenant.categories.map(cat => ({
       ...cat,
       products: cat.products.filter(p => {
         if (p.inventoryItem && p.inventoryItem.quantity <= 0) return false;
+        if ((p as any).scheduleRule && !isProductActiveNow((p as any).scheduleRule)) return false;
         return true;
       })
     })).filter(cat => cat.products.length > 0);
@@ -1532,7 +1568,7 @@ app.delete("/api/categories/:id", requireAuth, async (req, res) => {
 });
 
 app.post("/api/products", requireAuth, async (req, res) => {
-  const { name, description, price, imageUrl, categoryId, tenantId, variants, inventoryItemId, pdvOnly, extras } = req.body;
+  const { name, description, price, imageUrl, categoryId, tenantId, variants, inventoryItemId, pdvOnly, extras, scheduleRule } = req.body;
   const tenant = await requireTenantById(req, res, tenantId);
   if (!tenant) return;
 
@@ -1549,6 +1585,7 @@ app.post("/api/products", requireAuth, async (req, res) => {
         pdvOnly: Boolean(pdvOnly),
         inventoryItemId: inventoryItemId || null,
         extras: extras ? (typeof extras === 'string' ? extras : JSON.stringify(extras)) : null,
+        scheduleRule: scheduleRule ? (typeof scheduleRule === 'string' ? scheduleRule : JSON.stringify(scheduleRule)) : null,
         variants: Array.isArray(variants)
           ? {
               create: variants.map((variant: any) => ({
@@ -1573,7 +1610,7 @@ app.patch("/api/products/:id", requireAuth, async (req, res) => {
   const scoped = await requireTenantFromProduct(req, res, req.params.id);
   if (!scoped) return;
 
-  const { name, description, price, imageUrl, variants, inventoryItemId, available, autoDisableWhenOutOfStock, pdvOnly, extras } = req.body;
+  const { name, description, price, imageUrl, variants, inventoryItemId, available, autoDisableWhenOutOfStock, pdvOnly, extras, scheduleRule } = req.body;
 
   try {
     const product = await prisma.$transaction(async (tx) => {
@@ -1588,6 +1625,7 @@ app.patch("/api/products/:id", requireAuth, async (req, res) => {
           imageUrl,
           inventoryItemId: inventoryItemId || null,
           extras: extras !== undefined ? (typeof extras === 'string' ? extras : JSON.stringify(extras)) : undefined,
+          scheduleRule: scheduleRule !== undefined ? (scheduleRule ? (typeof scheduleRule === 'string' ? scheduleRule : JSON.stringify(scheduleRule)) : null) : undefined,
           ...(available !== undefined && { available: Boolean(available) }),
           ...(autoDisableWhenOutOfStock !== undefined && { autoDisableWhenOutOfStock: Boolean(autoDisableWhenOutOfStock) }),
           ...(pdvOnly !== undefined && { pdvOnly: Boolean(pdvOnly) }),

@@ -13,14 +13,14 @@ function formatItems(items: Array<{ quantity: number; price: number; notes?: str
   }).join("\n");
 }
 
-async function canSend(tenantId: string, field: "sendOrderCreated" | "sendStatusUpdates") {
+async function canSend(tenantId: string, field: "sendOrderCreated" | "sendStatusUpdates"): Promise<{ allowed: boolean; config: any }> {
   const [instance, config] = await Promise.all([
     prisma.wppInstance.findUnique({ where: { tenantId } }),
     prisma.wppBotConfig.findUnique({ where: { tenantId } }),
   ]);
-  if (!instance || instance.status !== "connected") return false;
-  if (!config?.botEnabled) return false;
-  return !!config[field];
+  if (!instance || instance.status !== "connected") return { allowed: false, config };
+  if (!config?.botEnabled) return { allowed: false, config };
+  return { allowed: !!config[field], config };
 }
 
 // ─── Customer: order created ──────────────────────────────────────────────────
@@ -37,19 +37,31 @@ export async function sendOrderCreatedMessage(order: {
   scheduledTime?: string | null;
   items: Array<{ quantity: number; price: number; notes?: string | null; product?: { name?: string | null } | null; productVariant?: { name?: string | null } | null }>;
 }, tenant: { name: string; slug: string }) {
-  const allowed = await canSend(order.tenantId, "sendOrderCreated");
+  const { allowed, config } = await canSend(order.tenantId, "sendOrderCreated");
   if (!allowed) return;
 
   const baseUrl = (process.env.APP_URL || "http://localhost:3000").replace(/\/$/, "");
   const typeLabel = order.orderType === "PICKUP" ? "🏪 Retirada no balcão" : "🛵 Entrega";
   const payLabel: Record<string, string> = { PIX: "PIX", CREDIT: "Cartão de crédito", DEBIT: "Cartão de débito", MEAL: "Vale-refeição", CASH: "Dinheiro" };
 
+  let dateStr = "";
   let scheduledLine = "";
   if (order.scheduledDate) {
     const d = new Date(order.scheduledDate + "T12:00:00");
-    const dateStr = d.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
+    dateStr = d.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
     const timeStr = order.scheduledTime ? ` às ${order.scheduledTime}` : "";
     scheduledLine = `\n📅 *Encomenda para:* ${dateStr}${timeStr}`;
+  }
+
+  // Se é encomenda e o dono configurou mensagem customizada, usá-la
+  if (order.scheduledDate && config?.preorderMessage) {
+    const customText = config.preorderMessage
+      .replace(/\{nome\}/g, order.customerName)
+      .replace(/\{data\}/g, dateStr)
+      .replace(/\{hora\}/g, order.scheduledTime || "")
+      .replace(/\{total\}/g, fmt(order.total));
+    await sendMessage(order.tenantId, order.customerPhone, customText);
+    return;
   }
 
   const text =
@@ -115,7 +127,7 @@ export async function sendOrderStatusMessage(order: {
   orderType: string;
   status: string;
 }, tenant: { name: string; slug: string }) {
-  const allowed = await canSend(order.tenantId, "sendStatusUpdates");
+  const { allowed } = await canSend(order.tenantId, "sendStatusUpdates");
   if (!allowed) return;
 
   const statusMap: Record<string, { label: string; emoji: string; detail: string }> = {

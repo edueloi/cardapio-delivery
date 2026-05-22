@@ -246,6 +246,21 @@ const migrations = [
       CONSTRAINT production_runs_recipe_id_fkey FOREIGN KEY (recipe_id) REFERENCES production_recipes(id) ON DELETE SET NULL ON UPDATE CASCADE
     ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
   },
+  {
+    name: 'add_tenants_order_mode',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenants' AND COLUMN_NAME = 'order_mode'",
+    run: "ALTER TABLE tenants ADD COLUMN order_mode VARCHAR(50) NOT NULL DEFAULT 'DELIVERY_ONLY'",
+  },
+  {
+    name: 'add_products_schedule_rule',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'schedule_rule'",
+    run: "ALTER TABLE products ADD COLUMN schedule_rule TEXT NULL",
+  },
+  {
+    name: 'add_wpp_bot_configs_preorder_message',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'wpp_bot_configs' AND COLUMN_NAME = 'preorder_message'",
+    run: "ALTER TABLE wpp_bot_configs ADD COLUMN preorder_message TEXT NULL",
+  },
 ];
 
 async function run() {

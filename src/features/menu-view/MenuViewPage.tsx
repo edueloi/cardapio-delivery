@@ -165,6 +165,7 @@ export default function MenuViewPage() {
     paymentDetail: "",
     scheduledDate: "",
     scheduledTime: "",
+    isPreorder: false, // usado no modo BOTH para o cliente escolher se quer encomenda
   });
 
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
@@ -612,16 +613,17 @@ export default function MenuViewPage() {
               </div>
 
               {/* Schedule banner */}
-              {tenant.scheduleMode && (() => {
+              {(tenant.scheduleMode || tenant.orderMode === "PREORDER_ONLY" || tenant.orderMode === "BOTH") && (() => {
                 let parsedDays: any[] = [];
                 try { parsedDays = tenant.scheduleDays ? JSON.parse(tenant.scheduleDays) : []; } catch {}
                 const enabledDays = parsedDays.filter((d: any) => d.enabled);
                 const weekLabels = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+                const modeLabel = tenant.orderMode === "PREORDER_ONLY" ? "Só Encomenda" : tenant.orderMode === "BOTH" ? "Delivery + Encomenda" : "Encomendas";
                 return (
                   <div className="rounded-2xl overflow-hidden mb-2" style={{ background: "rgba(201,162,39,0.15)", border: "1px solid rgba(201,162,39,0.3)" }}>
                     <div className="px-4 py-3 flex items-center gap-2">
                       <CalendarDays className="w-4 h-4 text-amber-400 shrink-0" />
-                      <p className="text-[11px] font-black uppercase tracking-widest text-amber-300">Encomendas</p>
+                      <p className="text-[11px] font-black uppercase tracking-widest text-amber-300">{modeLabel}</p>
                     </div>
                     {tenant.scheduleType === "OWNER_DEFINES" && enabledDays.length > 0 ? (
                       <div className="px-4 pb-3">
@@ -635,7 +637,7 @@ export default function MenuViewPage() {
                         </div>
                       </div>
                     ) : (
-                      <p className="px-4 pb-3 text-[10px] text-amber-200/70">Escolha a data no checkout.</p>
+                      <p className="px-4 pb-3 text-[10px] text-amber-200/70">{tenant.scheduleNotes || "Escolha a data no checkout."}</p>
                     )}
                   </div>
                 );
@@ -1049,14 +1051,55 @@ export default function MenuViewPage() {
                 <AnimatePresence mode="wait">
                   {checkoutStep === "info" && (
                     <motion.div key="info" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4">
-                      <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
-                        {(["DELIVERY", "PICKUP"] as const).map((type) => (
-                          <button key={type} onClick={() => setForm((f) => ({ ...f, orderType: type }))}
-                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold transition-all ${form.orderType === type ? "bg-white text-slate-900 shadow-sm" : "text-slate-400"}`}>
-                            {type === "DELIVERY" ? <><Truck className="w-3.5 h-3.5" /> Delivery</> : <><Store className="w-3.5 h-3.5" /> Retirada</>}
-                          </button>
-                        ))}
-                      </div>
+                      {/* Modo BOTH: cliente escolhe Delivery imediato OU Encomenda */}
+                      {tenant.orderMode === "BOTH" && (
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Tipo de pedido</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setForm(f => ({ ...f, isPreorder: false, scheduledDate: "", scheduledTime: "" }))}
+                              className={`flex flex-col items-center gap-1 py-3 rounded-2xl border-2 text-xs font-bold transition-all ${!form.isPreorder ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 text-slate-500 hover:border-slate-300"}`}
+                            >
+                              <span className="text-lg">🛵</span>
+                              <span>Entrega imediata</span>
+                              <span className={`text-[9px] ${!form.isPreorder ? "text-slate-300" : "text-slate-400"}`}>Pedido normal</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setForm(f => ({ ...f, isPreorder: true }))}
+                              className={`flex flex-col items-center gap-1 py-3 rounded-2xl border-2 text-xs font-bold transition-all ${form.isPreorder ? "border-amber-400 bg-amber-50 text-amber-800" : "border-slate-200 text-slate-500 hover:border-amber-300"}`}
+                            >
+                              <span className="text-lg">📦</span>
+                              <span>Encomenda</span>
+                              <span className={`text-[9px] ${form.isPreorder ? "text-amber-600" : "text-slate-400"}`}>Escolha a data</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Modo PREORDER_ONLY: banner informativo */}
+                      {tenant.orderMode === "PREORDER_ONLY" && (
+                        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3.5 flex items-start gap-3">
+                          <span className="text-xl shrink-0">📦</span>
+                          <div>
+                            <p className="text-xs font-black text-amber-800 mb-0.5">Estabelecimento trabalha por encomenda</p>
+                            <p className="text-[11px] text-amber-700">{tenant.scheduleNotes || "Escolha a data de entrega abaixo."}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Selector Delivery/Retirada — oculto no modo PREORDER_ONLY */}
+                      {(!tenant.orderMode || tenant.orderMode === "DELIVERY_ONLY" || (tenant.orderMode === "BOTH" && !form.isPreorder)) && (
+                        <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
+                          {(["DELIVERY", "PICKUP"] as const).map((type) => (
+                            <button key={type} onClick={() => setForm((f) => ({ ...f, orderType: type }))}
+                              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold transition-all ${form.orderType === type ? "bg-white text-slate-900 shadow-sm" : "text-slate-400"}`}>
+                              {type === "DELIVERY" ? <><Truck className="w-3.5 h-3.5" /> Delivery</> : <><Store className="w-3.5 h-3.5" /> Retirada</>}
+                            </button>
+                          ))}
+                        </div>
+                      )}
 
                       <CField label="Nome completo">
                         <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Como devo te chamar?" className={cinput} />
@@ -1126,8 +1169,10 @@ export default function MenuViewPage() {
                         </div>
                       )}
 
-                      {/* Schedule mode */}
-                      {tenant.scheduleMode && (() => {
+                      {/* Seletor de data/hora de encomenda — aparece quando necessário */}
+                      {(() => {
+                        const needsSchedule = tenant.orderMode === "PREORDER_ONLY" || (tenant.orderMode === "BOTH" && form.isPreorder);
+                        if (!needsSchedule && !tenant.scheduleMode) return null;
                         const scheduleType = tenant.scheduleType ?? "CLIENT_CHOOSES";
                         let parsedDays: any[] = [];
                         try { parsedDays = tenant.scheduleDays ? JSON.parse(tenant.scheduleDays) : []; } catch {}
@@ -1146,17 +1191,17 @@ export default function MenuViewPage() {
                               slots.push({ date: iso, label, time: t });
                             }
                           }
-                          const slotKey = form.scheduledDate && (form as any).scheduledTime ? `${form.scheduledDate}|${(form as any).scheduledTime}` : "";
+                          const slotKey = form.scheduledDate && form.scheduledTime ? `${form.scheduledDate}|${form.scheduledTime}` : "";
                           return (
                             <div className="space-y-2">
-                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5"><CalendarDays className="w-3.5 h-3.5 text-amber-500" /> Data e Horário</p>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5"><CalendarDays className="w-3.5 h-3.5 text-amber-500" /> Data e Horário da Encomenda</p>
                               <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3.5 space-y-3">
-                                {tenant.scheduleNotes && <p className="text-xs text-amber-700 italic">{tenant.scheduleNotes}</p>}
+                                {tenant.scheduleNotes && tenant.orderMode !== "PREORDER_ONLY" && <p className="text-xs text-amber-700 italic">{tenant.scheduleNotes}</p>}
                                 <div className="grid grid-cols-1 gap-1.5 max-h-44 overflow-y-auto">
                                   {slots.slice(0, 20).map(slot => {
                                     const key = `${slot.date}|${slot.time}`;
                                     return (
-                                      <button key={key} type="button" onClick={() => setForm(f => ({ ...f, scheduledDate: slot.date, scheduledTime: slot.time } as any))}
+                                      <button key={key} type="button" onClick={() => setForm(f => ({ ...f, scheduledDate: slot.date, scheduledTime: slot.time }))}
                                         className={`flex items-center justify-between px-3 py-2.5 rounded-xl border-2 text-xs font-bold transition-all ${slotKey === key ? "bg-amber-400 border-amber-400 text-white" : "bg-white border-amber-200 text-slate-700 hover:border-amber-300"}`}>
                                         <span className="capitalize">{slot.label}</span>
                                         <span className="font-black">{slot.time}</span>
@@ -1172,7 +1217,7 @@ export default function MenuViewPage() {
                           <div className="space-y-2">
                             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5"><CalendarDays className="w-3.5 h-3.5 text-amber-500" /> Data da Encomenda</p>
                             <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3.5 space-y-2">
-                              {tenant.scheduleNotes && <p className="text-xs text-amber-700 italic">{tenant.scheduleNotes}</p>}
+                              {tenant.scheduleNotes && tenant.orderMode !== "PREORDER_ONLY" && <p className="text-xs text-amber-700 italic">{tenant.scheduleNotes}</p>}
                               <input type="date" value={form.scheduledDate} min={new Date(Date.now() + 86400000).toISOString().split("T")[0]} onChange={e => setForm(f => ({ ...f, scheduledDate: e.target.value }))} className="w-full bg-white border border-amber-200 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-amber-400" />
                             </div>
                           </div>
@@ -1180,7 +1225,8 @@ export default function MenuViewPage() {
                       })()}
 
                       {(() => {
-                        const scheduleOk = !tenant.scheduleMode || (!!form.scheduledDate && (tenant.scheduleType !== "OWNER_DEFINES" || !!(form as any).scheduledTime));
+                        const needsSchedule = tenant.orderMode === "PREORDER_ONLY" || (tenant.orderMode === "BOTH" && form.isPreorder) || tenant.scheduleMode;
+                        const scheduleOk = !needsSchedule || (!!form.scheduledDate && (tenant.scheduleType !== "OWNER_DEFINES" || !!form.scheduledTime));
                         const canContinue = !!form.name && form.phone.replace(/\D/g, "").length >= 10 && !(form.orderType === "DELIVERY" && deliveryBlocked) && scheduleOk;
                         return (
                           <motion.button whileTap={{ scale: 0.97 }} disabled={!canContinue} onClick={() => setCheckoutStep("payment")}
