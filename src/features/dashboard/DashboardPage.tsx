@@ -9,7 +9,7 @@ import DashboardContent from "./DashboardContent";
 import { DASHBOARD_NAVIGATION } from "./config/navigation";
 import { type DashboardOrderTabId, type DashboardTabId, type MyMembership, PATH_TO_TAB, TAB_TO_PATH, canAccess, OWNER_ONLY_TABS } from "./types";
 import { motion, AnimatePresence } from "motion/react";
-import { Bell, Receipt, X } from "lucide-react";
+import { Bell, Receipt, ShoppingBag, X } from "lucide-react";
 
 export default function DashboardPage() {
   const { slug, tab: tabParam, orderId } = useParams<{ slug: string; tab?: string; orderId?: string }>();
@@ -23,6 +23,7 @@ export default function DashboardPage() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [checkoutRequests, setCheckoutRequests] = useState<Array<{ tableId: string; customerName: string; timestamp: number }>>([]);
   const [waiterCalls, setWaiterCalls] = useState<Array<{ tableId: string; customerName: string; note: string; requestBill: boolean; timestamp: number }>>([]);
+  const [newOrderAlerts, setNewOrderAlerts] = useState<Array<{ id: string; customerName: string; orderType: string; total: number; timestamp: number }>>([]);
 
   const activeTab: DashboardTabId = (tabParam ? PATH_TO_TAB[tabParam] : undefined) ?? (orderId ? "history" : "overview");
 
@@ -78,6 +79,10 @@ export default function DashboardPage() {
     socket.on("new-order", (newOrder: Order) => {
       setOrders((prev) => (Array.isArray(prev) ? [newOrder, ...prev] : [newOrder]));
       new Audio("/notification.mp3").play().catch(() => undefined);
+      setNewOrderAlerts((prev) => [
+        { id: newOrder.id, customerName: newOrder.customerName, orderType: newOrder.orderType, total: newOrder.total, timestamp: Date.now() },
+        ...prev,
+      ]);
     });
 
     socket.on("order-status-updated", (updatedOrder: Order) => {
@@ -249,6 +254,45 @@ export default function DashboardPage() {
 
       <div className="fixed bottom-6 right-6 z-[200] space-y-3 w-full max-w-xs pointer-events-none">
         <AnimatePresence>
+          {newOrderAlerts.map((alert) => (
+            <motion.div
+              key={alert.timestamp}
+              initial={{ opacity: 0, x: 100, scale: 0.9 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.5, transition: { duration: 0.2 } }}
+              className="pointer-events-auto bg-emerald-500 text-white p-4 rounded-2xl shadow-2xl flex flex-col gap-2"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center animate-bounce">
+                    <ShoppingBag className="w-4 h-4" />
+                  </div>
+                  <span className="text-xs font-black uppercase tracking-widest">
+                    Novo Pedido — {alert.orderType === "DELIVERY" ? "Delivery" : alert.orderType === "PICKUP" ? "Retirada" : "Mesa"}
+                  </span>
+                </div>
+                <button
+                  onClick={() => setNewOrderAlerts((prev) => prev.filter((a) => a.timestamp !== alert.timestamp))}
+                  className="p-1 hover:bg-white/20 rounded-lg transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <p className="text-sm font-black">{alert.customerName}</p>
+              <p className="text-xs font-bold opacity-70">
+                Total: R$ {alert.total.toFixed(2).replace(".", ",")}
+              </p>
+              <button
+                onClick={() => {
+                  navigateToTab("live-orders");
+                  setNewOrderAlerts((prev) => prev.filter((a) => a.timestamp !== alert.timestamp));
+                }}
+                className="w-full bg-white text-emerald-600 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-50 transition-colors"
+              >
+                Ver Pedido
+              </button>
+            </motion.div>
+          ))}
           {waiterCalls.map((w) => (
             <motion.div
               key={w.timestamp}

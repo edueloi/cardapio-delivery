@@ -805,7 +805,7 @@ app.patch("/api/owner/tenants/:tenantId", requireAuth, async (req, res) => {
   const tenant = await requireTenantById(req, res, req.params.tenantId);
   if (!tenant) return;
 
-  const { name, description, address, whatsapp, logoUrl, isOpen, scheduleMode, scheduleType, scheduleDays, scheduleNotes, orderMode, businessHours, deliveryConfig, paymentMethods, stoneConfig } = req.body;
+  const { name, description, address, whatsapp, logoUrl, isOpen, scheduleMode, scheduleType, scheduleDays, scheduleNotes, orderMode, businessHours, deliveryConfig, paymentMethods, stoneConfig, fiscalConfig } = req.body;
   try {
     const updated = await prisma.tenant.update({
       where: { id: tenant.id },
@@ -837,8 +837,18 @@ app.patch("/api/owner/tenants/:tenantId", requireAuth, async (req, res) => {
           stoneConfig: (stoneConfig === null || stoneConfig === "null") ? null :
                        (typeof stoneConfig === "string" ? stoneConfig : JSON.stringify(stoneConfig))
         }),
+        ...(fiscalConfig !== undefined && {
+          fiscalConfig: (fiscalConfig === null || fiscalConfig === "null") ? null :
+                        (typeof fiscalConfig === "string" ? fiscalConfig : JSON.stringify(fiscalConfig))
+        }),
       },
     });
+
+    // Invalida cache do wizard se config fiscal mudou
+    if (fiscalConfig !== undefined) {
+      const { invalidateFiscalCache } = await import("./src/lib/fiscal.js");
+      invalidateFiscalCache(tenant.id);
+    }
 
     res.json(updated);
   } catch (error) {
@@ -1218,6 +1228,35 @@ app.get("/api/tenants/:slug", async (req, res) => {
   }
 });
 
+// Haversine distance between two lat/lng points in km
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// Geocode a CEP using the public nominatim API (no key required)
+async function geocodeCep(cep: string): Promise<{ lat: number; lng: number } | null> {
+  const digits = cep.replace(/\D/g, "");
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?postalcode=${digits}&country=BR&format=json&limit=1`;
+    const r = await fetch(url, { headers: { "User-Agent": "cardapio-delivery-app/1.0" } });
+    const data = await r.json() as Array<{ lat: string; lon: string }>;
+    if (!data.length) return null;
+    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+  } catch {
+    return null;
+  }
+}
+
+function fmtBRL(value: number): string {
+  return `R$ ${value.toFixed(2).replace(".", ",")}`;
+}
+
 // Calculate delivery fee for a given CEP
 app.get("/api/tenants/:slug/delivery-fee", async (req, res) => {
   const { slug } = req.params;
@@ -1232,20 +1271,59 @@ app.get("/api/tenants/:slug/delivery-fee", async (req, res) => {
     const config = JSON.parse(tenant.deliveryConfig) as {
       mode: string; fixedFee?: number; defaultFee?: number; allowUnlisted?: boolean;
       zones?: Array<{ id: string; label: string; ceps: string[]; fee: number }>;
+      originCep?: string;
+      kmRanges?: Array<{ id: string; upToKm: number; fee: number }>;
+      kmDefaultFee?: number;
+      kmAllowBeyond?: boolean;
     };
 
     if (config.mode === "free") return res.json({ fee: 0, label: "Grátis" });
-    if (config.mode === "fixed") return res.json({ fee: config.fixedFee ?? 0, label: `R$ ${(config.fixedFee ?? 0).toFixed(2).replace(".", ",")}` });
+    if (config.mode === "fixed") return res.json({ fee: config.fixedFee ?? 0, label: fmtBRL(config.fixedFee ?? 0) });
 
     if (config.mode === "zones" && cep) {
       const cleanCep = cep.replace(/\D/g, "");
       const zone = config.zones?.find((z) =>
         z.ceps.some((prefix) => cleanCep.startsWith(prefix.replace(/\D/g, "")))
       );
-      if (zone) return res.json({ fee: zone.fee, label: zone.fee === 0 ? "Grátis" : `R$ ${zone.fee.toFixed(2).replace(".", ",")}`, zone: zone.label });
+      if (zone) return res.json({ fee: zone.fee, label: zone.fee === 0 ? "Grátis" : fmtBRL(zone.fee), zone: zone.label });
       if (config.allowUnlisted === false) return res.json({ fee: null, label: "Fora da área de entrega", blocked: true });
       const fallback = config.defaultFee ?? 0;
-      return res.json({ fee: fallback, label: fallback === 0 ? "Grátis" : `R$ ${fallback.toFixed(2).replace(".", ",")}`, zone: "Outros" });
+      return res.json({ fee: fallback, label: fallback === 0 ? "Grátis" : fmtBRL(fallback), zone: "Outros" });
+    }
+
+    if (config.mode === "km" && cep) {
+      if (!config.originCep || !config.kmRanges?.length) {
+        return res.json({ fee: 0, label: "Grátis" });
+      }
+      const [origin, destination] = await Promise.all([
+        geocodeCep(config.originCep),
+        geocodeCep(cep),
+      ]);
+      if (!origin || !destination) {
+        return res.json({ fee: config.kmDefaultFee ?? 0, label: "Distância não calculável", distanceKm: null });
+      }
+      const distanceKm = haversineKm(origin.lat, origin.lng, destination.lat, destination.lng);
+      const sorted = [...config.kmRanges].sort((a, b) => a.upToKm - b.upToKm);
+      const matched = sorted.find((r) => distanceKm <= r.upToKm);
+      if (matched) {
+        return res.json({
+          fee: matched.fee,
+          label: matched.fee === 0 ? "Grátis" : fmtBRL(matched.fee),
+          distanceKm: Math.round(distanceKm * 10) / 10,
+          range: `até ${matched.upToKm} km`,
+        });
+      }
+      // beyond last range
+      if (config.kmAllowBeyond === false) {
+        return res.json({ fee: null, label: "Fora da área de entrega", blocked: true, distanceKm: Math.round(distanceKm * 10) / 10 });
+      }
+      const beyond = config.kmDefaultFee ?? 0;
+      return res.json({
+        fee: beyond,
+        label: beyond === 0 ? "Grátis" : fmtBRL(beyond),
+        distanceKm: Math.round(distanceKm * 10) / 10,
+        range: `além de ${sorted[sorted.length - 1].upToKm} km`,
+      });
     }
 
     return res.json({ fee: 0, label: "Grátis" });
@@ -1276,6 +1354,26 @@ app.get("/api/admin/tenant/:slug", requireAuth, async (req, res) => {
       wppBotConfig: true,
     },
   });
+
+  // Enriquece produtos com recipeId (campo novo não está no Prisma client gerado)
+  if (completeTenant) {
+    const productIds = completeTenant.categories.flatMap((c: any) => (c.products || []).map((p: any) => p.id));
+    if (productIds.length > 0) {
+      const placeholders = productIds.map(() => '?').join(', ');
+      const rows = await prisma.$queryRawUnsafe(
+        `SELECT id, recipe_id FROM products WHERE id IN (${placeholders})`,
+        ...productIds,
+      ) as Array<{ id: string; recipe_id: string | null }>;
+      const recipeMap = new Map(rows.map(r => [r.id, r.recipe_id]));
+      (completeTenant as any).categories = completeTenant.categories.map((cat: any) => ({
+        ...cat,
+        products: (cat.products || []).map((p: any) => ({
+          ...p,
+          recipeId: recipeMap.get(p.id) ?? null,
+        })),
+      }));
+    }
+  }
 
   res.json(completeTenant);
 });
@@ -1412,40 +1510,77 @@ app.patch("/api/orders/:id/status", requireAuth, async (req, res) => {
 
     if (status === "PREPARING" && order.status !== "PREPARING") {
       for (const item of updatedOrder.items) {
+        // Deduct direct inventory link
         let inventoryItemId = item.productVariantId
           ? (await prisma.productVariant.findUnique({ where: { id: item.productVariantId } }))?.inventoryItemId
           : item.product.inventoryItemId;
 
-        if (!inventoryItemId) continue;
-
-        const updatedItem = await prisma.inventoryItem.update({
-          where: { id: inventoryItemId },
-          data: {
-            quantity: { decrement: item.quantity },
-            movements: {
-              create: {
-                type: "OUT",
-                quantity: item.quantity,
-                reason: "SALE",
-                orderId: updatedOrder.id,
+        if (inventoryItemId) {
+          const updatedItem = await prisma.inventoryItem.update({
+            where: { id: inventoryItemId },
+            data: {
+              quantity: { decrement: item.quantity },
+              movements: {
+                create: {
+                  type: "OUT",
+                  quantity: item.quantity,
+                  reason: "SALE",
+                  orderId: updatedOrder.id,
+                },
               },
             },
-          },
-        });
-
-        io.to(`tenant-${updatedOrder.tenantId}`).emit("inventory-update", {
-          id: updatedItem.id,
-          quantity: updatedItem.quantity
-        });
-
-        if (updatedItem.quantity <= 0) {
-          const productsToDisable = await prisma.product.findMany({
-            where: { inventoryItemId: updatedItem.id, available: true },
           });
-          for (const p of productsToDisable) {
-            if (!(p as any).autoDisableWhenOutOfStock) continue;
-            await prisma.product.update({ where: { id: p.id }, data: { available: false } });
-            io.to(`tenant-${updatedOrder.tenantId}`).emit("product-availability-changed", { id: p.id, available: false });
+
+          io.to(`tenant-${updatedOrder.tenantId}`).emit("inventory-update", {
+            id: updatedItem.id,
+            quantity: updatedItem.quantity
+          });
+
+          if (updatedItem.quantity <= 0) {
+            const productsToDisable = await prisma.product.findMany({
+              where: { inventoryItemId: updatedItem.id, available: true },
+            });
+            for (const p of productsToDisable) {
+              if (!(p as any).autoDisableWhenOutOfStock) continue;
+              await prisma.product.update({ where: { id: p.id }, data: { available: false } });
+              io.to(`tenant-${updatedOrder.tenantId}`).emit("product-availability-changed", { id: p.id, available: false });
+            }
+          }
+        }
+
+        // Deduct production recipe ingredients when product is linked to a recipe
+        const productRecipeId = (item.product as any).recipeId;
+        if (productRecipeId) {
+          const recipeRaw = await prisma.productionRecipe.findUnique({
+            where: { id: productRecipeId },
+          });
+          if (recipeRaw && recipeRaw.outputQuantity > 0) {
+            const ingredients: Array<{ inventoryItemId: string; quantity: number }> = (() => {
+              try { return JSON.parse(recipeRaw.ingredients as string) || []; } catch { return []; }
+            })();
+            const ratio = item.quantity / recipeRaw.outputQuantity;
+            for (const ingredient of ingredients) {
+              if (!ingredient.inventoryItemId || !ingredient.quantity) continue;
+              const deductQty = ingredient.quantity * ratio;
+              const updatedIngredient = await prisma.inventoryItem.update({
+                where: { id: ingredient.inventoryItemId },
+                data: {
+                  quantity: { decrement: deductQty },
+                  movements: {
+                    create: {
+                      type: "OUT",
+                      quantity: deductQty,
+                      reason: "PRODUCTION",
+                      orderId: updatedOrder.id,
+                    },
+                  },
+                },
+              });
+              io.to(`tenant-${updatedOrder.tenantId}`).emit("inventory-update", {
+                id: updatedIngredient.id,
+                quantity: updatedIngredient.quantity,
+              });
+            }
           }
         }
       }
@@ -1568,7 +1703,7 @@ app.delete("/api/categories/:id", requireAuth, async (req, res) => {
 });
 
 app.post("/api/products", requireAuth, async (req, res) => {
-  const { name, description, price, imageUrl, categoryId, tenantId, variants, inventoryItemId, pdvOnly, extras, scheduleRule } = req.body;
+  const { name, description, price, imageUrl, categoryId, tenantId, variants, inventoryItemId, pdvOnly, extras, scheduleRule, recipeId } = req.body;
   const tenant = await requireTenantById(req, res, tenantId);
   if (!tenant) return;
 
@@ -1599,7 +1734,16 @@ app.post("/api/products", requireAuth, async (req, res) => {
       include: { variants: true },
     });
 
-    res.json(product);
+    // Salva recipeId via SQL pois o campo foi adicionado ao banco mas o client Prisma ainda não foi regenerado
+    if (recipeId) {
+      await prisma.$executeRawUnsafe(
+        'UPDATE products SET recipe_id = ? WHERE id = ?',
+        recipeId,
+        product.id,
+      );
+    }
+
+    res.json({ ...product, recipeId: recipeId || null });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to create product" });
@@ -1610,7 +1754,7 @@ app.patch("/api/products/:id", requireAuth, async (req, res) => {
   const scoped = await requireTenantFromProduct(req, res, req.params.id);
   if (!scoped) return;
 
-  const { name, description, price, imageUrl, variants, inventoryItemId, available, autoDisableWhenOutOfStock, pdvOnly, extras, scheduleRule } = req.body;
+  const { name, description, price, imageUrl, variants, inventoryItemId, available, autoDisableWhenOutOfStock, pdvOnly, extras, scheduleRule, recipeId } = req.body;
 
   try {
     const product = await prisma.$transaction(async (tx) => {
@@ -1643,7 +1787,16 @@ app.patch("/api/products/:id", requireAuth, async (req, res) => {
       });
     });
 
-    res.json(product);
+    // Salva recipeId via SQL pois o campo foi adicionado ao banco mas o client Prisma ainda não foi regenerado
+    if (recipeId !== undefined) {
+      await prisma.$executeRawUnsafe(
+        'UPDATE products SET recipe_id = ? WHERE id = ?',
+        recipeId || null,
+        scoped.product.id,
+      );
+    }
+
+    res.json({ ...product, recipeId: recipeId !== undefined ? (recipeId || null) : undefined });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to update product" });
@@ -2088,6 +2241,9 @@ app.post("/api/inventory/items", requireAuth, async (req, res) => {
     expirationDate,
     purchaseDate,
     categoryId,
+    purchaseUnit,
+    purchaseQty,
+    stockUnit,
   } = req.body;
 
   try {
@@ -2107,6 +2263,9 @@ app.post("/api/inventory/items", requireAuth, async (req, res) => {
         expirationDate: expirationDate ? new Date(expirationDate) : null,
         purchaseDate: purchaseDate ? new Date(purchaseDate) : null,
         categoryId,
+        purchaseUnit: purchaseUnit || null,
+        purchaseQty: purchaseQty ? parseFloat(purchaseQty) : null,
+        stockUnit: stockUnit || null,
         movements:
           quantity && parseFloat(quantity) > 0
             ? {
@@ -2145,6 +2304,9 @@ app.patch("/api/inventory/items/:id", requireAuth, async (req, res) => {
     expirationDate,
     purchaseDate,
     categoryId,
+    purchaseUnit,
+    purchaseQty,
+    stockUnit,
   } = req.body;
 
   try {
@@ -2167,6 +2329,9 @@ app.patch("/api/inventory/items/:id", requireAuth, async (req, res) => {
         expirationDate: expirationDate ? new Date(expirationDate) : null,
         purchaseDate: purchaseDate ? new Date(purchaseDate) : null,
         categoryId,
+        purchaseUnit: purchaseUnit ?? undefined,
+        purchaseQty: purchaseQty ? parseFloat(purchaseQty) : null,
+        stockUnit: stockUnit ?? undefined,
         movements:
           diff !== 0
             ? {
@@ -2922,8 +3087,105 @@ app.delete("/api/admin/promotions/:id", requireAuth, async (req, res) => {
   }
 });
 
-// Socket event for waiter call with note and account request
-// (handled client-side via socket.emit("request-waiter", {...}))
+// ── Product Bundles (Combos) ──────────────────────────────────────────────────
+
+// Leitura pública: todos os combos ativos do tenant
+app.get("/api/tenants/:slug/bundles", async (req, res) => {
+  const { slug } = req.params;
+  try {
+    const tenant = await (prisma as any).tenant.findUnique({ where: { slug } });
+    if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+    const rows = await (prisma as any).$queryRawUnsafe(
+      `SELECT * FROM product_bundles WHERE tenant_id = ? AND available = 1 ORDER BY sort_order ASC, created_at ASC`,
+      tenant.id
+    ) as any[];
+    const bundles = rows.map((r: any) => ({
+      id: r.id, tenantId: r.tenant_id, name: r.name,
+      description: r.description, imageUrl: r.image_url,
+      price: r.price, available: Boolean(r.available),
+      sortOrder: r.sort_order,
+      steps: (() => { try { return JSON.parse(r.steps); } catch { return []; } })(),
+      createdAt: r.created_at, updatedAt: r.updated_at,
+    }));
+    res.json(bundles);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Erro ao buscar combos" });
+  }
+});
+
+// Admin: listar todos (incluindo indisponíveis)
+app.get("/api/admin/:slug/bundles", requireAuth, async (req, res) => {
+  const { slug } = req.params;
+  try {
+    const tenant = await (prisma as any).tenant.findUnique({ where: { slug } });
+    if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+    const rows = await (prisma as any).$queryRawUnsafe(
+      `SELECT * FROM product_bundles WHERE tenant_id = ? ORDER BY sort_order ASC, created_at ASC`,
+      tenant.id
+    ) as any[];
+    const bundles = rows.map((r: any) => ({
+      id: r.id, tenantId: r.tenant_id, name: r.name,
+      description: r.description, imageUrl: r.image_url,
+      price: r.price, available: Boolean(r.available),
+      sortOrder: r.sort_order,
+      steps: (() => { try { return JSON.parse(r.steps); } catch { return []; } })(),
+      createdAt: r.created_at, updatedAt: r.updated_at,
+    }));
+    res.json(bundles);
+  } catch (e) {
+    res.status(500).json({ error: "Erro ao buscar combos" });
+  }
+});
+
+// Admin: criar combo
+app.post("/api/admin/:slug/bundles", requireAuth, async (req, res) => {
+  const { slug } = req.params;
+  const { name, description, imageUrl, price, available, sortOrder, steps } = req.body;
+  try {
+    const tenant = await (prisma as any).tenant.findUnique({ where: { slug } });
+    if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+    const id = require("crypto").randomBytes(12).toString("base64url");
+    await (prisma as any).$executeRawUnsafe(
+      `INSERT INTO product_bundles (id, tenant_id, name, description, image_url, price, available, sort_order, steps) VALUES (?,?,?,?,?,?,?,?,?)`,
+      id, tenant.id, name, description ?? null, imageUrl ?? null,
+      price ?? 0, available !== false ? 1 : 0, sortOrder ?? 0,
+      JSON.stringify(steps ?? [])
+    );
+    res.json({ id, success: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Erro ao criar combo" });
+  }
+});
+
+// Admin: atualizar combo
+app.patch("/api/admin/bundles/:id", requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const { name, description, imageUrl, price, available, sortOrder, steps } = req.body;
+  try {
+    await (prisma as any).$executeRawUnsafe(
+      `UPDATE product_bundles SET name=?, description=?, image_url=?, price=?, available=?, sort_order=?, steps=?, updated_at=NOW() WHERE id=?`,
+      name, description ?? null, imageUrl ?? null,
+      price ?? 0, available !== false ? 1 : 0, sortOrder ?? 0,
+      JSON.stringify(steps ?? []), id
+    );
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: "Erro ao atualizar combo" });
+  }
+});
+
+// Admin: deletar combo
+app.delete("/api/admin/bundles/:id", requireAuth, async (req, res) => {
+  const { id } = req.params;
+  try {
+    await (prisma as any).$executeRawUnsafe(`DELETE FROM product_bundles WHERE id=?`, id);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: "Erro ao deletar combo" });
+  }
+});
 
 if (process.env.NODE_ENV !== "production") {
   const vite = await createViteServer({
@@ -2969,6 +3231,161 @@ if (process.env.NODE_ENV !== "production") {
     }
   });
 }
+
+// ─── NFC-e Fiscal Endpoints ───────────────────────────────────────────────────
+
+// POST /api/owner/tenants/:tenantId/nfce/emit — emite NFC-e para um pedido
+app.post("/api/owner/tenants/:tenantId/nfce/emit", requireAuth, async (req, res) => {
+  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  if (!tenant) return;
+
+  const { orderId } = req.body as { orderId: string };
+  if (!orderId) return res.status(400).json({ error: "orderId é obrigatório." });
+
+  try {
+    if (!tenant.fiscalConfig) return res.status(400).json({ error: "Configuração fiscal não encontrada." });
+    const fiscal = JSON.parse(tenant.fiscalConfig as string) as import("./src/types.js").FiscalConfig;
+    if (!fiscal.enabled) return res.status(400).json({ error: "Módulo fiscal desativado." });
+
+    // Busca pedido com itens e produtos
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, tenantId: tenant.id },
+      include: { items: { include: { product: true } } },
+    });
+    if (!order) return res.status(404).json({ error: "Pedido não encontrado." });
+    if (order.nfceStatus === "AUTHORIZED") return res.status(409).json({ error: "NFC-e já autorizada para este pedido." });
+
+    // Determina próximo número e incrementa
+    const numero = fiscal.proximoNumero || 1;
+
+    // Monta items fiscais — exige NCM/CFOP no produto
+    const { emitirNfce } = await import("./src/lib/fiscal.js");
+    const fiscalItems = order.items.map((item: any) => ({
+      productName: item.product?.name ?? "Produto",
+      ncm: item.product?.ncm ?? "00000000",
+      cfop: item.product?.cfop ?? "5102",
+      csosn: item.product?.csosn ?? "400",
+      unitCom: item.product?.unitCom ?? "UN",
+      origem: item.product?.origem ?? 0,
+      aliqIcms: item.product?.aliqIcms ?? 0,
+      quantity: item.quantity,
+      unitPrice: item.price,
+    }));
+
+    const result = await emitirNfce(tenant.id, fiscal, {
+      numero,
+      serie: fiscal.serie || 1,
+      items: fiscalItems,
+      total: order.total,
+      paymentMethod: order.paymentMethod,
+      customerName: order.customerName || undefined,
+    });
+
+    // Atualiza pedido com resultado
+    await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        nfceStatus: result.status,
+        nfceKey: result.chave ?? null,
+        nfceProtocol: result.protocolo ?? null,
+        nfceNumber: result.numero ?? null,
+        nfceXml: result.xmlAutorizado ? JSON.stringify({ xml: result.xmlAutorizado }) : null,
+      },
+    });
+
+    // Se autorizada, avança o número sequencial no fiscal_config
+    if (result.status === "AUTHORIZED") {
+      const updatedFiscal = { ...fiscal, proximoNumero: numero + 1 };
+      await prisma.tenant.update({
+        where: { id: tenant.id },
+        data: { fiscalConfig: JSON.stringify(updatedFiscal) },
+      });
+    }
+
+    res.json(result);
+  } catch (err: any) {
+    console.error("[NFC-e] Erro ao emitir:", err);
+    res.status(500).json({ error: err?.message ?? "Erro ao emitir NFC-e." });
+  }
+});
+
+// POST /api/owner/tenants/:tenantId/nfce/cancel — cancela NFC-e
+app.post("/api/owner/tenants/:tenantId/nfce/cancel", requireAuth, async (req, res) => {
+  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  if (!tenant) return;
+
+  const { orderId, justificativa } = req.body as { orderId: string; justificativa: string };
+  if (!orderId) return res.status(400).json({ error: "orderId é obrigatório." });
+  if (!justificativa || justificativa.length < 15) return res.status(400).json({ error: "Justificativa deve ter ao menos 15 caracteres." });
+
+  try {
+    const order = await prisma.order.findFirst({ where: { id: orderId, tenantId: tenant.id } });
+    if (!order) return res.status(404).json({ error: "Pedido não encontrado." });
+    if (order.nfceStatus !== "AUTHORIZED") return res.status(400).json({ error: "Apenas NFC-e autorizada pode ser cancelada." });
+    if (!order.nfceKey || !order.nfceProtocol) return res.status(400).json({ error: "Chave ou protocolo da NFC-e não encontrados." });
+
+    const fiscal = JSON.parse(tenant.fiscalConfig as string) as import("./src/types.js").FiscalConfig;
+    const { cancelarNfce } = await import("./src/lib/fiscal.js");
+
+    const result = await cancelarNfce(tenant.id, fiscal, order.nfceKey, order.nfceProtocol, justificativa);
+
+    if (result.success) {
+      await prisma.order.update({
+        where: { id: orderId },
+        data: { nfceStatus: "CANCELLED" },
+      });
+    }
+
+    res.json(result);
+  } catch (err: any) {
+    console.error("[NFC-e] Erro ao cancelar:", err);
+    res.status(500).json({ error: err?.message ?? "Erro ao cancelar NFC-e." });
+  }
+});
+
+// GET /api/owner/tenants/:tenantId/nfce/status/:orderId — status da NFC-e de um pedido
+app.get("/api/owner/tenants/:tenantId/nfce/status/:orderId", requireAuth, async (req, res) => {
+  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  if (!tenant) return;
+
+  const order = await prisma.order.findFirst({
+    where: { id: req.params.orderId, tenantId: tenant.id },
+    select: { nfceStatus: true, nfceKey: true, nfceProtocol: true, nfceNumber: true },
+  });
+  if (!order) return res.status(404).json({ error: "Pedido não encontrado." });
+  res.json(order);
+});
+
+// PATCH /api/owner/products/:productId/fiscal — salva dados fiscais de um produto
+app.patch("/api/owner/products/:productId/fiscal", requireAuth, async (req, res) => {
+  const { productId } = req.params;
+  const { ncm, cfop, csosn, unitCom, origem, aliqIcms } = req.body;
+  try {
+    // Verifica se o produto pertence a tenant do usuário
+    const authReq = req as AuthenticatedRequest;
+    const product = await prisma.product.findUnique({ where: { id: productId }, select: { tenantId: true } });
+    if (!product) return res.status(404).json({ error: "Produto não encontrado." });
+    const membership = await prisma.tenantMembership.findFirst({
+      where: { tenantId: product.tenantId, accountId: authReq.account.id },
+    });
+    if (!membership) return res.status(403).json({ error: "Sem permissão." });
+
+    const updated = await prisma.product.update({
+      where: { id: productId },
+      data: {
+        ...(ncm !== undefined && { ncm: ncm || null }),
+        ...(cfop !== undefined && { cfop: cfop || null }),
+        ...(csosn !== undefined && { csosn: csosn || null }),
+        ...(unitCom !== undefined && { unitCom: unitCom || "UN" }),
+        ...(origem !== undefined && { origem: Number(origem) }),
+        ...(aliqIcms !== undefined && { aliqIcms: Number(aliqIcms) }),
+      },
+    });
+    res.json(updated);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
 
 await restoreAllSessions().catch((error) => {
   console.warn("[Baileys] Falha ao restaurar sessões:", error);

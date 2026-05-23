@@ -45,7 +45,7 @@ export default function DashboardShell({
   children,
 }: DashboardShellProps) {
   const tenantInitial = tenantName?.[0] || "G";
-  const tenantLabel = tenantName || "Cardápio Develoi";
+  const tenantLabel = tenantName || "Box Sys";
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col md:flex-row font-sans relative">
@@ -89,7 +89,7 @@ export default function DashboardShell({
             </div>
             <div className="min-w-0">
               <span className="block text-[10px] font-black uppercase tracking-widest text-[#C9A227]/70 leading-none mb-0.5">
-                Cardápio Develoi
+                Box Sys
               </span>
               <span className="block text-sm font-bold text-white tracking-tight leading-none truncate">
                 {tenantLabel}

@@ -6,27 +6,27 @@ const VERSION = "1.0.0";
 const downloads = [
   {
     id: "windows-installer",
-    name: "MenuFlow PDV",
+    name: "Box Sys PDV",
     subtitle: "Instalador Windows",
     description: "Versão completa com instalação automática, atalho na área de trabalho e atualizações.",
     icon: Monitor,
     badge: "Recomendado",
     badgeColor: "bg-[#C9A227] text-black",
-    filename: `MenuFlow-PDV-Setup-${VERSION}.exe`,
-    url: `/downloads/MenuFlow-PDV-Setup-${VERSION}.exe`,
+    filename: `Box Sys-PDV-Setup-${VERSION}.exe`,
+    url: `/downloads/Box Sys-PDV-Setup-${VERSION}.exe`,
     size: "~85 MB",
     os: "Windows 10/11 64-bit",
   },
   {
     id: "windows-portable",
-    name: "MenuFlow PDV",
+    name: "Box Sys PDV",
     subtitle: "Versão Portátil",
     description: "Execute sem instalar. Ideal para uso em pendrive ou computadores sem permissão de administrador.",
     icon: Package2,
     badge: "Sem instalação",
     badgeColor: "bg-slate-100 text-slate-600",
-    filename: `PDV-Develoi-Portable.exe`,
-    url: `/downloads/PDV-Develoi-Portable.exe`,
+    filename: `BoxSys-PDV-Portable.exe`,
+    url: `/downloads/BoxSys-PDV-Portable.exe`,
     size: "~85 MB",
     os: "Windows 10/11 64-bit",
   },
@@ -53,7 +53,7 @@ export default function DownloadsPanel() {
     <PageWrapper>
       <SectionTitle
         title="Downloads"
-        description="Baixe o aplicativo desktop do MenuFlow PDV para Windows"
+        description="Baixe o aplicativo desktop do Box Sys PDV para Windows"
         icon={Download}
         className="mb-6"
       />
@@ -62,7 +62,7 @@ export default function DownloadsPanel() {
       <div className="bg-gradient-to-br from-[#0D1B3E] to-[#1a2f5a] rounded-2xl p-6 mb-6 flex flex-col sm:flex-row items-center gap-6">
         <img
           src="/images/app_celular.png"
-          alt="App MenuFlow no celular"
+          alt="App Box Sys no celular"
           className="w-32 h-32 object-contain drop-shadow-2xl shrink-0"
         />
         <div className="flex-1 text-center sm:text-left">
@@ -70,7 +70,7 @@ export default function DownloadsPanel() {
             <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-[#C9A227] text-black">Grátis</span>
             <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-white/10 text-white">iOS & Android</span>
           </div>
-          <h3 className="text-xl font-black text-white mb-1">MenuFlow no Celular</h3>
+          <h3 className="text-xl font-black text-white mb-1">Box Sys no Celular</h3>
           <p className="text-sm text-slate-300 mb-4 leading-relaxed">
             Adicione o painel à tela inicial do seu celular e use como um app nativo — sem baixar nada da loja.
           </p>

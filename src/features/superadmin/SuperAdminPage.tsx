@@ -307,7 +307,7 @@ export default function SuperAdminPage() {
             </div>
             <div>
               <p className="text-sm font-black text-slate-900">Super Admin</p>
-              <p className="text-[10px] text-slate-400 uppercase tracking-widest">MenuFlow</p>
+              <p className="text-[10px] text-slate-400 uppercase tracking-widest">Box Sys</p>
             </div>
           </div>
           <div className="flex items-center gap-2">

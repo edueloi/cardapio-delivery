@@ -124,6 +124,42 @@ function getInventoryItemCost(item?: InventoryItem | null) {
   return Number(item?.purchasePrice || 0);
 }
 
+/**
+ * Retorna a quantidade disponível do item na unidade granular (stockUnit).
+ * Se o item tem conversão configurada (purchaseQty + stockUnit), multiplica:
+ *   qty_compra * purchaseQty = qty em stockUnit
+ * Caso contrário, retorna quantity como está (na unit normal).
+ */
+export function getInventoryStockInGranularUnit(item: InventoryItem): {
+  stockQty: number;
+  effectiveUnit: string;
+} {
+  const hasConversion = item.purchaseQty && item.stockUnit;
+  if (hasConversion) {
+    return {
+      stockQty: Number(item.quantity) * Number(item.purchaseQty),
+      effectiveUnit: normalizeProductionUnit(item.stockUnit),
+    };
+  }
+  return {
+    stockQty: Number(item.quantity),
+    effectiveUnit: normalizeProductionUnit(item.unit || "un"),
+  };
+}
+
+/**
+ * Custo por unidade granular.
+ * Se item tem conversão: custo da unidade de compra dividido pelo conteúdo.
+ * Ex: garrafa de óleo custa R$8, tem 1000ml → custo por ml = R$0,008
+ */
+export function getInventoryUnitCostGranular(item: InventoryItem): number {
+  const cost = Number(item.purchasePrice || 0);
+  if (item.purchaseQty && Number(item.purchaseQty) > 0 && item.stockUnit) {
+    return cost / Number(item.purchaseQty);
+  }
+  return cost;
+}
+
 function getRecipeFactor(recipe: ProductionRecipe, quantityProduced: number) {
   const baseOutput = Number(recipe.outputQuantity) > 0 ? Number(recipe.outputQuantity) : 1;
   const safeOutput = Number(quantityProduced) > 0 ? Number(quantityProduced) : baseOutput;
@@ -142,7 +178,7 @@ function buildOutputSnapshot(
 ): ProductionOutputSnapshot | null {
   if (!linkedProduct) return null;
 
-  const requestedUnit = normalizeProductionUnit(recipe.outputUnit || linkedProduct.inventoryItem?.unit || "un");
+  const requestedUnit = normalizeProductionUnit(recipe.outputUnit || linkedProduct.inventoryItem?.stockUnit || linkedProduct.inventoryItem?.unit || "un");
   const requestedQuantity = roundProductionValue(quantityProduced);
 
   if (!linkedProduct.inventoryItem) {
@@ -157,8 +193,13 @@ function buildOutputSnapshot(
     };
   }
 
-  const inventoryUnit = normalizeProductionUnit(linkedProduct.inventoryItem.unit || requestedUnit);
+  // Usa stockUnit (granular) se configurado, senão usa unit normal
+  const inventoryUnit = normalizeProductionUnit(
+    linkedProduct.inventoryItem.stockUnit || linkedProduct.inventoryItem.unit || requestedUnit
+  );
   const convertedQuantity = convertProductionQuantity(requestedQuantity, requestedUnit, inventoryUnit);
+
+  const { stockQty: stockBeforeGranular } = getInventoryStockInGranularUnit(linkedProduct.inventoryItem);
 
   if (convertedQuantity === null) {
     return {
@@ -170,8 +211,8 @@ function buildOutputSnapshot(
       requestedUnit,
       convertedQuantity: null,
       inventoryUnit,
-      stockBefore: linkedProduct.inventoryItem.quantity,
-      stockAfter: linkedProduct.inventoryItem.quantity,
+      stockBefore: stockBeforeGranular,
+      stockAfter: stockBeforeGranular,
       canRestock: false,
       message: `Não foi possível converter ${requestedUnit} para ${inventoryUnit} no estoque do produto final.`,
     };
@@ -186,8 +227,8 @@ function buildOutputSnapshot(
     requestedUnit,
     convertedQuantity,
     inventoryUnit,
-    stockBefore: linkedProduct.inventoryItem.quantity,
-    stockAfter: roundProductionValue(linkedProduct.inventoryItem.quantity + convertedQuantity),
+    stockBefore: stockBeforeGranular,
+    stockAfter: roundProductionValue(stockBeforeGranular + convertedQuantity),
     unitCostApplied: requestedQuantity > 0 ? roundProductionValue(totalCost / requestedQuantity) : 0,
     canRestock: true,
   };
@@ -209,20 +250,26 @@ export function calculateProductionSimulation({
 
   const ingredients: ProductionRunIngredientSnapshot[] = recipe.ingredients.map((ingredient) => {
     const item = inventoryMap.get(ingredient.inventoryItemId);
-    const requestedUnit = normalizeProductionUnit(ingredient.unit || item?.unit || "un");
-    const inventoryUnit = normalizeProductionUnit(item?.unit || requestedUnit);
+
+    // Determina a unidade efetiva do estoque (granular se tiver conversão)
+    const { stockQty: stockBefore, effectiveUnit: inventoryUnit } = item
+      ? getInventoryStockInGranularUnit(item)
+      : { stockQty: 0, effectiveUnit: normalizeProductionUnit(ingredient.unit || "un") };
+
+    const requestedUnit = normalizeProductionUnit(ingredient.unit || inventoryUnit || "un");
     const requestedQuantity = roundProductionValue(Number(ingredient.quantity || 0) * factor);
     const convertedQuantity = item
       ? convertProductionQuantity(requestedQuantity, requestedUnit, inventoryUnit)
       : null;
-    const stockBefore = Number(item?.quantity || 0);
     const stockAfter = convertedQuantity === null
       ? stockBefore
       : roundProductionValue(stockBefore - convertedQuantity);
     const shortageQuantity = convertedQuantity === null
       ? requestedQuantity
       : roundProductionValue(Math.max(0, convertedQuantity - stockBefore));
-    const unitCost = getInventoryItemCost(item);
+
+    // Custo por unidade granular (se garrafa de 1L custa R$8, então ml = R$0,008)
+    const unitCost = item ? getInventoryUnitCostGranular(item) : 0;
     const totalCost = convertedQuantity === null ? 0 : roundProductionValue(convertedQuantity * unitCost);
     const canConvert = convertedQuantity !== null;
     const available = !!item && canConvert && stockBefore + 0.000001 >= convertedQuantity;

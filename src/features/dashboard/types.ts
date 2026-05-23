@@ -19,7 +19,8 @@ export type DashboardTabId =
   | "customers"
   | "reports"
   | "downloads"
-  | "promotions";
+  | "promotions"
+  | "bundles";
 
 export type DashboardOrderTabId = "pending" | "preparing" | "shipped";
 
@@ -43,6 +44,7 @@ export const TAB_TO_PATH: Record<DashboardTabId, string> = {
   "reports": "relatorios",
   "downloads": "downloads",
   "promotions": "promocoes",
+  "bundles": "combos",
 };
 
 export const PATH_TO_TAB: Record<string, DashboardTabId> = Object.fromEntries(

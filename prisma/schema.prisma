@@ -25,6 +25,7 @@ model Tenant {
   deliveryConfig String? @map("delivery_config") @db.Text // JSON: DeliveryConfig
   paymentMethods String? @map("payment_methods") @db.Text // JSON: PaymentConfig
   stoneConfig    String? @map("stone_config") @db.Text // JSON: StoneConfig
+  fiscalConfig   String? @map("fiscal_config") @db.LongText // JSON: FiscalConfig (CNPJ, IE, CSC, cert A1, série, ambiente)
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -169,6 +170,11 @@ model InventoryItem {
   unit            String?   // kg, g, un, cm, ml
   weight          String?   // Specific weight/measure e.g. "500g"
   usage           String    @default("SALE") @map("usage") // SALE (external), INTERNAL
+  // Conversão inteligente: comprei X "purchase_unit", cada um tem "purchase_qty" de "stock_unit"
+  // Ex: comprei 10 "un" de óleo, cada uma tem 1000 "ml" → estoque total = 10000 ml
+  purchaseUnit    String?   @map("purchase_unit") // unidade de compra: "un", "cx", "fardo"
+  purchaseQty     Float?    @map("purchase_qty")  // conteúdo por unidade: ex 1000 (ml por garrafa)
+  stockUnit       String?   @map("stock_unit")    // unidade granular: "ml", "g", "un"
   purchaseDate    DateTime? @map("purchase_date")
   expirationDate  DateTime? @map("expiration_date")
   createdAt       DateTime  @default(now()) @map("created_at")
@@ -326,16 +332,25 @@ model Product {
   autoDisableWhenOutOfStock Boolean @default(false) @map("auto_disable_when_out_of_stock")
   extras      String?  @db.Text // JSON: ProductExtra[]
   scheduleRule String? @map("schedule_rule") @db.Text // JSON: ProductScheduleRule
+  // Dados fiscais NFC-e
+  ncm         String?  // Nomenclatura Comum do Mercosul (8 dígitos)
+  cfop        String?  // Código Fiscal de Operações (ex: "5102")
+  csosn       String?  // CSOSN Simples Nacional (ex: "400") ou CST
+  unitCom     String?  @map("unit_com") @default("UN") // Unidade comercial: UN, KG, L, CX
+  origem      Int      @default(0) // 0=Nacional, 1=Estrangeira importação direta
+  aliqIcms    Float    @default(0) @map("aliq_icms") // Alíquota ICMS %
   createdAt   DateTime @default(now()) @map("created_at")
   inventoryItemId String? @map("inventory_item_id")
+  recipeId        String? @map("recipe_id")
 
   category  Category    @relation(fields: [categoryId], references: [id])
   tenant    Tenant      @relation(fields: [tenantId], references: [id])
   inventoryItem InventoryItem? @relation(fields: [inventoryItemId], references: [id])
+  recipe    ProductionRecipe? @relation("ProductLinkedRecipe", fields: [recipeId], references: [id], onDelete: SetNull)
   variants  ProductVariant[]
   items     OrderItem[]
   promotions Promotion[]
-  productionRecipes ProductionRecipe[]
+  productionRecipes ProductionRecipe[] @relation("RecipeLinkedProduct")
 
   @@map("products")
 }
@@ -372,6 +387,12 @@ model Order {
   scheduledDate DateTime? @map("scheduled_date") @db.Date
   scheduledTime  String?   @map("scheduled_time") // HH:mm
   stoneChargeId  String?   @map("stone_charge_id")
+  // NFC-e
+  nfceKey       String?   @map("nfce_key")      // chave de acesso 44 dígitos
+  nfceStatus    String?   @map("nfce_status")   // PENDING | AUTHORIZED | REJECTED | CANCELLED
+  nfceProtocol  String?   @map("nfce_protocol") // protocolo SEFAZ
+  nfceXml       String?   @map("nfce_xml") @db.LongText // XML autorizado + URL DANFE (JSON)
+  nfceNumber    Int?      @map("nfce_number")   // número sequencial da NFC-e
   total          Float
   tenantId      String   @map("tenant_id")
   createdAt     DateTime @default(now()) @map("created_at")
@@ -434,7 +455,8 @@ model ProductionRecipe {
   updatedAt      DateTime @updatedAt @map("updated_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  product Product? @relation("RecipeLinkedProduct", fields: [productId], references: [id], onDelete: SetNull)
+  linkedByProducts Product[] @relation("ProductLinkedRecipe")
   runs    ProductionRun[]
 
   @@map("production_recipes")

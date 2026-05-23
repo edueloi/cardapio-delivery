@@ -261,6 +261,130 @@ const migrations = [
     check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'wpp_bot_configs' AND COLUMN_NAME = 'preorder_message'",
     run: "ALTER TABLE wpp_bot_configs ADD COLUMN preorder_message TEXT NULL",
   },
+  // ── Conversão inteligente de unidades no estoque ──────────────────────────
+  // purchase_unit: unidade de compra (ex: "un" para uma garrafa de 1L)
+  // purchase_qty:  quanto conteúdo tem cada unidade de compra (ex: 1000 ml por garrafa)
+  // stock_unit:    unidade granular do estoque (ex: "ml") — usada na produção
+  {
+    name: 'add_inventory_items_purchase_unit',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'inventory_items' AND COLUMN_NAME = 'purchase_unit'",
+    run: "ALTER TABLE inventory_items ADD COLUMN purchase_unit VARCHAR(50) NULL",
+  },
+  {
+    name: 'add_inventory_items_purchase_qty',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'inventory_items' AND COLUMN_NAME = 'purchase_qty'",
+    run: "ALTER TABLE inventory_items ADD COLUMN purchase_qty DOUBLE NULL",
+  },
+  {
+    name: 'add_inventory_items_stock_unit',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'inventory_items' AND COLUMN_NAME = 'stock_unit'",
+    run: "ALTER TABLE inventory_items ADD COLUMN stock_unit VARCHAR(50) NULL",
+  },
+  // ── Combos / Product Bundles ──────────────────────────────────────────────
+  {
+    name: 'create_product_bundles_table',
+    check: "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'product_bundles'",
+    run: `CREATE TABLE product_bundles (
+      id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      tenant_id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      name VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      description TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
+      image_url VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
+      price DOUBLE NOT NULL DEFAULT 0,
+      available TINYINT(1) NOT NULL DEFAULT 1,
+      sort_order INT NOT NULL DEFAULT 0,
+      steps LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (id),
+      INDEX product_bundles_tenant_id_idx (tenant_id),
+      CONSTRAINT product_bundles_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE ON UPDATE CASCADE
+    ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+  },
+  {
+    name: 'add_products_recipe_id',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'recipe_id'",
+    run: "ALTER TABLE products ADD COLUMN recipe_id VARCHAR(191) NULL",
+  },
+  {
+    name: 'add_products_recipe_id_fkey',
+    check: "SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND CONSTRAINT_NAME = 'products_recipe_id_fkey'",
+    run: "ALTER TABLE products ADD CONSTRAINT products_recipe_id_fkey FOREIGN KEY (recipe_id) REFERENCES production_recipes(id) ON DELETE SET NULL ON UPDATE CASCADE",
+  },
+
+  // ── Módulo Fiscal NFC-e ───────────────────────────────────────────────────
+  // fiscal_config: JSON com CNPJ, IE, CSC, certificado A1, série, ambiente, etc.
+  {
+    name: 'add_tenants_fiscal_config',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenants' AND COLUMN_NAME = 'fiscal_config'",
+    run: "ALTER TABLE tenants ADD COLUMN fiscal_config LONGTEXT NULL",
+  },
+  // NCM — Nomenclatura Comum do Mercosul (8 dígitos)
+  {
+    name: 'add_products_ncm',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'ncm'",
+    run: "ALTER TABLE products ADD COLUMN ncm VARCHAR(20) NULL",
+  },
+  // CFOP — Código Fiscal de Operações e Prestações
+  {
+    name: 'add_products_cfop',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'cfop'",
+    run: "ALTER TABLE products ADD COLUMN cfop VARCHAR(10) NULL",
+  },
+  // CSOSN — Código de Situação de Operação no Simples Nacional
+  {
+    name: 'add_products_csosn',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'csosn'",
+    run: "ALTER TABLE products ADD COLUMN csosn VARCHAR(10) NULL",
+  },
+  // unidade comercial: UN, KG, L, CX, etc.
+  {
+    name: 'add_products_unit_com',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'unit_com'",
+    run: "ALTER TABLE products ADD COLUMN unit_com VARCHAR(20) NULL DEFAULT 'UN'",
+  },
+  // origem: 0=Nacional, 1=Estrangeira importação direta, etc.
+  {
+    name: 'add_products_origem',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'origem'",
+    run: "ALTER TABLE products ADD COLUMN origem TINYINT NOT NULL DEFAULT 0",
+  },
+  // alíquota ICMS (percentual, ex: 12.00)
+  {
+    name: 'add_products_aliq_icms',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'aliq_icms'",
+    run: "ALTER TABLE products ADD COLUMN aliq_icms DOUBLE NULL DEFAULT 0",
+  },
+  // chave de acesso da NFC-e autorizada (44 dígitos)
+  {
+    name: 'add_orders_nfce_key',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'nfce_key'",
+    run: "ALTER TABLE orders ADD COLUMN nfce_key VARCHAR(50) NULL",
+  },
+  // status da NFC-e: null=não emitida, PENDING, AUTHORIZED, REJECTED, CANCELLED
+  {
+    name: 'add_orders_nfce_status',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'nfce_status'",
+    run: "ALTER TABLE orders ADD COLUMN nfce_status VARCHAR(20) NULL",
+  },
+  // protocolo de autorização retornado pela SEFAZ
+  {
+    name: 'add_orders_nfce_protocol',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'nfce_protocol'",
+    run: "ALTER TABLE orders ADD COLUMN nfce_protocol VARCHAR(50) NULL",
+  },
+  // XML autorizado e DANFE (base64 ou URL) armazenados como JSON
+  {
+    name: 'add_orders_nfce_xml',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'nfce_xml'",
+    run: "ALTER TABLE orders ADD COLUMN nfce_xml LONGTEXT NULL",
+  },
+  // número da NFC-e emitida (controle sequencial por série)
+  {
+    name: 'add_orders_nfce_number',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'nfce_number'",
+    run: "ALTER TABLE orders ADD COLUMN nfce_number INT NULL",
+  },
 ];
 
 async function run() {

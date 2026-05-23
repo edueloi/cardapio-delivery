@@ -43,16 +43,16 @@ export default function LoginPage() {
           <div className="flex flex-col items-center mb-10 text-center">
             <div className="w-20 h-20 mb-4 drop-shadow-md">
               <img 
-                src="/images/favicon-menu-flow.png" 
-                alt="MenuFlow Logo" 
+                src="/images/favicon-menu-flow.png"
+                alt="Box Sys Logo"
                 className="w-full h-full object-contain"
               />
             </div>
             
             <div className="space-y-1">
               <div className="flex justify-center items-center text-4xl md:text-3xl font-black tracking-tighter">
-                <span className="text-[#001D3D]">Menu</span>
-                <span className="text-[#D49E00]">Flow</span>
+                <span className="text-[#001D3D]">Box</span>
+                <span className="text-[#D49E00]"> Sys</span>
               </div>
               <p className="text-slate-400 text-xs font-bold tracking-[0.2em] uppercase">Acesso Administrativo</p>
             </div>

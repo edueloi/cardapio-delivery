@@ -14,9 +14,9 @@ export default defineConfig(({mode}) => {
         registerType: 'autoUpdate',
         includeAssets: ['images/app_celular.png', 'images/menuflow-logo.png', 'favicon.ico'],
         manifest: {
-          name: 'MenuFlow PDV',
-          short_name: 'MenuFlow',
-          description: 'Cardápio digital e PDV MenuFlow',
+          name: 'Box Sys PDV',
+          short_name: 'Box Sys',
+          description: 'Cardápio digital e PDV Box Sys',
           theme_color: '#000000',
           background_color: '#000000',
           display: 'standalone',

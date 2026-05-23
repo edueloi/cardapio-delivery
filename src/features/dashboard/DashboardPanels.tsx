@@ -45,11 +45,13 @@ import {
   FileText,
   FileDown,
   Download,
-  Smartphone
+  Smartphone,
+  MapPin,
+  Ruler
 } from "lucide-react";
 import socket from "../../lib/socket";
 import { apiFetch, apiJson } from "../../lib/api";
-import { Order, Tenant, CashRegister, DeliveryConfig, DeliveryZone, PaymentConfig, PaymentMethodConfig, StoneConfig } from "../../types";
+import { Order, Tenant, CashRegister, DeliveryConfig, DeliveryZone, KmRange, PaymentConfig, PaymentMethodConfig, StoneConfig, FiscalConfig } from "../../types";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   Button, 
@@ -719,6 +721,256 @@ function ImageUploader({ value, onChange, label, description }: { value: string,
   );
 }
 
+// Modal de vínculo de estoque
+function InventoryLinkField({
+  inventoryItems,
+  value,
+  onChange,
+  autoDisable,
+  onAutoDisableChange,
+  allCategories,
+  editingProductId,
+}: {
+  inventoryItems: any[];
+  value: string;
+  onChange: (val: string) => void;
+  autoDisable: boolean;
+  onAutoDisableChange: (val: boolean) => void;
+  allCategories: any[];
+  editingProductId?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  // Apenas itens de VENDA (não uso interno)
+  const saleItems = inventoryItems.filter(item => item.usage !== 'INTERNAL');
+
+  // Verifica quais itens já estão vinculados a outros produtos (exceto o editando)
+  const allProducts = allCategories.flatMap((c: any) => c.products || []);
+  const usedItemIds = new Set(
+    allProducts
+      .filter((p: any) => p.id !== editingProductId && p.inventoryItemId)
+      .map((p: any) => p.inventoryItemId)
+  );
+
+  const selectedItem = saleItems.find(i => i.id === value);
+
+  const filtered = saleItems.filter(item =>
+    !search || item.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-2">
+      <label className="block text-[11px] font-black uppercase tracking-widest text-slate-400">Vincular ao estoque (opcional)</label>
+
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="w-full flex items-center justify-between gap-3 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2.5 text-sm font-bold text-left hover:border-amber-300 hover:bg-amber-50/30 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-400"
+      >
+        {selectedItem ? (
+          <div className="flex-1 min-w-0">
+            <span className="text-slate-800 truncate block">{selectedItem.name}</span>
+            <span className={`text-[10px] font-black uppercase ${selectedItem.quantity <= 0 ? "text-red-500" : selectedItem.quantity < 5 ? "text-amber-500" : "text-green-600"}`}>
+              {selectedItem.quantity <= 0 ? "Esgotado" : `${selectedItem.quantity} ${selectedItem.unit || 'un'}`}
+            </span>
+          </div>
+        ) : (
+          <span className="text-slate-400">Sem vínculo de estoque</span>
+        )}
+        <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+      </button>
+
+      {value && (
+        <label className="flex items-center gap-2.5 cursor-pointer select-none">
+          <input type="checkbox" checked={autoDisable} onChange={e => onAutoDisableChange(e.target.checked)} className="w-4 h-4 rounded accent-amber-500" />
+          <span className="text-xs font-semibold text-slate-600">Desativar automaticamente quando o estoque zerar</span>
+        </label>
+      )}
+
+      {saleItems.length === 0 && (
+        <p className="text-[11px] text-slate-400 italic">Nenhum item de venda cadastrado no estoque.</p>
+      )}
+
+      {/* Modal de seleção */}
+      <Modal isOpen={open} onClose={() => { setOpen(false); setSearch(""); }} title="Vincular ao Estoque" size="md" mobileStyle="bottom-sheet"
+        footer={<ModalFooter><Button variant="ghost" onClick={() => { onChange(""); setOpen(false); setSearch(""); }}>Remover vínculo</Button><Button variant="outline" onClick={() => { setOpen(false); setSearch(""); }}>Fechar</Button></ModalFooter>}
+      >
+        <div className="space-y-3 p-1">
+          <input
+            autoFocus
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar item..."
+            className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400"
+          />
+          <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
+            <button
+              type="button"
+              onClick={() => { onChange(""); setOpen(false); setSearch(""); }}
+              className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-left transition-colors ${!value ? "bg-amber-50 border border-amber-200 text-amber-800" : "hover:bg-slate-50 text-slate-500"}`}
+            >
+              Sem vínculo de estoque
+            </button>
+            {filtered.map((item: any) => {
+              const alreadyUsed = usedItemIds.has(item.id);
+              const isSelected = value === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  disabled={alreadyUsed && !isSelected}
+                  onClick={() => { onChange(item.id); setOpen(false); setSearch(""); }}
+                  className={`w-full flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm text-left transition-colors ${
+                    isSelected ? "bg-amber-50 border border-amber-200" :
+                    alreadyUsed ? "opacity-50 cursor-not-allowed bg-slate-50" :
+                    "hover:bg-slate-50 border border-transparent"
+                  }`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="font-black text-slate-800 truncate">{item.name}</p>
+                    <p className={`text-[10px] font-black uppercase ${item.quantity <= 0 ? "text-red-500" : item.quantity < 5 ? "text-amber-500" : "text-green-600"}`}>
+                      {item.quantity <= 0 ? "Esgotado" : `${item.quantity} ${item.unit || 'un'}`}
+                    </p>
+                    {alreadyUsed && !isSelected && <p className="text-[10px] text-slate-400 font-semibold">Já vinculado a outro produto</p>}
+                  </div>
+                  {isSelected && <CheckCircle2 className="w-4 h-4 text-amber-500 shrink-0" />}
+                </button>
+              );
+            })}
+            {filtered.length === 0 && (
+              <p className="text-center text-sm text-slate-400 py-6">Nenhum item encontrado</p>
+            )}
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+// Modal de vínculo de produção
+function ProductionLinkField({
+  recipes,
+  value,
+  onChange,
+  allCategories,
+  editingProductId,
+}: {
+  recipes: any[];
+  value: string;
+  onChange: (val: string) => void;
+  allCategories: any[];
+  editingProductId?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const activeRecipes = recipes.filter((r: any) => r.active);
+
+  // Verifica quais receitas já estão vinculadas a outros produtos
+  const allProducts = allCategories.flatMap((c: any) => c.products || []);
+  const usedRecipeIds = new Set(
+    allProducts
+      .filter((p: any) => p.id !== editingProductId && p.recipeId)
+      .map((p: any) => p.recipeId)
+  );
+
+  const selectedRecipe = activeRecipes.find((r: any) => r.id === value);
+
+  const filtered = activeRecipes.filter((r: any) =>
+    !search || r.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  if (activeRecipes.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      <label className="block text-[11px] font-black uppercase tracking-widest text-orange-600">Vincular à produção (opcional)</label>
+      <p className="text-[11px] text-slate-500 -mt-1">Ao vender, os insumos da receita são descontados do estoque automaticamente.</p>
+
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="w-full flex items-center justify-between gap-3 bg-orange-50/60 border border-orange-200 rounded-xl px-3 py-2.5 text-sm font-bold text-left hover:border-orange-300 hover:bg-orange-50 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-400"
+      >
+        {selectedRecipe ? (
+          <div className="flex-1 min-w-0">
+            <span className="text-slate-800 truncate block">{selectedRecipe.name}</span>
+            <span className="text-[10px] text-orange-600 font-semibold">Rende {selectedRecipe.outputQuantity} {selectedRecipe.outputUnit}</span>
+          </div>
+        ) : (
+          <span className="text-slate-400">Sem vínculo de produção</span>
+        )}
+        <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+      </button>
+
+      {selectedRecipe && (
+        <div className="rounded-xl border border-orange-200 bg-white px-3 py-2 text-[11px] text-orange-800 space-y-1">
+          <p className="font-black">📋 {selectedRecipe.name}</p>
+          <p className="text-orange-600">A cada <b>1 unidade</b> vendida, o sistema desconta <b>1/{selectedRecipe.outputQuantity} {selectedRecipe.outputUnit}</b> dos insumos.</p>
+          {selectedRecipe.ingredients?.length > 0 && (
+            <p className="text-orange-500">Insumos: {selectedRecipe.ingredients.map((i: any) => i.itemName).join(", ")}</p>
+          )}
+        </div>
+      )}
+
+      {/* Modal de seleção */}
+      <Modal isOpen={open} onClose={() => { setOpen(false); setSearch(""); }} title="Vincular à Produção" size="md" mobileStyle="bottom-sheet"
+        footer={<ModalFooter><Button variant="ghost" onClick={() => { onChange(""); setOpen(false); setSearch(""); }}>Remover vínculo</Button><Button variant="outline" onClick={() => { setOpen(false); setSearch(""); }}>Fechar</Button></ModalFooter>}
+      >
+        <div className="space-y-3 p-1">
+          <input
+            autoFocus
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar receita..."
+            className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-orange-400"
+          />
+          <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
+            <button
+              type="button"
+              onClick={() => { onChange(""); setOpen(false); setSearch(""); }}
+              className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-left transition-colors ${!value ? "bg-orange-50 border border-orange-200 text-orange-800" : "hover:bg-slate-50 text-slate-500"}`}
+            >
+              Sem vínculo de produção
+            </button>
+            {filtered.map((recipe: any) => {
+              const alreadyUsed = usedRecipeIds.has(recipe.id);
+              const isSelected = value === recipe.id;
+              return (
+                <button
+                  key={recipe.id}
+                  type="button"
+                  disabled={alreadyUsed && !isSelected}
+                  onClick={() => { onChange(recipe.id); setOpen(false); setSearch(""); }}
+                  className={`w-full flex items-start justify-between gap-3 rounded-xl px-3 py-2.5 text-sm text-left transition-colors ${
+                    isSelected ? "bg-orange-50 border border-orange-200" :
+                    alreadyUsed ? "opacity-50 cursor-not-allowed bg-slate-50" :
+                    "hover:bg-slate-50 border border-transparent"
+                  }`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="font-black text-slate-800">{recipe.name}</p>
+                    <p className="text-[10px] text-orange-600 font-semibold">Rende {recipe.outputQuantity} {recipe.outputUnit}</p>
+                    {recipe.ingredients?.length > 0 && (
+                      <p className="text-[10px] text-slate-400 truncate">Insumos: {recipe.ingredients.map((i: any) => i.itemName).join(", ")}</p>
+                    )}
+                    {alreadyUsed && !isSelected && <p className="text-[10px] text-slate-400 font-semibold">Já vinculado a outro produto</p>}
+                  </div>
+                  {isSelected && <CheckCircle2 className="w-4 h-4 text-orange-500 shrink-0 mt-0.5" />}
+                </button>
+              );
+            })}
+            {filtered.length === 0 && (
+              <p className="text-center text-sm text-slate-400 py-6">Nenhuma receita encontrada</p>
+            )}
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
 const DAY_KEYS_UI = ["sun","mon","tue","wed","thu","fri","sat"] as const;
 const DAY_LABELS: Record<string, string> = { sun:"Domingo", mon:"Segunda", tue:"Terça", wed:"Quarta", thu:"Quinta", fri:"Sexta", sat:"Sábado" };
 
@@ -870,7 +1122,7 @@ function parseScheduleDays(raw?: string | null) {
 }
 
 export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, refresh: () => void }) {
-  const [activeTab, setActiveTab] = useState<"general" | "hours" | "delivery" | "payments" | "maquinhas">("general");
+  const [activeTab, setActiveTab] = useState<"general" | "hours" | "delivery" | "payments" | "maquinhas" | "fiscal">("general");
   const [form, setForm] = useState({
     name: tenant?.name || "",
     description: tenant?.description || "",
@@ -907,6 +1159,14 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
     try { return tenant?.stoneConfig ? JSON.parse(tenant.stoneConfig) : DEFAULT_STONE; } catch { return DEFAULT_STONE; }
   });
 
+  const DEFAULT_FISCAL: FiscalConfig = {
+    enabled: false, ambiente: "homologacao", cnpj: "", ie: "", crt: "1",
+    serie: 1, proximoNumero: 1, csc: "", cscId: "1", uf: "SP", cMun: "3550308", xMun: "São Paulo",
+  };
+  const [fiscal, setFiscal] = useState<FiscalConfig>(() => {
+    try { return tenant?.fiscalConfig ? JSON.parse(tenant.fiscalConfig) : DEFAULT_FISCAL; } catch { return DEFAULT_FISCAL; }
+  });
+
   useEffect(() => {
     if (tenant) {
       setForm({ name: tenant.name || "", description: tenant.description || "", logoUrl: tenant.logoUrl || "", whatsapp: maskPhone(tenant.whatsapp) || "", isOpen: tenant.isOpen ?? true, orderMode: (tenant.orderMode ?? "DELIVERY_ONLY") as "DELIVERY_ONLY" | "PREORDER_ONLY" | "BOTH", scheduleMode: tenant.scheduleMode ?? false, scheduleType: (tenant.scheduleType ?? "CLIENT_CHOOSES") as "CLIENT_CHOOSES" | "OWNER_DEFINES", scheduleNotes: tenant.scheduleNotes || "" });
@@ -916,6 +1176,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
       setDelivery(parseDeliveryConfig(tenant.deliveryConfig));
       try { setPayments(tenant.paymentMethods ? JSON.parse(tenant.paymentMethods) : DEFAULT_PAYMENTS); } catch { setPayments(DEFAULT_PAYMENTS); }
       try { setStone(tenant.stoneConfig ? JSON.parse(tenant.stoneConfig) : DEFAULT_STONE); } catch { setStone(DEFAULT_STONE); }
+      try { setFiscal(tenant.fiscalConfig ? JSON.parse(tenant.fiscalConfig) : DEFAULT_FISCAL); } catch { setFiscal(DEFAULT_FISCAL); }
     }
   }, [tenant]);
 
@@ -948,6 +1209,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
           deliveryConfig: JSON.stringify(delivery),
           paymentMethods: JSON.stringify(payments),
           stoneConfig: JSON.stringify(stone),
+          fiscalConfig: JSON.stringify(fiscal),
           scheduleDays: JSON.stringify(scheduleDays),
         })
       });
@@ -982,6 +1244,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
             { id: "delivery", label: "Entrega", icon: Truck },
             { id: "payments", label: "Pagamentos", icon: Wallet },
             { id: "maquinhas", label: "Maquinhas", icon: Smartphone },
+            { id: "fiscal", label: "Fiscal", icon: FileText },
           ].map((tab) => (
             <button 
               key={tab.id}
@@ -1078,9 +1341,9 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
                     {([
-                      { value: "DELIVERY_ONLY",  label: "Só Delivery",          desc: "Apenas entrega/retirada imediata", icon: "🛵" },
-                      { value: "PREORDER_ONLY",  label: "Só Encomenda",         desc: "Apenas pedidos agendados (sem entrega imediata)", icon: "📦" },
-                      { value: "BOTH",           label: "Delivery + Encomenda", desc: "Cliente escolhe entre entrega imediata ou encomenda", icon: "✨" },
+                      { value: "DELIVERY_ONLY",  label: "Só Delivery",          desc: "Entregas imediatas — cliente recebe no mesmo dia", icon: "🛵" },
+                      { value: "PREORDER_ONLY",  label: "Só Encomenda",         desc: "Você define os dias de entrega (ex: só sábados). Cliente pede e você entrega na próxima data disponível", icon: "📦" },
+                      { value: "BOTH",           label: "Delivery + Encomenda", desc: "Aceita tanto entregas imediatas quanto encomendas com data definida por você", icon: "✨" },
                     ] as const).map(opt => (
                       <button
                         key={opt.value}
@@ -1103,11 +1366,11 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                     <div className="space-y-4 bg-amber-50 border border-amber-200 rounded-2xl p-4">
                       {/* Tipo de agendamento */}
                       <div>
-                        <p className="text-xs font-black text-amber-800 uppercase tracking-widest mb-2">Como o cliente escolhe a data de entrega?</p>
+                        <p className="text-xs font-black text-amber-800 uppercase tracking-widest mb-2">Quando o estabelecimento entrega?</p>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           {([
-                            { value: "CLIENT_CHOOSES", label: "Cliente escolhe a data", desc: "O cliente seleciona qualquer data no checkout" },
-                            { value: "OWNER_DEFINES",  label: "Dias e horários fixos",  desc: "Você define quais dias/turnos aceita encomendas" },
+                            { value: "CLIENT_CHOOSES", label: "Cliente informa a data", desc: "O cliente digita a data desejada — você decide se aceita ou não" },
+                            { value: "OWNER_DEFINES",  label: "Você define os dias (recomendado)", desc: "Configure os dias e horários fixos de entrega. O cliente vê apenas as datas disponíveis" },
                           ] as const).map(opt => (
                             <button
                               key={opt.value}
@@ -1253,6 +1516,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                     { id: "free", label: "Grátis", icon: CheckCircle2 },
                     { id: "fixed", label: "Taxa Fixa", icon: CircleDollarSign },
                     { id: "zones", label: "Por Bairro/CEP", icon: Truck },
+                    { id: "km", label: "Por Distância (KM)", icon: Ruler },
                   ] as const).map(opt => (
                     <button
                       key={opt.id}
@@ -1324,7 +1588,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                           </div>
                           <div className="flex items-center gap-4">
                             <span className="text-sm font-black text-[#C9A227]">{zone.fee === 0 ? "GRÁTIS" : fmt(zone.fee)}</span>
-                            <button 
+                            <button
                               type="button"
                               onClick={() => setDelivery(d => ({ ...d, zones: d.zones?.filter((_, i) => i !== idx) }))}
                               className="p-2 text-slate-300 hover:text-red-500 transition-colors"
@@ -1335,6 +1599,99 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                         </div>
                       ))}
                       <ZoneAdder onAdd={z => setDelivery(d => ({ ...d, zones: [...(d.zones || []), z] }))} />
+                    </div>
+                  </div>
+                )}
+
+                {delivery.mode === "km" && (
+                  <div className="space-y-6">
+                    {/* Origin CEP */}
+                    <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 space-y-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <MapPin className="w-4 h-4 text-[#C9A227]" />
+                        <p className="text-[11px] font-black uppercase tracking-widest text-slate-600">CEP de Origem (seu estabelecimento)</p>
+                      </div>
+                      <p className="text-[10px] text-slate-400 font-medium">O cálculo de distância parte deste CEP até o CEP do cliente.</p>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={9}
+                        value={delivery.originCep
+                          ? delivery.originCep.replace(/^(\d{5})(\d{1,3})$/, "$1-$2")
+                          : ""}
+                        onChange={e => {
+                          const digits = e.target.value.replace(/\D/g, "").slice(0, 8);
+                          setDelivery(d => ({ ...d, originCep: digits }));
+                        }}
+                        placeholder="00000-000"
+                        className="w-40 bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-black text-slate-800 focus:border-[#C9A227] outline-none transition-all shadow-sm"
+                      />
+                    </div>
+
+                    {/* KM ranges */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Faixas de Distância</p>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase">{delivery.kmRanges?.length || 0} faixas</span>
+                      </div>
+
+                      {[...(delivery.kmRanges || [])].sort((a, b) => a.upToKm - b.upToKm).map((range, idx, arr) => {
+                        const from = idx === 0 ? 0 : arr[idx - 1].upToKm;
+                        return (
+                          <div key={range.id} className="bg-white border border-slate-100 rounded-2xl p-5 flex items-center justify-between group hover:border-[#C9A227]/30 transition-all">
+                            <div className="flex items-center gap-4">
+                              <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-[#C9A227]/10 group-hover:text-[#C9A227] transition-all">
+                                <Ruler className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <p className="text-sm font-bold text-slate-800">
+                                  {from === 0 ? `Até ${range.upToKm} km` : `De ${from} km até ${range.upToKm} km`}
+                                </p>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Faixa {idx + 1}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <span className="text-sm font-black text-[#C9A227]">{range.fee === 0 ? "GRÁTIS" : fmt(range.fee)}</span>
+                              <button
+                                type="button"
+                                onClick={() => setDelivery(d => ({ ...d, kmRanges: d.kmRanges?.filter(r => r.id !== range.id) }))}
+                                className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      <KmRangeAdder onAdd={r => setDelivery(d => ({ ...d, kmRanges: [...(d.kmRanges || []), r] }))} />
+                    </div>
+
+                    {/* Beyond last range */}
+                    <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 space-y-4">
+                      <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Além da última faixa</p>
+                      <label className="flex items-center gap-3 cursor-pointer select-none">
+                        <div
+                          onClick={() => setDelivery(d => ({ ...d, kmAllowBeyond: !(d.kmAllowBeyond ?? true) }))}
+                          className={`w-10 h-5 rounded-full transition-colors relative cursor-pointer ${(delivery.kmAllowBeyond ?? true) ? "bg-[#C9A227]" : "bg-slate-300"}`}
+                        >
+                          <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${(delivery.kmAllowBeyond ?? true) ? "translate-x-5" : "translate-x-0.5"}`} />
+                        </div>
+                        <span className="text-sm font-bold text-slate-700">Aceitar pedidos além da última faixa</span>
+                      </label>
+                      {(delivery.kmAllowBeyond ?? true) && (
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs font-black text-slate-400">Taxa R$</span>
+                          <input
+                            type="number" min="0" step="0.50"
+                            value={delivery.kmDefaultFee ?? ""}
+                            onChange={e => setDelivery(d => ({ ...d, kmDefaultFee: parseFloat(e.target.value) || 0 }))}
+                            className="w-28 bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-black text-slate-800 focus:border-[#C9A227] outline-none"
+                            placeholder="0,00"
+                          />
+                          <span className="text-[10px] text-slate-400">(0 = grátis)</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1592,6 +1949,223 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
           </motion.div>
         )}
 
+        {/* ── ABA FISCAL ─────────────────────────────────────────────────── */}
+        {activeTab === "fiscal" && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+            <ContentCard padding="lg">
+              <div className="flex items-center gap-4 mb-6">
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${fiscal.enabled ? "bg-amber-50 text-[#C9A227]" : "bg-slate-100 text-slate-400"}`}>
+                  <FileText className="w-7 h-7" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-black text-slate-800">Módulo Fiscal — NFC-e</p>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Nota Fiscal do Consumidor Eletrônica (Modelo 65)</p>
+                </div>
+                <label className="flex items-center gap-3 cursor-pointer select-none">
+                  <div
+                    onClick={() => setFiscal(f => ({ ...f, enabled: !f.enabled }))}
+                    className={`w-12 h-6 rounded-full transition-colors relative cursor-pointer ${fiscal.enabled ? "bg-[#C9A227]" : "bg-slate-300"}`}
+                  >
+                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${fiscal.enabled ? "translate-x-7" : "translate-x-1"}`} />
+                  </div>
+                  <span className="text-xs font-bold text-slate-600">{fiscal.enabled ? "Ativo" : "Inativo"}</span>
+                </label>
+              </div>
+
+              {fiscal.enabled && (
+                <div className="space-y-6 pt-4 border-t border-slate-100">
+                  {/* Ambiente */}
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Ambiente SEFAZ</p>
+                    <div className="flex gap-3">
+                      {(["homologacao", "producao"] as const).map(env => (
+                        <button key={env} type="button"
+                          onClick={() => setFiscal(f => ({ ...f, ambiente: env }))}
+                          className={`flex-1 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-all ${fiscal.ambiente === env ? "bg-[#0D1B3E] text-white border-[#0D1B3E]" : "bg-white text-slate-400 border-slate-200"}`}
+                        >
+                          {env === "homologacao" ? "🧪 Homologação (teste)" : "🚀 Produção"}
+                        </button>
+                      ))}
+                    </div>
+                    {fiscal.ambiente === "homologacao" && (
+                      <div className="mt-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-[10px] text-amber-700 font-medium">
+                        Em homologação as notas <strong>não têm valor fiscal</strong>. Use para testar a integração com a SEFAZ antes de ir para produção.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Dados do Emitente */}
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Dados do Emitente</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">CNPJ</label>
+                        <input type="text" maxLength={18} value={fiscal.cnpj}
+                          onChange={e => setFiscal(f => ({ ...f, cnpj: e.target.value }))}
+                          placeholder="00.000.000/0000-00"
+                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Inscrição Estadual (IE)</label>
+                        <input type="text" value={fiscal.ie}
+                          onChange={e => setFiscal(f => ({ ...f, ie: e.target.value }))}
+                          placeholder="000.000.000.000"
+                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Regime Tributário (CRT)</label>
+                        <select value={fiscal.crt} onChange={e => setFiscal(f => ({ ...f, crt: e.target.value as any }))}
+                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
+                        >
+                          <option value="1">1 — Simples Nacional</option>
+                          <option value="2">2 — Simples Nacional (excesso sublimite)</option>
+                          <option value="3">3 — Regime Normal</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">UF</label>
+                        <select value={fiscal.uf} onChange={e => setFiscal(f => ({ ...f, uf: e.target.value }))}
+                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
+                        >
+                          {["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"].map(uf => (
+                            <option key={uf} value={uf}>{uf}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Código IBGE do Município</label>
+                        <input type="text" value={fiscal.cMun}
+                          onChange={e => setFiscal(f => ({ ...f, cMun: e.target.value }))}
+                          placeholder="Ex: 3550308 (São Paulo)"
+                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Nome do Município</label>
+                        <input type="text" value={fiscal.xMun}
+                          onChange={e => setFiscal(f => ({ ...f, xMun: e.target.value }))}
+                          placeholder="Ex: São Paulo"
+                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* NFC-e — Série e número */}
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Numeração NFC-e</p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Série</label>
+                        <input type="number" min={1} max={999} value={fiscal.serie}
+                          onChange={e => setFiscal(f => ({ ...f, serie: parseInt(e.target.value) || 1 }))}
+                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-black text-slate-800 focus:border-[#C9A227] outline-none bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Próximo Número</label>
+                        <input type="number" min={1} value={fiscal.proximoNumero}
+                          onChange={e => setFiscal(f => ({ ...f, proximoNumero: parseInt(e.target.value) || 1 }))}
+                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-black text-slate-800 focus:border-[#C9A227] outline-none bg-white"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CSC */}
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">CSC — Código de Segurança do Contribuinte</p>
+                    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-[10px] text-slate-500 mb-3 leading-relaxed">
+                      O CSC é cadastrado no portal da SEFAZ do seu estado. Em SP: <span className="font-black text-slate-700">NF-e / Minha Conta</span>. Você receberá o Token e o ID do token.
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">ID do CSC</label>
+                        <input type="text" value={fiscal.cscId}
+                          onChange={e => setFiscal(f => ({ ...f, cscId: e.target.value }))}
+                          placeholder="Ex: 1"
+                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Token CSC</label>
+                        <input type="password" value={fiscal.csc}
+                          onChange={e => setFiscal(f => ({ ...f, csc: e.target.value }))}
+                          placeholder="Token UUID da SEFAZ"
+                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Certificado A1 */}
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Certificado Digital A1 (.pfx)</p>
+                    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                      {fiscal.certBase64 ? (
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-xl bg-green-100 text-green-600 flex items-center justify-center">
+                            <CheckCircle2 className="w-4 h-4" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-xs font-black text-slate-700">Certificado carregado</p>
+                            <p className="text-[10px] text-slate-400">Clique em "Trocar" para substituir</p>
+                          </div>
+                          <button type="button" onClick={() => setFiscal(f => ({ ...f, certBase64: undefined, certPassword: undefined }))}
+                            className="text-[10px] font-black text-red-500 hover:text-red-700 px-3 py-1 rounded-lg border border-red-200 hover:border-red-300 transition-colors"
+                          >
+                            Remover
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="flex items-center gap-3 cursor-pointer group">
+                          <div className="w-10 h-10 rounded-xl bg-slate-100 group-hover:bg-[#C9A227]/10 text-slate-400 group-hover:text-[#C9A227] flex items-center justify-center transition-all">
+                            <FileDown className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-black text-slate-700">Selecionar arquivo .pfx</p>
+                            <p className="text-[10px] text-slate-400">Certificado A1 emitido pela AC</p>
+                          </div>
+                          <input type="file" accept=".pfx,.p12" className="hidden"
+                            onChange={e => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              const reader = new FileReader();
+                              reader.onload = ev => {
+                                const b64 = (ev.target?.result as string).split(",")[1];
+                                setFiscal(f => ({ ...f, certBase64: b64 }));
+                              };
+                              reader.readAsDataURL(file);
+                            }}
+                          />
+                        </label>
+                      )}
+                      <div>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Senha do Certificado</label>
+                        <input type="password" value={fiscal.certPassword ?? ""}
+                          onChange={e => setFiscal(f => ({ ...f, certPassword: e.target.value }))}
+                          placeholder="Senha do arquivo .pfx"
+                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {!fiscal.enabled && (
+                <div className="text-center py-8 text-slate-400">
+                  <FileText className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                  <p className="text-[11px] font-black uppercase tracking-widest mb-1">Módulo Fiscal Inativo</p>
+                  <p className="text-[10px]">Ative acima para configurar a emissão de NFC-e.</p>
+                </div>
+              )}
+            </ContentCard>
+          </motion.div>
+        )}
+
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 w-full max-w-4xl px-4">
           <div className="bg-white/80 backdrop-blur-md border border-slate-200/50 p-4 rounded-[2rem] shadow-2xl flex items-center justify-between gap-4">
             <div className="hidden sm:block pl-4">
@@ -1644,16 +2218,19 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
   const [prodModal, setProdModal] = useState<{ open: boolean; categoryId: string | null }>({ open: false, categoryId: null });
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
+  const [productionRecipes, setProductionRecipes] = useState<any[]>([]);
   const [prodForm, setProdForm] = useState({
-    name: "", description: "", price: "", imageUrl: "", inventoryItemId: "",
+    name: "", description: "", price: "", imageUrl: "", inventoryItemId: "", recipeId: "",
     available: true, pdvOnly: false, autoDisableWhenOutOfStock: false,
     scheduleRuleEnabled: false,
     scheduleRuleType: "weekday" as "weekday" | "daterange" | "both",
     scheduleRuleWeekdays: [] as number[],
     scheduleRuleStartDate: "",
     scheduleRuleEndDate: "",
-    variants: [] as { name: string, price: string, description: string, inventoryItemId: string }[],
-    extras: [] as { id: string, label: string, price: string }[]
+    variants: [] as { _key: string, name: string, price: string, description: string, inventoryItemId: string }[],
+    extras: [] as { id: string, label: string, price: string }[],
+    // Fiscal NFC-e
+    ncm: "", cfop: "5102", csosn: "400", unitCom: "UN", origem: 0, aliqIcms: 0,
   });
   const [extraInput, setExtraInput] = useState({ label: "", price: "" });
 
@@ -1663,6 +2240,10 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
       apiFetch(`/api/tenants/${tenant.slug}/inventory`)
         .then(res => res.json())
         .then(data => setInventoryItems(data))
+        .catch(() => {});
+      apiFetch(`/api/tenants/${tenant.slug}/production/recipes`)
+        .then(res => res.json())
+        .then(data => setProductionRecipes(Array.isArray(data) ? data : []))
         .catch(() => {});
     }
   }, [tenant]);
@@ -1705,7 +2286,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
 
   const openNewProduct = (categoryId: string) => {
     setEditingProduct(null);
-    setProdForm({ name: "", description: "", price: "", imageUrl: "", inventoryItemId: "", available: true, pdvOnly: false, autoDisableWhenOutOfStock: false, scheduleRuleEnabled: false, scheduleRuleType: "weekday", scheduleRuleWeekdays: [], scheduleRuleStartDate: "", scheduleRuleEndDate: "", variants: [], extras: [] });
+    setProdForm({ name: "", description: "", price: "", imageUrl: "", inventoryItemId: "", recipeId: "", available: true, pdvOnly: false, autoDisableWhenOutOfStock: false, scheduleRuleEnabled: false, scheduleRuleType: "weekday", scheduleRuleWeekdays: [], scheduleRuleStartDate: "", scheduleRuleEndDate: "", variants: [], extras: [], ncm: "", cfop: "5102", csosn: "400", unitCom: "UN", origem: 0, aliqIcms: 0 });
     setExtraInput({ label: "", price: "" });
     setProdModal({ open: true, categoryId });
   };
@@ -1734,7 +2315,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
     } catch {}
     setProdForm({
       name: prod.name, description: prod.description || "", price: String(prod.price),
-      imageUrl: prod.imageUrl || "", inventoryItemId: prod.inventoryItemId || "",
+      imageUrl: prod.imageUrl || "", inventoryItemId: prod.inventoryItemId || "", recipeId: prod.recipeId || "",
       available: prod.available !== false,
       pdvOnly: prod.pdvOnly || false,
       autoDisableWhenOutOfStock: prod.autoDisableWhenOutOfStock || false,
@@ -1743,8 +2324,10 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
       scheduleRuleWeekdays,
       scheduleRuleStartDate,
       scheduleRuleEndDate,
-      variants: prod.variants?.map((v: any) => ({ name: v.name, price: String(v.price), description: v.description || "", inventoryItemId: v.inventoryItemId || "" })) || [],
-      extras: parsedExtras
+      variants: prod.variants?.map((v: any) => ({ _key: v.id || crypto.randomUUID(), name: v.name, price: String(v.price), description: v.description || "", inventoryItemId: v.inventoryItemId || "" })) || [],
+      extras: parsedExtras,
+      ncm: prod.ncm || "", cfop: prod.cfop || "5102", csosn: prod.csosn || "400",
+      unitCom: prod.unitCom || "UN", origem: prod.origem ?? 0, aliqIcms: prod.aliqIcms ?? 0,
     });
     setExtraInput({ label: "", price: "" });
     setProdModal({ open: true, categoryId: prod.categoryId });
@@ -1804,6 +2387,49 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
     })));
   };
 
+  const duplicateProductToCatalog = async () => {
+    if (!editingProduct || !prodModal.categoryId) return;
+    const res = await apiFetch('/api/products', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: `${prodForm.name} (cópia)`,
+        description: prodForm.description,
+        price: prodForm.price,
+        imageUrl: prodForm.imageUrl,
+        available: prodForm.available,
+        categoryId: prodModal.categoryId,
+        tenantId: tenant?.id,
+      })
+    });
+    const saved = await res.json();
+    setLocalCategories(cats => cats.map(cat =>
+      cat.id === prodModal.categoryId
+        ? { ...cat, products: [...(cat.products || []), saved] }
+        : cat
+    ));
+    alert(`"${saved.name}" duplicado no catálogo com sucesso!`);
+  };
+
+  const duplicateProductToInventory = async () => {
+    if (!editingProduct || !tenant) return;
+    const res = await apiFetch('/api/inventory/items', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: prodForm.name,
+        tenantId: tenant.id,
+        quantity: 0,
+        unit: 'un',
+        usage: 'SALE',
+        purchasePrice: parseFloat(prodForm.price) || 0,
+        sellingPrice: parseFloat(prodForm.price) || 0,
+      })
+    });
+    const saved = await res.json();
+    alert(`"${saved.name}" criado no Estoque! Vá em Estoque para configurar quantidade e unidades.`);
+  };
+
   const toggleProductAvailability = async (prod: any) => {
     const newAvailable = !prod.available;
     setLocalCategories(cats => cats.map(cat => ({
@@ -1817,7 +2443,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
     });
   };
 
-  const addVariantField = () => setProdForm(prev => ({ ...prev, variants: [...prev.variants, { name: "", price: "", description: "", inventoryItemId: "" }] }));
+  const addVariantField = () => setProdForm(prev => ({ ...prev, variants: [...prev.variants, { _key: crypto.randomUUID(), name: "", price: "", description: "", inventoryItemId: "" }] }));
   const removeVariantField = (i: number) => setProdForm(prev => ({ ...prev, variants: prev.variants.filter((_, idx) => idx !== i) }));
   const updateVariantField = (i: number, field: string, value: string) => setProdForm(prev => ({ ...prev, variants: prev.variants.map((v, idx) => idx === i ? { ...v, [field]: value } : v) }));
 
@@ -2039,9 +2665,29 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
         size="lg"
         mobileStyle="fullscreen"
         footer={
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button variant="outline" onClick={closeProdModal}>Cancelar</Button>
-            <Button onClick={saveProduct}>{editingProduct ? "Salvar alterações" : "Adicionar produto"}</Button>
+          <div className="flex flex-col gap-2">
+            {editingProduct && (
+              <div className="flex gap-2 flex-wrap pb-1 border-b border-slate-100">
+                <button
+                  type="button"
+                  onClick={duplicateProductToCatalog}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors border border-blue-100"
+                >
+                  <span>📋</span> Duplicar no Catálogo
+                </button>
+                <button
+                  type="button"
+                  onClick={duplicateProductToInventory}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors border border-amber-100"
+                >
+                  <span>📦</span> Criar no Estoque
+                </button>
+              </div>
+            )}
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button variant="outline" onClick={closeProdModal}>Cancelar</Button>
+              <Button onClick={saveProduct}>{editingProduct ? "Salvar alterações" : "Adicionar produto"}</Button>
+            </div>
           </div>
         }
       >
@@ -2054,27 +2700,25 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
 
           <ImageUploader label="Foto do produto" value={prodForm.imageUrl} onChange={val => setProdForm({ ...prodForm, imageUrl: val })} description="Fotos de alta qualidade convertem mais vendas." />
 
-          {inventoryItems.length > 0 && (
-            <div className="space-y-2">
-              <label className="block text-[11px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Vincular ao estoque (opcional)</label>
-              <select value={prodForm.inventoryItemId} onChange={e => setProdForm({ ...prodForm, inventoryItemId: e.target.value })}
-                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
-                <option value="">Sem vínculo de estoque</option>
-                {inventoryItems.map(item => <option key={item.id} value={item.id}>{item.name} ({item.quantity} {item.unit})</option>)}
-              </select>
-              {prodForm.inventoryItemId && (
-                <label className="flex items-center gap-2.5 cursor-pointer select-none mt-1">
-                  <input
-                    type="checkbox"
-                    checked={prodForm.autoDisableWhenOutOfStock}
-                    onChange={e => setProdForm({ ...prodForm, autoDisableWhenOutOfStock: e.target.checked })}
-                    className="w-4 h-4 rounded accent-amber-500"
-                  />
-                  <span className="text-xs font-semibold text-slate-600">Desativar automaticamente quando o estoque zerar</span>
-                </label>
-              )}
-            </div>
-          )}
+          {/* Vínculo de estoque */}
+          <InventoryLinkField
+            inventoryItems={inventoryItems}
+            value={prodForm.inventoryItemId}
+            onChange={val => setProdForm({ ...prodForm, inventoryItemId: val })}
+            autoDisable={prodForm.autoDisableWhenOutOfStock}
+            onAutoDisableChange={val => setProdForm({ ...prodForm, autoDisableWhenOutOfStock: val })}
+            allCategories={localCategories}
+            editingProductId={editingProduct?.id}
+          />
+
+          {/* Vínculo de receita de produção */}
+          <ProductionLinkField
+            recipes={productionRecipes}
+            value={prodForm.recipeId}
+            onChange={val => setProdForm({ ...prodForm, recipeId: val })}
+            allCategories={localCategories}
+            editingProductId={editingProduct?.id}
+          />
 
           <div className="flex items-center justify-between py-1 border-t border-slate-100">
             <div>
@@ -2152,7 +2796,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
                         const active = prodForm.scheduleRuleWeekdays.includes(idx);
                         return (
                           <button
-                            key={idx}
+                            key={label}
                             type="button"
                             onClick={() => setProdForm(f => ({
                               ...f,
@@ -2247,6 +2891,75 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
             )}
           </div>
 
+          {/* Dados Fiscais NFC-e */}
+          <details className="group">
+            <summary className="flex items-center gap-2 cursor-pointer select-none text-[11px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors list-none">
+              <FileText className="w-3.5 h-3.5" />
+              Dados Fiscais (NFC-e)
+            </summary>
+            <div className="mt-3 p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
+              <p className="text-[10px] text-slate-400 font-medium">Preencha apenas se o módulo fiscal (NFC-e) estiver ativo nas configurações da loja.</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">NCM</label>
+                  <input type="text" maxLength={10} value={prodForm.ncm}
+                    onChange={e => setProdForm(f => ({ ...f, ncm: e.target.value.replace(/\D/g, "") }))}
+                    placeholder="00000000"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">CFOP</label>
+                  <select value={prodForm.cfop} onChange={e => setProdForm(f => ({ ...f, cfop: e.target.value }))}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
+                  >
+                    <option value="5102">5102 — Venda mercadoria adquirida</option>
+                    <option value="5405">5405 — Venda c/ ST</option>
+                    <option value="5101">5101 — Venda de produção própria</option>
+                    <option value="5933">5933 — Simples Nacional — serviço</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">CSOSN</label>
+                  <select value={prodForm.csosn} onChange={e => setProdForm(f => ({ ...f, csosn: e.target.value }))}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
+                  >
+                    <option value="400">400 — Isento ICMS (Simples)</option>
+                    <option value="102">102 — Tributada sem permissão crédito</option>
+                    <option value="103">103 — Isento faixa receita bruta</option>
+                    <option value="500">500 — ICMS cobrado por ST</option>
+                    <option value="900">900 — Outros</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Unidade</label>
+                  <select value={prodForm.unitCom} onChange={e => setProdForm(f => ({ ...f, unitCom: e.target.value }))}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
+                  >
+                    {["UN","KG","G","L","ML","CX","PC","PT","PAR","DZ"].map(u => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Origem</label>
+                  <select value={prodForm.origem} onChange={e => setProdForm(f => ({ ...f, origem: Number(e.target.value) }))}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
+                  >
+                    <option value={0}>0 — Nacional</option>
+                    <option value={1}>1 — Estrangeira (importação direta)</option>
+                    <option value={2}>2 — Estrangeira (mercado interno)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Alíq. ICMS %</label>
+                  <input type="number" min={0} max={100} step={0.01} value={prodForm.aliqIcms}
+                    onChange={e => setProdForm(f => ({ ...f, aliqIcms: parseFloat(e.target.value) || 0 }))}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
+                  />
+                </div>
+              </div>
+            </div>
+          </details>
+
           {/* Variantes */}
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -2255,7 +2968,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
             </div>
             <div className="space-y-2">
               {prodForm.variants.map((v, idx) => (
-                <div key={idx} className="flex gap-2 items-center">
+                <div key={v._key} className="flex gap-2 items-center">
                   <input placeholder="Nome (ex: 500ml)" value={v.name} onChange={e => updateVariantField(idx, 'name', e.target.value)}
                     className="flex-1 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 min-w-0" />
                   <input placeholder="R$" value={v.price} onChange={e => updateVariantField(idx, 'price', e.target.value)}
@@ -2586,7 +3299,10 @@ export function InventoryPanel({ tenant }: { tenant: Tenant | null }) {
   const [showItemForm, setShowItemForm] = useState(false);
   const [editingItem, setEditingItem] = useState<any | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterType, setFilterType] = useState<"all" | "low" | "expired" | "internal" | "sale">("all");
+  const [filterType, setFilterType] = useState<"all" | "low" | "expiring" | "expired" | "internal" | "sale">("all");
+  const [filterCategory, setFilterCategory] = useState<string>("all");
+  const [deletingItem, setDeletingItem] = useState<any | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
 
 
@@ -2613,15 +3329,21 @@ export function InventoryPanel({ tenant }: { tenant: Tenant | null }) {
   const filteredItems = items.filter(item => {
     const nameStr = item.name || "";
     const codeStr = item.code || "";
-    const matchesSearch = nameStr.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    const matchesSearch = nameStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           codeStr.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    if (filterType === "low") return matchesSearch && item.minStock && item.quantity <= item.minStock;
-    if (filterType === "expired") return matchesSearch && item.expirationDate && new Date(item.expirationDate) < new Date();
-    if (filterType === "internal") return matchesSearch && item.usage === "INTERNAL";
-    if (filterType === "sale") return matchesSearch && item.usage === "SALE";
-    
-    return matchesSearch;
+    const matchesCategory = filterCategory === "all" || item.categoryId === filterCategory;
+
+    if (!matchesSearch || !matchesCategory) return false;
+    if (filterType === "low") return item.minStock && item.quantity <= item.minStock;
+    if (filterType === "expired") return item.expirationDate && new Date(item.expirationDate) < new Date();
+    if (filterType === "expiring") {
+      if (!item.expirationDate) return false;
+      const days = (new Date(item.expirationDate).getTime() - Date.now()) / 86400000;
+      return days >= 0 && days <= 5;
+    }
+    if (filterType === "internal") return item.usage === "INTERNAL";
+    if (filterType === "sale") return item.usage === "SALE";
+    return true;
   });
 
   const stats = {
@@ -2630,8 +3352,8 @@ export function InventoryPanel({ tenant }: { tenant: Tenant | null }) {
     expired: items.filter(i => i.expirationDate && new Date(i.expirationDate) < new Date()).length,
     nearExpiry: items.filter(i => {
       if (!i.expirationDate) return false;
-      const days = (new Date(i.expirationDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24);
-      return days > 0 && days <= 7;
+      const days = (new Date(i.expirationDate).getTime() - Date.now()) / 86400000;
+      return days >= 0 && days <= 5;
     }).length,
     totalValue: items.reduce((acc, i) => acc + (i.purchasePrice || 0) * i.quantity, 0)
   };
@@ -2654,12 +3376,18 @@ export function InventoryPanel({ tenant }: { tenant: Tenant | null }) {
           icon={AlertTriangle} 
           color="warning"
         />
-        <StatCard 
-          title="Próximos do Vencimento" 
-          value={stats.nearExpiry} 
-          icon={CalendarClock} 
-          color="warning"
-        />
+        <div
+          className={`cursor-pointer transition-transform hover:scale-[1.02] ${stats.nearExpiry > 0 ? "ring-2 ring-amber-400 ring-offset-2 rounded-2xl" : ""}`}
+          onClick={() => stats.nearExpiry > 0 && setFilterType("expiring")}
+          title={stats.nearExpiry > 0 ? "Ver itens a vencer em até 5 dias" : ""}
+        >
+          <StatCard
+            title="Próximos do Vencimento"
+            value={stats.nearExpiry}
+            icon={CalendarClock}
+            color={stats.nearExpiry > 0 ? "warning" : "info"}
+          />
+        </div>
         <StatCard 
           title="Valor em Insumos" 
           value={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(stats.totalValue)} 
@@ -2669,36 +3397,88 @@ export function InventoryPanel({ tenant }: { tenant: Tenant | null }) {
       </div>
 
       <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden min-h-[500px]">
-        <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4 bg-slate-50/30">
-          <FilterLineSegmented 
-            options={[
-              { value: 'all', label: 'Todos' },
-              { value: 'low', label: 'Críticos' },
-              { value: 'expired', label: 'Vencidos' },
-              { value: 'sale', label: 'Para Venda' },
-              { value: 'internal', label: 'Consumo' }
-            ]}
-            value={filterType}
-            onChange={val => setFilterType(val as any)}
-          />
-
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
-            <Input 
-              placeholder="Buscar por nome ou código..." 
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="flex-1 md:w-64"
-              size="sm"
+        <div className="p-4 border-b border-slate-100 flex flex-col gap-3 bg-slate-50/30">
+          {/* Row 1: tabs de tipo */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <FilterLineSegmented
+              options={[
+                { value: 'all', label: 'Todos' },
+                { value: 'low', label: 'Críticos' },
+                { value: 'expiring', label: stats.nearExpiry > 0 ? `⚠ A Vencer (${stats.nearExpiry})` : 'A Vencer' },
+                { value: 'expired', label: 'Vencidos' },
+                { value: 'sale', label: 'Para Venda' },
+                { value: 'internal', label: 'Consumo' },
+              ]}
+              value={filterType}
+              onChange={val => setFilterType(val as any)}
             />
-            <Button 
+            <Button
               onClick={() => { setEditingItem(null); setShowItemForm(true); }}
               size="sm"
-              className="w-full sm:w-auto"
               iconLeft={<Plus className="w-4 h-4" />}
             >
               Novo Item
             </Button>
           </div>
+
+          {/* Row 2: busca + filtro categoria */}
+          <div className="flex flex-col sm:flex-row items-stretch gap-2">
+            <div className="relative flex-1">
+              <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Buscar por nome ou código..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="w-full pl-8 pr-3 py-2 text-xs font-semibold border border-zinc-200 rounded-lg bg-white outline-none focus:border-amber-400 transition-colors placeholder:text-slate-400"
+              />
+            </div>
+            <div className="relative">
+              <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4h18M6 8h12M9 12h6" />
+              </svg>
+              <select
+                value={filterCategory}
+                onChange={e => setFilterCategory(e.target.value)}
+                className="pl-8 pr-8 py-2 text-xs font-semibold border border-zinc-200 rounded-lg bg-white outline-none focus:border-amber-400 transition-colors appearance-none cursor-pointer text-slate-700 min-w-[160px]"
+              >
+                <option value="all">Todas as categorias</option>
+                {categories.map(cat => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name} ({items.filter(i => i.categoryId === cat.id).length})
+                  </option>
+                ))}
+              </select>
+              <svg className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+              </svg>
+              {filterCategory !== "all" && (
+                <button
+                  onClick={() => setFilterCategory("all")}
+                  className="absolute right-6 top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors"
+                  title="Limpar filtro"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Badge de filtro ativo */}
+          {filterCategory !== "all" && (
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Filtrando por:</span>
+              <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-700 text-[11px] font-black px-2 py-0.5 rounded-full">
+                {categories.find(c => c.id === filterCategory)?.name}
+                <button onClick={() => setFilterCategory("all")} className="hover:text-red-500 transition-colors">×</button>
+              </span>
+              <span className="text-[10px] text-slate-400">{filteredItems.length} item(s)</span>
+            </div>
+          )}
         </div>
 
         <GridTable 
@@ -2733,11 +3513,18 @@ export function InventoryPanel({ tenant }: { tenant: Tenant | null }) {
               className: "text-center",
               render: item => {
                 const isLow = item.minStock && item.quantity <= item.minStock;
+                const hasConversion = item.purchaseUnit && item.purchaseQty && item.stockUnit;
+                const granularTotal = hasConversion ? item.quantity * item.purchaseQty : null;
                 return (
-                  <div className="flex flex-col items-center">
+                  <div className="flex flex-col items-center gap-0.5">
                     <span className={`text-sm font-black ${isLow ? 'text-orange-600' : 'text-slate-800'}`}>
-                      {item.quantity} {item.unit || 'un'}
+                      {item.quantity} {item.unit || item.purchaseUnit || 'un'}
                     </span>
+                    {hasConversion && granularTotal !== null && (
+                      <span className="text-[10px] text-amber-600 font-bold bg-amber-50 px-1.5 py-0.5 rounded-md">
+                        ≈ {granularTotal.toLocaleString("pt-BR")} {item.stockUnit}
+                      </span>
+                    )}
                     {item.weight && <p className="text-[9px] text-slate-400 italic">({item.weight})</p>}
                   </div>
                 );
@@ -2759,22 +3546,33 @@ export function InventoryPanel({ tenant }: { tenant: Tenant | null }) {
               render: item => {
                 const isLow = item.minStock && item.quantity <= item.minStock;
                 const isExpired = item.expirationDate && new Date(item.expirationDate) < new Date();
-                const isNearExpiry = item.expirationDate && !isExpired && (new Date(item.expirationDate).getTime() - new Date().getTime()) < (7 * 24 * 60 * 60 * 1000);
-                
+                const daysLeft = item.expirationDate
+                  ? Math.ceil((new Date(item.expirationDate).getTime() - Date.now()) / 86400000)
+                  : null;
+                const isNearExpiry = daysLeft !== null && daysLeft >= 0 && daysLeft <= 5;
+
                 return (
-                   <div className="space-y-1.5 min-w-[140px]">
-                      {isLow && (
-                         <Badge color="warning" size="sm" dot>Estoque Crítico</Badge>
-                      )}
-                      {item.expirationDate ? (
+                  <div className="space-y-1.5 min-w-[140px]">
+                    {isLow && (
+                      <Badge color="warning" size="sm" dot>Estoque Crítico</Badge>
+                    )}
+                    {item.expirationDate ? (
+                      <div className="space-y-0.5">
                         <Badge color={isExpired ? "danger" : isNearExpiry ? "warning" : "success"} size="sm">
-                          {isExpired ? 'Expirou: ' : 'Vence em: '}
-                          {new Date(item.expirationDate).toLocaleDateString()}
+                          {isExpired
+                            ? `Venceu: ${new Date(item.expirationDate).toLocaleDateString("pt-BR")}`
+                            : `Vence em: ${new Date(item.expirationDate).toLocaleDateString("pt-BR")}`}
                         </Badge>
-                      ) : (
-                        <span className="text-[11px] text-slate-200 font-black uppercase italic">Sem Início</span>
-                      )}
-                   </div>
+                        {isNearExpiry && !isExpired && (
+                          <p className="text-[10px] font-black text-amber-600 animate-pulse">
+                            ⚠ {daysLeft === 0 ? "Vence hoje!" : `${daysLeft} dia${daysLeft === 1 ? "" : "s"} restante${daysLeft === 1 ? "" : "s"}`}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-[11px] text-slate-300 font-bold italic">Sem validade</span>
+                    )}
+                  </div>
                 );
               }
             },
@@ -2790,16 +3588,11 @@ export function InventoryPanel({ tenant }: { tenant: Tenant | null }) {
                   >
                     <Settings className="w-4 h-4" />
                   </IconButton>
-                  <IconButton 
-                    variant="ghost" 
+                  <IconButton
+                    variant="ghost"
                     size="sm"
                     className="text-red-400 hover:text-red-600"
-                    onClick={async () => {
-                      if (confirm("Deseja realmente remover este item do estoque?")) {
-                        await apiFetch(`/api/inventory/items/${item.id}`, { method: 'DELETE' });
-                        fetchData();
-                      }
-                    }}
+                    onClick={() => setDeletingItem(item)}
                   >
                     <Trash2 className="w-4 h-4" />
                   </IconButton>
@@ -2812,7 +3605,7 @@ export function InventoryPanel({ tenant }: { tenant: Tenant | null }) {
 
       <AnimatePresence>
         {showItemForm && (
-          <InventoryItemModal 
+          <InventoryItemModal
             tenant={tenant}
             item={editingItem}
             categories={categories}
@@ -2822,6 +3615,166 @@ export function InventoryPanel({ tenant }: { tenant: Tenant | null }) {
           />
         )}
       </AnimatePresence>
+
+      {/* Modal de confirmação de exclusão */}
+      <ConfirmModal
+        isOpen={!!deletingItem}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={async () => {
+          if (!deletingItem) return;
+          setDeleteLoading(true);
+          try {
+            await apiFetch(`/api/inventory/items/${deletingItem.id}`, { method: 'DELETE' });
+            fetchData();
+          } finally {
+            setDeleteLoading(false);
+            setDeletingItem(null);
+          }
+        }}
+        title="Remover item do estoque"
+        message={
+          <span>
+            Tem certeza que deseja remover <strong>{deletingItem?.name}</strong> do estoque?
+            {deletingItem?.quantity > 0 && (
+              <span className="block mt-2 text-amber-600 text-xs font-semibold">
+                Ainda há {deletingItem.quantity} {deletingItem.unit || "un"} em estoque.
+              </span>
+            )}
+          </span>
+        }
+        confirmLabel="Remover"
+        loading={deleteLoading}
+        variant="danger"
+      />
+    </div>
+  );
+}
+
+const UNIT_GROUPS = [
+  {
+    label: "Massa",
+    units: [
+      { value: "g",  label: "g — Grama" },
+      { value: "kg", label: "kg — Quilograma" },
+      { value: "mg", label: "mg — Miligrama" },
+    ],
+  },
+  {
+    label: "Volume",
+    units: [
+      { value: "ml", label: "ml — Mililitro" },
+      { value: "l",  label: "l — Litro" },
+    ],
+  },
+  {
+    label: "Contagem",
+    units: [
+      { value: "un",   label: "un — Unidade" },
+      { value: "dz",   label: "dz — Dúzia" },
+      { value: "cx",   label: "cx — Caixa" },
+      { value: "pct",  label: "pct — Pacote" },
+      { value: "fd",   label: "fd — Fardo" },
+      { value: "saco", label: "saco — Saco" },
+    ],
+  },
+  {
+    label: "Comprimento",
+    units: [
+      { value: "cm", label: "cm — Centímetro" },
+      { value: "m",  label: "m — Metro" },
+    ],
+  },
+];
+
+function UnitSelectInput({
+  label,
+  value,
+  onChange,
+  hint,
+  size = "sm",
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  hint?: string;
+  size?: "sm" | "md";
+}) {
+  const [open, setOpen] = useState(false);
+  const [openUp, setOpenUp] = useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const handleToggle = () => {
+    if (!open && ref.current) {
+      const rect = ref.current.getBoundingClientRect();
+      setOpenUp(rect.bottom + 210 > window.innerHeight);
+    }
+    setOpen((o) => !o);
+  };
+
+  const allUnits = UNIT_GROUPS.flatMap((g) => g.units);
+  const _matched = allUnits.find((u) => u.value === value.trim().toLowerCase());
+
+  return (
+    <div ref={ref} className="relative">
+      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">
+        {label}
+      </label>
+      <div
+        className="flex items-center gap-1 border border-zinc-200 rounded-lg bg-white cursor-pointer hover:border-amber-400 focus-within:border-amber-400 transition-colors px-2"
+        style={{ height: size === "sm" ? "34px" : "40px" }}
+        onClick={handleToggle}
+      >
+        <input
+          className="flex-1 text-xs font-bold bg-transparent outline-none text-slate-800 placeholder:text-slate-400 min-w-0"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onClick={(e) => e.stopPropagation()}
+          placeholder="un, kg, ml…"
+          autoComplete="off"
+        />
+        <svg className={`w-3 h-3 text-slate-400 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+        </svg>
+      </div>
+      {hint && <p className="text-[9px] text-amber-600 mt-0.5">{hint}</p>}
+      {open && (
+        <div className={`absolute z-50 w-44 bg-white border border-zinc-200 rounded-xl shadow-xl overflow-y-auto max-h-48 ${openUp ? "bottom-full mb-1" : "top-full mt-1"} left-0`}>
+          {UNIT_GROUPS.map((group) => (
+            <div key={group.label}>
+              <div className="px-2 py-1 text-[9px] font-black uppercase tracking-widest text-slate-400 bg-zinc-50 border-b border-zinc-100 sticky top-0">
+                {group.label}
+              </div>
+              {group.units.map((u) => (
+                <button
+                  key={u.value}
+                  type="button"
+                  onClick={() => { onChange(u.value); setOpen(false); }}
+                  className={`w-full text-left px-2 py-1.5 text-[11px] flex items-center gap-2 hover:bg-amber-50 transition-colors ${
+                    value === u.value ? "bg-amber-50 text-amber-700 font-black" : "text-slate-700 font-semibold"
+                  }`}
+                >
+                  <span className="font-black text-slate-900 w-6 shrink-0">{u.value}</span>
+                  <span className="text-slate-500 text-[10px] flex-1 truncate">{u.label.split(" — ")[1]}</span>
+                  {value === u.value && (
+                    <svg className="w-3 h-3 text-amber-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -2847,7 +3800,11 @@ function InventoryItemModal({ tenant, item, categories, onClose, onSave, refresh
     usage: item?.usage || "SALE",
     categoryId: item?.categoryId || "",
     expirationDate: item?.expirationDate ? new Date(item.expirationDate).toISOString().split('T')[0] : "",
-    purchaseDate: item?.purchaseDate ? new Date(item.purchaseDate).toISOString().split('T')[0] : ""
+    purchaseDate: item?.purchaseDate ? new Date(item.purchaseDate).toISOString().split('T')[0] : "",
+    // Conversão inteligente
+    purchaseUnit: item?.purchaseUnit || "",
+    purchaseQty: item?.purchaseQty || "",
+    stockUnit: item?.stockUnit || "",
   });
 
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
@@ -2869,7 +3826,10 @@ function InventoryItemModal({ tenant, item, categories, onClose, onSave, refresh
         purchasePrice: parseFloat(form.purchasePrice.toString()) || 0,
         sellingPrice: form.sellingPrice ? parseFloat(form.sellingPrice.toString()) : null,
         quantity: parseFloat(form.quantity.toString()) || 0,
-        minStock: form.minStock ? parseFloat(form.minStock.toString()) : null
+        minStock: form.minStock ? parseFloat(form.minStock.toString()) : null,
+        purchaseUnit: form.purchaseUnit || null,
+        purchaseQty: form.purchaseQty ? parseFloat(form.purchaseQty.toString()) : null,
+        stockUnit: form.stockUnit || null,
       })
     });
     setLoading(false);
@@ -2958,9 +3918,70 @@ function InventoryItemModal({ tenant, item, categories, onClose, onSave, refresh
               <Input label="Mín. alerta" size="sm" type="number" step="0.01" placeholder="0" value={form.minStock} onChange={e => set("minStock", e.target.value)} />
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <Input label="Unidade" size="sm" placeholder="un, kg..." value={form.unit} onChange={e => set("unit", e.target.value)} />
+              <UnitSelectInput label="Unidade de armazenamento" value={form.unit} onChange={v => set("unit", v)} />
               <Input label="Peso/Volume" size="sm" placeholder="500g, 1.5L" value={form.weight} onChange={e => set("weight", e.target.value)} />
             </div>
+          </div>
+
+          {/* Conversão de Unidades */}
+          <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-3 space-y-3">
+            <SectionHeader icon={ArrowRightLeft} label="Conversão de Unidades (opcional)" color="bg-amber-500" />
+            <p className="text-[11px] text-amber-700 leading-relaxed -mt-1">
+              Use quando compra em uma unidade mas consome em outra. Ex: compra <b>1 garrafa (un)</b> de óleo que contém <b>1000 ml</b> — na produção desconta em <b>ml</b>.
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <UnitSelectInput
+                  label="Unidade de compra"
+                  value={form.purchaseUnit}
+                  onChange={v => set("purchaseUnit", v)}
+                  hint="como você compra"
+                />
+              </div>
+              <div>
+                <Input
+                  label="Conteúdo por unidade"
+                  size="sm"
+                  type="number"
+                  step="0.001"
+                  placeholder="1000"
+                  value={form.purchaseQty}
+                  onChange={e => set("purchaseQty", e.target.value)}
+                />
+                <p className="text-[9px] text-amber-600 mt-0.5">quantidade contida</p>
+              </div>
+              <div>
+                <UnitSelectInput
+                  label="Unidade granular"
+                  value={form.stockUnit}
+                  onChange={v => set("stockUnit", v)}
+                  hint="usada na produção"
+                />
+              </div>
+            </div>
+            {/* Preview da conversão */}
+            {form.purchaseUnit && form.purchaseQty && form.stockUnit && (
+              <div className="bg-white border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-2">
+                <span className="text-base">🔄</span>
+                <p className="text-[12px] text-amber-800 font-bold">
+                  1 <span className="text-amber-600">{form.purchaseUnit}</span>
+                  {" = "}
+                  <span className="text-amber-600">{form.purchaseQty} {form.stockUnit}</span>
+                  {form.quantity ? (
+                    <span className="text-slate-500 font-normal ml-1">
+                      → estoque total:{" "}
+                      <b className="text-amber-700">
+                        {(parseFloat(form.quantity.toString()) * parseFloat(form.purchaseQty.toString())).toLocaleString("pt-BR")} {form.stockUnit}
+                      </b>
+                    </span>
+                  ) : null}
+                </p>
+              </div>
+            )}
+            {(form.purchaseUnit || form.purchaseQty || form.stockUnit) &&
+             !(form.purchaseUnit && form.purchaseQty && form.stockUnit) && (
+              <p className="text-[10px] text-amber-500 italic">Preencha os 3 campos para ativar a conversão automática.</p>
+            )}
           </div>
 
           {/* Financeiro */}
@@ -3031,6 +4052,52 @@ function CategoryForm({ tenantId, onSuccess, onClose, isInventory = false }: { t
         </Button>
       </ModalFooter>
     </form>
+  );
+}
+
+// ─── KmRangeAdder ─────────────────────────────────────────────────────────────
+function KmRangeAdder({ onAdd }: { onAdd: (range: KmRange) => void }) {
+  const [upToKm, setUpToKm] = useState("");
+  const [fee, setFee] = useState("");
+
+  const handleAdd = () => {
+    const km = parseFloat(upToKm);
+    if (!km || km <= 0) return;
+    onAdd({ id: Date.now().toString(), upToKm: km, fee: parseFloat(fee) || 0 });
+    setUpToKm("");
+    setFee("");
+  };
+
+  return (
+    <div className="border border-dashed border-slate-300 rounded-xl p-3 space-y-3 bg-slate-50/50">
+      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Adicionar faixa de distância</p>
+      <div className="flex gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-1 min-w-[140px]">
+          <span className="text-xs font-bold text-slate-400 shrink-0">Até</span>
+          <input
+            type="number" min="0.1" step="0.5"
+            value={upToKm}
+            onChange={e => setUpToKm(e.target.value)}
+            placeholder="5"
+            className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-amber-400"
+          />
+          <span className="text-xs font-bold text-slate-400 shrink-0">km</span>
+        </div>
+        <div className="flex items-center gap-2 flex-1 min-w-[140px]">
+          <span className="text-xs font-bold text-slate-400 shrink-0">Taxa R$</span>
+          <input
+            type="number" min="0" step="0.50"
+            value={fee}
+            onChange={e => setFee(e.target.value)}
+            placeholder="0,00"
+            className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-amber-400"
+          />
+        </div>
+      </div>
+      <Button type="button" size="xs" variant="outline" disabled={!upToKm || parseFloat(upToKm) <= 0} onClick={handleAdd}>
+        + Adicionar faixa
+      </Button>
+    </div>
   );
 }
 

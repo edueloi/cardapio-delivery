@@ -61,7 +61,7 @@ const LandingPage: React.FC = () => {
             <div className="w-11 h-11 rounded-2xl bg-white border border-white/10 flex items-center justify-center shadow-lg shadow-black/20 group-hover:border-[#D49E00]/50 transition-all">
               <img
                 src="/images/favicon-menu-flow.png"
-                alt="MenuFlow"
+                alt="Box Sys"
                 className="w-8 h-8 object-contain"
               />
             </div>
@@ -147,7 +147,7 @@ const LandingPage: React.FC = () => {
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/7 border border-white/10 text-[#D49E00] mb-7 shadow-lg shadow-black/10 max-w-full">
               <Sparkles className="w-4 h-4 shrink-0" />
               <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] sm:tracking-[0.25em]">
-                Tecnologia Develoi para restaurantes
+                Box Sys — Sistema de Gestão
               </span>
             </div>
 
@@ -159,7 +159,7 @@ const LandingPage: React.FC = () => {
             </h1>
 
             <p className="mt-7 max-w-2xl mx-auto lg:mx-0 text-base sm:text-lg md:text-xl text-white/68 leading-relaxed">
-              O MenuFlow une cardápio digital, bots inteligentes, painel de pedidos,
+              O Box Sys une cardápio digital, bots inteligentes, painel de pedidos,
               controle de estoque e operação em tempo real para restaurantes, lanchonetes,
               pastelarias, hamburguerias e delivery.
             </p>
@@ -208,7 +208,7 @@ const LandingPage: React.FC = () => {
               <div className="rounded-[22px] sm:rounded-[28px] overflow-hidden bg-[#0B1424] border border-white/10 aspect-[16/10]">
                 <img
                   src="/images/mockup-site-menuflow.png"
-                  alt="Painel MenuFlow"
+                  alt="Painel Box Sys"
                   className="w-full h-full object-cover object-center"
                 />
               </div>
@@ -310,7 +310,7 @@ const LandingPage: React.FC = () => {
               <div className="relative rounded-[24px] sm:rounded-[28px] overflow-hidden aspect-[16/10]">
                 <img
                   src="/images/mockup-site-menuflow.png"
-                  alt="MenuFlow Operação"
+                  alt="Box Sys Operação"
                   className="w-full h-full object-cover object-center"
                 />
               </div>
@@ -450,9 +450,8 @@ const LandingPage: React.FC = () => {
           </Link>
 
           <div className="mt-14 pt-10 border-t border-[#001D3D]/8 flex flex-col md:flex-row items-center justify-center gap-4 md:gap-8">
-            <img src="/images/develoi.png" alt="Develoi" className="h-9 object-contain opacity-80" />
             <div className="text-[10px] uppercase tracking-[0.22em] font-black text-[#001D3D]/40">
-              © 2026 MenuFlow | Cardápios & Bots by Develoi
+              © 2026 Box Sys
             </div>
           </div>
         </div>

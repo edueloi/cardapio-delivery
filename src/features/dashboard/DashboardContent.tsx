@@ -34,6 +34,7 @@ import CustomerCRMPanel from "./CustomerCRMPanel";
 import ReportsPanel from "./ReportsPanel";
 import DownloadsPanel from "./DownloadsPanel";
 import PromotionsPanel from "./PromotionsPanel";
+import BundlesPanel from "./BundlesPanel";
 import ProductionPanel from "./ProductionPanel";
 import { WhatsAppManagementPanel, WhatsAppOverviewCard } from "./WhatsAppPanel";
 import { type DashboardOrderTabId, type DashboardTabId, type MyMembership, canAccess } from "./types";
@@ -361,6 +362,9 @@ export default function DashboardContent({
       )}
       {activeTab === "promotions" && (
         <PromotionsPanel tenant={tenant} />
+      )}
+      {activeTab === "bundles" && (
+        <BundlesPanel tenant={tenant} />
       )}
       {activeTab === "kds" && (
         <KitchenKDSPanel orders={orders} updateStatus={updateStatus} waiterCalls={waiterCalls} onDismissWaiterCall={onDismissWaiterCall} />

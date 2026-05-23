@@ -17,12 +17,23 @@ export interface DeliveryZone {
   fee: number;        // in BRL
 }
 
+export interface KmRange {
+  id: string;
+  upToKm: number;   // upper bound in km (exclusive), e.g. 5 means "up to 5 km"
+  fee: number;      // delivery fee in BRL for this range
+}
+
 export interface DeliveryConfig {
-  mode: "free" | "fixed" | "zones";
+  mode: "free" | "fixed" | "zones" | "km";
   fixedFee?: number;             // used when mode === "fixed"
   defaultFee?: number;           // fallback fee for unlisted CEPs when mode === "zones"
   allowUnlisted?: boolean;       // whether to accept orders from unlisted CEPs
   zones?: DeliveryZone[];
+  // km mode fields
+  originCep?: string;            // CEP of the store (origin for distance calculation)
+  kmRanges?: KmRange[];          // sorted ascending by upToKm
+  kmDefaultFee?: number;         // fee for orders beyond the last range (null = blocked)
+  kmAllowBeyond?: boolean;       // whether to accept orders beyond last range
 }
 
 export interface PaymentMethodConfig {
@@ -73,6 +84,48 @@ export interface StoneConfig {
   stonecode: string;    // establishment code linking to physical terminal
 }
 
+// ─── Fiscal / NFC-e ──────────────────────────────────────────────────────────
+
+export type FiscalRegime =
+  | "1"  // Simples Nacional
+  | "2"  // Simples Nacional — excesso de sublimite
+  | "3"; // Regime Normal (Lucro Presumido / Real)
+
+export interface FiscalConfig {
+  enabled: boolean;
+  ambiente: "homologacao" | "producao";
+  // Emitente
+  cnpj: string;
+  ie: string;                // Inscrição Estadual
+  im?: string;               // Inscrição Municipal (opcional)
+  crt: FiscalRegime;         // Código de Regime Tributário
+  // Certificado digital A1 (PFX base64)
+  certBase64?: string;
+  certPassword?: string;
+  // NFC-e
+  serie: number;             // Série da NFC-e (geralmente 1)
+  proximoNumero: number;     // Próximo número sequencial
+  csc: string;               // Código de Segurança do Contribuinte (token SEFAZ)
+  cscId: string;             // ID do CSC cadastrado na SEFAZ
+  // UF do emitente (ex: "SP")
+  uf: string;
+  // cMunFG: código IBGE do município (ex: 3550308 = São Paulo)
+  cMun: string;
+  xMun: string;
+}
+
+export type NfceStatus = "PENDING" | "AUTHORIZED" | "REJECTED" | "CANCELLED";
+
+export interface NfceResult {
+  status: NfceStatus;
+  chave?: string;
+  protocolo?: string;
+  numero?: number;
+  danfeUrl?: string;
+  xmlAutorizado?: string;
+  motivo?: string; // mensagem de erro/rejeição
+}
+
 export interface Tenant {
   id: string;
   name: string;
@@ -91,6 +144,7 @@ export interface Tenant {
   deliveryConfig?: string | null; // JSON string: DeliveryConfig
   paymentMethods?: string | null; // JSON string: PaymentConfig
   stoneConfig?: string | null;    // JSON string: StoneConfig
+  fiscalConfig?: string | null;   // JSON string: FiscalConfig
   categories?: Category[];
   wppInstance?: WppInstance | null;
   wppBotConfig?: WppBotConfig | null;
@@ -193,6 +247,13 @@ export interface Product {
   variants?: ProductVariant[];
   extras?: string | null; // JSON: ProductExtra[]
   scheduleRule?: string | null; // JSON: ProductScheduleRule
+  // Fiscal NFC-e
+  ncm?: string | null;
+  cfop?: string | null;
+  csosn?: string | null;
+  unitCom?: string | null;
+  origem?: number;
+  aliqIcms?: number;
 }
 
 export interface InventoryItem {
@@ -208,6 +269,12 @@ export interface InventoryItem {
   minStock?: number | null;
   unit?: string | null;
   usage: 'SALE' | 'INTERNAL';
+  // Conversão inteligente de unidades
+  // Ex: purchaseUnit="un", purchaseQty=1000, stockUnit="ml"
+  // → 1 garrafa comprada = 1000 ml no estoque granular
+  purchaseUnit?: string | null;  // unidade de compra (un, cx, fardo…)
+  purchaseQty?: number | null;   // conteúdo por unidade de compra (ex: 1000)
+  stockUnit?: string | null;     // unidade granular usada na produção (ml, g…)
 }
 
 export interface ProductionRecipeIngredient {
@@ -351,6 +418,11 @@ export interface Order {
   tenantId: string;
   createdAt: string;
   items: OrderItem[];
+  // NFC-e
+  nfceKey?: string | null;
+  nfceStatus?: NfceStatus | null;
+  nfceProtocol?: string | null;
+  nfceNumber?: number | null;
 }
 
 export interface OrderItem {
@@ -399,6 +471,62 @@ export interface CashMovement {
   orderId?: string | null;
   operatorName?: string | null;
   createdAt: string;
+}
+
+// ─── Product Bundles / Combos ─────────────────────────────────────────────────
+// Um BundleStep representa uma etapa de escolha no combo (ex: "Escolha a pizza", "Escolha o refri")
+// flavorMode: "single" = só um sabor; "half" = dois sabores (meio a meio) — somente para pizza
+// sourceType: "category" = lista produtos de uma categoria; "products" = lista selecionada manualmente
+export interface BundleStep {
+  id: string;           // uuid client-side
+  label: string;        // "Escolha a Pizza Grande"
+  description?: string; // opcional
+  sourceType: "category" | "products";
+  categoryId?: string;  // se sourceType === "category"
+  productIds?: string[]; // se sourceType === "products"
+  variantId?: string;    // variante obrigatória (ex: só "Grande")
+  flavorMode: "single" | "half"; // "half" = meio a meio (2 sabores)
+  qty: number;           // quantas unidades desta etapa compõem o combo
+  required: boolean;
+}
+
+export interface ProductBundle {
+  id: string;
+  tenantId: string;
+  name: string;
+  description?: string | null;
+  imageUrl?: string | null;
+  price: number;
+  available: boolean;
+  sortOrder: number;
+  steps: BundleStep[];  // JSON serializado no banco
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Seleção do usuário em cada etapa
+export interface BundleStepSelection {
+  stepId: string;
+  stepLabel: string;
+  flavorMode: "single" | "half";
+  qty: number;
+  // single: um produto+variante
+  productId?: string;
+  productName?: string;
+  variantId?: string;
+  variantName?: string;
+  unitPrice: number;
+  // half: dois produtos
+  halfA?: { productId: string; productName: string; variantId?: string; variantName?: string };
+  halfB?: { productId: string; productName: string; variantId?: string; variantName?: string };
+}
+
+export interface BundleCartItem {
+  type: "bundle";
+  bundle: ProductBundle;
+  selections: BundleStepSelection[];
+  quantity: number;
+  notes: string;
 }
 
 export interface Customer {

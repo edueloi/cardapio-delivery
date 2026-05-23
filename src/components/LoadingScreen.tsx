@@ -37,8 +37,8 @@ const LoadingScreen: React.FC<LoadingProps> = ({ onComplete }) => {
               className="mb-8" // Reduzi a margem abaixo do ícone
             >
               <img 
-                src="/images/favicon-menu-flow.png" 
-                alt="MenuFlow Icon" 
+                src="/images/favicon-menu-flow.png"
+                alt="Box Sys Icon"
                 className="w-24 h-24 object-contain drop-shadow-2xl"
               />
             </motion.div>
@@ -55,8 +55,8 @@ const LoadingScreen: React.FC<LoadingProps> = ({ onComplete }) => {
                 }}
                 className="flex items-center text-7xl font-bold tracking-tighter"
               >
-                <span style={{ color: '#001D3D' }}>Menu</span>
-                <span style={{ color: '#D49E00' }}>Flow</span>
+                <span style={{ color: '#001D3D' }}>Box</span>
+                <span style={{ color: '#D49E00' }}> Sys</span>
               </motion.div>
             </div>
 
@@ -70,18 +70,13 @@ const LoadingScreen: React.FC<LoadingProps> = ({ onComplete }) => {
               
               <div className="flex items-center space-x-6">
                 <div className="text-[11px] uppercase tracking-[0.3em] font-bold" style={{ color: '#D49E00' }}>
-                  Cardápios & Bots
+                  Sistema de Gestão
                 </div>
                 
                 <div className="h-4 w-[1px] bg-gray-300"></div>
 
                 <div className="text-[11px] uppercase tracking-[0.15em] flex items-center font-medium" style={{ color: '#001D3D' }}>
-                  <span className="opacity-50 mr-2 italic text-[9px]">by</span>
-                  <img 
-                    src="/images/develoi.png" 
-                    alt="Develoi" 
-                    className="h-10 object-contain"
-                  />
+                  <span className="font-black">Box Sys</span>
                 </div>
               </div>
             </motion.div>

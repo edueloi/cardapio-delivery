@@ -5,7 +5,8 @@ import { useAuth } from "../lib/auth";
 import socket from "../lib/socket";
 import type { Order, Tenant } from "../types";
 import PDVPanel from "../features/dashboard/PDVPanel";
-import { X } from "lucide-react";
+import { ShoppingBag, X } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
 
 export default function PDVPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -14,6 +15,7 @@ export default function PDVPage() {
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [checkoutRequests, setCheckoutRequests] = useState<Array<{ tableId: string; customerName: string; timestamp: number }>>([]);
+  const [newOrderAlerts, setNewOrderAlerts] = useState<Array<{ id: string; customerName: string; orderType: string; total: number; timestamp: number }>>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchTenant = async () => {
@@ -41,6 +43,10 @@ export default function PDVPage() {
     socket.on("new-order", (newOrder: Order) => {
       setOrders((prev) => [newOrder, ...prev]);
       new Audio("/notification.mp3").play().catch(() => {});
+      setNewOrderAlerts((prev) => [
+        { id: newOrder.id, customerName: newOrder.customerName, orderType: newOrder.orderType, total: newOrder.total, timestamp: Date.now() },
+        ...prev,
+      ]);
     });
     socket.on("order-status-updated", (updatedOrder: Order) => {
       setOrders((prev) => prev.map((o) => (o.id === updatedOrder.id ? updatedOrder : o)));
@@ -148,6 +154,48 @@ export default function PDVPage() {
           onClearTable={handleClearTable}
           orders={orders}
         />
+      </div>
+
+      {/* Toasts de novo pedido do cardápio digital */}
+      <div className="fixed bottom-6 right-6 z-[200] space-y-3 w-full max-w-xs pointer-events-none">
+        <AnimatePresence>
+          {newOrderAlerts.map((alert) => (
+            <motion.div
+              key={alert.timestamp}
+              initial={{ opacity: 0, x: 100, scale: 0.9 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.5, transition: { duration: 0.2 } }}
+              className="pointer-events-auto bg-emerald-500 text-white p-4 rounded-2xl shadow-2xl flex flex-col gap-2"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center animate-bounce">
+                    <ShoppingBag className="w-4 h-4" />
+                  </div>
+                  <span className="text-xs font-black uppercase tracking-widest">
+                    Novo Pedido — {alert.orderType === "DELIVERY" ? "Delivery" : alert.orderType === "PICKUP" ? "Retirada" : "Mesa"}
+                  </span>
+                </div>
+                <button
+                  onClick={() => setNewOrderAlerts((prev) => prev.filter((a) => a.timestamp !== alert.timestamp))}
+                  className="p-1 hover:bg-white/20 rounded-lg transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <p className="text-sm font-black">{alert.customerName}</p>
+              <p className="text-xs font-bold opacity-70">
+                Total: R$ {alert.total.toFixed(2).replace(".", ",")}
+              </p>
+              <button
+                onClick={() => setNewOrderAlerts((prev) => prev.filter((a) => a.timestamp !== alert.timestamp))}
+                className="w-full bg-white text-emerald-600 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-50 transition-colors"
+              >
+                Ciente
+              </button>
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </div>
     </div>
   );

@@ -81,6 +81,8 @@ export default function PDVPanel({
 
   // Success flash
   const [showSuccess, setShowSuccess] = useState(false);
+  const [nfceStatus, setNfceStatus] = useState<"idle" | "loading" | "authorized" | "rejected">("idle");
+  const [nfceMessage, setNfceMessage] = useState("");
 
   const lastOrderRef = useRef<any>(null);
 
@@ -93,6 +95,36 @@ export default function PDVPanel({
     try { return tenant.stoneConfig ? JSON.parse(tenant.stoneConfig) as StoneConfig : null; }
     catch { return null; }
   }, [tenant.stoneConfig]);
+
+  const fiscalEnabled = useMemo(() => {
+    try {
+      const cfg = tenant.fiscalConfig ? JSON.parse(tenant.fiscalConfig as string) : null;
+      return cfg?.enabled === true;
+    } catch { return false; }
+  }, [tenant.fiscalConfig]);
+
+  const handleEmitNfce = async () => {
+    const order = lastOrderRef.current;
+    if (!order?.id) return;
+    setNfceStatus("loading");
+    setNfceMessage("");
+    try {
+      const res = await apiJson(`/api/owner/tenants/${tenant.id}/nfce/emit`, {
+        method: "POST",
+        body: JSON.stringify({ orderId: order.id }),
+      }) as any;
+      if (res.status === "AUTHORIZED") {
+        setNfceStatus("authorized");
+        setNfceMessage(`NFC-e ${res.numero} autorizada — Chave: ${res.chave?.slice(-8)}`);
+      } else {
+        setNfceStatus("rejected");
+        setNfceMessage(res.motivo ?? "NFC-e rejeitada pela SEFAZ");
+      }
+    } catch (err: any) {
+      setNfceStatus("rejected");
+      setNfceMessage(err?.message ?? "Erro ao emitir NFC-e");
+    }
+  };
 
   const PAYMENT_METHODS = useMemo(() =>
     stoneCfg?.enabled
@@ -172,6 +204,8 @@ export default function PDVPanel({
     setCardBrand("");
     setStoneStatus("idle");
     setStoneChargeId(null);
+    setNfceStatus("idle");
+    setNfceMessage("");
     if (stonePollRef.current) clearInterval(stonePollRef.current);
   };
 
@@ -328,20 +362,50 @@ export default function PDVPanel({
 
   return (
     <div className="flex flex-col lg:flex-row gap-2 lg:gap-4 h-full min-h-0">
-      {/* ── Success flash ── */}
+      {/* ── Success flash + NFC-e ── */}
       <AnimatePresence>
         {showSuccess && (
           <motion.div
             initial={{ opacity: 0, y: -40 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -40 }}
-            className="fixed top-6 left-1/2 -translate-x-1/2 z-[200] bg-green-500 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 font-black text-sm"
+            className="fixed top-6 left-1/2 -translate-x-1/2 z-[200] flex flex-col items-center gap-2"
           >
-            <CheckCircle2 className="w-5 h-5" />
-            Venda realizada com sucesso!
-            <button onClick={handlePrintReceipt} className="ml-2 underline text-xs font-bold opacity-80">
-              Imprimir cupom
-            </button>
+            <div className="bg-green-500 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 font-black text-sm">
+              <CheckCircle2 className="w-5 h-5" />
+              Venda realizada com sucesso!
+              <button onClick={handlePrintReceipt} className="ml-2 underline text-xs font-bold opacity-80">
+                Imprimir cupom
+              </button>
+            </div>
+            {/* Botão NFC-e — aparece apenas se fiscal estiver habilitado */}
+            {fiscalEnabled && nfceStatus === "idle" && (
+              <button
+                onClick={handleEmitNfce}
+                className="bg-[#C9A227] text-white px-5 py-2.5 rounded-xl shadow-xl flex items-center gap-2 text-xs font-black hover:bg-[#b8911f] transition-colors"
+              >
+                <Receipt className="w-4 h-4" />
+                Emitir NFC-e
+              </button>
+            )}
+            {fiscalEnabled && nfceStatus === "loading" && (
+              <div className="bg-slate-800 text-white px-5 py-2.5 rounded-xl shadow-xl flex items-center gap-2 text-xs font-black">
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Enviando para SEFAZ...
+              </div>
+            )}
+            {fiscalEnabled && nfceStatus === "authorized" && (
+              <div className="bg-green-600 text-white px-5 py-2.5 rounded-xl shadow-xl flex items-center gap-2 text-xs font-black">
+                <CheckCircle2 className="w-4 h-4" />
+                {nfceMessage}
+              </div>
+            )}
+            {fiscalEnabled && nfceStatus === "rejected" && (
+              <div className="bg-red-500 text-white px-5 py-2.5 rounded-xl shadow-xl flex items-center gap-2 text-xs font-black max-w-xs text-center">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                {nfceMessage}
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

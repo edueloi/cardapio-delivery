@@ -147,11 +147,11 @@ export default function InviteRegisterPage() {
         {/* Logo */}
         <div className="flex flex-col items-center mb-8 text-center">
           <div className="w-16 h-16 mb-3 drop-shadow-md">
-            <img src="/images/favicon-menu-flow.png" alt="MenuFlow" className="w-full h-full object-contain" />
+            <img src="/images/favicon-menu-flow.png" alt="Box Sys" className="w-full h-full object-contain" />
           </div>
           <div className="flex justify-center items-center text-3xl font-black tracking-tighter">
-            <span className="text-[#001D3D]">Menu</span>
-            <span className="text-[#D49E00]">Flow</span>
+            <span className="text-[#001D3D]">Box</span>
+            <span className="text-[#D49E00]"> Sys</span>
           </div>
           <p className="text-slate-400 text-xs font-bold tracking-[0.2em] uppercase mt-1">Criar conta</p>
         </div>
