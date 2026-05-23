@@ -1,5 +1,4 @@
 import {
-  CircleDollarSign,
   Clock,
   LayoutDashboard,
   MessageSquare,
@@ -7,12 +6,9 @@ import {
   ExternalLink,
 } from "lucide-react";
 import {
-  ContentCard,
   FilterLineSegmented,
   PageWrapper,
   SectionTitle,
-  StatCard,
-  StatGrid,
   Button,
 } from "../../components";
 import type { Order, Tenant } from "../../types";
@@ -36,7 +32,9 @@ import DownloadsPanel from "./DownloadsPanel";
 import PromotionsPanel from "./PromotionsPanel";
 import BundlesPanel from "./BundlesPanel";
 import ProductionPanel from "./ProductionPanel";
-import { WhatsAppManagementPanel, WhatsAppOverviewCard } from "./WhatsAppPanel";
+import { WhatsAppManagementPanel } from "./WhatsAppPanel";
+import OverviewPanel from "./OverviewPanel";
+import EntradasSaidasPanel from "./EntradasSaidasPanel";
 import { type DashboardOrderTabId, type DashboardTabId, type MyMembership, canAccess } from "./types";
 
 interface DashboardContentProps {
@@ -94,9 +92,6 @@ export default function DashboardContent({
   const pendingOrders = orders.filter((order) => order.status === "PENDING").length;
   const preparingOrders = orders.filter((order) => order.status === "PREPARING").length;
   const shippedOrders = orders.filter((order) => order.status === "SHIPPED").length;
-  const deliveredOrders = orders.filter((order) => order.status === "DELIVERED").length;
-  const totalSales = orders.reduce((acc, order) => acc + order.total, 0);
-  const averageTicket = totalSales / (orders.length || 1);
 
   // If the active tab is not accessible, show the access denied screen
   if (!allowed(activeTab)) return <AccessDenied />;
@@ -105,106 +100,13 @@ export default function DashboardContent({
     <>
       {activeTab === "overview" && (
         <PageWrapper>
-          {/* Título — oculto no mobile, visível no desktop */}
-          <SectionTitle
-            title="Visão Geral"
-            description="Acompanhe o desempenho da sua unidade em tempo real"
-            icon={LayoutDashboard}
-            className="mb-6 hidden sm:flex"
+          <OverviewPanel
+            tenant={tenant}
+            slug={slug}
+            orders={orders}
+            setActiveTab={setActiveTab}
+            setSubTab={setSubTab}
           />
-
-          <StatGrid cols={4} className="mb-4 sm:mb-8">
-            <StatCard
-              title="Pedidos Hoje"
-              value={orders.length}
-              icon={Clock}
-              description="Atualizado agora"
-              color="info"
-              delay={0.1}
-            />
-            <StatCard
-              title="Ticket Médio"
-              value={new Intl.NumberFormat("pt-BR", {
-                style: "currency",
-                currency: "BRL",
-              }).format(averageTicket)}
-              icon={CircleDollarSign}
-              description="Estável hoje"
-              color="success"
-              delay={0.2}
-            />
-            <StatCard
-              title="Vendas Totais"
-              value={new Intl.NumberFormat("pt-BR", {
-                style: "currency",
-                currency: "BRL",
-              }).format(totalSales)}
-              icon={CircleDollarSign}
-              description="Acumulado do dia"
-              color="info"
-              delay={0.3}
-            />
-            <StatCard
-              title="Fila Cozinha"
-              value={preparingOrders}
-              icon={Utensils}
-              description="Requisições ativas"
-              color="warning"
-              delay={0.4}
-            />
-          </StatGrid>
-
-          <div className="grid grid-cols-12 gap-4 sm:gap-6">
-            <div className="col-span-12 lg:col-span-8 space-y-4 sm:space-y-6">
-              <ContentCard>
-                <h3 className="text-sm sm:text-lg font-bold text-slate-800 mb-3 sm:mb-4">Resumo da Operação</h3>
-                <div className="grid grid-cols-3 gap-2 sm:gap-4">
-                  <button
-                    onClick={() => {
-                      setActiveTab("live-orders");
-                      setSubTab("pending");
-                    }}
-                    className="p-3 sm:p-4 bg-[#fdf8e8] rounded-xl sm:rounded-2xl text-center hover:bg-[#faefc0] transition-colors group"
-                  >
-                    <div className="text-xl sm:text-2xl font-black text-[#A8841C] group-hover:scale-110 transition-transform">
-                      {pendingOrders}
-                    </div>
-                    <div className="text-[9px] sm:text-[10px] font-black uppercase text-[#C9A227]/70 tracking-wider mt-0.5">
-                      Aguardando
-                    </div>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setActiveTab("live-orders");
-                      setSubTab("preparing");
-                    }}
-                    className="p-3 sm:p-4 bg-orange-50 rounded-xl sm:rounded-2xl text-center hover:bg-orange-100 transition-colors group"
-                  >
-                    <div className="text-xl sm:text-2xl font-black text-orange-600 group-hover:scale-110 transition-transform">
-                      {preparingOrders}
-                    </div>
-                    <div className="text-[9px] sm:text-[10px] font-black uppercase text-orange-400 tracking-wider mt-0.5">
-                      Em Preparo
-                    </div>
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("history")}
-                    className="p-3 sm:p-4 bg-green-50 rounded-xl sm:rounded-2xl text-center hover:bg-green-100 transition-colors group"
-                  >
-                    <div className="text-xl sm:text-2xl font-black text-green-600 group-hover:scale-110 transition-transform">
-                      {deliveredOrders}
-                    </div>
-                    <div className="text-[9px] sm:text-[10px] font-black uppercase text-green-400 tracking-wider mt-0.5">
-                      Entregues
-                    </div>
-                  </button>
-                </div>
-              </ContentCard>
-            </div>
-            <div className="col-span-12 lg:col-span-4">
-              <WhatsAppOverviewCard tenant={tenant} onOpenSettings={() => setActiveTab("whatsapp")} />
-            </div>
-          </div>
         </PageWrapper>
       )}
 
@@ -266,6 +168,10 @@ export default function DashboardContent({
 
       {activeTab === "finance" && (
         <CashFlowPanel slug={slug} tenant={tenant} />
+      )}
+
+      {activeTab === "entries" && (
+        <EntradasSaidasPanel slug={slug} tenant={tenant} />
       )}
 
       {activeTab === "customers" && (

@@ -18,6 +18,7 @@ import {
   Users,
   Utensils,
   Wallet,
+  ArrowLeftRight,
 } from "lucide-react";
 import type { DashboardNavigationGroup } from "../types";
 
@@ -49,6 +50,7 @@ export const DASHBOARD_NAVIGATION: DashboardNavigationGroup[] = [
     label: "Financeiro",
     items: [
       { id: "finance",   label: "Fluxo de Caixa",     tab: "finance",      icon: Wallet },
+      { id: "entries",   label: "Entradas e Saídas",  tab: "entries",      icon: ArrowLeftRight },
       { id: "reports",   label: "Relatórios",         tab: "reports",      icon: BarChart3 },
     ],
   },

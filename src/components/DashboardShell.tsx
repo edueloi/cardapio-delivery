@@ -82,16 +82,16 @@ export default function DashboardShell({
         `}
       >
         {/* Logo / tenant header */}
-        <div className="p-5 md:p-6 flex items-center justify-between border-b border-white/10">
+        <div className="px-5 pt-6 pb-5 md:px-6 flex items-center justify-between border-b border-white/[0.08]">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="w-9 h-9 bg-[#C9A227] rounded-xl flex items-center justify-center font-bold text-white uppercase shrink-0">
-              {tenantInitial}
+            <div className="w-10 h-10 rounded-xl overflow-hidden shrink-0 bg-white flex items-center justify-center p-1.5">
+              <img src="/images/logo.png" alt="Logo" className="w-full h-full object-contain" />
             </div>
             <div className="min-w-0">
-              <span className="block text-[10px] font-black uppercase tracking-widest text-[#C9A227]/70 leading-none mb-0.5">
+              <span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-[#C9A227]/60 leading-none mb-1">
                 Box Sys
               </span>
-              <span className="block text-sm font-bold text-white tracking-tight leading-none truncate">
+              <span className="block text-[13px] font-bold text-white/90 leading-none truncate">
                 {tenantLabel}
               </span>
             </div>
@@ -102,10 +102,10 @@ export default function DashboardShell({
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 py-5 md:py-6 px-4 space-y-6 overflow-y-auto custom-scrollbar">
+        <nav className="flex-1 py-4 px-3 space-y-5 overflow-y-auto custom-scrollbar">
           {navigationGroups.map((group) => (
-            <div key={group.id} className="space-y-2">
-              <div className="px-3 text-[9px] font-black uppercase tracking-[0.25em] text-white/20">
+            <div key={group.id} className="space-y-1">
+              <div className="px-3 pb-1 text-[9px] font-semibold uppercase tracking-[0.22em] text-white/25">
                 {group.label}
               </div>
               <div className="space-y-0.5">
@@ -113,17 +113,17 @@ export default function DashboardShell({
                   <button
                     key={item.id}
                     onClick={() => onSelectTab(item.tab)}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl font-bold transition-all cursor-pointer group ${
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all cursor-pointer group ${
                       activeTab === item.tab
-                        ? "bg-[#C9A227] text-white shadow-lg shadow-[#C9A227]/20"
-                        : "text-slate-400 hover:bg-white/5 hover:text-white"
+                        ? "bg-[#C9A227] text-white shadow-md shadow-[#C9A227]/25"
+                        : "text-slate-400 hover:bg-white/[0.06] hover:text-white"
                     }`}
                   >
                     <item.icon className={cn(
-                      "w-3.5 h-3.5 shrink-0 transition-transform group-hover:scale-110",
+                      "w-4 h-4 shrink-0 transition-colors",
                       activeTab === item.tab ? "text-white" : "text-slate-500 group-hover:text-[#C9A227]"
                     )} />
-                    <span className="text-[11px] text-left uppercase tracking-wider">{item.label}</span>
+                    <span className="text-[11.5px] font-semibold text-left tracking-wide">{item.label}</span>
                   </button>
                 ))}
               </div>
@@ -132,41 +132,34 @@ export default function DashboardShell({
         </nav>
 
         {/* Ver cardápio + super admin + logout */}
-        <div className="p-4 border-t border-white/10 space-y-1">
+        <div className="p-3 border-t border-white/[0.08] space-y-0.5">
           <Link
             to={`/${slug}`}
-            className="flex items-center gap-3 w-full p-2.5 text-slate-400 hover:text-[#C9A227] transition-colors rounded-xl hover:bg-white/10"
+            className="flex items-center gap-3 w-full px-3 py-2.5 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-white/[0.06] group"
           >
-            <Utensils className="w-4 h-4 shrink-0" />
-            <span className="text-xs font-bold uppercase tracking-widest">Ver Cardápio</span>
+            <Utensils className="w-4 h-4 shrink-0 group-hover:text-[#C9A227] transition-colors" />
+            <span className="text-[11.5px] font-semibold tracking-wide">Ver Cardápio</span>
           </Link>
           {isSuperAdmin && (
             <Link
               to="/superadmin"
-              className="flex items-center gap-3 w-full p-2.5 text-amber-400/80 hover:text-amber-400 transition-colors rounded-xl hover:bg-amber-400/10 border border-amber-400/20"
+              className="flex items-center gap-3 w-full px-3 py-2.5 text-amber-400/70 hover:text-amber-400 transition-colors rounded-lg hover:bg-amber-400/10"
             >
               <ShieldCheck className="w-4 h-4 shrink-0" />
-              <span className="text-xs font-bold uppercase tracking-widest">Super Admin</span>
+              <span className="text-[11.5px] font-semibold tracking-wide">Super Admin</span>
             </Link>
           )}
           {onLogout && (
             <button
               onClick={onLogout}
-              className="flex items-center gap-3 w-full p-2.5 text-slate-400 hover:text-red-400 transition-colors rounded-xl hover:bg-white/10"
+              className="flex items-center gap-3 w-full px-3 py-2.5 text-slate-500 hover:text-red-400 transition-colors rounded-lg hover:bg-white/[0.06] group"
             >
               <LogOut className="w-4 h-4 shrink-0" />
-              <span className="text-xs font-bold uppercase tracking-widest">Sair</span>
+              <span className="text-[11.5px] font-semibold tracking-wide">Sair</span>
             </button>
           )}
         </div>
 
-        {/* Status footer */}
-        <div className="p-5 md:p-6 bg-black/20">
-          <div className="flex items-center gap-2 text-[10px] text-green-400/80 font-mono">
-            <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-            Server Online
-          </div>
-        </div>
       </aside>
 
       {/* Mobile overlay */}
