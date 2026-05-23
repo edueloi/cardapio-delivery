@@ -11,7 +11,6 @@ import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
 import OwnerPortal from "./pages/OwnerPortal";
 import Register from "./pages/Register";
-import LoadingScreen from "./components/LoadingScreen";
 import LandingPage from "./pages/LandingPage";
 import PublicDashboard from "./features/public-dashboard";
 import PDVPage from "./pages/PDVPage";
@@ -27,8 +26,6 @@ function AnimatedRoutes() {
 
   return (
     <>
-      {location.pathname === "/" && <LoadingScreen onComplete={() => {}} />}
-
       <AnimatePresence mode="wait">
         <Routes location={location} key={routeKey}>
           <Route path="/login" element={<Login />} />

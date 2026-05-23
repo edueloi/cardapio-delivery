@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { Button, Input } from "../../components";
+import LoadingScreen from "../../components/LoadingScreen";
 import { useAuth } from "../../lib/auth";
 import { resolvePostAuthPath } from "./authRedirect";
 
@@ -14,6 +15,7 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [redirectPath, setRedirectPath] = useState<string | null>(null);
 
   const next = searchParams.get("next") || "/painel";
 
@@ -24,7 +26,7 @@ export default function LoginPage() {
 
     try {
       const payload = await login(email, password);
-      navigate(resolvePostAuthPath(next, payload.tenants), { replace: true });
+      setRedirectPath(resolvePostAuthPath(next, payload.tenants));
     } catch (err: any) {
       setError(err?.message || "Falha ao entrar.");
     } finally {
@@ -34,6 +36,15 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row relative overflow-hidden bg-[#0D1B3E]">
+      {redirectPath && (
+        <LoadingScreen
+          durationMs={1800}
+          badgeText="Acesso Liberado"
+          statusText="Entrando"
+          description="Suas permissões foram carregadas. Estamos abrindo o painel com segurança."
+          onComplete={() => navigate(redirectPath, { replace: true })}
+        />
+      )}
 
       {/* Lado esquerdo — branding */}
       <div className="hidden md:flex flex-col justify-center items-center w-[48%] relative px-16 shrink-0">

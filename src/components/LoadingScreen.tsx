@@ -3,18 +3,28 @@ import {AnimatePresence, motion} from 'framer-motion';
 
 interface LoadingProps {
   onComplete?: () => void;
+  durationMs?: number;
+  badgeText?: string;
+  statusText?: string;
+  description?: string;
 }
 
-const LoadingScreen: React.FC<LoadingProps> = ({onComplete}) => {
+const LoadingScreen: React.FC<LoadingProps> = ({
+  onComplete,
+  durationMs = 3200,
+  badgeText = 'Inicializando',
+  statusText = 'Carregando',
+  description = 'Preparando seu ambiente com rapidez, estabilidade e uma experiência mais limpa na abertura.',
+}) => {
   const [isVisible, setIsVisible] = useState(true);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setIsVisible(false);
-    }, 3200);
+    }, durationMs);
 
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [durationMs]);
 
   return (
     <AnimatePresence onExitComplete={onComplete}>
@@ -49,7 +59,7 @@ const LoadingScreen: React.FC<LoadingProps> = ({onComplete}) => {
                   transition={{duration: 1.4, repeat: Infinity, ease: 'easeInOut'}}
                 />
                 <span className="text-[11px] font-semibold uppercase tracking-[0.32em] text-slate-500">
-                  Inicializando
+                  {badgeText}
                 </span>
               </motion.div>
 
@@ -84,11 +94,11 @@ const LoadingScreen: React.FC<LoadingProps> = ({onComplete}) => {
                 <div className="flex items-center justify-center gap-4 text-[11px] font-semibold uppercase tracking-[0.34em]">
                   <span className="text-[#C99000]">Sistema de Gestão</span>
                   <span className="h-4 w-px bg-slate-300" />
-                  <span className="text-[#0B2343]">Carregando</span>
+                  <span className="text-[#0B2343]">{statusText}</span>
                 </div>
 
                 <p className="mx-auto max-w-md text-sm leading-relaxed text-slate-500 sm:text-[15px]">
-                  Preparando seu ambiente com rapidez, estabilidade e uma experiência mais limpa na abertura.
+                  {description}
                 </p>
               </motion.div>
 

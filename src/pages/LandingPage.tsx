@@ -52,8 +52,8 @@ const LandingPage: React.FC = () => {
       icon: <Utensils className="w-5 h-5" />,
       title: 'FoodService',
       subtitle: 'Restaurantes e Delivery',
-      desc: 'Gestão de pedidos, mesas, cozinha e entregas. Integração com iFood e atendimento via WhatsApp.',
-      features: ['Pedidos em tempo real', 'Monitor de cozinha digital', 'Integração com iFood', 'Cardápio por QR Code'],
+      desc: 'Gestão para operação diária ou por agenda. Venda em tempo real, aceite pedidos programados e configure cardápios para finais de semana, datas especiais e janelas específicas.',
+      features: ['Pedidos em tempo real', 'Agendamento por data e horário', 'Cardápio por dia da semana', 'Robô informa quando você atende'],
       accent: 'text-orange-600',
       bg: 'bg-orange-50',
       border: 'border-orange-100',
@@ -97,11 +97,14 @@ const LandingPage: React.FC = () => {
   const features = [
     { icon: <QrCode className="w-5 h-5" />, title: 'Cardápio por QR Code', desc: 'Cliente acessa pelo celular, sem papel, sem espera. Atualização em tempo real.', color: 'bg-blue-50 text-blue-600 border-blue-100' },
     { icon: <Bot className="w-5 h-5" />, title: 'Robô do WhatsApp', desc: 'Atendimento automático 24h. Receba pedidos e responda clientes sem esforço.', color: 'bg-green-50 text-green-600 border-green-100' },
+    { icon: <Clock3 className="w-5 h-5" />, title: 'Agendamento Inteligente', desc: 'Ideal para quem vende por encomenda ou só trabalha em dias específicos, como sexta, sábado e domingo.', color: 'bg-amber-50 text-amber-600 border-amber-100' },
+    { icon: <Sparkles className="w-5 h-5" />, title: 'Cardápio Programado', desc: 'Suba pratos, combos e promoções automaticamente em datas e dias da semana definidos por você.', color: 'bg-yellow-50 text-yellow-600 border-yellow-100' },
     { icon: <LayoutDashboard className="w-5 h-5" />, title: 'Painel Operacional', desc: 'Pedidos, caixa, estoque e produção em tempo real em um só painel.', color: 'bg-amber-50 text-amber-600 border-amber-100' },
     { icon: <Clock3 className="w-5 h-5" />, title: 'Monitor de Cozinha', desc: 'Fila inteligente com status em preparo, pronto e entregue para sua equipe.', color: 'bg-orange-50 text-orange-600 border-orange-100' },
     { icon: <BarChart3 className="w-5 h-5" />, title: 'Relatórios e Financeiro', desc: 'Fluxo de caixa, relatórios de vendas e controle de desempenho.', color: 'bg-violet-50 text-violet-600 border-violet-100' },
     { icon: <Utensils className="w-5 h-5" />, title: 'PDV Completo', desc: 'Caixa com abertura, fechamento, sangria e controle de operadores.', color: 'bg-red-50 text-red-500 border-red-100' },
     { icon: <Package className="w-5 h-5" />, title: 'Controle de Estoque', desc: 'Controle de insumos e alertas automáticos de reposição.', color: 'bg-teal-50 text-teal-600 border-teal-100' },
+    { icon: <Layers className="w-5 h-5" />, title: 'Produção com Custo Real', desc: 'O sistema calcula custo por grama, ml e unidade, gera a produção e desconta os insumos automaticamente.', color: 'bg-cyan-50 text-cyan-700 border-cyan-100' },
     { icon: <CreditCard className="w-5 h-5" />, title: 'Ofertas e Promoções', desc: 'Cupons de desconto, clube de fidelidade e promoções automáticas.', color: 'bg-pink-50 text-pink-600 border-pink-100' },
     { icon: <Wallet className="w-5 h-5" />, title: 'Controle Financeiro', desc: 'Contas a pagar e receber, fluxo de caixa e relatórios simplificados.', color: 'bg-indigo-50 text-indigo-600 border-indigo-100' },
     { icon: <Users className="w-5 h-5" />, title: 'Mesas e Comandas', desc: 'App para garçom e QR Code na mesa. Pedidos da mesa direto para a cozinha.', color: 'bg-amber-50 text-amber-600 border-amber-100' },
@@ -124,7 +127,7 @@ const LandingPage: React.FC = () => {
         <div className="max-w-7xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between gap-4">
 
           <Link to="/" className="flex items-center gap-2.5 group shrink-0">
-            <div className="w-9 h-9 rounded-xl bg-gray-900 flex items-center justify-center p-1.5 shadow-sm">
+            <div className="w-9 h-9 rounded-xl bg-white border border-gray-200 flex items-center justify-center p-1.5 shadow-[0_10px_24px_-16px_rgba(15,23,42,0.35)] transition-all group-hover:border-amber-200">
               <img src="/images/logo.png" alt="BoxSys" className="w-full h-full object-contain" />
             </div>
             <span className="text-[15px] font-bold tracking-tight text-gray-900">
@@ -204,8 +207,8 @@ const LandingPage: React.FC = () => {
             </h1>
 
             <p className="text-base sm:text-lg md:text-xl text-gray-500 max-w-2xl mx-auto leading-relaxed mb-10">
-              Maximize suas operações com nossa plataforma integrada.
-              Cardápio digital, PDV, bot de WhatsApp, monitor de cozinha e muito mais.
+              Cardápio digital, PDV, WhatsApp, agendamento e produção inteligente em uma plataforma só.
+              Funciona para quem opera todos os dias ou apenas em finais de semana, datas especiais e pedidos sob encomenda.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3 justify-center mb-14">
@@ -224,7 +227,7 @@ const LandingPage: React.FC = () => {
                 { value: '100%', label: 'Digital e em nuvem' },
                 { value: 'Real-time', label: 'Pedidos ao vivo' },
                 { value: 'Multi-canal', label: 'Mesa, delivery e balcão' },
-                { value: '24/7', label: 'Sistema disponível' },
+                { value: 'Sob agenda', label: 'Dias e horários programados' },
               ].map(({ value, label }) => (
                 <div key={label} className="text-center">
                   <div className="text-2xl sm:text-3xl font-black text-gray-900">{value}</div>
@@ -285,8 +288,9 @@ const LandingPage: React.FC = () => {
             { icon: <ShoppingBag className="w-3.5 h-3.5" />, label: 'Hamburgeria' },
             { icon: <Store className="w-3.5 h-3.5" />, label: 'Lanchonete' },
             { icon: <Package className="w-3.5 h-3.5" />, label: 'Delivery' },
+            { icon: <Clock3 className="w-3.5 h-3.5" />, label: 'Encomendas' },
             { icon: <Globe className="w-3.5 h-3.5" />, label: 'Dark Kitchen' },
-            { icon: <Layers className="w-3.5 h-3.5" />, label: 'Varejo' },
+            { icon: <Layers className="w-3.5 h-3.5" />, label: 'Operação por agenda' },
           ].map(({ icon, label }) => (
             <div key={label} className="flex items-center gap-2">
               {icon}
@@ -309,7 +313,7 @@ const LandingPage: React.FC = () => {
               <span className="text-gray-400">cada tipo de negócio.</span>
             </h2>
             <p className="text-gray-500 max-w-xl mx-auto text-base sm:text-lg">
-              Escolha a solução ideal para o seu segmento. Todas integradas e prontas para operar.
+              Escolha a solução ideal para o seu segmento, inclusive para operações sob encomenda, cardápios de fim de semana e produção programada.
             </p>
           </div>
 
@@ -380,7 +384,7 @@ const LandingPage: React.FC = () => {
               <span className="text-gray-400">Tudo que você precisa.</span>
             </h2>
             <p className="text-gray-500 max-w-xl mx-auto text-base">
-              Do pedido ao relatório, da cozinha ao financeiro — tudo conectado e funcionando junto.
+              Do pedido imediato ao agendamento da semana, da cozinha ao custo de produção — tudo conectado e funcionando junto.
             </p>
           </div>
 
@@ -420,18 +424,21 @@ const LandingPage: React.FC = () => {
             </h2>
 
             <p className="text-base text-gray-500 leading-relaxed mb-8">
-              Cada pedido entra no sistema, segue pelo monitor de cozinha, é entregue ao cliente
-              e registrado no financeiro. Sem papel, sem ruído, sem erro.
+              Cada pedido entra no sistema, respeita sua agenda de funcionamento, segue para a produção
+              e chega ao financeiro com tudo registrado. Ideal para operação diária, produção sob encomenda e vendas de fim de semana.
             </p>
 
             <div className="space-y-3 mb-10">
               {[
                 'Pedidos por mesa, balcão, retirada e delivery',
+                'Cardápio aberto apenas nos dias e horários programados',
+                'WhatsApp e cardápio orientam o cliente sobre sua agenda de atendimento',
+                'Pratos e promoções entram sozinhos em dias específicos, como toda quarta-feira',
                 'Monitor de cozinha com status em tempo real',
                 'PDV com abertura e fechamento de caixa',
-                'Estoque e controle de produção integrados',
+                'Produção calcula custo real por grama, ml e unidade',
+                'Receitas vinculadas ao cardápio baixam os insumos automaticamente',
                 'Fluxo de caixa e relatórios de vendas',
-                'Acesso remoto de qualquer dispositivo',
               ].map((item) => (
                 <div key={item} className="flex items-center gap-3">
                   <div className="w-5 h-5 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center shrink-0">
@@ -504,6 +511,128 @@ const LandingPage: React.FC = () => {
       </section>
 
       {/* ── DIFERENCIAIS ── */}
+      <section className="py-20 sm:py-24 px-5 sm:px-8 bg-[linear-gradient(180deg,#fffdf8_0%,#ffffff_100%)] border-y border-amber-100/60">
+        <div className="max-w-7xl mx-auto">
+          <div className="rounded-[2rem] border border-amber-100 bg-white shadow-[0_30px_80px_-45px_rgba(15,23,42,0.25)] overflow-hidden">
+            <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-0">
+              <motion.div
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.6 }}
+                className="p-8 sm:p-10 lg:p-12"
+              >
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-600 mb-6">
+                  <Layers className="w-3.5 h-3.5" />
+                  <span className="text-[10px] font-bold uppercase tracking-widest">Produção Inteligente</span>
+                </div>
+
+                <h2 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-[-0.03em] leading-tight text-gray-900 mb-5">
+                  Você sabe quanto custa,<br />
+                  <span className="text-amber-500">de verdade, o seu produto?</span>
+                </h2>
+
+                <p className="text-base sm:text-lg text-gray-500 leading-relaxed mb-8 max-w-2xl">
+                  Seja uma pizza, um lanche, um prato, um doce ou qualquer outro item do seu cardápio,
+                  a BoxSys calcula cada grama usada na receita. Assim você sabe o custo real do produto,
+                  ajusta preço com segurança e evita vender sem margem.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
+                  {[
+                    'Cálculo exato por grama, ml e unidade',
+                    'Receitas com custo real atualizado pelos insumos',
+                    'Produção vinculada ao cardápio e ao estoque',
+                    'Baixa automática do que foi realmente consumido',
+                  ].map((item) => (
+                    <div key={item} className="flex items-center gap-3 rounded-2xl bg-gray-50 border border-gray-100 px-4 py-3">
+                      <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-100 text-amber-500 flex items-center justify-center shrink-0">
+                        <CheckCircle2 className="w-4 h-4" />
+                      </div>
+                      <span className="text-sm font-semibold text-gray-700">{item}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="rounded-2xl bg-[#0B2343] px-5 py-4 text-white">
+                  <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-white/55 mb-2">
+                    Exemplo prático
+                  </div>
+                  <p className="text-sm sm:text-base leading-relaxed text-white/85">
+                    Aqui usamos uma pizza só como exemplo. O mesmo cálculo vale para qualquer receita:
+                    o sistema entende os ingredientes, calcula o custo real, gera a produção e baixa o
+                    estoque com precisão.
+                  </p>
+                </div>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.6, delay: 0.1 }}
+                className="relative bg-[radial-gradient(circle_at_top,rgba(245,158,11,0.16),transparent_38%),linear-gradient(180deg,#fffaf0_0%,#ffffff_100%)] p-8 sm:p-10 lg:p-12 border-t lg:border-t-0 lg:border-l border-amber-100/70"
+              >
+                <div className="absolute inset-0 opacity-40 [background-image:linear-gradient(to_right,rgba(251,191,36,0.12)_1px,transparent_1px),linear-gradient(to_bottom,rgba(251,191,36,0.12)_1px,transparent_1px)] [background-size:58px_58px]" />
+
+                <div className="relative space-y-4">
+                  <div className="rounded-3xl bg-white border border-amber-100 shadow-sm p-6">
+                    <div className="flex items-center justify-between mb-5">
+                      <div>
+                        <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-gray-400">Exemplo de Custo</div>
+                        <div className="text-xl font-black text-gray-900 mt-1">Pizza Calabresa Grande 35cm</div>
+                      </div>
+                      <div className="w-11 h-11 rounded-2xl bg-amber-50 border border-amber-100 text-amber-500 flex items-center justify-center">
+                        <Package className="w-5 h-5" />
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      {[
+                        ['Farinha 300g', 'R$ 1,74'],
+                        ['Água + fermento + sal + azeite', 'R$ 0,96'],
+                        ['Molho artesanal 120g', 'R$ 1,08'],
+                        ['Mussarela 180g', 'R$ 7,92'],
+                        ['Calabresa 130g + cebola 30g', 'R$ 4,08'],
+                        ['Azeitona, orégano e embalagem', 'R$ 1,20'],
+                      ].map(([label, value]) => (
+                        <div key={label} className="flex items-center justify-between rounded-2xl bg-gray-50 border border-gray-100 px-4 py-3">
+                          <span className="text-sm font-semibold text-gray-600">{label}</span>
+                          <span className="text-sm font-black text-gray-900">{value}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-4 rounded-2xl bg-[#0B2343] px-4 py-4 text-white flex items-center justify-between">
+                      <div>
+                        <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-white/55">Custo real do produto</div>
+                        <div className="text-2xl font-black mt-1">R$ 16,98</div>
+                      </div>
+                      <TrendingUp className="w-6 h-6 text-amber-400" />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="rounded-2xl bg-white border border-gray-100 p-4">
+                      <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-gray-400 mb-2">Produção</div>
+                      <div className="text-sm font-semibold text-gray-800 leading-relaxed">
+                        Gere a produção da pizza, massa ou recheio com base na sua receita.
+                      </div>
+                    </div>
+                    <div className="rounded-2xl bg-white border border-gray-100 p-4">
+                      <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-gray-400 mb-2">Estoque</div>
+                      <div className="text-sm font-semibold text-gray-800 leading-relaxed">
+                        O sistema baixa exatamente o que foi usado para manter sua margem protegida.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section className="py-24 sm:py-32 px-5 sm:px-8 bg-gray-50 border-y border-gray-100">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
@@ -541,21 +670,21 @@ const LandingPage: React.FC = () => {
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-600 mb-6">
               <TrendingUp className="w-3 h-3" />
-              <span className="text-[10px] font-bold uppercase tracking-widest">Aumente seu ticket médio</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest">Agenda, campanhas e automações</span>
             </div>
             <h2 className="text-4xl sm:text-5xl font-black tracking-[-0.03em] leading-tight mb-6 text-gray-900">
-              Ofereça mais para<br />
-              <span className="text-amber-500">cada cliente.</span>
+              Faça seu cardápio vender<br />
+              <span className="text-amber-500">na hora certa.</span>
             </h2>
             <p className="text-base text-gray-500 leading-relaxed mb-8">
-              Promoções que ativam no momento certo, combos e complementos que aumentam
-              naturalmente o valor de cada pedido — sem esforço extra da equipe.
+              Programe campanhas, combos e pratos para subir automaticamente no melhor momento.
+              Se você vende só aos finais de semana ou trabalha com pratos do dia, o sistema organiza isso para você.
             </p>
             <div className="space-y-4">
               {[
-                { icon: <Zap className="w-4 h-4" />, title: 'Promoções automatizadas', desc: 'Promoções que se ativam sozinhas no momento certo para aumentar o ticket.' },
-                { icon: <ShoppingBag className="w-4 h-4" />, title: 'Combinações e combos', desc: 'Complementos e combos que o cliente escolhe, aumentando o valor do pedido.' },
-                { icon: <BarChart3 className="w-4 h-4" />, title: 'Relatórios de promoções', desc: 'Acompanhe o impacto direto das campanhas nas suas vendas em tempo real.' },
+                { icon: <Zap className="w-4 h-4" />, title: 'Promoções por dia e horário', desc: 'Ative campanhas automaticamente em datas, horários e dias específicos da semana.' },
+                { icon: <ShoppingBag className="w-4 h-4" />, title: 'Pratos e combos programados', desc: 'Publique menus especiais, pratos do dia e combos só quando fizer sentido para sua operação.' },
+                { icon: <BarChart3 className="w-4 h-4" />, title: 'Relatórios de campanha e agenda', desc: 'Veja o impacto das promoções e do cardápio programado nas vendas em tempo real.' },
               ].map((item) => (
                 <div key={item.title} className="flex items-start gap-4 rounded-xl bg-gray-50 border border-gray-100 p-4">
                   <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-100 text-amber-500 flex items-center justify-center shrink-0 mt-0.5">
@@ -571,12 +700,14 @@ const LandingPage: React.FC = () => {
           </motion.div>
 
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.2 }} className="grid grid-cols-1 gap-3">
-            {[
+            {[ 
               { label: 'Integração com Google ADS e Meta ADS', icon: <Globe className="w-4 h-4" />, color: 'text-blue-500 bg-blue-50' },
               { label: 'Clube de fidelidade e cashback', icon: <CreditCard className="w-4 h-4" />, color: 'text-amber-500 bg-amber-50' },
               { label: 'Cupons de desconto personalizados', icon: <Zap className="w-4 h-4" />, color: 'text-violet-500 bg-violet-50' },
               { label: 'Link para pedido compartilhável', icon: <MessageCircle className="w-4 h-4" />, color: 'text-green-600 bg-green-50' },
-              { label: 'Ativação automática de produtos', icon: <BarChart3 className="w-4 h-4" />, color: 'text-orange-500 bg-orange-50' },
+              { label: 'Ativação automática de produtos e promoções', icon: <BarChart3 className="w-4 h-4" />, color: 'text-orange-500 bg-orange-50' },
+              { label: 'Cardápio especial para finais de semana e datas sazonais', icon: <Clock3 className="w-4 h-4" />, color: 'text-sky-600 bg-sky-50' },
+              { label: 'Controle de custos por ingrediente e receita', icon: <Layers className="w-4 h-4" />, color: 'text-cyan-700 bg-cyan-50' },
               { label: 'Relatórios detalhados de campanhas', icon: <TrendingUp className="w-4 h-4" />, color: 'text-pink-500 bg-pink-50' },
             ].map((item) => (
               <div key={item.label} className="flex items-center gap-3 rounded-xl bg-white border border-gray-100 px-4 py-3.5 hover:bg-gray-50 hover:border-gray-200 transition-all">
@@ -604,7 +735,7 @@ const LandingPage: React.FC = () => {
               </h2>
               <p className="text-base text-gray-500 leading-relaxed mb-10">
                 Solicite uma demonstração gratuita e veja como a BoxSys pode
-                modernizar sua operação. Nossa equipe entrará em contato rapidamente.
+                modernizar sua operação diária ou sob agenda, com cardápio programado, automações e produção inteligente.
               </p>
               <div className="space-y-4">
                 {[
@@ -649,6 +780,7 @@ const LandingPage: React.FC = () => {
                     <option value="hamburgeria">Hamburgeria</option>
                     <option value="lanchonete">Lanchonete</option>
                     <option value="delivery">Delivery / Dark Kitchen</option>
+                    <option value="agenda">Encomendas / Operação por agenda</option>
                     <option value="varejo">Varejo</option>
                     <option value="outro">Outro</option>
                   </select>
@@ -701,7 +833,7 @@ const LandingPage: React.FC = () => {
                 <span className="text-base font-bold text-white/80">Box<span className="text-amber-400">Sys</span></span>
               </div>
               <p className="text-xs text-white/30 leading-relaxed mb-5">
-                Plataforma de gestão para restaurantes, deliverys e varejo. Tecnologia para impulsionar seu negócio.
+                Plataforma de gestão para restaurantes, delivery, encomendas e operações por agenda. Tecnologia para vender melhor e produzir com controle real.
               </p>
               <div className="flex items-center gap-1.5">
                 <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
@@ -721,7 +853,7 @@ const LandingPage: React.FC = () => {
             <div>
               <div className="text-[10px] font-black uppercase tracking-widest text-white/30 mb-4">Recursos</div>
               <ul className="space-y-2.5">
-                {['Cardápio QR Code', 'Bot de WhatsApp', 'Monitor de Cozinha', 'PDV Completo', 'Relatórios', 'Controle de Estoque'].map((item) => (
+                {['Cardápio QR Code', 'Bot de WhatsApp', 'Agendamento inteligente', 'Produção com custo real', 'Monitor de Cozinha', 'Controle de Estoque'].map((item) => (
                   <li key={item}><a href="#recursos" className="text-xs text-white/40 hover:text-white/70 transition-colors font-medium">{item}</a></li>
                 ))}
               </ul>
