@@ -1,103 +1,135 @@
-import React, { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, {useEffect, useState} from 'react';
+import {AnimatePresence, motion} from 'framer-motion';
 
 interface LoadingProps {
   onComplete?: () => void;
 }
 
-const LoadingScreen: React.FC<LoadingProps> = ({ onComplete }) => {
+const LoadingScreen: React.FC<LoadingProps> = ({onComplete}) => {
   const [isVisible, setIsVisible] = useState(true);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
+    const timer = window.setTimeout(() => {
       setIsVisible(false);
-    }, 3500); // Um pouco mais de tempo para a nova animação brilhar
+    }, 3200);
 
-    return () => clearTimeout(timer);
+    return () => window.clearTimeout(timer);
   }, []);
 
   return (
-    <AnimatePresence>
+    <AnimatePresence onExitComplete={onComplete}>
       {isVisible && (
         <motion.div
-          initial={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 1, ease: [0.43, 0.13, 0.23, 0.96] }}
-          className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-white"
+          initial={{opacity: 1}}
+          exit={{opacity: 0}}
+          transition={{duration: 0.7, ease: [0.22, 1, 0.36, 1]}}
+          className="fixed inset-0 z-[9999] overflow-hidden bg-[#F8FAFC]"
         >
-          <div className="relative flex flex-col items-center">
-            {/* Ícone que aparece primeiro */}
-            <motion.div
-              initial={{ scale: 0.5, opacity: 0, y: 20 }}
-              animate={{ scale: 1.8, opacity: 1, y: 0 }} // Ícone ainda maior
-              transition={{ 
-                duration: 0.8, 
-                ease: [0.34, 1.56, 0.64, 1],
-              }}
-              className="mb-8" // Reduzi a margem abaixo do ícone
-            >
-              <img 
-                src="/images/favicon-menu-flow.png"
-                alt="Box Sys Icon"
-                className="w-24 h-24 object-contain drop-shadow-2xl"
-              />
-            </motion.div>
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(212,158,0,0.14),_transparent_34%),radial-gradient(circle_at_bottom,_rgba(0,29,61,0.08),_transparent_30%)]" />
+          <div className="absolute inset-0 opacity-70 [background-image:linear-gradient(to_right,rgba(148,163,184,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.08)_1px,transparent_1px)] [background-size:72px_72px]" />
 
-            {/* Texto surgindo do ícone */}
-            <div className="overflow-hidden py-2 px-4">
+          <motion.div
+            initial={{opacity: 0, scale: 0.8}}
+            animate={{opacity: 1, scale: 1}}
+            transition={{duration: 0.9, ease: [0.22, 1, 0.36, 1]}}
+            className="absolute left-1/2 top-[14%] h-40 w-40 -translate-x-1/2 rounded-full bg-[#D49E00]/12 blur-3xl"
+          />
+
+          <div className="relative flex min-h-screen items-center justify-center px-6">
+            <div className="flex w-full max-w-xl flex-col items-center text-center">
               <motion.div
-                initial={{ y: -60, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ 
-                  delay: 0.5, 
-                  duration: 0.7, 
-                  ease: "circOut" 
-                }}
-                className="flex items-center text-7xl font-bold tracking-tighter"
+                initial={{opacity: 0, y: 12}}
+                animate={{opacity: 1, y: 0}}
+                transition={{duration: 0.6, ease: 'easeOut'}}
+                className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#0B2343]/10 bg-white/85 px-4 py-2 shadow-[0_16px_40px_-28px_rgba(15,23,42,0.45)] backdrop-blur-md"
               >
-                <span style={{ color: '#001D3D' }}>Box</span>
-                <span style={{ color: '#D49E00' }}> Sys</span>
+                <motion.span
+                  className="h-2 w-2 rounded-full bg-[#D49E00]"
+                  animate={{scale: [1, 1.35, 1], opacity: [0.7, 1, 0.7]}}
+                  transition={{duration: 1.4, repeat: Infinity, ease: 'easeInOut'}}
+                />
+                <span className="text-[11px] font-semibold uppercase tracking-[0.32em] text-slate-500">
+                  Inicializando
+                </span>
+              </motion.div>
+
+              <motion.div
+                initial={{opacity: 0, y: 20, scale: 0.9}}
+                animate={{opacity: 1, y: 0, scale: 1}}
+                transition={{delay: 0.12, duration: 0.8, ease: [0.22, 1, 0.36, 1]}}
+                className="relative mb-8"
+              >
+                <div className="absolute inset-0 rounded-[2rem] bg-[#D49E00]/12 blur-2xl" />
+                <div className="relative rounded-[2rem] border border-slate-200/80 bg-white p-4 shadow-[0_28px_80px_-34px_rgba(15,23,42,0.35)]">
+                  <div className="rounded-[1.4rem] bg-white p-3">
+                    <img
+                      src="/images/logo.png"
+                      alt="Logo Box Sys"
+                      className="h-16 w-16 object-contain"
+                    />
+                  </div>
+                </div>
+              </motion.div>
+
+              <motion.div
+                initial={{opacity: 0, y: 26}}
+                animate={{opacity: 1, y: 0}}
+                transition={{delay: 0.25, duration: 0.75, ease: [0.22, 1, 0.36, 1]}}
+                className="space-y-4"
+              >
+                <h1 className="text-5xl font-black tracking-[-0.08em] text-[#0B2343] sm:text-6xl">
+                  Box<span className="text-[#D49E00]">Sys</span>
+                </h1>
+
+                <div className="flex items-center justify-center gap-4 text-[11px] font-semibold uppercase tracking-[0.34em]">
+                  <span className="text-[#C99000]">Sistema de Gestão</span>
+                  <span className="h-4 w-px bg-slate-300" />
+                  <span className="text-[#0B2343]">Carregando</span>
+                </div>
+
+                <p className="mx-auto max-w-md text-sm leading-relaxed text-slate-500 sm:text-[15px]">
+                  Preparando seu ambiente com rapidez, estabilidade e uma experiência mais limpa na abertura.
+                </p>
+              </motion.div>
+
+              <motion.div
+                initial={{opacity: 0, y: 18}}
+                animate={{opacity: 1, y: 0}}
+                transition={{delay: 0.45, duration: 0.7, ease: 'easeOut'}}
+                className="mt-8 w-full max-w-[280px]"
+              >
+                <div className="overflow-hidden rounded-full bg-slate-200/80 p-[3px] shadow-inner">
+                  <div className="h-2.5 overflow-hidden rounded-full bg-white/70">
+                    <motion.div
+                      className="h-full rounded-full bg-gradient-to-r from-[#0B2343] via-[#D49E00] to-[#0B2343]"
+                      initial={{scaleX: 0.18, originX: 0}}
+                      animate={{scaleX: 1, originX: 0}}
+                      transition={{duration: 2.5, ease: [0.22, 1, 0.36, 1]}}
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-4 flex items-center justify-center gap-2 text-[12px] text-slate-400">
+                  {[0, 1, 2].map((dot) => (
+                    <motion.span
+                      key={dot}
+                      className="h-2 w-2 rounded-full bg-slate-300"
+                      animate={{
+                        y: [0, -4, 0],
+                        backgroundColor: ['#CBD5E1', '#D49E00', '#CBD5E1'],
+                      }}
+                      transition={{
+                        duration: 0.9,
+                        repeat: Infinity,
+                        delay: dot * 0.16,
+                        ease: 'easeInOut',
+                      }}
+                    />
+                  ))}
+                </div>
               </motion.div>
             </div>
-
-            <motion.div
-              initial={{ opacity: 0, scaleX: 0 }}
-              animate={{ opacity: 1, scaleX: 1 }}
-              transition={{ delay: 1.2, duration: 0.8, ease: "easeInOut" }}
-              className="mt-4 flex flex-col items-center w-full"
-            >
-              <div className="w-64 h-[1px] bg-gradient-to-r from-transparent via-gray-200 to-transparent mb-4"></div>
-              
-              <div className="flex items-center space-x-6">
-                <div className="text-[11px] uppercase tracking-[0.3em] font-bold" style={{ color: '#D49E00' }}>
-                  Sistema de Gestão
-                </div>
-                
-                <div className="h-4 w-[1px] bg-gray-300"></div>
-
-                <div className="text-[11px] uppercase tracking-[0.15em] flex items-center font-medium" style={{ color: '#001D3D' }}>
-                  <span className="font-black">Box Sys</span>
-                </div>
-              </div>
-            </motion.div>
           </div>
-
-          {/* Partículas sutis de carregamento */}
-          <motion.div 
-            className="absolute bottom-20 flex space-x-2"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 2 }}
-          >
-            {[0, 1, 2].map((i) => (
-              <motion.div
-                key={i}
-                className="w-1.5 h-1.5 rounded-full bg-gray-200"
-                animate={{ scale: [1, 1.5, 1], backgroundColor: ["#E5E7EB", "#D49E00", "#E5E7EB"] }}
-                transition={{ repeat: Infinity, duration: 1, delay: i * 0.2 }}
-              />
-            ))}
-          </motion.div>
         </motion.div>
       )}
     </AnimatePresence>
