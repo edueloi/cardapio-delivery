@@ -525,7 +525,6 @@ function DeleteConfirm({ name, onConfirm, onCancel }: { name: string; onConfirm:
 // ─── Main panel ───────────────────────────────────────────────────────────────
 
 export default function SuppliersPanel({ tenant }: Props) {
-  const token = localStorage.getItem("auth_token") ?? "";
   const slug = tenant.slug;
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
@@ -542,33 +541,31 @@ export default function SuppliersPanel({ tenant }: Props) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [sRes, iRes] = await Promise.all([
-        fetch(`/api/tenants/${slug}/suppliers`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`/api/tenants/${slug}/inventory`, { headers: { Authorization: `Bearer ${token}` } }),
+      const [sup, inv] = await Promise.all([
+        apiJson<Supplier[]>(`/api/tenants/${slug}/suppliers`),
+        apiJson<InventoryItem[]>(`/api/tenants/${slug}/inventory`),
       ]);
-      if (sRes.ok) setSuppliers(await sRes.json());
-      if (iRes.ok) setInventoryItems(await iRes.json());
+      setSuppliers(sup);
+      setInventoryItems(inv);
+    } catch {
+      // silencia erro de auth — AuthError redireciona automaticamente
     } finally {
       setLoading(false);
     }
-  }, [slug, token]);
+  }, [slug]);
 
   useEffect(() => { load(); }, [load]);
 
   async function toggleFavorite(supplier: Supplier) {
-    await fetch(`/api/tenants/${slug}/suppliers/${supplier.id}`, {
+    await apiJson(`/api/tenants/${slug}/suppliers/${supplier.id}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ ...supplier, isFavorite: !supplier.isFavorite, inventoryItemIds: supplier.inventoryItems?.map((i) => i.inventoryItemId) ?? [] }),
     });
     load();
   }
 
   async function doDelete(supplier: Supplier) {
-    await fetch(`/api/tenants/${slug}/suppliers/${supplier.id}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    await apiJson(`/api/tenants/${slug}/suppliers/${supplier.id}`, { method: "DELETE" });
     setDeleteTarget(null);
     load();
   }
