@@ -358,18 +358,18 @@ export default function EntradasSaidasPanel({ slug, tenant }: Props) {
   return (
     <PageWrapper>
       {/* ── Header ── */}
-      <div className="flex items-center justify-between gap-4 mb-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div>
           <h2 className="text-xl font-black text-slate-800">Entradas e Saídas</h2>
           <p className="text-xs text-slate-400 mt-0.5">Controle financeiro completo do estabelecimento</p>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={refetch} className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={refetch} className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors shrink-0">
             <RefreshCw className="w-4 h-4" />
           </button>
           <div className="relative group">
             <button className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:border-slate-300 hover:bg-slate-50 transition-colors">
-              <Download className="w-3.5 h-3.5" /> Exportar <ChevronDown className="w-3 h-3" />
+              <Download className="w-3.5 h-3.5" /> <span className="hidden xs:inline">Exportar</span> <ChevronDown className="w-3 h-3" />
             </button>
             <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-20 py-1 hidden group-hover:block w-44">
               <button onClick={() => exportExcel(filtered, tenant, dateFrom, dateTo)} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
@@ -381,95 +381,108 @@ export default function EntradasSaidasPanel({ slug, tenant }: Props) {
             </div>
           </div>
           <button onClick={() => openNew("INCOME")} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-green-600 hover:bg-green-700 text-white text-xs font-bold transition-colors shadow-sm">
-            <ArrowDownCircle className="w-3.5 h-3.5" /> Entrada
+            <ArrowDownCircle className="w-3.5 h-3.5" /> <span>Entrada</span>
           </button>
           <button onClick={() => openNew("EXPENSE")} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-xs font-bold transition-colors shadow-sm">
-            <ArrowUpCircle className="w-3.5 h-3.5" /> Saída
+            <ArrowUpCircle className="w-3.5 h-3.5" /> <span>Saída</span>
           </button>
         </div>
       </div>
 
       {/* ── KPIs ── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
-        <div className="rounded-2xl bg-green-50 border border-green-100 p-4">
-          <div className="flex items-center gap-2 mb-2">
+        <div className="rounded-2xl bg-green-50 border border-green-100 p-4 flex sm:flex-col items-center sm:items-start gap-3 sm:gap-0">
+          <div className="flex items-center gap-2 sm:mb-2">
             <ArrowDownCircle className="w-4 h-4 text-green-600" />
             <span className="text-[10px] font-black uppercase tracking-widest text-green-600">Total Entradas</span>
           </div>
-          <p className="text-2xl font-black text-green-700">{fmt(totalIncome)}</p>
-          <p className="text-[10px] text-green-500 mt-1">{filtered.filter(e => e.type === "INCOME").length} lançamentos</p>
+          <div className="ml-auto sm:ml-0">
+            <p className="text-xl sm:text-2xl font-black text-green-700 text-right sm:text-left">{fmt(totalIncome)}</p>
+            <p className="text-[10px] text-green-500 mt-0.5 text-right sm:text-left">{filtered.filter(e => e.type === "INCOME").length} lançamentos</p>
+          </div>
         </div>
-        <div className="rounded-2xl bg-red-50 border border-red-100 p-4">
-          <div className="flex items-center gap-2 mb-2">
+        <div className="rounded-2xl bg-red-50 border border-red-100 p-4 flex sm:flex-col items-center sm:items-start gap-3 sm:gap-0">
+          <div className="flex items-center gap-2 sm:mb-2">
             <ArrowUpCircle className="w-4 h-4 text-red-600" />
             <span className="text-[10px] font-black uppercase tracking-widest text-red-600">Total Saídas</span>
           </div>
-          <p className="text-2xl font-black text-red-700">{fmt(totalExpense)}</p>
-          <p className="text-[10px] text-red-500 mt-1">{filtered.filter(e => e.type === "EXPENSE").length} lançamentos</p>
+          <div className="ml-auto sm:ml-0">
+            <p className="text-xl sm:text-2xl font-black text-red-700 text-right sm:text-left">{fmt(totalExpense)}</p>
+            <p className="text-[10px] text-red-500 mt-0.5 text-right sm:text-left">{filtered.filter(e => e.type === "EXPENSE").length} lançamentos</p>
+          </div>
         </div>
-        <div className={`rounded-2xl border p-4 ${saldo >= 0 ? "bg-amber-50 border-amber-100" : "bg-red-50 border-red-100"}`}>
-          <div className="flex items-center gap-2 mb-2">
+        <div className={`rounded-2xl border p-4 flex sm:flex-col items-center sm:items-start gap-3 sm:gap-0 ${saldo >= 0 ? "bg-amber-50 border-amber-100" : "bg-red-50 border-red-100"}`}>
+          <div className="flex items-center gap-2 sm:mb-2">
             <Wallet className={`w-4 h-4 ${saldo >= 0 ? "text-[#C9A227]" : "text-red-600"}`} />
             <span className={`text-[10px] font-black uppercase tracking-widest ${saldo >= 0 ? "text-[#C9A227]" : "text-red-600"}`}>Saldo</span>
           </div>
-          <p className={`text-2xl font-black ${saldo >= 0 ? "text-amber-700" : "text-red-700"}`}>{fmt(saldo)}</p>
-          <p className={`text-[10px] mt-1 ${saldo >= 0 ? "text-amber-500" : "text-red-500"}`}>{filtered.length} lançamentos no período</p>
+          <div className="ml-auto sm:ml-0">
+            <p className={`text-xl sm:text-2xl font-black text-right sm:text-left ${saldo >= 0 ? "text-amber-700" : "text-red-700"}`}>{fmt(saldo)}</p>
+            <p className={`text-[10px] mt-0.5 text-right sm:text-left ${saldo >= 0 ? "text-amber-500" : "text-red-500"}`}>{filtered.length} lançamentos no período</p>
+          </div>
         </div>
       </div>
 
       {/* ── Filtros ── */}
       <div className="bg-white rounded-2xl border border-slate-100 p-4 mb-5 space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex flex-wrap gap-2">
+        {/* Presets + botão filtros */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-1.5">
             {[
               { id: "today", label: "Hoje" },
               { id: "week", label: "Semana" },
               { id: "month", label: "Mês" },
-              { id: "last-month", label: "Mês anterior" },
+              { id: "last-month", label: "Mês ant." },
             ].map(p => (
               <button key={p.id} onClick={() => setPreset(p.id)}
-                className="px-3 py-1.5 rounded-full border border-slate-200 text-[11px] font-semibold text-slate-500 hover:border-[#C9A227] hover:text-[#C9A227] transition-all"
+                className="px-2.5 py-1.5 rounded-full border border-slate-200 text-[11px] font-semibold text-slate-500 hover:border-[#C9A227] hover:text-[#C9A227] transition-all"
               >{p.label}</button>
             ))}
           </div>
-          <button onClick={() => setShowFilters(v => !v)} className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-700">
+          <button onClick={() => setShowFilters(v => !v)}
+            className={`flex items-center gap-1.5 text-xs font-semibold shrink-0 px-2.5 py-1.5 rounded-xl border transition-all ${showFilters ? "border-[#C9A227] text-[#C9A227] bg-amber-50" : "border-slate-200 text-slate-500 hover:text-slate-700"}`}
+          >
             <Filter className="w-3.5 h-3.5" /> Filtros
           </button>
         </div>
 
+        {/* Datas */}
         <div className="grid grid-cols-2 gap-3">
           <DatePicker label="De" value={dateFrom} onChange={setDateFrom} max={dateTo ?? undefined} />
           <DatePicker label="Até" value={dateTo} onChange={setDateTo} min={dateFrom ?? undefined} />
         </div>
 
+        {/* Filtros avançados */}
         {showFilters && (
           <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="overflow-hidden">
-            <div className="pt-2 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="pt-2 flex flex-col gap-3">
               {/* Busca */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
                 <input
                   value={search} onChange={e => setSearch(e.target.value)}
-                  placeholder="Buscar descrição..."
-                  className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40"
+                  placeholder="Buscar descrição ou categoria..."
+                  className="w-full pl-9 pr-8 py-2.5 rounded-xl border border-slate-200 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40"
                 />
                 {search && <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2"><X className="w-3.5 h-3.5 text-slate-400" /></button>}
               </div>
-              {/* Tipo */}
-              <div className="flex bg-slate-100 p-0.5 rounded-xl">
-                {(["ALL", "INCOME", "EXPENSE"] as const).map(t => (
-                  <button key={t} onClick={() => setTypeFilter(t)}
-                    className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${typeFilter === t ? (t === "INCOME" ? "bg-green-500 text-white shadow-sm" : t === "EXPENSE" ? "bg-red-500 text-white shadow-sm" : "bg-white text-slate-700 shadow-sm") : "text-slate-400"}`}
-                  >{t === "ALL" ? "Todos" : t === "INCOME" ? "Entradas" : "Saídas"}</button>
-                ))}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Tipo */}
+                <div className="flex bg-slate-100 p-0.5 rounded-xl">
+                  {(["ALL", "INCOME", "EXPENSE"] as const).map(t => (
+                    <button key={t} onClick={() => setTypeFilter(t)}
+                      className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${typeFilter === t ? (t === "INCOME" ? "bg-green-500 text-white shadow-sm" : t === "EXPENSE" ? "bg-red-500 text-white shadow-sm" : "bg-white text-slate-700 shadow-sm") : "text-slate-400"}`}
+                    >{t === "ALL" ? "Todos" : t === "INCOME" ? "Entradas" : "Saídas"}</button>
+                  ))}
+                </div>
+                {/* Categoria */}
+                <select value={catFilter} onChange={e => setCatFilter(e.target.value)}
+                  className="px-3 py-2 rounded-xl border border-slate-200 text-sm font-medium bg-white focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40"
+                >
+                  <option value="ALL">Todas as categorias</option>
+                  {allCats.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
               </div>
-              {/* Categoria */}
-              <select value={catFilter} onChange={e => setCatFilter(e.target.value)}
-                className="px-3 py-2 rounded-xl border border-slate-200 text-sm font-medium bg-white focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40"
-              >
-                <option value="ALL">Todas as categorias</option>
-                {allCats.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
             </div>
           </motion.div>
         )}
@@ -487,9 +500,7 @@ export default function EntradasSaidasPanel({ slug, tenant }: Props) {
                 <button key={cat} onClick={() => setCatFilter(catFilter === cat ? "ALL" : cat)}
                   className={`rounded-xl px-3 py-2.5 text-left border transition-all ${catFilter === cat ? "border-[#C9A227] bg-amber-50" : "border-slate-100 bg-white hover:border-slate-200"}`}
                 >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${catColor(cat)}`}>{cat}</span>
-                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full inline-block mb-1.5 ${catColor(cat)}`}>{cat}</span>
                   {vals.income > 0 && <p className="text-xs font-black text-green-700">+{fmt(vals.income)}</p>}
                   {vals.expense > 0 && <p className="text-xs font-black text-red-600">−{fmt(vals.expense)}</p>}
                   <div className="mt-2 h-1 bg-slate-100 rounded-full overflow-hidden">
@@ -509,7 +520,7 @@ export default function EntradasSaidasPanel({ slug, tenant }: Props) {
 
       {/* ── Lista de lançamentos ── */}
       <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-50">
+        <div className="flex items-center justify-between px-4 sm:px-5 py-4 border-b border-slate-50">
           <p className="text-sm font-black text-slate-800">Lançamentos</p>
           <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-full">{filtered.length}</span>
         </div>
@@ -519,7 +530,7 @@ export default function EntradasSaidasPanel({ slug, tenant }: Props) {
             <div className="w-7 h-7 border-4 border-[#C9A227] border-t-transparent rounded-full animate-spin" />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-slate-300">
+          <div className="flex flex-col items-center justify-center py-16 text-slate-300 px-4 text-center">
             <Tag className="w-10 h-10 mb-3" />
             <p className="text-sm font-medium text-slate-400">Nenhum lançamento no período</p>
             <button onClick={() => openNew()} className="mt-4 flex items-center gap-2 px-4 py-2 rounded-xl bg-[#C9A227] text-white text-xs font-bold hover:bg-[#b8911f] transition-colors">
@@ -535,31 +546,39 @@ export default function EntradasSaidasPanel({ slug, tenant }: Props) {
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, x: -10 }}
-                  className="flex items-center gap-3 px-5 py-3.5 hover:bg-slate-50/70 transition-colors group"
+                  className="flex items-start sm:items-center gap-3 px-4 sm:px-5 py-3.5 hover:bg-slate-50/70 transition-colors group"
                 >
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${e.type === "INCOME" ? "bg-green-100" : "bg-red-100"}`}>
+                  {/* Ícone */}
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 sm:mt-0 ${e.type === "INCOME" ? "bg-green-100" : "bg-red-100"}`}>
                     {e.type === "INCOME"
                       ? <ArrowDownCircle className="w-4 h-4 text-green-600" />
                       : <ArrowUpCircle className="w-4 h-4 text-red-600" />
                     }
                   </div>
+
+                  {/* Descrição + categoria + data */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-semibold text-slate-800 truncate">{e.description}</p>
+                      <p className="text-sm font-semibold text-slate-800 truncate max-w-[160px] sm:max-w-none">{e.description}</p>
                       <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${catColor(e.category)}`}>{e.category}</span>
                     </div>
                     <p className="text-[10px] text-slate-400 mt-0.5">{fmtDate(e.date)}{e.notes ? ` · ${e.notes}` : ""}</p>
                   </div>
-                  <p className={`text-sm font-black tabular-nums shrink-0 ${e.type === "INCOME" ? "text-green-700" : "text-red-600"}`}>
-                    {e.type === "INCOME" ? "+" : "−"}{fmt(e.amount)}
-                  </p>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                    <button onClick={() => openEdit(e)} className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors">
-                      <Edit2 className="w-3 h-3" />
-                    </button>
-                    <button onClick={() => setDeleteEntry(e)} className="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 flex items-center justify-center text-red-500 transition-colors">
-                      <Trash2 className="w-3 h-3" />
-                    </button>
+
+                  {/* Valor + ações — empilha em mobile */}
+                  <div className="flex flex-col items-end gap-1.5 sm:flex-row sm:items-center sm:gap-2 shrink-0">
+                    <p className={`text-sm font-black tabular-nums ${e.type === "INCOME" ? "text-green-700" : "text-red-600"}`}>
+                      {e.type === "INCOME" ? "+" : "−"}{fmt(e.amount)}
+                    </p>
+                    {/* Botões: sempre visíveis em mobile, hover em desktop */}
+                    <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => openEdit(e)} className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors">
+                        <Edit2 className="w-3 h-3" />
+                      </button>
+                      <button onClick={() => setDeleteEntry(e)} className="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 flex items-center justify-center text-red-500 transition-colors">
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
                   </div>
                 </motion.div>
               ))}
