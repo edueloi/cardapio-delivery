@@ -17,7 +17,6 @@ import {
   X,
 } from "lucide-react";
 import type { InventoryItem, Supplier, SupplierType, Tenant } from "../../types";
-import { useAuth } from "../../hooks/useAuth";
 
 interface Props {
   tenant: Tenant;
@@ -99,10 +98,10 @@ interface ModalProps {
   onClose: () => void;
   onSaved: () => void;
   slug: string;
-  token: string;
 }
 
-function SupplierModal({ supplier, inventoryItems, onClose, onSaved, slug, token }: ModalProps) {
+function SupplierModal({ supplier, inventoryItems, onClose, onSaved, slug }: ModalProps) {
+  const token = localStorage.getItem("auth_token") ?? "";
   const isEdit = !!supplier;
   const [form, setForm] = useState(() => {
     if (supplier) {
@@ -493,7 +492,7 @@ function DeleteConfirm({ name, onConfirm, onCancel }: { name: string; onConfirm:
 // ─── Main panel ───────────────────────────────────────────────────────────────
 
 export default function SuppliersPanel({ tenant }: Props) {
-  const { token } = useAuth();
+  const token = localStorage.getItem("auth_token") ?? "";
   const slug = tenant.slug;
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
@@ -680,7 +679,6 @@ export default function SuppliersPanel({ tenant }: Props) {
           supplier={editTarget}
           inventoryItems={inventoryItems}
           slug={slug}
-          token={token ?? ""}
           onClose={() => { setModalOpen(false); setEditTarget(null); }}
           onSaved={() => { setModalOpen(false); setEditTarget(null); load(); }}
         />
