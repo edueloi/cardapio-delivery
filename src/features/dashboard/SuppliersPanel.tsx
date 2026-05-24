@@ -14,9 +14,10 @@ import {
   Star,
   Trash2,
   Truck,
-  X,
 } from "lucide-react";
 import type { InventoryItem, Supplier, SupplierType, Tenant } from "../../types";
+import { Modal, ModalFooter, Button, Input, Select } from "../../components";
+import { apiJson } from "../../lib/api";
 
 interface Props {
   tenant: Tenant;
@@ -114,7 +115,7 @@ function blankForm(): Omit<Supplier, "id" | "tenantId" | "createdAt" | "updatedA
 
 // ─── Modal ────────────────────────────────────────────────────────────────────
 
-interface ModalProps {
+interface SupplierModalProps {
   supplier: Supplier | null;
   inventoryItems: InventoryItem[];
   onClose: () => void;
@@ -122,8 +123,7 @@ interface ModalProps {
   slug: string;
 }
 
-function SupplierModal({ supplier, inventoryItems, onClose, onSaved, slug }: ModalProps) {
-  const token = localStorage.getItem("auth_token") ?? "";
+function SupplierModal({ supplier, inventoryItems, onClose, onSaved, slug }: SupplierModalProps) {
   const isEdit = !!supplier;
   const [form, setForm] = useState(() => {
     if (supplier) {
@@ -189,12 +189,7 @@ function SupplierModal({ supplier, inventoryItems, onClose, onSaved, slug }: Mod
       const url = isEdit
         ? `/api/tenants/${slug}/suppliers/${supplier!.id}`
         : `/api/tenants/${slug}/suppliers`;
-      const res = await fetch(url, {
-        method: isEdit ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify(form),
-      });
-      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error ?? "Erro ao salvar"); }
+      await apiJson(url, { method: isEdit ? "PUT" : "POST", body: JSON.stringify(form) });
       onSaved();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Erro desconhecido");
@@ -204,163 +199,179 @@ function SupplierModal({ supplier, inventoryItems, onClose, onSaved, slug }: Mod
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100">
-          <div>
-            <p className="text-xs font-black uppercase tracking-widest text-slate-400">{isEdit ? "Editar" : "Novo"} Fornecedor</p>
-            <h2 className="text-xl font-black text-slate-800">{isEdit ? supplier!.name : "Cadastrar fornecedor"}</h2>
+    <Modal
+      isOpen
+      onClose={onClose}
+      title={isEdit ? `Editar — ${supplier!.name}` : "Novo Fornecedor"}
+      size="lg"
+      mobileStyle="fullscreen"
+      footer={
+        <ModalFooter>
+          <Button variant="ghost" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button variant="primary" loading={saving} onClick={handleSubmit}>
+            {isEdit ? "Salvar alterações" : "Cadastrar"}
+          </Button>
+        </ModalFooter>
+      }
+    >
+      <form onSubmit={handleSubmit} className="space-y-4 py-1">
+        {error && (
+          <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-red-50 border border-red-100">
+            <div className="w-2 h-2 rounded-full bg-red-400 shrink-0" />
+            <p className="text-sm text-red-600 font-medium">{error}</p>
           </div>
-          <button onClick={onClose} className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors">
-            <X className="w-4 h-4 text-slate-500" />
-          </button>
+        )}
+
+        {/* Nome + Tipo */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Input
+            label="Nome *"
+            value={form.name}
+            onChange={(e) => set("name", e.target.value)}
+            placeholder="Distribuidora XYZ"
+          />
+          <Select
+            label="Tipo"
+            value={form.type}
+            onChange={(e) => set("type", e.target.value)}
+          >
+            {SUPPLIER_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </Select>
         </div>
 
-        {/* Body */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-          {error && <p className="text-sm text-red-500 bg-red-50 px-4 py-2 rounded-xl">{error}</p>}
+        {/* CPF/CNPJ + Telefone */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Input
+            label="CPF / CNPJ"
+            value={form.cpfCnpj ?? ""}
+            onChange={(e) => set("cpfCnpj", maskCpfCnpj(e.target.value))}
+            placeholder="000.000.000-00"
+            inputMode="numeric"
+          />
+          <Input
+            label="Telefone / WhatsApp"
+            value={form.phone ?? ""}
+            onChange={(e) => set("phone", maskPhone(e.target.value))}
+            placeholder="(11) 99999-9999"
+            inputMode="numeric"
+          />
+        </div>
 
-          {/* Nome + Tipo */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="sm:col-span-1">
-              <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-1.5">Nome *</label>
-              <input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="Distribuidora XYZ" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227]" />
-            </div>
-            <div>
-              <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-1.5">Tipo</label>
-              <div className="relative">
-                <select value={form.type} onChange={(e) => set("type", e.target.value)} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227] appearance-none bg-white">
-                  {SUPPLIER_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-              </div>
-            </div>
+        {/* E-mail */}
+        <Input
+          label="E-mail"
+          type="email"
+          value={form.email ?? ""}
+          onChange={(e) => set("email", e.target.value)}
+          placeholder="contato@fornecedor.com"
+        />
+
+        {/* Endereço */}
+        <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
+          <p className="text-xs font-black uppercase tracking-widest text-slate-400">Endereço</p>
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="CEP"
+              value={form.cep ?? ""}
+              onChange={(e) => set("cep", e.target.value)}
+              onBlur={handleCepBlur}
+              placeholder="00000-000"
+              inputMode="numeric"
+              iconRight={cepLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" /> : undefined}
+            />
+            <Input
+              label="Número"
+              value={form.number ?? ""}
+              onChange={(e) => set("number", e.target.value)}
+              placeholder="123"
+            />
           </div>
-
-          {/* CPF/CNPJ + Telefone */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-1.5">CPF / CNPJ</label>
-              <input value={form.cpfCnpj ?? ""} onChange={(e) => set("cpfCnpj", maskCpfCnpj(e.target.value))} placeholder="000.000.000-00 ou 00.000.000/0000-00" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227]" />
-            </div>
-            <div>
-              <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-1.5">Telefone / WhatsApp</label>
-              <input value={form.phone ?? ""} onChange={(e) => set("phone", maskPhone(e.target.value))} placeholder="(11) 99999-9999" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227]" />
-            </div>
+          <Input
+            label="Logradouro"
+            value={form.street ?? ""}
+            onChange={(e) => set("street", e.target.value)}
+            placeholder="Rua Exemplo"
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Complemento"
+              value={form.complement ?? ""}
+              onChange={(e) => set("complement", e.target.value)}
+              placeholder="Sala 2"
+            />
+            <Input
+              label="Bairro"
+              value={form.neighborhood ?? ""}
+              onChange={(e) => set("neighborhood", e.target.value)}
+              placeholder="Centro"
+            />
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Cidade"
+              value={form.city ?? ""}
+              onChange={(e) => set("city", e.target.value)}
+              placeholder="São Paulo"
+            />
+            <Input
+              label="Estado (UF)"
+              value={form.state ?? ""}
+              onChange={(e) => set("state", e.target.value.toUpperCase())}
+              placeholder="SP"
+              maxLength={2}
+            />
+          </div>
+        </div>
 
-          {/* E-mail */}
+        {/* Insumos vinculados */}
+        {inventoryItems.length > 0 && (
           <div>
-            <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-1.5">E-mail</label>
-            <input type="email" value={form.email ?? ""} onChange={(e) => set("email", e.target.value)} placeholder="contato@fornecedor.com" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227]" />
-          </div>
-
-          {/* Endereço */}
-          <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
-            <p className="text-xs font-black uppercase tracking-widest text-slate-400">Endereço</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <div className="col-span-1">
-                <label className="block text-xs text-slate-500 mb-1">CEP</label>
-                <div className="relative">
+            <p className="ds-label mb-2">Insumos fornecidos</p>
+            <div className="max-h-36 overflow-y-auto space-y-1 border border-slate-200 rounded-xl p-2 bg-white">
+              {inventoryItems.map((item) => (
+                <label key={item.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer">
                   <input
-                    value={form.cep ?? ""}
-                    onChange={(e) => set("cep", e.target.value)}
-                    onBlur={handleCepBlur}
-                    placeholder="00000-000"
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227] bg-white"
+                    type="checkbox"
+                    checked={form.inventoryItemIds.includes(item.id)}
+                    onChange={() => toggleItem(item.id)}
+                    className="accent-[#C9A227] w-4 h-4"
                   />
-                  {cepLoading && <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 animate-spin text-slate-400" />}
-                </div>
-              </div>
-              <div className="col-span-1 sm:col-span-2">
-                <label className="block text-xs text-slate-500 mb-1">Logradouro</label>
-                <input value={form.street ?? ""} onChange={(e) => set("street", e.target.value)} placeholder="Rua Exemplo" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227] bg-white" />
-              </div>
+                  <span className="text-sm text-slate-700">{item.name}</span>
+                  {item.unit && <span className="text-xs text-slate-400 ml-auto">{item.unit}</span>}
+                </label>
+              ))}
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">Número</label>
-                <input value={form.number ?? ""} onChange={(e) => set("number", e.target.value)} placeholder="123" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227] bg-white" />
-              </div>
-              <div className="col-span-1 sm:col-span-1">
-                <label className="block text-xs text-slate-500 mb-1">Complemento</label>
-                <input value={form.complement ?? ""} onChange={(e) => set("complement", e.target.value)} placeholder="Sala 2" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227] bg-white" />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">Bairro</label>
-                <input value={form.neighborhood ?? ""} onChange={(e) => set("neighborhood", e.target.value)} placeholder="Centro" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227] bg-white" />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">Cidade</label>
-                <input value={form.city ?? ""} onChange={(e) => set("city", e.target.value)} placeholder="São Paulo" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227] bg-white" />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">Estado (UF)</label>
-                <input value={form.state ?? ""} onChange={(e) => set("state", e.target.value)} placeholder="SP" maxLength={2} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227] bg-white uppercase" />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">País</label>
-                <input value={form.country ?? "Brasil"} onChange={(e) => set("country", e.target.value)} placeholder="Brasil" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227] bg-white" />
-              </div>
-            </div>
+            {form.inventoryItemIds.length > 0 && (
+              <p className="text-xs text-slate-400 mt-1">{form.inventoryItemIds.length} insumo(s) vinculado(s)</p>
+            )}
           </div>
+        )}
 
-          {/* Itens de estoque vinculados */}
-          {inventoryItems.length > 0 && (
-            <div>
-              <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Insumos fornecidos</label>
-              <div className="max-h-40 overflow-y-auto space-y-1 border border-slate-200 rounded-xl p-2">
-                {inventoryItems.map((item) => (
-                  <label key={item.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={form.inventoryItemIds.includes(item.id)}
-                      onChange={() => toggleItem(item.id)}
-                      className="accent-[#C9A227] w-4 h-4"
-                    />
-                    <span className="text-sm text-slate-700">{item.name}</span>
-                    {item.unit && <span className="text-xs text-slate-400 ml-auto">{item.unit}</span>}
-                  </label>
-                ))}
-              </div>
-              {form.inventoryItemIds.length > 0 && (
-                <p className="text-xs text-slate-400 mt-1">{form.inventoryItemIds.length} insumo(s) vinculado(s)</p>
-              )}
-            </div>
-          )}
-
-          {/* Observações */}
-          <div>
-            <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-1.5">Observações</label>
-            <textarea value={form.notes ?? ""} onChange={(e) => set("notes", e.target.value)} rows={3} placeholder="Prazo de entrega, condições de pagamento..." className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227]" />
-          </div>
-
-          {/* Favorito + Ativo */}
-          <div className="flex items-center gap-6">
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input type="checkbox" checked={form.isFavorite} onChange={(e) => set("isFavorite", e.target.checked)} className="accent-[#C9A227] w-4 h-4" />
-              <span className="text-sm text-slate-600 font-medium">Favorito</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input type="checkbox" checked={form.isActive} onChange={(e) => set("isActive", e.target.checked)} className="accent-[#C9A227] w-4 h-4" />
-              <span className="text-sm text-slate-600 font-medium">Ativo</span>
-            </label>
-          </div>
-        </form>
-
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100">
-          <button type="button" onClick={onClose} className="px-5 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-colors">Cancelar</button>
-          <button onClick={handleSubmit} disabled={saving} className="px-6 py-2.5 rounded-xl text-sm font-black bg-[#C9A227] hover:bg-[#b8911f] text-white shadow-sm transition-colors disabled:opacity-50 flex items-center gap-2">
-            {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-            {isEdit ? "Salvar alterações" : "Cadastrar fornecedor"}
-          </button>
+        {/* Observações */}
+        <div>
+          <p className="ds-label mb-1.5">Observações</p>
+          <textarea
+            value={form.notes ?? ""}
+            onChange={(e) => set("notes", e.target.value)}
+            rows={3}
+            placeholder="Prazo de entrega, condições de pagamento..."
+            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227] bg-white"
+          />
         </div>
-      </div>
-    </div>
+
+        {/* Favorito + Ativo */}
+        <div className="flex items-center gap-6 pt-1">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" checked={form.isFavorite} onChange={(e) => set("isFavorite", e.target.checked)} className="accent-[#C9A227] w-4 h-4" />
+            <span className="text-sm text-slate-600 font-medium">Favorito</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" checked={form.isActive} onChange={(e) => set("isActive", e.target.checked)} className="accent-[#C9A227] w-4 h-4" />
+            <span className="text-sm text-slate-600 font-medium">Ativo</span>
+          </label>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
@@ -705,6 +716,7 @@ export default function SuppliersPanel({ tenant }: Props) {
           onSaved={() => { setModalOpen(false); setEditTarget(null); load(); }}
         />
       )}
+
 
       {/* Delete confirm */}
       {deleteTarget && (
