@@ -846,8 +846,12 @@ app.patch("/api/owner/tenants/:tenantId", requireAuth, async (req, res) => {
 
     // Invalida cache do wizard se config fiscal mudou
     if (fiscalConfig !== undefined) {
-      const { invalidateFiscalCache } = await import("./src/lib/fiscal.js");
-      invalidateFiscalCache(tenant.id);
+      try {
+        const { invalidateFiscalCache } = await import("./src/lib/fiscal.js");
+        invalidateFiscalCache(tenant.id);
+      } catch {
+        // nfewizard-io não instalado — ignora
+      }
     }
 
     res.json(updated);
