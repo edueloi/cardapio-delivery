@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { DashboardShell } from "../../components";
-import { apiFetch, apiJson } from "../../lib/api";
+import { apiFetch, apiJson, AuthError } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import socket from "../../lib/socket";
 import type { Order, Tenant } from "../../types";
@@ -58,16 +58,20 @@ export default function DashboardPage() {
       setTenant(data);
       socket.emit("join-tenant", data.id);
       await fetchOrders(data.id);
-      // Fetch membership/permissions for this tenant
       try {
         const mem = await apiJson<MyMembership>(`/api/owner/tenants/${data.id}/my-membership`);
         setMembership(mem);
       } catch {
         setMembership(null);
       }
-    } catch {
-      setTenant(null);
-      setOrders([]);
+    } catch (err) {
+      if (err instanceof AuthError) {
+        // Token expirado — redireciona para login
+        navigate(`/login?next=/dashboard/${slug}`, { replace: true });
+        return;
+      }
+      // Erro transitório (servidor reiniciando) — tenta novamente em 3s
+      setTimeout(() => void fetchTenant(), 3000);
     } finally {
       setLoading(false);
     }
