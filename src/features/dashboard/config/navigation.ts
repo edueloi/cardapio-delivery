@@ -15,6 +15,7 @@ import {
   Receipt,
   Settings,
   Star,
+  Truck,
   Users,
   Utensils,
   Wallet,
@@ -40,9 +41,10 @@ export const DASHBOARD_NAVIGATION: DashboardNavigationGroup[] = [
     id: "catalogo",
     label: "Catálogo & Estoque",
     items: [
-      { id: "menu",      label: "Cardápio",           tab: "menu",         icon: Utensils },
-      { id: "inventory", label: "Estoque",            tab: "inventory",    icon: Package },
-      { id: "production", label: "Produção",          tab: "production",   icon: Factory },
+      { id: "menu",       label: "Cardápio",           tab: "menu",         icon: Utensils },
+      { id: "inventory",  label: "Estoque",            tab: "inventory",    icon: Package },
+      { id: "production", label: "Produção",           tab: "production",   icon: Factory },
+      { id: "suppliers",  label: "Fornecedores",       tab: "suppliers",    icon: Truck },
     ],
   },
   {

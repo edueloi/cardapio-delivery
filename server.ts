@@ -3391,6 +3391,83 @@ app.patch("/api/owner/products/:productId/fiscal", requireAuth, async (req, res)
   }
 });
 
+// ─── Suppliers ────────────────────────────────────────────────────────────────
+
+app.get("/api/tenants/:slug/suppliers", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  if (!tenant) return;
+  try {
+    const suppliers = await (prisma as any).supplier.findMany({
+      where: { tenantId: tenant.id },
+      include: { inventoryItems: { include: { inventoryItem: true } } },
+      orderBy: [{ isFavorite: "desc" }, { name: "asc" }],
+    });
+    res.json(suppliers);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+app.post("/api/tenants/:slug/suppliers", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  if (!tenant) return;
+  try {
+    const { inventoryItemIds = [], ...data } = req.body;
+    if (!data.name?.trim()) return res.status(400).json({ error: "Nome é obrigatório." });
+    const supplier = await (prisma as any).supplier.create({
+      data: {
+        ...data,
+        tenantId: tenant.id,
+        inventoryItems: inventoryItemIds.length
+          ? { create: inventoryItemIds.map((id: string) => ({ inventoryItemId: id })) }
+          : undefined,
+      },
+      include: { inventoryItems: { include: { inventoryItem: true } } },
+    });
+    res.json(supplier);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+app.put("/api/tenants/:slug/suppliers/:id", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  if (!tenant) return;
+  try {
+    const existing = await (prisma as any).supplier.findFirst({ where: { id: req.params.id, tenantId: tenant.id } });
+    if (!existing) return res.status(404).json({ error: "Fornecedor não encontrado." });
+    const { inventoryItemIds = [], id: _id, tenantId: _tid, createdAt: _c, updatedAt: _u, inventoryItems: _inv, ...data } = req.body;
+    // Replace inventory item links
+    await (prisma as any).supplierInventoryItem.deleteMany({ where: { supplierId: req.params.id } });
+    const supplier = await (prisma as any).supplier.update({
+      where: { id: req.params.id },
+      data: {
+        ...data,
+        inventoryItems: inventoryItemIds.length
+          ? { create: inventoryItemIds.map((iid: string) => ({ inventoryItemId: iid })) }
+          : undefined,
+      },
+      include: { inventoryItems: { include: { inventoryItem: true } } },
+    });
+    res.json(supplier);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+app.delete("/api/tenants/:slug/suppliers/:id", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  if (!tenant) return;
+  try {
+    const existing = await (prisma as any).supplier.findFirst({ where: { id: req.params.id, tenantId: tenant.id } });
+    if (!existing) return res.status(404).json({ error: "Fornecedor não encontrado." });
+    await (prisma as any).supplier.delete({ where: { id: req.params.id } });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
 await restoreAllSessions().catch((error) => {
   console.warn("[Baileys] Falha ao restaurar sessões:", error);
 });

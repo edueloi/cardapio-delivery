@@ -544,3 +544,42 @@ export interface Customer {
   createdAt: string;
   updatedAt: string;
 }
+
+export type SupplierType =
+  | "ALIMENTICIO"
+  | "BEBIDAS"
+  | "EMBALAGENS"
+  | "LIMPEZA"
+  | "EQUIPAMENTOS"
+  | "OUTROS";
+
+export interface Supplier {
+  id: string;
+  tenantId: string;
+  name: string;
+  cpfCnpj?: string | null;
+  type: SupplierType;
+  phone?: string | null;
+  email?: string | null;
+  cep?: string | null;
+  street?: string | null;
+  number?: string | null;
+  complement?: string | null;
+  neighborhood?: string | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  notes?: string | null;
+  isFavorite: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  inventoryItems?: SupplierInventoryItemLink[];
+}
+
+export interface SupplierInventoryItemLink {
+  id: string;
+  supplierId: string;
+  inventoryItemId: string;
+  inventoryItem?: InventoryItem;
+}

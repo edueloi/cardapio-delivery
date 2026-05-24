@@ -43,6 +43,7 @@ model Tenant {
   wppBotConfig WppBotConfig?
   customers   Customer[]
   promotions  Promotion[]
+  suppliers   Supplier[]
 
   @@map("tenants")
 }
@@ -185,8 +186,49 @@ model InventoryItem {
   movements StockMovement[]
   products  Product[]
   variants  ProductVariant[]
+  supplierItems SupplierInventoryItem[]
 
   @@map("inventory_items")
+}
+
+model Supplier {
+  id           String   @id @default(cuid())
+  tenantId     String   @map("tenant_id")
+  name         String
+  cpfCnpj      String?  @map("cpf_cnpj")
+  type         String   @default("OUTROS") @map("type") // ALIMENTICIO, BEBIDAS, EMBALAGENS, LIMPEZA, EQUIPAMENTOS, OUTROS
+  phone        String?
+  email        String?
+  cep          String?
+  street       String?
+  number       String?
+  complement   String?
+  neighborhood String?
+  city         String?
+  state        String?
+  country      String?  @default("Brasil")
+  notes        String?  @db.Text
+  isFavorite   Boolean  @default(false) @map("is_favorite")
+  isActive     Boolean  @default(true)  @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt      @map("updated_at")
+
+  tenant        Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  inventoryItems SupplierInventoryItem[]
+
+  @@map("suppliers")
+}
+
+model SupplierInventoryItem {
+  id             String @id @default(cuid())
+  supplierId     String @map("supplier_id")
+  inventoryItemId String @map("inventory_item_id")
+
+  supplier      Supplier      @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+
+  @@unique([supplierId, inventoryItemId])
+  @@map("supplier_inventory_items")
 }
 
 model StockMovement {

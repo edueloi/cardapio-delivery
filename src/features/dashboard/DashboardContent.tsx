@@ -32,6 +32,7 @@ import DownloadsPanel from "./DownloadsPanel";
 import PromotionsPanel from "./PromotionsPanel";
 import BundlesPanel from "./BundlesPanel";
 import ProductionPanel from "./ProductionPanel";
+import SuppliersPanel from "./SuppliersPanel";
 import { WhatsAppManagementPanel } from "./WhatsAppPanel";
 import OverviewPanel from "./OverviewPanel";
 import EntradasSaidasPanel from "./EntradasSaidasPanel";
@@ -229,6 +230,9 @@ export default function DashboardContent({
 
       {activeTab === "production" && (
         <ProductionPanel tenant={tenant} />
+      )}
+      {activeTab === "suppliers" && (
+        <SuppliersPanel tenant={tenant} />
       )}
 
       {activeTab === "tables" && (
