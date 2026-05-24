@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { Button, Input } from "../../components";
 import LoadingScreen from "../../components/LoadingScreen";
@@ -159,6 +159,15 @@ export default function LoginPage() {
               >
                 Entrar no Painel
               </Button>
+            </div>
+
+            <div className="text-center pt-1">
+              <Link
+                to="/esqueci-senha"
+                className="text-xs text-white/30 hover:text-[#C9A227] transition-colors"
+              >
+                Esqueci minha senha
+              </Link>
             </div>
           </form>
         </div>

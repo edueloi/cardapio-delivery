@@ -16,6 +16,8 @@ import PublicDashboard from "./features/public-dashboard";
 import PDVPage from "./pages/PDVPage";
 import SuperAdminPage from "./features/superadmin/SuperAdminPage";
 import InviteRegisterPage from "./features/auth/InviteRegisterPage";
+import ForgotPasswordPage from "./features/auth/ForgotPasswordPage";
+import ResetPasswordPage from "./features/auth/ResetPasswordPage";
 
 function AnimatedRoutes() {
   const location = useLocation();
@@ -31,6 +33,8 @@ function AnimatedRoutes() {
           <Route path="/login" element={<Login />} />
           <Route path="/cadastro" element={<Register />} />
           <Route path="/cadastro/:token" element={<InviteRegisterPage />} />
+          <Route path="/esqueci-senha" element={<ForgotPasswordPage />} />
+          <Route path="/redefinir-senha/:token" element={<ResetPasswordPage />} />
           <Route
             path="/superadmin"
             element={

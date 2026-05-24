@@ -57,10 +57,11 @@ model Account {
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
-  memberships   TenantMembership[]
-  sessions      AuthSession[]
-  inviteTokens  InviteToken[]
-  subscriptions Subscription[]
+  memberships        TenantMembership[]
+  sessions           AuthSession[]
+  inviteTokens       InviteToken[]
+  subscriptions      Subscription[]
+  passwordResetTokens PasswordResetToken[]
 
   @@map("accounts")
 }
@@ -298,6 +299,19 @@ model Customer {
 
   @@unique([tenantId, phone])
   @@map("customers")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  accountId String   @map("account_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
 }
 
 model User {

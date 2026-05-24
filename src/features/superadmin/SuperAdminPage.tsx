@@ -134,6 +134,7 @@ export default function SuperAdminPage() {
   // Convites
   const [showNewInvite, setShowNewInvite] = useState(false);
   const [inviteNote, setInviteNote] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
   const [inviteHours, setInviteHours] = useState("48");
   const [creatingInvite, setCreatingInvite] = useState(false);
   const [newInviteUrl, setNewInviteUrl] = useState<string | null>(null);
@@ -190,10 +191,11 @@ export default function SuperAdminPage() {
     setCreatingInvite(true);
     try {
       const invite = await apiJson<Invite>("/api/superadmin/invites", {
-        method: "POST", body: JSON.stringify({ note: inviteNote.trim() || null, expiresInHours: Number(inviteHours) || 48 }),
+        method: "POST", body: JSON.stringify({ note: inviteNote.trim() || null, expiresInHours: Number(inviteHours) || 48, sendTo: inviteEmail.trim() || null }),
       });
       setNewInviteUrl(inviteUrl(invite.token));
       setInvites(prev => [{ ...invite, createdBy: { name: account!.name, email: (account as any).email } }, ...prev]);
+      setInviteEmail("");
       setInviteNote(""); setInviteHours("48");
     } catch {}
     setCreatingInvite(false);
@@ -726,6 +728,7 @@ export default function SuperAdminPage() {
         ) : (
           <>
             <div className="space-y-4">
+              <Input label="Enviar por e-mail (opcional)" type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder="cliente@email.com" hint="Se preenchido, o link será enviado automaticamente ao cadastrar" />
               <Input label="Observação (opcional)" value={inviteNote} onChange={e => setInviteNote(e.target.value)} placeholder="Ex: Para João da Pizzaria Central" hint="Ajuda a identificar para quem foi gerado" />
               <div>
                 <label className="ds-label mb-2 block">Validade do link</label>

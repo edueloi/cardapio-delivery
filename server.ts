@@ -25,6 +25,7 @@ import {
 } from "./src/backend/auth";
 import { parseProductionRecipeRecord } from "./src/backend/production";
 import { registerProductionRoutes } from "./src/backend/production-routes";
+import { sendInviteEmail, sendPasswordResetEmail } from "./src/backend/mailer";
 import {
   connectSession,
   disconnectSession,
@@ -492,6 +493,66 @@ app.post("/api/auth/register-invite", async (req, res) => {
   }
 });
 
+// ── REDEFINIÇÃO DE SENHA ──────────────────────────────────────────────────────
+
+// Solicitar redefinição — gera token e envia email
+app.post("/api/auth/forgot-password", async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: "E-mail obrigatório." });
+  try {
+    const account = await prisma.account.findUnique({ where: { email: email.trim().toLowerCase() } });
+    // Responde sempre 200 para não revelar se email existe
+    if (!account) return res.json({ ok: true });
+
+    const token = [...Array(48)].map(() => Math.random().toString(36)[2]).join("");
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+    await prisma.passwordResetToken.create({ data: { accountId: account.id, token, expiresAt } });
+    await sendPasswordResetEmail(account.email, token, account.name).catch((err) => {
+      console.error("[mailer] forgot-password:", err);
+    });
+    res.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao processar solicitação." });
+  }
+});
+
+// Validar token de reset
+app.get("/api/auth/reset-password/:token", async (req, res) => {
+  try {
+    const record = await prisma.passwordResetToken.findUnique({ where: { token: req.params.token } });
+    if (!record) return res.status(404).json({ error: "Token inválido." });
+    if (record.usedAt) return res.status(410).json({ error: "Este link já foi utilizado." });
+    if (new Date() > new Date(record.expiresAt)) return res.status(410).json({ error: "Este link expirou." });
+    res.json({ valid: true });
+  } catch (error) {
+    res.status(500).json({ error: "Falha ao validar token." });
+  }
+});
+
+// Redefinir senha
+app.post("/api/auth/reset-password", async (req, res) => {
+  const { token, password } = req.body;
+  if (!token || !password) return res.status(400).json({ error: "Dados incompletos." });
+  if (String(password).length < 6) return res.status(400).json({ error: "A senha deve ter ao menos 6 caracteres." });
+  try {
+    const record = await prisma.passwordResetToken.findUnique({ where: { token } });
+    if (!record) return res.status(404).json({ error: "Token inválido." });
+    if (record.usedAt) return res.status(410).json({ error: "Este link já foi utilizado." });
+    if (new Date() > new Date(record.expiresAt)) return res.status(410).json({ error: "Este link expirou." });
+
+    await prisma.account.update({
+      where: { id: record.accountId },
+      data: { passwordHash: hashPassword(String(password)) },
+    });
+    await prisma.passwordResetToken.update({ where: { token }, data: { usedAt: new Date() } });
+    res.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao redefinir senha." });
+  }
+});
+
 // ── SUPER ADMIN ──────────────────────────────────────────────────────────────
 
 function requireSuperAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
@@ -542,16 +603,21 @@ app.get("/api/superadmin/invites", requireAuth, requireSuperAdmin, async (req, r
   }
 });
 
-// Gera novo convite
+// Gera novo convite (opcionalmente envia por email)
 app.post("/api/superadmin/invites", requireAuth, requireSuperAdmin, async (req, res) => {
   const me = currentAccount(req)!;
-  const { note, expiresInHours = 48 } = req.body;
+  const { note, expiresInHours = 48, sendTo } = req.body;
   try {
     const token = [...Array(32)].map(() => Math.random().toString(36)[2]).join('');
     const expiresAt = new Date(Date.now() + Number(expiresInHours) * 60 * 60 * 1000);
     const invite = await prisma.inviteToken.create({
       data: { token, createdById: me.id, expiresAt, note: note || null },
     });
+    if (sendTo) {
+      sendInviteEmail(String(sendTo).trim(), token, note).catch((err) => {
+        console.error("[mailer] invite:", err);
+      });
+    }
     res.json(invite);
   } catch (error) {
     res.status(500).json({ error: "Falha ao gerar convite." });
