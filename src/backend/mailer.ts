@@ -6,7 +6,7 @@ const SMTP_SECURE = process.env.SMTP_SECURE !== "false"; // true por padrão (po
 const SMTP_USER = process.env.SMTP_USER ?? "contato@boxsys.com.br";
 const SMTP_PASS = process.env.SMTP_PASS ?? "";
 const MAIL_FROM = process.env.MAIL_FROM ?? '"BoxSys" <contato@boxsys.com.br>';
-const APP_URL = process.env.APP_URL ?? "https://boxsys.com.br";
+const APP_URL = process.env.APP_URL ?? "https://menu.develoi.com.br";
 
 const transporter = nodemailer.createTransport({
   host: SMTP_HOST,
