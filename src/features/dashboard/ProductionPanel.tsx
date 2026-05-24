@@ -797,7 +797,7 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
       <ConfirmModal
         isOpen={!!recipeToDelete}
         title="Excluir receita"
-        description={`Excluir a receita "${recipeToDelete?.name}"? O histórico de produções anteriores será preservado.`}
+        message={`Deseja excluir a receita "${recipeToDelete?.name}"? O histórico de produções anteriores será preservado.`}
         confirmLabel="Excluir"
         variant="danger"
         loading={deleting}
@@ -815,7 +815,7 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
             setDeleting(false);
           }
         }}
-        onCancel={() => setRecipeToDelete(null)}
+        onClose={() => setRecipeToDelete(null)}
       />
     </div>
   );
