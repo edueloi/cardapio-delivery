@@ -545,10 +545,11 @@ export default function SuppliersPanel({ tenant }: Props) {
         apiJson<Supplier[]>(`/api/tenants/${slug}/suppliers`),
         apiJson<InventoryItem[]>(`/api/tenants/${slug}/inventory`),
       ]);
-      setSuppliers(sup);
-      setInventoryItems(inv);
+      setSuppliers(Array.isArray(sup) ? sup : []);
+      setInventoryItems(Array.isArray(inv) ? inv : []);
     } catch {
-      // silencia erro de auth — AuthError redireciona automaticamente
+      setSuppliers([]);
+      setInventoryItems([]);
     } finally {
       setLoading(false);
     }
