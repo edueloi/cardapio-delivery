@@ -128,7 +128,7 @@ export default function DashboardShell({
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 py-3 px-2.5 space-y-4 overflow-y-auto">
+        <nav className="flex-1 py-3 px-2.5 space-y-4 overflow-y-auto custom-scrollbar">
           {navigationGroups.map((group) => (
             <div key={group.id}>
               <p className="px-3 mb-1 text-[9px] font-black uppercase tracking-[0.24em] text-white/20">
@@ -180,6 +180,15 @@ export default function DashboardShell({
               <ShieldCheck className="w-4 h-4 shrink-0" />
               <span className="text-[12px] font-semibold tracking-wide">Super Admin</span>
             </Link>
+          )}
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              className="flex items-center gap-3 w-full px-3 py-2.5 text-slate-500 hover:text-red-400 rounded-xl hover:bg-white/[0.06] transition-all group"
+            >
+              <LogOut className="w-4 h-4 shrink-0" />
+              <span className="text-[12px] font-semibold tracking-wide">Sair</span>
+            </button>
           )}
         </div>
       </aside>
