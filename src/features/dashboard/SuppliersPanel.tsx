@@ -45,6 +45,28 @@ function fmtPhone(phone: string) {
   return phone;
 }
 
+function maskPhone(value: string) {
+  const d = value.replace(/\D/g, "").slice(0, 11);
+  if (d.length <= 2) return d.length ? `(${d}` : "";
+  if (d.length <= 6) return `(${d.slice(0,2)}) ${d.slice(2)}`;
+  if (d.length <= 10) return `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`;
+  return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`;
+}
+
+function maskCpfCnpj(value: string) {
+  const d = value.replace(/\D/g, "").slice(0, 14);
+  if (d.length <= 11) {
+    // CPF: 000.000.000-00
+    if (d.length <= 3) return d;
+    if (d.length <= 6) return `${d.slice(0,3)}.${d.slice(3)}`;
+    if (d.length <= 9) return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6)}`;
+    return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6,9)}-${d.slice(9)}`;
+  }
+  // CNPJ: 00.000.000/0000-00
+  if (d.length <= 12) return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8)}`;
+  return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12)}`;
+}
+
 function whatsappUrl(phone: string) {
   const d = phone.replace(/\D/g, "");
   const num = d.startsWith("55") ? d : `55${d}`;
@@ -220,11 +242,11 @@ function SupplierModal({ supplier, inventoryItems, onClose, onSaved, slug }: Mod
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-1.5">CPF / CNPJ</label>
-              <input value={form.cpfCnpj ?? ""} onChange={(e) => set("cpfCnpj", e.target.value)} placeholder="00.000.000/0000-00" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227]" />
+              <input value={form.cpfCnpj ?? ""} onChange={(e) => set("cpfCnpj", maskCpfCnpj(e.target.value))} placeholder="000.000.000-00 ou 00.000.000/0000-00" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227]" />
             </div>
             <div>
               <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-1.5">Telefone / WhatsApp</label>
-              <input value={form.phone ?? ""} onChange={(e) => set("phone", e.target.value)} placeholder="(11) 99999-9999" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227]" />
+              <input value={form.phone ?? ""} onChange={(e) => set("phone", maskPhone(e.target.value))} placeholder="(11) 99999-9999" className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227]" />
             </div>
           </div>
 
