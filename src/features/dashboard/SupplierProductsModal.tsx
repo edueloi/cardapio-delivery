@@ -349,15 +349,17 @@ export const PRESET_CATALOG: PresetCategory[] = [
 // ─── Component ────────────────────────────────────────────────────────────────
 
 interface Props {
-  supplierId: string;
+  supplierId: string | null;
   supplierName: string;
   slug: string;
   existingItems: SupplierCatalogItem[];
   onClose: () => void;
   onSaved: (items: SupplierCatalogItem[]) => void;
+  // When supplierId is null (new supplier), called instead of API save
+  onPendingSelected?: (names: { name: string; unit: string }[]) => void;
 }
 
-export default function SupplierProductsModal({ supplierId, supplierName, slug, existingItems, onClose, onSaved }: Props) {
+export default function SupplierProductsModal({ supplierId, supplierName, slug, existingItems, onClose, onSaved, onPendingSelected }: Props) {
   const [search, setSearch] = useState("");
   const [activeCat, setActiveCat] = useState<string>("todas");
   const [selected, setSelected] = useState<Set<string>>(() => new Set(existingItems.map(i => i.name)));
@@ -400,17 +402,23 @@ export default function SupplierProductsModal({ supplierId, supplierName, slug, 
   }
 
   async function handleSave() {
+    // New supplier (no ID yet) — just pass selected names back to parent
+    if (!supplierId) {
+      const items = [...selected].map(name => {
+        const preset = allPresetItems.find(p => p.name === name);
+        return { name, unit: preset?.unit ?? "" };
+      });
+      onPendingSelected?.(items);
+      onClose();
+      return;
+    }
+
     setSaving(true);
     try {
-      // Delete all existing catalog items for this supplier, then recreate selected
-      // We do it by fetching current and diffing
-
       const currentNames = new Set(existingItems.map(i => i.name));
       const selectedNames = selected;
 
-      // Items to delete: in existing but not in selected
       const toDelete = existingItems.filter(i => !selectedNames.has(i.name));
-      // Items to add: in selected but not in existing
       const toAdd = [...selectedNames].filter(name => !currentNames.has(name));
 
       await Promise.all([
@@ -427,7 +435,6 @@ export default function SupplierProductsModal({ supplierId, supplierName, slug, 
         }),
       ]);
 
-      // Reload catalog items
       const updated = await apiJson<SupplierCatalogItem[]>(`/api/tenants/${slug}/suppliers/${supplierId}/catalog`);
       onSaved(Array.isArray(updated) ? updated : []);
     } finally {

@@ -162,6 +162,8 @@ function SupplierModal({ supplier, inventoryItems, onClose, onSaved, slug }: Sup
   const [showProductsModal, setShowProductsModal] = useState(false);
   const [catalogItems, setCatalogItems] = useState<SupplierCatalogItem[]>([]);
   const [catalogLoaded, setCatalogLoaded] = useState(false);
+  // Products selected before supplier is saved (new supplier flow)
+  const [pendingProducts, setPendingProducts] = useState<{ name: string; unit: string }[]>([]);
 
   // Load catalog items when editing an existing supplier
   useEffect(() => {
@@ -199,7 +201,20 @@ function SupplierModal({ supplier, inventoryItems, onClose, onSaved, slug }: Sup
       const url = isEdit
         ? `/api/tenants/${slug}/suppliers/${supplier!.id}`
         : `/api/tenants/${slug}/suppliers`;
-      await apiJson(url, { method: isEdit ? "PUT" : "POST", body: JSON.stringify(form) });
+      const saved = await apiJson<{ id: string }>(url, { method: isEdit ? "PUT" : "POST", body: JSON.stringify(form) });
+
+      // After creating a new supplier, save any pending products
+      if (!isEdit && pendingProducts.length > 0 && saved?.id) {
+        await Promise.all(
+          pendingProducts.map(p =>
+            apiJson(`/api/tenants/${slug}/suppliers/${saved.id}/catalog`, {
+              method: "POST",
+              body: JSON.stringify({ name: p.name, unit: p.unit || null, price: null, notes: null }),
+            }).catch(() => null)
+          )
+        );
+      }
+
       onSaved();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Erro desconhecido");
@@ -268,27 +283,22 @@ function SupplierModal({ supplier, inventoryItems, onClose, onSaved, slug }: Sup
           <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200">
             <div>
               <p className="text-xs font-black uppercase tracking-widest text-slate-500">Produtos fornecidos</p>
-              {catalogItems.length > 0 && (
-                <p className="text-[11px] text-slate-400 mt-0.5">{catalogItems.length} produto{catalogItems.length !== 1 ? "s" : ""} cadastrado{catalogItems.length !== 1 ? "s" : ""}</p>
+              {(catalogItems.length > 0 || pendingProducts.length > 0) && (
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  {isEdit ? catalogItems.length : pendingProducts.length} produto{(isEdit ? catalogItems.length : pendingProducts.length) !== 1 ? "s" : ""} selecionado{(isEdit ? catalogItems.length : pendingProducts.length) !== 1 ? "s" : ""}
+                </p>
               )}
             </div>
             <button
               type="button"
-              onClick={() => {
-                if (!supplier && !isEdit) {
-                  // Precisa salvar o fornecedor primeiro
-                  setError("Salve o fornecedor primeiro para adicionar produtos.");
-                  return;
-                }
-                setShowProductsModal(true);
-              }}
+              onClick={() => setShowProductsModal(true)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#C9A227] hover:bg-[#b8911f] text-white text-xs font-black transition-colors"
             >
               <Plus className="w-3.5 h-3.5" />
-              {catalogItems.length > 0 ? "Gerenciar produtos" : "Adicionar produtos"}
+              {(isEdit ? catalogItems.length : pendingProducts.length) > 0 ? "Gerenciar produtos" : "Adicionar produtos"}
             </button>
           </div>
-          {catalogItems.length > 0 ? (
+          {isEdit && catalogItems.length > 0 ? (
             <div className="max-h-40 overflow-y-auto divide-y divide-slate-50">
               {catalogItems.map(item => (
                 <div key={item.id} className="flex items-center gap-3 px-4 py-2.5">
@@ -303,24 +313,33 @@ function SupplierModal({ supplier, inventoryItems, onClose, onSaved, slug }: Sup
                 </div>
               ))}
             </div>
+          ) : !isEdit && pendingProducts.length > 0 ? (
+            <div className="max-h-40 overflow-y-auto divide-y divide-slate-50">
+              {pendingProducts.map((item, i) => (
+                <div key={i} className="flex items-center gap-3 px-4 py-2.5">
+                  <Package className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                  <span className="text-sm text-slate-700 flex-1 truncate">{item.name}</span>
+                  {item.unit && <span className="text-xs text-slate-400 shrink-0">{item.unit}</span>}
+                </div>
+              ))}
+            </div>
           ) : (
             <div className="px-4 py-5 text-center">
-              <p className="text-sm text-slate-400">
-                {isEdit ? "Nenhum produto cadastrado ainda." : "Salve o fornecedor para adicionar produtos."}
-              </p>
+              <p className="text-sm text-slate-400">Nenhum produto selecionado ainda.</p>
             </div>
           )}
         </div>
 
         {/* Products modal */}
-        {showProductsModal && supplier && (
+        {showProductsModal && (
           <SupplierProductsModal
-            supplierId={supplier.id}
-            supplierName={supplier.name}
+            supplierId={supplier?.id ?? null}
+            supplierName={form.name || "Novo fornecedor"}
             slug={slug}
-            existingItems={catalogItems}
+            existingItems={isEdit ? catalogItems : pendingProducts.map((p, i) => ({ id: String(i), supplierId: "", name: p.name, unit: p.unit, price: null, notes: null, sortOrder: i, createdAt: "", updatedAt: "" }))}
             onClose={() => setShowProductsModal(false)}
             onSaved={(items) => { setCatalogItems(items); setShowProductsModal(false); }}
+            onPendingSelected={(items) => { setPendingProducts(items); setShowProductsModal(false); }}
           />
         )}
 
