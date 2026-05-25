@@ -3334,6 +3334,82 @@ app.delete("/api/tenants/:slug/suppliers/:id", requireAuth, async (req, res) => 
   }
 });
 
+// ─── Supplier Catalog Items ───────────────────────────────────────────────────
+
+app.get("/api/tenants/:slug/suppliers/:supplierId/catalog", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  if (!tenant) return;
+  try {
+    const supplier = await (prisma as any).supplier.findFirst({ where: { id: req.params.supplierId, tenantId: tenant.id } });
+    if (!supplier) return res.status(404).json({ error: "Fornecedor não encontrado." });
+    const items = await (prisma as any).supplierCatalogItem.findMany({
+      where: { supplierId: req.params.supplierId },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    });
+    res.json(items);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+app.post("/api/tenants/:slug/suppliers/:supplierId/catalog", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  if (!tenant) return;
+  try {
+    const supplier = await (prisma as any).supplier.findFirst({ where: { id: req.params.supplierId, tenantId: tenant.id } });
+    if (!supplier) return res.status(404).json({ error: "Fornecedor não encontrado." });
+    const { name, unit, price, notes, sortOrder } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: "Nome é obrigatório." });
+    const item = await (prisma as any).supplierCatalogItem.create({
+      data: {
+        supplierId: req.params.supplierId,
+        name: name.trim(),
+        unit: unit ?? null,
+        price: price != null ? Number(price) : null,
+        notes: notes ?? null,
+        sortOrder: sortOrder ?? 0,
+      },
+    });
+    res.json(item);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+app.put("/api/tenants/:slug/suppliers/:supplierId/catalog/:itemId", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  if (!tenant) return;
+  try {
+    const supplier = await (prisma as any).supplier.findFirst({ where: { id: req.params.supplierId, tenantId: tenant.id } });
+    if (!supplier) return res.status(404).json({ error: "Fornecedor não encontrado." });
+    const { name, unit, price, notes, sortOrder } = req.body;
+    const item = await (prisma as any).supplierCatalogItem.update({
+      where: { id: req.params.itemId },
+      data: {
+        name: name?.trim(),
+        unit: unit ?? null,
+        price: price != null ? Number(price) : null,
+        notes: notes ?? null,
+        sortOrder: sortOrder ?? 0,
+      },
+    });
+    res.json(item);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+app.delete("/api/tenants/:slug/suppliers/:supplierId/catalog/:itemId", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  if (!tenant) return;
+  try {
+    await (prisma as any).supplierCatalogItem.delete({ where: { id: req.params.itemId } });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
 if (process.env.NODE_ENV !== "production") {
   const vite = await createViteServer({
     server: { middlewareMode: true },

@@ -216,8 +216,25 @@ model Supplier {
 
   tenant        Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   inventoryItems SupplierInventoryItem[]
+  catalogItems   SupplierCatalogItem[]
 
   @@map("suppliers")
+}
+
+model SupplierCatalogItem {
+  id         String   @id @default(cuid())
+  supplierId String   @map("supplier_id")
+  name       String
+  unit       String?
+  price      Float?
+  notes      String?  @db.Text
+  sortOrder  Int      @default(0) @map("sort_order")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt      @map("updated_at")
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@map("supplier_catalog_items")
 }
 
 model SupplierInventoryItem {

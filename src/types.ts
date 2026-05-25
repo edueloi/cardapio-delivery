@@ -583,3 +583,15 @@ export interface SupplierInventoryItemLink {
   inventoryItemId: string;
   inventoryItem?: InventoryItem;
 }
+
+export interface SupplierCatalogItem {
+  id: string;
+  supplierId: string;
+  name: string;
+  unit?: string | null;
+  price?: number | null;
+  notes?: string | null;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
