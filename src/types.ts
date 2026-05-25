@@ -575,6 +575,7 @@ export interface Supplier {
   createdAt: string;
   updatedAt: string;
   inventoryItems?: SupplierInventoryItemLink[];
+  _count?: { catalogItems: number };
 }
 
 export interface SupplierInventoryItemLink {

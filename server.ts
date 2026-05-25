@@ -3265,7 +3265,10 @@ app.get("/api/tenants/:slug/suppliers", requireAuth, async (req, res) => {
   try {
     const suppliers = await (prisma as any).supplier.findMany({
       where: { tenantId: tenant.id },
-      include: { inventoryItems: { include: { inventoryItem: true } } },
+      include: {
+        inventoryItems: { include: { inventoryItem: true } },
+        _count: { select: { catalogItems: true } },
+      },
       orderBy: [{ isFavorite: "desc" }, { name: "asc" }],
     });
     res.json(suppliers);

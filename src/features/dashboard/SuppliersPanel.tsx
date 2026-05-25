@@ -22,6 +22,7 @@ import {
 import type { InventoryItem, Supplier, SupplierCatalogItem, SupplierType, Tenant } from "../../types";
 import { Modal, ModalFooter, Button, Input, Select } from "../../components";
 import { apiJson } from "../../lib/api";
+import SupplierProductsModal from "./SupplierProductsModal";
 
 interface Props {
   tenant: Tenant;
@@ -158,6 +159,18 @@ function SupplierModal({ supplier, inventoryItems, onClose, onSaved, slug }: Sup
   const [cepLoading, setCepLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [showProductsModal, setShowProductsModal] = useState(false);
+  const [catalogItems, setCatalogItems] = useState<SupplierCatalogItem[]>([]);
+  const [catalogLoaded, setCatalogLoaded] = useState(false);
+
+  // Load catalog items when editing an existing supplier
+  useEffect(() => {
+    if (supplier && !catalogLoaded) {
+      apiJson<SupplierCatalogItem[]>(`/api/tenants/${slug}/suppliers/${supplier.id}/catalog`)
+        .then(items => { setCatalogItems(Array.isArray(items) ? items : []); setCatalogLoaded(true); })
+        .catch(() => { setCatalogItems([]); setCatalogLoaded(true); });
+    }
+  }, [supplier, slug, catalogLoaded]);
 
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -176,15 +189,6 @@ function SupplierModal({ supplier, inventoryItems, onClose, onSaved, slug }: Sup
         state: data.uf ?? f.state,
       }));
     }
-  }
-
-  function toggleItem(id: string) {
-    setForm((f) => ({
-      ...f,
-      inventoryItemIds: f.inventoryItemIds.includes(id)
-        ? f.inventoryItemIds.filter((x) => x !== id)
-        : [...f.inventoryItemIds, id],
-    }));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -259,22 +263,65 @@ function SupplierModal({ supplier, inventoryItems, onClose, onSaved, slug }: Sup
           </div>
         </div>
 
-        {inventoryItems.length > 0 && (
-          <div>
-            <p className="ds-label mb-2">Insumos fornecidos</p>
-            <div className="max-h-36 overflow-y-auto space-y-1 border border-slate-200 rounded-xl p-2 bg-white">
-              {inventoryItems.map((item) => (
-                <label key={item.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer">
-                  <input type="checkbox" checked={form.inventoryItemIds.includes(item.id)} onChange={() => toggleItem(item.id)} className="accent-[#C9A227] w-4 h-4" />
-                  <span className="text-sm text-slate-700">{item.name}</span>
-                  {item.unit && <span className="text-xs text-slate-400 ml-auto">{item.unit}</span>}
-                </label>
+        {/* Produtos/insumos do fornecedor */}
+        <div className="border border-slate-200 rounded-2xl overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200">
+            <div>
+              <p className="text-xs font-black uppercase tracking-widest text-slate-500">Produtos fornecidos</p>
+              {catalogItems.length > 0 && (
+                <p className="text-[11px] text-slate-400 mt-0.5">{catalogItems.length} produto{catalogItems.length !== 1 ? "s" : ""} cadastrado{catalogItems.length !== 1 ? "s" : ""}</p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (!supplier && !isEdit) {
+                  // Precisa salvar o fornecedor primeiro
+                  setError("Salve o fornecedor primeiro para adicionar produtos.");
+                  return;
+                }
+                setShowProductsModal(true);
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#C9A227] hover:bg-[#b8911f] text-white text-xs font-black transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              {catalogItems.length > 0 ? "Gerenciar produtos" : "Adicionar produtos"}
+            </button>
+          </div>
+          {catalogItems.length > 0 ? (
+            <div className="max-h-40 overflow-y-auto divide-y divide-slate-50">
+              {catalogItems.map(item => (
+                <div key={item.id} className="flex items-center gap-3 px-4 py-2.5">
+                  <Package className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                  <span className="text-sm text-slate-700 flex-1 truncate">{item.name}</span>
+                  {item.unit && <span className="text-xs text-slate-400 shrink-0">{item.unit}</span>}
+                  {item.price != null && (
+                    <span className="text-xs font-bold text-[#C9A227] shrink-0">
+                      R$ {item.price.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    </span>
+                  )}
+                </div>
               ))}
             </div>
-            {form.inventoryItemIds.length > 0 && (
-              <p className="text-xs text-slate-400 mt-1">{form.inventoryItemIds.length} insumo(s) vinculado(s)</p>
-            )}
-          </div>
+          ) : (
+            <div className="px-4 py-5 text-center">
+              <p className="text-sm text-slate-400">
+                {isEdit ? "Nenhum produto cadastrado ainda." : "Salve o fornecedor para adicionar produtos."}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Products modal */}
+        {showProductsModal && supplier && (
+          <SupplierProductsModal
+            supplierId={supplier.id}
+            supplierName={supplier.name}
+            slug={slug}
+            existingItems={catalogItems}
+            onClose={() => setShowProductsModal(false)}
+            onSaved={(items) => { setCatalogItems(items); setShowProductsModal(false); }}
+          />
         )}
 
         <div>
@@ -828,7 +875,7 @@ function SupplierCard({ supplier, onOpen, onEdit, onDelete, onToggleFavorite }: 
   onDelete: () => void;
   onToggleFavorite: () => void;
 }) {
-  const itemCount = supplier.inventoryItems?.length ?? 0;
+  const catalogCount = supplier._count?.catalogItems ?? 0;
   return (
     <div
       onClick={onOpen}
@@ -865,10 +912,10 @@ function SupplierCard({ supplier, onOpen, onEdit, onDelete, onToggleFavorite }: 
             <span className="text-sm text-slate-500 truncate">{[supplier.city, supplier.state].filter(Boolean).join(" / ")}</span>
           </div>
         )}
-        {itemCount > 0 && (
+        {catalogCount > 0 && (
           <div className="flex items-center gap-2">
-            <Package className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-            <span className="text-xs text-slate-400">{itemCount} insumo{itemCount !== 1 ? "s" : ""} vinculado{itemCount !== 1 ? "s" : ""}</span>
+            <Package className="w-3.5 h-3.5 text-[#C9A227] shrink-0" />
+            <span className="text-xs font-semibold text-[#C9A227]">{catalogCount} produto{catalogCount !== 1 ? "s" : ""} no catálogo</span>
           </div>
         )}
       </div>
@@ -906,7 +953,7 @@ function SupplierRow({ supplier, onOpen, onEdit, onDelete, onToggleFavorite }: {
   onDelete: () => void;
   onToggleFavorite: () => void;
 }) {
-  const itemCount = supplier.inventoryItems?.length ?? 0;
+  const catalogCount = supplier._count?.catalogItems ?? 0;
   return (
     <div
       onClick={onOpen}
@@ -928,8 +975,8 @@ function SupplierRow({ supplier, onOpen, onEdit, onDelete, onToggleFavorite }: {
       <span className={`hidden sm:inline-block px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide shrink-0 ${typeColor(supplier.type)}`}>
         {typeLabel(supplier.type)}
       </span>
-      {itemCount > 0 && (
-        <span className="hidden md:inline-block text-xs text-slate-400 shrink-0">{itemCount} insumo{itemCount !== 1 ? "s" : ""}</span>
+      {catalogCount > 0 && (
+        <span className="hidden md:inline-block text-xs font-semibold text-[#C9A227] shrink-0">{catalogCount} produto{catalogCount !== 1 ? "s" : ""}</span>
       )}
       <div className="flex items-center gap-1 shrink-0">
         {supplier.phone && (
