@@ -3,13 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { BrowserRouter as Router, Routes, Route, useLocation } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { AuthGuard } from "./components";
 import MenuView from "./pages/MenuView";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
-import OwnerPortal from "./pages/OwnerPortal";
 import Register from "./pages/Register";
 import LandingPage from "./pages/LandingPage";
 import PublicDashboard from "./features/public-dashboard";
@@ -47,14 +46,7 @@ function AnimatedRoutes() {
             }
           />
 
-          <Route
-            path="/painel"
-            element={
-              <AuthGuard>
-                <OwnerPortal />
-              </AuthGuard>
-            }
-          />
+          <Route path="/painel" element={<Navigate to="/login" replace />} />
 
           <Route
             path="/dashboard/:slug"
