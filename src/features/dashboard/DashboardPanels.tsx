@@ -47,7 +47,12 @@ import {
   Download,
   Smartphone,
   MapPin,
-  Ruler
+  Ruler,
+  Building2,
+  ExternalLink,
+  Edit3,
+  Save,
+  CheckCircle
 } from "lucide-react";
 import socket from "../../lib/socket";
 import { apiFetch, apiJson } from "../../lib/api";
@@ -1121,6 +1126,185 @@ function parseScheduleDays(raw?: string | null) {
   try { return raw ? JSON.parse(raw) : DEFAULT_SCHEDULE_DAYS; } catch { return DEFAULT_SCHEDULE_DAYS; }
 }
 
+// ── Condomínios do tenant ─────────────────────────────────────────────────────
+
+const DAY_KEYS_COND = ["sun","mon","tue","wed","thu","fri","sat"] as const;
+const DAY_LABELS_COND: Record<string,string> = { sun:"Dom", mon:"Seg", tue:"Ter", wed:"Qua", thu:"Qui", fri:"Sex", sat:"Sáb" };
+
+function CondominiumsCard({ tenant }: { tenant: Tenant | null }) {
+  const [condos, setCondos] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [localAddr, setLocalAddr] = useState("");
+  const [localHours, setLocalHours] = useState<Record<string, { enabled: boolean; open: string; close: string }>>({});
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (!tenant?.id) return;
+    setLoading(true);
+    apiJson<any[]>(`/api/owner/tenants/${tenant.id}/condominiums`)
+      .then(d => setCondos(Array.isArray(d) ? d : []))
+      .catch((e) => { console.error("[CondominiumsCard] erro:", e); setCondos([]); })
+      .finally(() => setLoading(false));
+  }, [tenant?.id]);
+
+  function startEdit(condo: any) {
+    setEditingId(condo.id);
+    setLocalAddr(condo.localAddress || "");
+    try {
+      setLocalHours(condo.localHours ? JSON.parse(condo.localHours) : getDefaultHours());
+    } catch { setLocalHours(getDefaultHours()); }
+  }
+
+  function getDefaultHours() {
+    return Object.fromEntries(DAY_KEYS_COND.map(d => [d, { enabled: !["sun"].includes(d), open: "08:00", close: "22:00" }]));
+  }
+
+  async function handleSave(condId: string) {
+    if (!tenant?.id) return;
+    setSaving(true);
+    try {
+      await apiJson(`/api/owner/tenants/${tenant.id}/condominiums/${condId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ localAddress: localAddr || null, localHours: JSON.stringify(localHours) }),
+      });
+      setCondos(prev => prev.map(c => c.id === condId ? { ...c, localAddress: localAddr || null, localHours: JSON.stringify(localHours) } : c));
+      setEditingId(null);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch {}
+    setSaving(false);
+  }
+
+  if (loading) return null;
+  if (condos.length === 0) return null;
+
+  return (
+    <ContentCard padding="lg">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
+          <Building2 className="w-4 h-4 text-amber-600" />
+        </div>
+        <div>
+          <p className="text-sm font-black text-slate-900">Condomínios vinculados</p>
+          <p className="text-xs text-slate-500">Configure seu endereço local e horários em cada condomínio.</p>
+        </div>
+        {saved && <span className="ml-auto flex items-center gap-1 text-xs text-green-600 font-bold"><CheckCircle className="w-3.5 h-3.5" /> Salvo!</span>}
+      </div>
+
+      <div className="space-y-3">
+        {condos.map(condo => {
+          const isEditing = editingId === condo.id;
+          let hoursPreview = "";
+          if (condo.localHours) {
+            try {
+              const h = JSON.parse(condo.localHours);
+              const days = DAY_KEYS_COND.filter(d => h[d]?.enabled).map(d => DAY_LABELS_COND[d]);
+              hoursPreview = days.length > 0 ? days.join(", ") : "Sem horários";
+            } catch {}
+          }
+
+          return (
+            <div key={condo.id} className="border border-slate-200 rounded-2xl overflow-hidden">
+              {/* Header do condo */}
+              <div className="flex items-center gap-3 px-4 py-3 bg-slate-50">
+                {condo.logoUrl
+                  ? <img src={condo.logoUrl} alt="" className="w-8 h-8 rounded-xl object-cover flex-shrink-0" />
+                  : <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0"><Building2 className="w-4 h-4 text-amber-500" /></div>}
+                <div className="flex-1 min-w-0">
+                  <p className="font-black text-slate-900 text-sm truncate">{condo.name}</p>
+                  <a href={`/cond/${condo.slug}`} target="_blank" rel="noreferrer"
+                    className="text-[10px] text-amber-600 hover:underline font-mono flex items-center gap-1">
+                    /cond/{condo.slug} <ExternalLink className="w-2.5 h-2.5" />
+                  </a>
+                </div>
+                <button type="button" onClick={() => isEditing ? setEditingId(null) : startEdit(condo)}
+                  className={`p-2 rounded-xl transition-colors text-xs font-bold flex items-center gap-1.5 ${isEditing ? "bg-slate-200 text-slate-600" : "bg-amber-100 text-amber-700 hover:bg-amber-200"}`}>
+                  <Edit3 className="w-3.5 h-3.5" />
+                  {isEditing ? "Cancelar" : "Editar"}
+                </button>
+              </div>
+
+              {/* Info resumida (quando não editando) */}
+              {!isEditing && (
+                <div className="px-4 py-3 space-y-1.5">
+                  <div className="flex items-start gap-2 text-xs text-slate-600">
+                    <MapPin className="w-3.5 h-3.5 text-slate-400 flex-shrink-0 mt-0.5" />
+                    <span>{condo.localAddress || <span className="text-slate-400 italic">Sem endereço local definido</span>}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-slate-600">
+                    <Clock className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                    <span>{hoursPreview || <span className="text-slate-400 italic">Sem horários definidos — aparece fechado</span>}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Formulário de edição */}
+              {isEditing && (
+                <div className="px-4 py-4 space-y-4">
+                  {/* Endereço local */}
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 block">
+                      Endereço neste local
+                    </label>
+                    <input
+                      value={localAddr}
+                      onChange={e => setLocalAddr(e.target.value)}
+                      placeholder="Ex: Bloco A, Loja 12 — Rua das Flores, 100"
+                      className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-300 focus:border-amber-300 transition-all"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">Este endereço será exibido para clientes neste condomínio.</p>
+                  </div>
+
+                  {/* Horários por dia */}
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">
+                      Horários neste local
+                    </label>
+                    <div className="space-y-2">
+                      {DAY_KEYS_COND.map(d => {
+                        const day = localHours[d] ?? { enabled: false, open: "08:00", close: "22:00" };
+                        return (
+                          <div key={d} className="flex items-center gap-3">
+                            <button type="button" onClick={() => setLocalHours(h => ({ ...h, [d]: { ...day, enabled: !day.enabled } }))}
+                              className={`w-10 h-6 rounded-full transition-colors flex-shrink-0 ${day.enabled ? "bg-amber-400" : "bg-slate-200"}`}>
+                              <div className={`w-5 h-5 bg-white rounded-full shadow-sm mx-auto transition-transform ${day.enabled ? "translate-x-2" : "-translate-x-2"}`} />
+                            </button>
+                            <span className={`text-xs font-black w-8 flex-shrink-0 ${day.enabled ? "text-slate-900" : "text-slate-400"}`}>{DAY_LABELS_COND[d]}</span>
+                            {day.enabled ? (
+                              <div className="flex items-center gap-2 flex-1">
+                                <input type="time" value={day.open}
+                                  onChange={e => setLocalHours(h => ({ ...h, [d]: { ...day, open: e.target.value } }))}
+                                  className="flex-1 px-2 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-amber-300" />
+                                <span className="text-xs text-slate-400">até</span>
+                                <input type="time" value={day.close}
+                                  onChange={e => setLocalHours(h => ({ ...h, [d]: { ...day, close: e.target.value } }))}
+                                  className="flex-1 px-2 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-amber-300" />
+                              </div>
+                            ) : (
+                              <span className="text-xs text-slate-400 italic">Fechado</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <button type="button" onClick={() => handleSave(condo.id)} disabled={saving}
+                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-black text-sm text-white bg-amber-500 hover:bg-amber-600 disabled:opacity-60 transition-colors shadow-sm">
+                    {saving ? <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Salvando...</> : <><Save className="w-4 h-4" /> Salvar configurações</>}
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </ContentCard>
+  );
+}
+
 export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, refresh: () => void }) {
   const [activeTab, setActiveTab] = useState<"general" | "hours" | "delivery" | "payments" | "maquinhas" | "fiscal">("general");
   const [form, setForm] = useState({
@@ -1445,6 +1629,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                 </div>
               </div>
             </ContentCard>
+
           </motion.div>
         )}
 
@@ -2196,6 +2381,8 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
           </div>
         </div>
       </form>
+
+      <CondominiumsCard tenant={tenant} />
     </PageWrapper>
   );
 }

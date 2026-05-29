@@ -518,6 +518,53 @@ const migrations = [
       CONSTRAINT supplier_inventory_items_inventory_item_id_fkey FOREIGN KEY (inventory_item_id) REFERENCES inventory_items(id) ON DELETE CASCADE ON UPDATE CASCADE
     ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
   },
+  // ── Módulo Condomínios ────────────────────────────────────────────────────────
+  {
+    name: 'create_condominiums_table',
+    check: "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'condominiums'",
+    run: `CREATE TABLE condominiums (
+      id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      name VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      slug VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      description TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
+      logo_url VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
+      banner_url VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
+      primary_color VARCHAR(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '#C9A227',
+      address TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
+      is_active TINYINT(1) NOT NULL DEFAULT 1,
+      created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (id),
+      UNIQUE INDEX condominiums_slug_unique (slug)
+    ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+  },
+  {
+    name: 'add_condominiums_logo_banner_cols',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'condominiums' AND COLUMN_NAME = 'logo_url'",
+    run: `ALTER TABLE condominiums ADD COLUMN logo_url VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL, ADD COLUMN banner_url VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL`,
+  },
+  {
+    name: 'add_condominium_tenants_local_cols',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'condominium_tenants' AND COLUMN_NAME = 'local_address'",
+    run: `ALTER TABLE condominium_tenants ADD COLUMN local_address TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL, ADD COLUMN local_hours TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL`,
+  },
+  {
+    name: 'create_condominium_tenants_table',
+    check: "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'condominium_tenants'",
+    run: `CREATE TABLE condominium_tenants (
+      id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      condominium_id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      tenant_id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      sort_order INT NOT NULL DEFAULT 0,
+      created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (id),
+      UNIQUE INDEX condominium_tenants_unique (condominium_id, tenant_id),
+      INDEX condominium_tenants_cond_idx (condominium_id),
+      INDEX condominium_tenants_tenant_idx (tenant_id),
+      CONSTRAINT condominium_tenants_cond_fkey FOREIGN KEY (condominium_id) REFERENCES condominiums(id) ON DELETE CASCADE ON UPDATE CASCADE,
+      CONSTRAINT condominium_tenants_tenant_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE ON UPDATE CASCADE
+    ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+  },
 ];
 
 async function run() {

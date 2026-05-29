@@ -4,7 +4,7 @@ import {
   ShieldCheck, Users, Link as LinkIcon, Plus, Trash2, Copy,
   Clock, CheckCircle2, XCircle, RefreshCw, LogOut, ChevronDown, ChevronUp,
   Wallet, TrendingUp, Star, CalendarDays, Package, BarChart3,
-  ArrowUpRight, Crown, Zap, Building2, Mail, Edit3, X,
+  ArrowUpRight, Crown, Zap, Building2, Mail, Edit3, X, Store, MapPin, Search, Loader2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "../../lib/auth";
@@ -119,6 +119,418 @@ function RevenueChart({ data }: { data: Record<string, number> }) {
   );
 }
 
+// ─── Condomínios Tab ──────────────────────────────────────────────────────────
+interface CondTenantItem {
+  id: string;
+  sortOrder: number;
+  tenant: { id: string; name: string; slug: string; logoUrl: string | null };
+}
+interface CondominiumItem {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  logoUrl: string | null;
+  bannerUrl: string | null;
+  primaryColor: string | null;
+  address: string | null;
+  isActive: boolean;
+  createdAt: string;
+  tenants: CondTenantItem[];
+}
+
+function CondominiumsTab() {
+  const [condominiums, setCondominiums] = useState<CondominiumItem[]>([]);
+  const [allTenants, setAllTenants] = useState<{ id: string; name: string; slug: string; logoUrl: string | null }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  // Form: criar/editar condomínio
+  const [showForm, setShowForm] = useState(false);
+  const [editingCond, setEditingCond] = useState<CondominiumItem | null>(null);
+  const [form, setForm] = useState({ name: "", slug: "", description: "", address: "", primaryColor: "#C9A227" });
+  const [saving, setSaving] = useState(false);
+
+  // Vincular tenant
+  const [linkTenantId, setLinkTenantId] = useState("");
+  const [linking, setLinking] = useState<string | null>(null);
+
+  // Deletar
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  // Logo/banner upload
+  const [uploadingLogo, setUploadingLogo] = useState<string | null>(null);
+  const [uploadingBanner, setUploadingBanner] = useState<string | null>(null);
+
+  // Confirmação de remoção de imagem: { condId, type }
+  const [removeImageConfirm, setRemoveImageConfirm] = useState<{ condId: string; type: "logo" | "banner" } | null>(null);
+  const [removingImage, setRemovingImage] = useState(false);
+
+  useEffect(() => {
+    loadAll();
+  }, []);
+
+  async function loadAll() {
+    setLoading(true);
+    try {
+      const [condsRes, tenantsRes] = await Promise.all([
+        apiFetch("/api/superadmin/condominiums"),
+        apiFetch("/api/superadmin/tenants-list"),
+      ]);
+      const [condsData, tenantsData] = await Promise.all([condsRes.json(), tenantsRes.json()]);
+      setCondominiums(Array.isArray(condsData) ? condsData : []);
+      setAllTenants(Array.isArray(tenantsData) ? tenantsData : []);
+    } catch {}
+    setLoading(false);
+  }
+
+  function openCreate() {
+    setEditingCond(null);
+    setForm({ name: "", slug: "", description: "", address: "", primaryColor: "#C9A227" });
+    setShowForm(true);
+  }
+
+  function openEdit(cond: CondominiumItem) {
+    setEditingCond(cond);
+    setForm({ name: cond.name, slug: cond.slug, description: cond.description || "", address: cond.address || "", primaryColor: cond.primaryColor || "#C9A227" });
+    setShowForm(true);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      if (editingCond) {
+        const updated = await apiJson<CondominiumItem>(`/api/superadmin/condominiums/${editingCond.id}`, {
+          method: "PATCH", body: JSON.stringify({ name: form.name, description: form.description || null, address: form.address || null, primaryColor: form.primaryColor }),
+        });
+        setCondominiums(prev => prev.map(c => c.id === updated.id ? { ...c, ...updated } : c));
+      } else {
+        const created = await apiJson<CondominiumItem>("/api/superadmin/condominiums", {
+          method: "POST", body: JSON.stringify({ name: form.name, slug: form.slug, description: form.description || null, address: form.address || null, primaryColor: form.primaryColor }),
+        });
+        if (created) setCondominiums(prev => [created, ...prev]);
+        else await loadAll();
+      }
+      setShowForm(false);
+    } catch (e: any) { alert(e.message || "Erro ao salvar."); }
+    setSaving(false);
+  }
+
+  async function handleDelete() {
+    if (!deleteId) return;
+    setDeleting(true);
+    try {
+      await apiJson(`/api/superadmin/condominiums/${deleteId}`, { method: "DELETE" });
+      setCondominiums(prev => prev.filter(c => c.id !== deleteId));
+      setDeleteId(null);
+    } catch {}
+    setDeleting(false);
+  }
+
+  async function handleLink(condId: string) {
+    if (!linkTenantId) return;
+    setLinking(condId);
+    try {
+      const link = await apiJson(`/api/superadmin/condominiums/${condId}/tenants`, {
+        method: "POST", body: JSON.stringify({ tenantId: linkTenantId }),
+      });
+      const tenant = allTenants.find(t => t.id === linkTenantId);
+      if (tenant) {
+        setCondominiums(prev => prev.map(c => c.id === condId ? {
+          ...c,
+          tenants: [...c.tenants, { ...(link as any), tenant }],
+        } : c));
+      }
+      setLinkTenantId("");
+    } catch (e: any) { alert(e.message || "Erro ao vincular."); }
+    setLinking(null);
+  }
+
+  async function handleUnlink(condId: string, tenantId: string) {
+    try {
+      await apiJson(`/api/superadmin/condominiums/${condId}/tenants/${tenantId}`, { method: "DELETE" });
+      setCondominiums(prev => prev.map(c => c.id === condId ? {
+        ...c, tenants: c.tenants.filter(ct => ct.tenant.id !== tenantId),
+      } : c));
+    } catch {}
+  }
+
+  async function handleUpload(condId: string, type: "logo" | "banner", file: File) {
+    if (type === "logo") setUploadingLogo(condId);
+    else setUploadingBanner(condId);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await apiFetch(`/api/superadmin/condominiums/${condId}/${type}`, { method: "POST", body: formData });
+      const data = await res.json();
+      setCondominiums(prev => prev.map(c => c.id === condId ? { ...c, [type === "logo" ? "logoUrl" : "bannerUrl"]: data.url } : c));
+    } catch {}
+    if (type === "logo") setUploadingLogo(null);
+    else setUploadingBanner(null);
+  }
+
+  async function handleRemoveImage(condId: string, type: "logo" | "banner") {
+    setRemovingImage(true);
+    try {
+      await apiJson(`/api/superadmin/condominiums/${condId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ [type === "logo" ? "logoUrl" : "bannerUrl"]: null }),
+      });
+      setCondominiums(prev => prev.map(c => c.id === condId ? { ...c, [type === "logo" ? "logoUrl" : "bannerUrl"]: null } : c));
+      setRemoveImageConfirm(null);
+    } catch (e: any) {
+      alert(e.message || "Erro ao remover imagem.");
+    } finally {
+      setRemovingImage(false);
+    }
+  }
+
+  const publicUrl = (slug: string) => `${window.location.origin}/cond/${slug}`;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-6 h-6 animate-spin text-amber-400" />
+      </div>
+    );
+  }
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+      <SectionTitle
+        title="Condomínios"
+        subtitle={`${condominiums.length} condomínio${condominiums.length !== 1 ? "s" : ""} cadastrado${condominiums.length !== 1 ? "s" : ""}`}
+        action={<Button variant="primary" iconLeft={<Plus className="w-4 h-4" />} onClick={openCreate}>Novo condomínio</Button>}
+      />
+
+      {condominiums.length === 0 ? (
+        <ContentCard>
+          <EmptyState icon={Building2} title="Nenhum condomínio" description="Crie o primeiro condomínio para agrupar estabelecimentos." />
+        </ContentCard>
+      ) : (
+        condominiums.map(cond => {
+          const isExpanded = expanded === cond.id;
+          const availableTenants = allTenants.filter(t => !cond.tenants.some(ct => ct.tenant.id === t.id));
+          return (
+            <ContentCard key={cond.id}>
+              {/* Header */}
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-12 h-12 rounded-xl flex-shrink-0 overflow-hidden bg-slate-100 flex items-center justify-center border-2"
+                  style={{ borderColor: `${cond.primaryColor || "#C9A227"}44` }}
+                >
+                  {cond.logoUrl ? (
+                    <img src={cond.logoUrl} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <Building2 className="w-5 h-5 text-slate-300" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-900 truncate">{cond.name}</span>
+                    {!cond.isActive && <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-red-100 text-red-600">Inativo</span>}
+                  </div>
+                  <div className="flex items-center gap-3 mt-0.5">
+                    <code className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded font-mono">/cond/{cond.slug}</code>
+                    <span className="text-[10px] text-slate-400">{cond.tenants.length} estabelecimento{cond.tenants.length !== 1 ? "s" : ""}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(publicUrl(cond.slug)); }}
+                    className="p-2 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-xl transition-colors"
+                    title="Copiar link público"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => openEdit(cond)} className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-xl transition-colors">
+                    <Edit3 className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => setDeleteId(cond.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => { setExpanded(isExpanded ? null : cond.id); setLinkTenantId(""); }} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
+                    {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Expandido */}
+              <AnimatePresence>
+                {isExpanded && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="mt-4 pt-4 border-t border-zinc-100 space-y-4">
+                      {/* Logo / Banner upload */}
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* LOGO */}
+                        <div>
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Logo</label>
+                          {cond.logoUrl ? (
+                            <div className="relative group rounded-xl overflow-hidden border border-slate-200 bg-slate-50" style={{ height: 80 }}>
+                              <img src={cond.logoUrl} alt="logo" className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100">
+                                <label className="p-1.5 bg-white rounded-lg cursor-pointer hover:bg-amber-50 transition-colors" title="Trocar">
+                                  {uploadingLogo === cond.id ? <Loader2 className="w-4 h-4 animate-spin text-slate-500" /> : <Edit3 className="w-4 h-4 text-slate-600" />}
+                                  <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleUpload(cond.id, "logo", e.target.files[0])} />
+                                </label>
+                                <button type="button" onClick={() => setRemoveImageConfirm({ condId: cond.id, type: "logo" })} className="p-1.5 bg-white rounded-lg hover:bg-red-50 transition-colors" title="Remover">
+                                  <Trash2 className="w-4 h-4 text-red-500" />
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <label className="flex flex-col items-center justify-center gap-1 px-3 py-4 bg-slate-50 border border-dashed border-slate-200 rounded-xl cursor-pointer hover:bg-amber-50 hover:border-amber-300 transition-colors text-xs text-slate-400">
+                              {uploadingLogo === cond.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
+                              Enviar logo
+                              <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleUpload(cond.id, "logo", e.target.files[0])} />
+                            </label>
+                          )}
+                        </div>
+                        {/* BANNER */}
+                        <div>
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Banner</label>
+                          {cond.bannerUrl ? (
+                            <div className="relative group rounded-xl overflow-hidden border border-slate-200 bg-slate-50" style={{ height: 80 }}>
+                              <img src={cond.bannerUrl} alt="banner" className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100">
+                                <label className="p-1.5 bg-white rounded-lg cursor-pointer hover:bg-amber-50 transition-colors" title="Trocar">
+                                  {uploadingBanner === cond.id ? <Loader2 className="w-4 h-4 animate-spin text-slate-500" /> : <Edit3 className="w-4 h-4 text-slate-600" />}
+                                  <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleUpload(cond.id, "banner", e.target.files[0])} />
+                                </label>
+                                <button type="button" onClick={() => setRemoveImageConfirm({ condId: cond.id, type: "banner" })} className="p-1.5 bg-white rounded-lg hover:bg-red-50 transition-colors" title="Remover">
+                                  <Trash2 className="w-4 h-4 text-red-500" />
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <label className="flex flex-col items-center justify-center gap-1 px-3 py-4 bg-slate-50 border border-dashed border-slate-200 rounded-xl cursor-pointer hover:bg-amber-50 hover:border-amber-300 transition-colors text-xs text-slate-400">
+                              {uploadingBanner === cond.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
+                              Enviar banner
+                              <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleUpload(cond.id, "banner", e.target.files[0])} />
+                            </label>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Estabelecimentos vinculados */}
+                      <div>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Estabelecimentos vinculados</p>
+                        {cond.tenants.length === 0 ? (
+                          <p className="text-xs text-slate-400 italic">Nenhum estabelecimento vinculado ainda.</p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {cond.tenants.map(ct => (
+                              <div key={ct.id} className="flex items-center gap-2 p-2 bg-slate-50 rounded-xl">
+                                <div className="w-7 h-7 rounded-lg bg-white border border-slate-200 flex items-center justify-center overflow-hidden flex-shrink-0">
+                                  {ct.tenant.logoUrl ? <img src={ct.tenant.logoUrl} alt="" className="w-full h-full object-cover" /> : <Store className="w-3.5 h-3.5 text-slate-300" />}
+                                </div>
+                                <span className="text-xs font-semibold text-slate-700 flex-1 truncate">{ct.tenant.name}</span>
+                                <code className="text-[10px] text-slate-400 font-mono">/{ct.tenant.slug}</code>
+                                <button onClick={() => handleUnlink(cond.id, ct.tenant.id)} className="p-1 text-slate-300 hover:text-red-500 transition-colors">
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Vincular novo */}
+                      {availableTenants.length > 0 && (
+                        <div className="flex gap-2">
+                          <select
+                            value={availableTenants.some(t => t.id === linkTenantId) ? linkTenantId : ""}
+                            onChange={e => setLinkTenantId(e.target.value)}
+                            className="flex-1 h-9 rounded-[10px] border border-zinc-200 bg-zinc-50 px-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400"
+                          >
+                            <option value="">Selecionar estabelecimento...</option>
+                            {availableTenants.map(t => (
+                              <option key={t.id} value={t.id}>{t.name} (/{t.slug})</option>
+                            ))}
+                          </select>
+                          <Button
+                            variant="primary"
+                            loading={linking === cond.id}
+                            disabled={!linkTenantId}
+                            onClick={() => handleLink(cond.id)}
+                          >
+                            Vincular
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </ContentCard>
+          );
+        })
+      )}
+
+      {/* Modal: criar/editar */}
+      <Modal isOpen={showForm} onClose={() => setShowForm(false)} title={editingCond ? "Editar condomínio" : "Novo condomínio"} size="sm">
+        <div className="space-y-3">
+          <div>
+            <Input
+              label="Nome"
+              value={form.name}
+              onChange={e => {
+                const name = e.target.value;
+                const slug = name.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+                setForm(f => ({ ...f, name, slug }));
+              }}
+              placeholder="Residencial Park"
+            />
+            {!editingCond && form.slug && (
+              <p className="text-[11px] text-slate-400 mt-1">URL: <span className="font-mono text-amber-600">/cond/{form.slug}</span></p>
+            )}
+          </div>
+          <Input label="Descrição (opcional)" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Condomínio localizado na Av. ..." />
+          <Input label="Endereço (opcional)" value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="Av. das Flores, 100" />
+          <div>
+            <label className="ds-label mb-1.5 block">Cor principal</label>
+            <input type="color" value={form.primaryColor} onChange={e => setForm(f => ({ ...f, primaryColor: e.target.value }))} className="h-10 w-20 rounded-xl border border-zinc-200 cursor-pointer" />
+          </div>
+        </div>
+        <ModalFooter>
+          <Button variant="ghost" onClick={() => setShowForm(false)}>Cancelar</Button>
+          <Button variant="primary" loading={saving} onClick={handleSave} disabled={!form.name || (!editingCond && !form.slug)}>
+            {editingCond ? "Salvar" : "Criar"}
+          </Button>
+        </ModalFooter>
+      </Modal>
+
+      {/* Modal: confirmar exclusão */}
+      <Modal isOpen={!!deleteId} onClose={() => setDeleteId(null)} title="Excluir condomínio" size="sm">
+        <p className="text-sm text-slate-500 -mt-2 mb-4">Esta ação é irreversível. Todos os vínculos com estabelecimentos serão removidos.</p>
+        <ModalFooter>
+          <Button variant="ghost" onClick={() => setDeleteId(null)}>Cancelar</Button>
+          <Button variant="danger" loading={deleting} onClick={handleDelete}>Excluir</Button>
+        </ModalFooter>
+      </Modal>
+
+      {/* Modal: confirmar remoção de imagem */}
+      <Modal isOpen={!!removeImageConfirm} onClose={() => setRemoveImageConfirm(null)} title={`Remover ${removeImageConfirm?.type === "logo" ? "logo" : "banner"}`} size="sm">
+        <p className="text-sm text-slate-500 -mt-2 mb-4">
+          Tem certeza que deseja remover {removeImageConfirm?.type === "logo" ? "a logo" : "o banner"} deste condomínio? Você poderá enviar uma nova imagem depois.
+        </p>
+        <ModalFooter>
+          <Button variant="ghost" onClick={() => setRemoveImageConfirm(null)}>Cancelar</Button>
+          <Button variant="danger" loading={removingImage} onClick={() => removeImageConfirm && handleRemoveImage(removeImageConfirm.condId, removeImageConfirm.type)}>
+            Remover
+          </Button>
+        </ModalFooter>
+      </Modal>
+    </motion.div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function SuperAdminPage() {
   const navigate = useNavigate();
@@ -129,7 +541,7 @@ export default function SuperAdminPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"dashboard" | "accounts" | "subscriptions" | "plans" | "invites">("dashboard");
+  const [tab, setTab] = useState<"dashboard" | "accounts" | "subscriptions" | "plans" | "invites" | "condominiums">("dashboard");
 
   // Convites
   const [showNewInvite, setShowNewInvite] = useState(false);
@@ -285,6 +697,7 @@ export default function SuperAdminPage() {
     { id: "subscriptions", label: "Assinaturas", icon: Crown },
     { id: "plans", label: "Planos", icon: Package },
     { id: "invites", label: "Convites", icon: LinkIcon },
+    { id: "condominiums", label: "Condomínios", icon: Building2 },
   ] as const;
 
   if (loading) {
@@ -706,6 +1119,11 @@ export default function SuperAdminPage() {
               </div>
             )}
           </motion.div>
+        )}
+
+        {/* ══ CONDOMÍNIOS ══ */}
+        {tab === "condominiums" && (
+          <CondominiumsTab />
         )}
       </div>
 

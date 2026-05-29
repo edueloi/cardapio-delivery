@@ -50,7 +50,7 @@ export default function LoginPage() {
       const payload = await login(email.trim(), password);
       if (remember) localStorage.setItem("boxsys_remember_email", email.trim());
       else          localStorage.removeItem("boxsys_remember_email");
-      redirectRef.current = resolvePostAuthPath(next, payload.tenants);
+      redirectRef.current = resolvePostAuthPath(next, payload.tenants, (payload.account as any).isSuperAdmin);
       setShowLoading(true);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "E-mail ou senha incorretos.");

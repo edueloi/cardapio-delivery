@@ -15,6 +15,8 @@ import LandingPage from "./pages/LandingPage";
 import PublicDashboard from "./features/public-dashboard";
 import PDVPage from "./pages/PDVPage";
 import SuperAdminPage from "./features/superadmin/SuperAdminPage";
+import CondominiumPage from "./features/condominium-view/CondominiumPage";
+import AdminAccessPage from "./features/auth/AdminAccessPage";
 import InviteRegisterPage from "./features/auth/InviteRegisterPage";
 import ForgotPasswordPage from "./features/auth/ForgotPasswordPage";
 import ResetPasswordPage from "./features/auth/ResetPasswordPage";
@@ -30,6 +32,7 @@ function AnimatedRoutes() {
     <>
       <AnimatePresence mode="wait">
         <Routes location={location} key={routeKey}>
+          <Route path="/admin" element={<AdminAccessPage />} />
           <Route path="/login" element={<Login />} />
           <Route path="/cadastro" element={<Register />} />
           <Route path="/cadastro/:token" element={<InviteRegisterPage />} />
@@ -79,6 +82,7 @@ function AnimatedRoutes() {
           />
 
           <Route path="/:slug/display" element={<PublicDashboard />} />
+          <Route path="/cond/:slug" element={<CondominiumPage />} />
 
           <Route
             path="/pdv/:slug"

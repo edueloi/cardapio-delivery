@@ -19,7 +19,9 @@ export function getRequestedDashboardSlug(next: string | null): string | null {
   return decodeURIComponent(match[1]);
 }
 
-export function resolvePostAuthPath(next: string | null, tenants: TenantMembership[]): string {
+export function resolvePostAuthPath(next: string | null, tenants: TenantMembership[], isSuperAdmin?: boolean): string {
+  if (isSuperAdmin) return "/superadmin";
+
   const normalized = normalizeNextPath(next);
   const requestedSlug = getRequestedDashboardSlug(normalized);
 
