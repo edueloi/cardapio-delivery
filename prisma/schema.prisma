@@ -404,7 +404,7 @@ model Product {
   tenantId    String   @map("tenant_id")
   available   Boolean  @default(true)
   pdvOnly     Boolean  @default(false) @map("pdv_only")
-  kitchenPrint Boolean @default(true) @map("kitchen_print") // false = não vai para o painel de cozinha (ex: bebidas, embalagens)
+  kitchenPrint Boolean @default(false) @map("kitchen_print") // true = vai para o painel de cozinha — dono marca manualmente o que precisa de preparo
   autoDisableWhenOutOfStock Boolean @default(false) @map("auto_disable_when_out_of_stock")
   extras      String?  @db.Text // JSON: ProductExtra[]
   scheduleRule String? @map("schedule_rule") @db.Text // JSON: ProductScheduleRule

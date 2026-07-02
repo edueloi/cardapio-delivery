@@ -1981,7 +1981,7 @@ app.post("/api/products", requireAuth, async (req, res) => {
         tenantId: tenant.id,
         available: true,
         pdvOnly: Boolean(pdvOnly),
-        kitchenPrint: kitchenPrint === undefined ? true : Boolean(kitchenPrint),
+        kitchenPrint: kitchenPrint === undefined ? false : Boolean(kitchenPrint),
         inventoryItemId: inventoryItemId || null,
         extras: extras ? (typeof extras === 'string' ? extras : JSON.stringify(extras)) : null,
         scheduleRule: scheduleRule ? (typeof scheduleRule === 'string' ? scheduleRule : JSON.stringify(scheduleRule)) : null,

@@ -609,6 +609,13 @@ const migrations = [
     check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'kitchen_print'",
     run: "ALTER TABLE products ADD COLUMN kitchen_print TINYINT(1) NOT NULL DEFAULT 1",
   },
+  // Produtos novos passam a não ir para a cozinha por padrão — o dono ativa manualmente
+  // só o que precisa de preparo. Não afeta produtos já cadastrados (mantém o valor atual).
+  {
+    name: 'change_products_kitchen_print_default_to_false',
+    check: "SELECT COLUMN_DEFAULT FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'kitchen_print' AND COLUMN_DEFAULT = '0'",
+    run: "ALTER TABLE products MODIFY COLUMN kitchen_print TINYINT(1) NOT NULL DEFAULT 0",
+  },
 ];
 
 async function run() {

@@ -2595,7 +2595,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
   const [productionRecipes, setProductionRecipes] = useState<any[]>([]);
   const [prodForm, setProdForm] = useState({
     name: "", description: "", price: "", imageUrl: "", inventoryItemId: "", recipeId: "",
-    available: true, pdvOnly: false, kitchenPrint: true, autoDisableWhenOutOfStock: false,
+    available: true, pdvOnly: false, kitchenPrint: false, autoDisableWhenOutOfStock: false,
     scheduleRuleEnabled: false,
     scheduleRuleType: "weekday" as "weekday" | "daterange" | "both",
     scheduleRuleWeekdays: [] as number[],
@@ -2660,7 +2660,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
 
   const openNewProduct = (categoryId: string) => {
     setEditingProduct(null);
-    setProdForm({ name: "", description: "", price: "", imageUrl: "", inventoryItemId: "", recipeId: "", available: true, pdvOnly: false, kitchenPrint: true, autoDisableWhenOutOfStock: false, scheduleRuleEnabled: false, scheduleRuleType: "weekday", scheduleRuleWeekdays: [], scheduleRuleStartDate: "", scheduleRuleEndDate: "", variants: [], extras: [], ncm: "", cfop: "5102", csosn: "400", unitCom: "UN", origem: 0, aliqIcms: 0 });
+    setProdForm({ name: "", description: "", price: "", imageUrl: "", inventoryItemId: "", recipeId: "", available: true, pdvOnly: false, kitchenPrint: false, autoDisableWhenOutOfStock: false, scheduleRuleEnabled: false, scheduleRuleType: "weekday", scheduleRuleWeekdays: [], scheduleRuleStartDate: "", scheduleRuleEndDate: "", variants: [], extras: [], ncm: "", cfop: "5102", csosn: "400", unitCom: "UN", origem: 0, aliqIcms: 0 });
     setExtraInput({ label: "", price: "" });
     setProdModal({ open: true, categoryId });
   };
@@ -2692,7 +2692,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
       imageUrl: prod.imageUrl || "", inventoryItemId: prod.inventoryItemId || "", recipeId: prod.recipeId || "",
       available: prod.available !== false,
       pdvOnly: prod.pdvOnly || false,
-      kitchenPrint: prod.kitchenPrint !== false,
+      kitchenPrint: prod.kitchenPrint === true,
       autoDisableWhenOutOfStock: prod.autoDisableWhenOutOfStock || false,
       scheduleRuleEnabled,
       scheduleRuleType,
@@ -3126,14 +3126,14 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
           <div className="flex items-center justify-between py-1 border-t border-slate-100">
             <div>
               <p className="text-sm font-bold text-slate-700">Vai para a cozinha</p>
-              <p className="text-xs text-slate-400">Desative para bebidas/embalagens — não aparece no painel de cozinha</p>
+              <p className="text-xs text-slate-400">Ative para itens que precisam de preparo — bebidas/embalagens ficam desativadas por padrão</p>
             </div>
             <button
               type="button"
               onClick={() => setProdForm(f => ({ ...f, kitchenPrint: !f.kitchenPrint }))}
-              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${prodForm.kitchenPrint !== false ? 'bg-orange-500' : 'bg-slate-200'}`}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${prodForm.kitchenPrint === true ? 'bg-orange-500' : 'bg-slate-200'}`}
             >
-              <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition duration-200 ${prodForm.kitchenPrint !== false ? 'translate-x-5' : 'translate-x-0'}`} />
+              <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition duration-200 ${prodForm.kitchenPrint === true ? 'translate-x-5' : 'translate-x-0'}`} />
             </button>
           </div>
 
@@ -4825,13 +4825,14 @@ export function KitchenKDSPanel({
   onDismissWaiterCall?: (ts: number) => void;
 }) {
   const [viewMode, setViewMode] = useState<"grid" | "consolidated">("grid");
-  const pendingOrders = orders.filter(o => o.status === "PENDING");
-  const preparingOrders = orders.filter(o => o.status === "PREPARING");
+  const hasKitchenItem = (o: Order) => o.items.some(item => item.product?.kitchenPrint === true);
+  const pendingOrders = orders.filter(o => o.status === "PENDING" && hasKitchenItem(o));
+  const preparingOrders = orders.filter(o => o.status === "PREPARING" && hasKitchenItem(o));
   const kitchenOrders = [...pendingOrders, ...preparingOrders];
 
-  // Calculate consolidated items (pending + preparing)
+  // Calculate consolidated items (pending + preparing) — só itens marcados para cozinha
   const consolidated = kitchenOrders.reduce((acc: Record<string, { name: string; quantity: number }>, order) => {
-    order.items.forEach(item => {
+    order.items.filter(item => item.product?.kitchenPrint === true).forEach(item => {
       const key = item.productId;
       if (!acc[key]) acc[key] = { name: item.product?.name || "Produto", quantity: 0 };
       acc[key].quantity += item.quantity;
@@ -5033,7 +5034,7 @@ function KDSTicket({ order, onComplete, actionLabel = "Concluir Pedido", highlig
       </div>
 
       <div className="flex-1 space-y-2.5">
-        {order.items.map((item, idx) => (
+        {order.items.filter((item) => item.product?.kitchenPrint === true).map((item, idx) => (
           <div key={idx} className="flex items-start gap-3 p-3 bg-white/60 rounded-2xl border border-slate-100/50">
             <span className="text-sm font-black text-[#C9A227] min-w-[20px]">{item.quantity}x</span>
             <div className="flex-1">
@@ -5047,6 +5048,9 @@ function KDSTicket({ order, onComplete, actionLabel = "Concluir Pedido", highlig
             </div>
           </div>
         ))}
+        {order.items.every((item) => item.product?.kitchenPrint !== true) && (
+          <p className="text-xs text-slate-300 italic text-center py-4">Nenhum item de cozinha neste pedido</p>
+        )}
       </div>
 
       <Button

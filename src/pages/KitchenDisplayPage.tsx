@@ -37,7 +37,7 @@ function KitchenTicket({
   isReady: boolean;
 }) {
   const elapsed = useElapsedMinutes(order.createdAt);
-  const kitchenItems = order.items.filter((item) => item.product?.kitchenPrint !== false);
+  const kitchenItems = order.items.filter((item) => item.product?.kitchenPrint === true);
 
   const urgency = isReady
     ? "border-emerald-500/40 bg-emerald-500/5"
@@ -179,7 +179,7 @@ export default function KitchenDisplayPage() {
   const kitchenOrders = useMemo(() => {
     return orders
       .filter((o) => KITCHEN_STATUSES.includes(o.status as any))
-      .filter((o) => o.items.some((item) => item.product?.kitchenPrint !== false))
+      .filter((o) => o.items.some((item) => item.product?.kitchenPrint === true))
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   }, [orders, now]);
 
