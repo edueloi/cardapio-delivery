@@ -8,10 +8,16 @@ import PDVPanel from "../features/dashboard/PDVPanel";
 import { ShoppingBag, X } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
-export default function PDVPage() {
+interface PDVPageProps {
+  /** "waiter" = tela reduzida para garçons: só lança pedidos em mesa/comanda, sem caixa/pagamento. */
+  mode?: "full" | "waiter";
+}
+
+export default function PDVPage({ mode = "full" }: PDVPageProps) {
   const { slug } = useParams<{ slug: string }>();
   const { isAuthenticated, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const isWaiterMode = mode === "waiter";
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [checkoutRequests, setCheckoutRequests] = useState<Array<{ tableId: string; customerName: string; timestamp: number }>>([]);
@@ -36,7 +42,7 @@ export default function PDVPage() {
   useEffect(() => {
     if (authLoading) return;
     if (!isAuthenticated) {
-      navigate(`/login?redirect=/pdv/${slug}`);
+      navigate(`/login?redirect=/${isWaiterMode ? "garcom" : "pdv"}/${slug}`);
       return;
     }
     fetchTenant();
@@ -120,7 +126,9 @@ export default function PDVPage() {
             </div>
             <div>
               <p className="text-sm font-black">{tenant.name}</p>
-              <p className="text-[10px] text-white/40 uppercase tracking-widest font-bold">PDV — Ponto de Venda</p>
+              <p className="text-[10px] text-white/40 uppercase tracking-widest font-bold">
+                {isWaiterMode ? "Garçom — Lançar Pedidos" : "PDV — Ponto de Venda"}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -128,13 +136,15 @@ export default function PDVPage() {
               <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
               Online
             </span>
-            <Link
-              to={`/dashboard/${slug}/pdv`}
-              className="flex items-center gap-1.5 text-[10px] font-black uppercase text-white/40 hover:text-white transition-colors bg-white/5 px-3 py-2 rounded-xl"
-            >
-              <X className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Fechar</span>
-            </Link>
+            {!isWaiterMode && (
+              <Link
+                to={`/dashboard/${slug}/pdv`}
+                className="flex items-center gap-1.5 text-[10px] font-black uppercase text-white/40 hover:text-white transition-colors bg-white/5 px-3 py-2 rounded-xl"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Fechar</span>
+              </Link>
+            )}
           </div>
         </div>
       )}
@@ -143,6 +153,7 @@ export default function PDVPage() {
       <div className="flex-1 min-h-0 p-2 sm:p-3 pt-3 sm:pt-4">
         <PDVPanel
           tenant={tenant}
+          mode={mode}
           onOrderCreated={() => {
             if (tenant) {
               apiJson<Order[]>(`/api/admin/${tenant.id}/orders`)

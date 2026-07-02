@@ -17,6 +17,7 @@ import {
   Star,
   Truck,
   Users,
+  UserCog,
   Utensils,
   Wallet,
   ArrowLeftRight,
@@ -30,6 +31,7 @@ export const DASHBOARD_NAVIGATION: DashboardNavigationGroup[] = [
     items: [
       { id: "overview",  label: "Visão Geral",        tab: "overview",     icon: LayoutDashboard },
       { id: "pos",       label: "PDV — Caixa",        tab: "pos",          icon: Receipt },
+      { id: "waiter",    label: "Garçom",             tab: "waiter",       icon: UserCog },
       { id: "orders",    label: "Painel de Pedidos",  tab: "live-orders",  icon: Clock },
       { id: "scheduled", label: "Agendamentos",       tab: "scheduled",    icon: CalendarDays },
       { id: "kds",       label: "Monitor de Cozinha", tab: "kds",          icon: Utensils },

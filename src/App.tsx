@@ -13,6 +13,7 @@ import Register from "./pages/Register";
 import LandingPage from "./pages/LandingPage";
 import PublicDashboard from "./features/public-dashboard";
 import PDVPage from "./pages/PDVPage";
+import KitchenDisplayPage from "./pages/KitchenDisplayPage";
 import SuperAdminPage from "./features/superadmin/SuperAdminPage";
 import CondominiumPage from "./features/condominium-view/CondominiumPage";
 import AdminAccessPage from "./features/auth/AdminAccessPage";
@@ -81,6 +82,24 @@ function AnimatedRoutes() {
             element={
               <AuthGuard>
                 <PDVPage />
+              </AuthGuard>
+            }
+          />
+
+          <Route
+            path="/garcom/:slug"
+            element={
+              <AuthGuard>
+                <PDVPage mode="waiter" />
+              </AuthGuard>
+            }
+          />
+
+          <Route
+            path="/cozinha/:slug"
+            element={
+              <AuthGuard>
+                <KitchenDisplayPage />
               </AuthGuard>
             }
           />

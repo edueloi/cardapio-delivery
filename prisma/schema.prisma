@@ -35,6 +35,7 @@ model Tenant {
   products   Product[]
   orders     Order[]
   cashRegisters CashRegister[]
+  restaurantTables RestaurantTable[]
   inventoryCategories InventoryCategory[]
   inventoryItems      InventoryItem[]
   productionRecipes   ProductionRecipe[]
@@ -403,6 +404,7 @@ model Product {
   tenantId    String   @map("tenant_id")
   available   Boolean  @default(true)
   pdvOnly     Boolean  @default(false) @map("pdv_only")
+  kitchenPrint Boolean @default(true) @map("kitchen_print") // false = não vai para o painel de cozinha (ex: bebidas, embalagens)
   autoDisableWhenOutOfStock Boolean @default(false) @map("auto_disable_when_out_of_stock")
   extras      String?  @db.Text // JSON: ProductExtra[]
   scheduleRule String? @map("schedule_rule") @db.Text // JSON: ProductScheduleRule
@@ -616,4 +618,19 @@ model Feature {
   createdAt   DateTime @default(now()) @map("created_at")
 
   @@map("features")
+}
+
+// Mesa cadastrada pelo estabelecimento — usada pelo PDV/garçom para abrir uma mesa nova
+// sem precisar digitar o número livremente. label = "1", "2", "VIP", etc.
+model RestaurantTable {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  label     String
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, label])
+  @@map("restaurant_tables")
 }

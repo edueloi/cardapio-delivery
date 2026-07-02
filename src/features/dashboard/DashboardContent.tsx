@@ -267,6 +267,32 @@ export default function DashboardContent({
           />
         </div>
       )}
+      {activeTab === "waiter" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-xl font-black text-slate-800 uppercase tracking-widest">Garçom — Lançar Pedidos</h3>
+              <p className="text-xs text-slate-400 mt-0.5">Mesas e comandas, sem acesso ao caixa</p>
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              iconLeft={<ExternalLink className="w-4 h-4" />}
+              onClick={() => window.open(`/garcom/${slug}`, "_blank", "width=1024,height=768")}
+            >
+              Abrir em Tela Cheia
+            </Button>
+          </div>
+          <PDVPanel
+            tenant={tenant}
+            mode="waiter"
+            onOrderCreated={refreshTenant}
+            checkoutRequests={checkoutRequests}
+            onClearTable={onClearTable}
+            orders={orders}
+          />
+        </div>
+      )}
       {activeTab === "loyalty" && (
         <LoyaltyPanel tenant={tenant} onUpdated={refreshTenant} />
       )}

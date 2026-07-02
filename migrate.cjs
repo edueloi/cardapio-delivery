@@ -587,6 +587,28 @@ const migrations = [
       CONSTRAINT condominium_tenants_tenant_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE ON UPDATE CASCADE
     ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
   },
+  // Mesas cadastradas pelo estabelecimento — usadas pelo PDV/garçom para abrir mesa nova
+  {
+    name: 'create_restaurant_tables_table',
+    check: "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'restaurant_tables'",
+    run: `CREATE TABLE restaurant_tables (
+      id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      tenant_id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      label VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      sort_order INT NOT NULL DEFAULT 0,
+      created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (id),
+      UNIQUE INDEX restaurant_tables_unique (tenant_id, label),
+      INDEX restaurant_tables_tenant_id_idx (tenant_id),
+      CONSTRAINT restaurant_tables_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE ON UPDATE CASCADE
+    ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+  },
+  // Marca se o produto deve aparecer no painel de cozinha (false = bebida/embalagem, não precisa preparo)
+  {
+    name: 'add_products_kitchen_print',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'kitchen_print'",
+    run: "ALTER TABLE products ADD COLUMN kitchen_print TINYINT(1) NOT NULL DEFAULT 1",
+  },
 ];
 
 async function run() {

@@ -249,6 +249,7 @@ export interface Product {
   categoryId: string;
   available: boolean;
   pdvOnly?: boolean;
+  kitchenPrint?: boolean; // false = não aparece no painel de cozinha (ex: bebidas, embalagens)
   autoDisableWhenOutOfStock?: boolean;
   inventoryItemId?: string | null;
   inventoryItem?: InventoryItem | null;

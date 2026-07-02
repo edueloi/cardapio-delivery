@@ -341,6 +341,7 @@ export function OrdersList({
 const PERM_TABS = [
   { id: "overview",    label: "Visão Geral",       group: "Operação" },
   { id: "pos",         label: "PDV — Caixa",       group: "Operação" },
+  { id: "waiter",      label: "Garçom",            group: "Operação" },
   { id: "live-orders", label: "Painel de Pedidos", group: "Operação" },
   { id: "scheduled",   label: "Agendamentos",      group: "Operação" },
   { id: "kds",         label: "Monitor de Cozinha",group: "Operação" },
@@ -349,7 +350,9 @@ const PERM_TABS = [
   { id: "menu",        label: "Cardápio",          group: "Catálogo" },
   { id: "inventory",   label: "Estoque",           group: "Catálogo" },
   { id: "production",  label: "Produção",          group: "Catálogo" },
+  { id: "suppliers",   label: "Fornecedores",      group: "Catálogo" },
   { id: "finance",     label: "Fluxo de Caixa",    group: "Financeiro" },
+  { id: "entries",     label: "Entradas e Saídas", group: "Financeiro" },
   { id: "reports",     label: "Relatórios",        group: "Financeiro" },
   { id: "customers",   label: "Clientes CRM",      group: "Marketing" },
   { id: "loyalty",     label: "Fidelidade",        group: "Marketing" },
@@ -2122,12 +2125,48 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
             {/* Taxas da Maquininha */}
             <ContentCard padding="lg">
               <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-1">Taxas da Maquininha</p>
-              <p className="text-[10px] text-slate-400 mb-6">Configure o percentual cobrado pela adquirente por bandeira e parcela. Esses valores alimentam o custo exibido no financeiro e, se ativado, o acréscimo cobrado do cliente no PDV.</p>
+              <p className="text-[10px] text-slate-400 mb-6">Configure o percentual cobrado pela adquirente por bandeira/provedor. Esses valores alimentam o custo exibido no financeiro e, se ativado, o acréscimo cobrado do cliente no PDV.</p>
+
+              {/* PIX — taxa única do provedor, sem bandeira/parcela */}
+              {payments.pix?.enabled && (
+                <div className="mb-6 pb-6 border-b border-slate-100">
+                  <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                    <p className="text-sm font-black text-slate-800">Pix</p>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Repassar taxa ao cliente</span>
+                      <Switch
+                        checked={!!payments.pix.passFeeToCustomer}
+                        onCheckedChange={(v) => setPayments({ ...payments, pix: { ...payments.pix!, passFeeToCustomer: v } })}
+                      />
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-3 bg-slate-50 border border-slate-100 rounded-2xl p-3 max-w-xs">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex-1">Taxa do provedor</span>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={payments.pix.brandFees?.["PIX"]?.installmentFees?.["1"] ?? ""}
+                        onChange={(e) => {
+                          const pct = parseFloat(e.target.value.replace(",", ".")) || 0;
+                          setPayments({
+                            ...payments,
+                            pix: { ...payments.pix!, brandFees: { PIX: { installmentFees: { "1": pct } } } },
+                          });
+                        }}
+                        placeholder="0,0"
+                        className="w-16 text-center bg-white border border-slate-200 rounded-lg py-1.5 text-xs font-bold outline-none focus:border-[#C9A227] transition-all"
+                      />
+                      <span className="text-xs font-bold text-slate-400">%</span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {(["credit", "debit"] as const).map((methodKey) => {
                 const methodConfig = payments[methodKey] as PaymentMethodConfig | undefined;
                 if (!methodConfig?.enabled) return null;
-                const brands = methodConfig.acceptedBrands?.length ? methodConfig.acceptedBrands : ["Visa", "Mastercard", "Elo"];
+                const brands = methodConfig.acceptedBrands?.length ? methodConfig.acceptedBrands : [];
                 const installmentsRange = methodKey === "credit" ? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] : [1];
                 const brandFees = methodConfig.brandFees || {};
 
@@ -2146,9 +2185,30 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                   });
                 };
 
+                const addBrand = (name: string) => {
+                  const trimmed = name.trim();
+                  if (!trimmed || brands.includes(trimmed)) return;
+                  setPayments({
+                    ...payments,
+                    [methodKey]: { ...methodConfig, acceptedBrands: [...brands, trimmed] },
+                  });
+                };
+
+                const removeBrand = (name: string) => {
+                  const { [name]: _removed, ...restFees } = brandFees;
+                  setPayments({
+                    ...payments,
+                    [methodKey]: {
+                      ...methodConfig,
+                      acceptedBrands: brands.filter((b) => b !== name),
+                      brandFees: restFees,
+                    },
+                  });
+                };
+
                 return (
                   <div key={methodKey} className="mb-6 last:mb-0 pb-6 last:pb-0 border-b last:border-0 border-slate-100">
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
                       <p className="text-sm font-black text-slate-800">
                         {methodKey === "credit" ? "Cartão de Crédito" : "Cartão de Débito"}
                       </p>
@@ -2164,48 +2224,84 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                       </label>
                     </div>
 
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-[10px] border-collapse">
-                        <thead>
-                          <tr>
-                            <th className="text-left font-black uppercase tracking-widest text-slate-400 pb-2 pr-3">Bandeira</th>
+                    {/* Cards por bandeira — responsivo, uma bandeira por bloco */}
+                    <div className="space-y-3">
+                      {brands.map((brand) => (
+                        <div key={brand} className="bg-slate-50 border border-slate-100 rounded-2xl p-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <p className="text-xs font-black text-slate-700 uppercase tracking-wide">{brand}</p>
+                            <button
+                              type="button"
+                              onClick={() => removeBrand(brand)}
+                              className="text-slate-300 hover:text-red-400 transition-colors"
+                              title="Remover bandeira"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
                             {installmentsRange.map((n) => (
-                              <th key={n} className="text-center font-black uppercase tracking-widest text-slate-400 pb-2 px-1">
-                                {methodKey === "credit" ? `${n}x` : "%"}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {brands.map((brand) => (
-                            <tr key={brand} className="border-t border-slate-50">
-                              <td className="py-1.5 pr-3 font-bold text-slate-600 whitespace-nowrap">{brand}</td>
-                              {installmentsRange.map((n) => (
-                                <td key={n} className="px-1 py-1.5">
+                              <div key={n} className="flex flex-col gap-1">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 text-center">
+                                  {methodKey === "credit" ? `${n}x` : "à vista"}
+                                </span>
+                                <div className="flex items-center gap-0.5">
                                   <input
                                     type="text"
                                     inputMode="decimal"
                                     value={brandFees[brand]?.installmentFees?.[String(n)] ?? ""}
                                     onChange={(e) => updateFee(brand, n, e.target.value)}
                                     placeholder="0,0"
-                                    className="w-14 text-center bg-slate-50 border border-slate-100 rounded-lg py-1 outline-none focus:border-[#C9A227] transition-all"
+                                    className="w-full min-w-0 text-center bg-white border border-slate-200 rounded-lg py-1.5 text-xs font-bold outline-none focus:border-[#C9A227] transition-all"
                                   />
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                                  <span className="text-[10px] font-bold text-slate-400 shrink-0">%</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
                     </div>
+
+                    {/* Adicionar nova bandeira */}
+                    <div className="flex gap-2 mt-3">
+                      <input
+                        type="text"
+                        placeholder="Adicionar bandeira (ex: Cabal, Banricompras...)"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            addBrand(e.currentTarget.value);
+                            e.currentTarget.value = "";
+                          }
+                        }}
+                        className="flex-1 min-w-0 bg-white border border-slate-200 rounded-xl px-3 py-2 text-[11px] font-bold outline-none focus:border-[#C9A227] transition-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          const input = (e.currentTarget.previousSibling as HTMLInputElement);
+                          addBrand(input.value);
+                          input.value = "";
+                        }}
+                        className="shrink-0 px-3 py-2 bg-[#0D1B3E] text-white rounded-xl hover:bg-[#0D1B3E]/90 transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {brands.length === 0 && (
+                      <p className="text-[10px] text-slate-400 mt-2">Nenhuma bandeira cadastrada ainda — adicione acima ou na aba "Pagamentos".</p>
+                    )}
                   </div>
                 );
               })}
 
-              {!payments.credit?.enabled && !payments.debit?.enabled && (
+              {!payments.pix?.enabled && !payments.credit?.enabled && !payments.debit?.enabled && (
                 <div className="text-center py-8 text-slate-400">
                   <CreditCard className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                  <p className="text-[11px] font-black uppercase tracking-widest mb-1">Nenhum cartão habilitado</p>
-                  <p className="text-[10px]">Ative Crédito ou Débito na aba "Pagamentos" para configurar as taxas.</p>
+                  <p className="text-[11px] font-black uppercase tracking-widest mb-1">Nenhum meio de pagamento habilitado</p>
+                  <p className="text-[10px]">Ative Pix, Crédito ou Débito na aba "Pagamentos" para configurar as taxas.</p>
                 </div>
               )}
             </ContentCard>
@@ -2499,7 +2595,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
   const [productionRecipes, setProductionRecipes] = useState<any[]>([]);
   const [prodForm, setProdForm] = useState({
     name: "", description: "", price: "", imageUrl: "", inventoryItemId: "", recipeId: "",
-    available: true, pdvOnly: false, autoDisableWhenOutOfStock: false,
+    available: true, pdvOnly: false, kitchenPrint: true, autoDisableWhenOutOfStock: false,
     scheduleRuleEnabled: false,
     scheduleRuleType: "weekday" as "weekday" | "daterange" | "both",
     scheduleRuleWeekdays: [] as number[],
@@ -2564,7 +2660,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
 
   const openNewProduct = (categoryId: string) => {
     setEditingProduct(null);
-    setProdForm({ name: "", description: "", price: "", imageUrl: "", inventoryItemId: "", recipeId: "", available: true, pdvOnly: false, autoDisableWhenOutOfStock: false, scheduleRuleEnabled: false, scheduleRuleType: "weekday", scheduleRuleWeekdays: [], scheduleRuleStartDate: "", scheduleRuleEndDate: "", variants: [], extras: [], ncm: "", cfop: "5102", csosn: "400", unitCom: "UN", origem: 0, aliqIcms: 0 });
+    setProdForm({ name: "", description: "", price: "", imageUrl: "", inventoryItemId: "", recipeId: "", available: true, pdvOnly: false, kitchenPrint: true, autoDisableWhenOutOfStock: false, scheduleRuleEnabled: false, scheduleRuleType: "weekday", scheduleRuleWeekdays: [], scheduleRuleStartDate: "", scheduleRuleEndDate: "", variants: [], extras: [], ncm: "", cfop: "5102", csosn: "400", unitCom: "UN", origem: 0, aliqIcms: 0 });
     setExtraInput({ label: "", price: "" });
     setProdModal({ open: true, categoryId });
   };
@@ -2596,6 +2692,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
       imageUrl: prod.imageUrl || "", inventoryItemId: prod.inventoryItemId || "", recipeId: prod.recipeId || "",
       available: prod.available !== false,
       pdvOnly: prod.pdvOnly || false,
+      kitchenPrint: prod.kitchenPrint !== false,
       autoDisableWhenOutOfStock: prod.autoDisableWhenOutOfStock || false,
       scheduleRuleEnabled,
       scheduleRuleType,
@@ -3023,6 +3120,20 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
               className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${prodForm.pdvOnly ? 'bg-blue-500' : 'bg-slate-200'}`}
             >
               <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition duration-200 ${prodForm.pdvOnly ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between py-1 border-t border-slate-100">
+            <div>
+              <p className="text-sm font-bold text-slate-700">Vai para a cozinha</p>
+              <p className="text-xs text-slate-400">Desative para bebidas/embalagens — não aparece no painel de cozinha</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setProdForm(f => ({ ...f, kitchenPrint: !f.kitchenPrint }))}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${prodForm.kitchenPrint !== false ? 'bg-orange-500' : 'bg-slate-200'}`}
+            >
+              <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition duration-200 ${prodForm.kitchenPrint !== false ? 'translate-x-5' : 'translate-x-0'}`} />
             </button>
           </div>
 
@@ -4496,23 +4607,51 @@ export function TableManagement({
   checkoutRequests?: Array<{ tableId: string }>;
   onClearTable?: (tableId: string) => void;
 }) {
-  const [tables, setTables] = useState<string[]>(["1", "2", "3", "4", "5"]);
+  const [tableRecords, setTableRecords] = useState<Array<{ id: string; label: string }>>([]);
   const [newTable, setNewTable] = useState("");
+  const [tablesLoading, setTablesLoading] = useState(true);
+  const [addTableError, setAddTableError] = useState("");
 
-  const addTable = () => {
-    if (newTable && !tables.includes(newTable)) {
-      setTables([...tables, newTable].sort((a, b) => {
-        const numA = parseInt(a);
-        const numB = parseInt(b);
+  const fetchTables = async () => {
+    try {
+      const data = await apiJson(`/api/tenants/${tenant.slug}/tables`) as Array<{ id: string; label: string }>;
+      setTableRecords(Array.isArray(data) ? data : []);
+    } catch { /* ignore */ }
+    finally { setTablesLoading(false); }
+  };
+
+  useEffect(() => { fetchTables(); }, [tenant.slug]);
+
+  const tables = tableRecords.map(t => t.label);
+
+  const addTable = async () => {
+    const label = newTable.trim();
+    if (!label || tables.includes(label)) return;
+    setAddTableError("");
+    try {
+      const created = await apiJson(`/api/tenants/${tenant.slug}/tables`, {
+        method: "POST",
+        body: JSON.stringify({ label }),
+      }) as { id: string; label: string };
+      setTableRecords(prev => [...prev, created].sort((a, b) => {
+        const numA = parseInt(a.label);
+        const numB = parseInt(b.label);
         if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
-        return a.localeCompare(b);
+        return a.label.localeCompare(b.label);
       }));
       setNewTable("");
+    } catch (err: any) {
+      setAddTableError(err?.message || "Erro ao adicionar mesa.");
     }
   };
 
-  const removeTable = (id: string) => {
-    setTables(tables.filter(t => t !== id));
+  const removeTable = async (label: string) => {
+    const record = tableRecords.find(t => t.label === label);
+    if (!record) return;
+    setTableRecords(prev => prev.filter(t => t.id !== record.id));
+    try {
+      await apiJson(`/api/tenants/${tenant.slug}/tables/${record.id}`, { method: "DELETE" });
+    } catch { fetchTables(); }
   };
 
   const menuUrl = `${window.location.origin}/${tenant.slug}/mesa/`;
@@ -4570,23 +4709,33 @@ export function TableManagement({
         <section className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <h4 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Mesas do Salão</h4>
-            <div className="flex gap-2">
-              <input 
-                value={newTable} 
-                onChange={e => setNewTable(e.target.value)} 
-                placeholder="Nº da Mesa" 
-                className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 w-28"
-              />
-              <Button variant="primary" size="sm" onClick={addTable}>
-                + Adicionar Mesa
-              </Button>
+            <div className="flex flex-col items-end gap-1">
+              <div className="flex gap-2">
+                <input
+                  value={newTable}
+                  onChange={e => setNewTable(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") addTable(); }}
+                  placeholder="Nº da Mesa"
+                  className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 w-28"
+                />
+                <Button variant="primary" size="sm" onClick={addTable}>
+                  + Adicionar Mesa
+                </Button>
+              </div>
+              {addTableError && <p className="text-[10px] font-bold text-red-500">{addTableError}</p>}
             </div>
           </div>
 
+          {tablesLoading ? (
+            <div className="flex items-center justify-center p-16">
+              <div className="w-8 h-8 border-4 border-[#C9A227] border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : (
+          <>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
             {tables.map(table => {
               const isRequestingAccount = checkoutRequests.some(r => r.tableId === table);
-              
+
               return (
                 <div 
                   key={table} 
@@ -4650,11 +4799,13 @@ export function TableManagement({
           </div>
 
           {tables.length === 0 && (
-            <EmptyState 
-              title="Nenhuma mesa no salão" 
+            <EmptyState
+              title="Nenhuma mesa no salão"
               description="Cadastre as mesas para gerar os códigos individuais."
               icon={Monitor}
             />
+          )}
+          </>
           )}
         </section>
       </div>

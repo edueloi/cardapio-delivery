@@ -33,6 +33,8 @@ interface PDVPanelProps {
   checkoutRequests?: Array<{ tableId: string; customerName: string; timestamp: number }>;
   onClearTable?: (tableId: string) => void;
   orders?: Order[];
+  /** "waiter" = garçom: só lança pedidos em mesa/comanda, sem acesso a pagamento/caixa. */
+  mode?: "full" | "waiter";
 }
 
 const BASE_PAYMENT_METHODS = [
@@ -50,7 +52,9 @@ export default function PDVPanel({
   checkoutRequests = [],
   onClearTable,
   orders = [],
+  mode = "full",
 }: PDVPanelProps) {
+  const isWaiterMode = mode === "waiter";
   const [activeTab, setActiveTab] = useState<"products" | "tables" | "comandas">("products");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
@@ -61,6 +65,7 @@ export default function PDVPanel({
   const [comandaNumber, setComandaNumber] = useState("");
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   const [selectedComandaId, setSelectedComandaId] = useState<string | null>(null);
+  const [registeredTables, setRegisteredTables] = useState<Array<{ id: string; label: string }>>([]);
 
   // Customer
   const [customerName, setCustomerName] = useState("");
@@ -175,6 +180,12 @@ export default function PDVPanel({
   const total = Math.max(0, subtotal - discountAmount);
 
   const feeInfo = useMemo(() => {
+    if (paymentMethod === "PIX") {
+      const cfg = paymentConfig.pix;
+      const percent = cfg?.brandFees?.["PIX"]?.installmentFees?.["1"] ?? 0;
+      const passToCustomer = !!cfg?.passFeeToCustomer;
+      return { percent, amount: total * (percent / 100), passToCustomer };
+    }
     const methodKey = paymentMethod === "CREDIT" ? "credit" : paymentMethod === "DEBIT" ? "debit" : null;
     if (!methodKey || !cardBrand) return { percent: 0, amount: 0, passToCustomer: false };
     const cfg = paymentConfig[methodKey] as PaymentMethodConfig | undefined;
@@ -233,6 +244,12 @@ export default function PDVPanel({
   // Cleanup stone polling on unmount
   useEffect(() => () => { if (stonePollRef.current) clearInterval(stonePollRef.current); }, []);
 
+  useEffect(() => {
+    apiJson(`/api/tenants/${tenant.slug}/tables`)
+      .then((data) => setRegisteredTables(Array.isArray(data) ? data as Array<{ id: string; label: string }> : []))
+      .catch(() => setRegisteredTables([]));
+  }, [tenant.slug]);
+
   const handleLoadTable = (tableId: string) => {
     const tableOrders = orders.filter(
       (o) => o.tableId === tableId && o.status !== "CANCELLED" && o.status !== "DELIVERED"
@@ -250,6 +267,34 @@ export default function PDVPanel({
     setCart(items);
     setSelectedTableId(tableId);
     setActiveTab("products");
+  };
+
+  // Lança o pedido em uma mesa/comanda já aberta, sem cobrar — usado pelo modo garçom
+  // e pelo botão "Lançar" quando a mesa/comanda já está selecionada.
+  const handleLaunchOrder = async () => {
+    if (cart.length === 0 || (!selectedTableId && !selectedComandaId)) return;
+    setIsProcessing(true);
+    try {
+      await apiJson(`/api/tenants/${tenant.slug}/pdv/order`, {
+        method: "POST",
+        body: JSON.stringify({
+          customerName: customerName || (selectedTableId ? `Mesa ${selectedTableId}` : "Comanda"),
+          customerPhone: customerPhone || "00000000000",
+          orderType: "DINE_IN",
+          tableId: selectedTableId || undefined,
+          paymentMethod: "CASH",
+          items: cart.map((item) => ({ productId: item.product.id, quantity: item.quantity, price: item.price, notes: item.notes || undefined })),
+          status: "PENDING",
+        }),
+      });
+      clearCart();
+      onOrderCreated?.();
+      setActiveTab("tables");
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleCheckout = async () => {
@@ -613,20 +658,40 @@ export default function PDVPanel({
             }
           });
           const activeTables = Array.from(activeTableMap.values()).sort((a, b) => Number(a.tableId) - Number(b.tableId));
+          const availableTables = registeredTables.filter((t) => !activeTableMap.has(t.label));
 
           return (
-            <div className="flex-1 overflow-y-auto p-6 custom-scrollbar bg-slate-50">
-              {activeTables.length === 0 ? (
+            <div className="flex-1 overflow-y-auto p-6 custom-scrollbar bg-slate-50 space-y-6">
+              {availableTables.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Mesas Disponíveis</p>
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                    {availableTables.map((t) => (
+                      <button
+                        key={t.id}
+                        onClick={() => handleLoadTable(t.label)}
+                        className="bg-white border border-slate-200 hover:border-[#C9A227] rounded-2xl py-3 text-center transition-all"
+                      >
+                        <span className="text-sm font-black text-slate-700">{t.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {activeTables.length === 0 && availableTables.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center space-y-4 opacity-30">
                   <div className="w-20 h-20 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center">
                     <Utensils className="w-8 h-8 text-slate-400" />
                   </div>
                   <p className="text-sm font-black uppercase tracking-widest text-slate-500">
-                    Nenhuma mesa com pedido ativo
+                    Nenhuma mesa cadastrada
                   </p>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              ) : activeTables.length === 0 ? null : (
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Mesas Ocupadas</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                   {activeTables.map((tbl) => (
                     <button
                       key={tbl.tableId}
@@ -654,6 +719,7 @@ export default function PDVPanel({
                       </div>
                     </button>
                   ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -895,26 +961,34 @@ export default function PDVPanel({
           </div>
 
           {/* Actions */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className={isWaiterMode ? "grid grid-cols-1" : "grid grid-cols-2 gap-3"}>
             <button
-              disabled={cart.length === 0}
+              disabled={cart.length === 0 || isProcessing}
               onClick={() => {
-                if (selectedTableId || selectedComandaId) setShowCheckout(true);
+                if (selectedTableId || selectedComandaId) void handleLaunchOrder();
                 else setShowComandaModal(true);
               }}
-              className="bg-white/5 hover:bg-white/10 disabled:opacity-30 text-white font-black py-3 rounded-2xl transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-[10px]"
+              className={`${isWaiterMode ? "bg-[#C9A227] hover:bg-[#E8B93A] text-black shadow-xl shadow-[#C9A227]/20" : "bg-white/5 hover:bg-white/10 text-white"} disabled:opacity-30 font-black py-3 rounded-2xl transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-[10px]`}
             >
-              Lançar
-              <Package className="w-4 h-4" />
+              {isProcessing ? (
+                <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <>
+                  Lançar Pedido
+                  <Package className="w-4 h-4" />
+                </>
+              )}
             </button>
-            <button
-              disabled={cart.length === 0}
-              onClick={() => setShowCheckout(true)}
-              className="bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-3 rounded-2xl transition-all shadow-xl shadow-[#C9A227]/20 flex items-center justify-center gap-2 uppercase tracking-widest text-[10px]"
-            >
-              Pagar
-              <ChevronRight className="w-4 h-4" />
-            </button>
+            {!isWaiterMode && (
+              <button
+                disabled={cart.length === 0}
+                onClick={() => setShowCheckout(true)}
+                className="bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-3 rounded-2xl transition-all shadow-xl shadow-[#C9A227]/20 flex items-center justify-center gap-2 uppercase tracking-widest text-[10px]"
+              >
+                Pagar
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
 

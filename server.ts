@@ -1966,7 +1966,7 @@ app.delete("/api/categories/:id", requireAuth, async (req, res) => {
 });
 
 app.post("/api/products", requireAuth, async (req, res) => {
-  const { name, description, price, imageUrl, categoryId, tenantId, variants, inventoryItemId, pdvOnly, extras, scheduleRule, recipeId } = req.body;
+  const { name, description, price, imageUrl, categoryId, tenantId, variants, inventoryItemId, pdvOnly, kitchenPrint, extras, scheduleRule, recipeId } = req.body;
   const tenant = await requireTenantById(req, res, tenantId);
   if (!tenant) return;
 
@@ -1981,6 +1981,7 @@ app.post("/api/products", requireAuth, async (req, res) => {
         tenantId: tenant.id,
         available: true,
         pdvOnly: Boolean(pdvOnly),
+        kitchenPrint: kitchenPrint === undefined ? true : Boolean(kitchenPrint),
         inventoryItemId: inventoryItemId || null,
         extras: extras ? (typeof extras === 'string' ? extras : JSON.stringify(extras)) : null,
         scheduleRule: scheduleRule ? (typeof scheduleRule === 'string' ? scheduleRule : JSON.stringify(scheduleRule)) : null,
@@ -2017,7 +2018,7 @@ app.patch("/api/products/:id", requireAuth, async (req, res) => {
   const scoped = await requireTenantFromProduct(req, res, req.params.id);
   if (!scoped) return;
 
-  const { name, description, price, imageUrl, variants, inventoryItemId, available, autoDisableWhenOutOfStock, pdvOnly, extras, scheduleRule, recipeId } = req.body;
+  const { name, description, price, imageUrl, variants, inventoryItemId, available, autoDisableWhenOutOfStock, pdvOnly, kitchenPrint, extras, scheduleRule, recipeId } = req.body;
 
   try {
     const product = await prisma.$transaction(async (tx) => {
@@ -2036,6 +2037,7 @@ app.patch("/api/products/:id", requireAuth, async (req, res) => {
           ...(available !== undefined && { available: Boolean(available) }),
           ...(autoDisableWhenOutOfStock !== undefined && { autoDisableWhenOutOfStock: Boolean(autoDisableWhenOutOfStock) }),
           ...(pdvOnly !== undefined && { pdvOnly: Boolean(pdvOnly) }),
+          ...(kitchenPrint !== undefined && { kitchenPrint: Boolean(kitchenPrint) }),
           variants: Array.isArray(variants)
             ? {
                 create: variants.map((variant: any) => ({
@@ -2995,14 +2997,20 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
     // Taxa de maquininha — recalculada no servidor a partir da config salva do tenant (nunca confia no valor vindo do cliente)
     let feePercent = 0;
     let feePassedToCustomer = false;
-    if ((paymentMethod === "CREDIT" || paymentMethod === "DEBIT") && cardBrand && tenant.paymentMethods) {
+    if (tenant.paymentMethods) {
       try {
         const pm = JSON.parse(tenant.paymentMethods as string);
-        const methodKey = paymentMethod === "CREDIT" ? "credit" : "debit";
-        const cfg = pm?.[methodKey];
-        const installmentKey = paymentMethod === "CREDIT" ? String(installments || 1) : "1";
-        feePercent = cfg?.brandFees?.[cardBrand]?.installmentFees?.[installmentKey] ?? 0;
-        feePassedToCustomer = !!cfg?.passFeeToCustomer;
+        if (paymentMethod === "PIX") {
+          const cfg = pm?.pix;
+          feePercent = cfg?.brandFees?.["PIX"]?.installmentFees?.["1"] ?? 0;
+          feePassedToCustomer = !!cfg?.passFeeToCustomer;
+        } else if ((paymentMethod === "CREDIT" || paymentMethod === "DEBIT") && cardBrand) {
+          const methodKey = paymentMethod === "CREDIT" ? "credit" : "debit";
+          const cfg = pm?.[methodKey];
+          const installmentKey = paymentMethod === "CREDIT" ? String(installments || 1) : "1";
+          feePercent = cfg?.brandFees?.[cardBrand]?.installmentFees?.[installmentKey] ?? 0;
+          feePassedToCustomer = !!cfg?.passFeeToCustomer;
+        }
       } catch {}
     }
     const feeAmount = totalBeforeFee * (feePercent / 100);
@@ -3483,6 +3491,51 @@ app.delete("/api/admin/bundles/:id", requireAuth, async (req, res) => {
 });
 
 // ─── Suppliers ────────────────────────────────────────────────────────────────
+
+// ── Mesas do estabelecimento (persistidas — usadas pelo PDV/garçom em qualquer dispositivo) ──
+app.get("/api/tenants/:slug/tables", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  if (!tenant) return;
+  try {
+    const tables = await (prisma as any).restaurantTable.findMany({
+      where: { tenantId: tenant.id },
+      orderBy: { sortOrder: "asc" },
+    });
+    res.json(tables);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+app.post("/api/tenants/:slug/tables", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  if (!tenant) return;
+  try {
+    const label = String(req.body?.label ?? "").trim();
+    if (!label) return res.status(400).json({ error: "Identificação da mesa é obrigatória." });
+    const count = await (prisma as any).restaurantTable.count({ where: { tenantId: tenant.id } });
+    const table = await (prisma as any).restaurantTable.create({
+      data: { tenantId: tenant.id, label, sortOrder: count },
+    });
+    res.json(table);
+  } catch (err: any) {
+    if (err?.code === "P2002") return res.status(409).json({ error: "Já existe uma mesa com essa identificação." });
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+app.delete("/api/tenants/:slug/tables/:id", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  if (!tenant) return;
+  try {
+    const existing = await (prisma as any).restaurantTable.findFirst({ where: { id: req.params.id, tenantId: tenant.id } });
+    if (!existing) return res.status(404).json({ error: "Mesa não encontrada." });
+    await (prisma as any).restaurantTable.delete({ where: { id: req.params.id } });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
 
 app.get("/api/tenants/:slug/suppliers", requireAuth, async (req, res) => {
   const tenant = await requireTenantBySlug(req, res, req.params.slug);
