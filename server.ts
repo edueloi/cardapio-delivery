@@ -2338,7 +2338,7 @@ app.get("/api/tenants/:slug/cash/summary", requireAuth, async (req, res) => {
         status: "DELIVERED",
         createdAt: { gte: dateFrom, lte: dateTo },
       },
-      select: { total: true, paymentMethod: true, createdAt: true, discount: true },
+      select: { total: true, paymentMethod: true, createdAt: true, discount: true, feeAmount: true, feePassedToCustomer: true },
     });
 
     // Movimentos manuais (sangrias/suprimentos) no período
@@ -2354,6 +2354,8 @@ app.get("/api/tenants/:slug/cash/summary", requireAuth, async (req, res) => {
     const totalRevenue = orders.reduce((s, o) => s + o.total, 0);
     const totalSangrias = movements.filter(m => m.type === "SANGRIA").reduce((s, m) => s + m.amount, 0);
     const totalSuprimentos = movements.filter(m => m.type === "SUPRIMENTO").reduce((s, m) => s + m.amount, 0);
+    // Taxa de maquininha absorvida pelo lojista (não repassada ao cliente) — reduz o líquido em caixa
+    const totalFeesAbsorbed = orders.reduce((s, o) => s + (o.feePassedToCustomer ? 0 : (o.feeAmount || 0)), 0);
 
     // Agrupar receita por método
     const byMethod: Record<string, number> = {};
@@ -2374,7 +2376,8 @@ app.get("/api/tenants/:slug/cash/summary", requireAuth, async (req, res) => {
       orderCount: orders.length,
       totalSangrias,
       totalSuprimentos,
-      netBalance: totalRevenue + totalSuprimentos - totalSangrias,
+      totalFeesAbsorbed,
+      netBalance: totalRevenue + totalSuprimentos - totalSangrias - totalFeesAbsorbed,
       byMethod,
       byDay,
       movements,
@@ -2853,13 +2856,19 @@ app.get("/api/tenants/:slug/reports/summary", requireAuth, async (req, res) => {
     const totalOrders = orders.length;
     const averageTicket = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
+    // Taxa de maquininha: custo total (sempre, é o que a adquirente cobra) e quanto foi absorvido pelo lojista
+    const totalFees = orders.reduce((s, o) => s + (o.feeAmount || 0), 0);
+    const totalFeesAbsorbed = orders.reduce((s, o) => s + (o.feePassedToCustomer ? 0 : (o.feeAmount || 0)), 0);
+    const netRevenue = totalRevenue - totalFeesAbsorbed;
+
     // Revenue by payment method
-    const byPaymentMethod: Record<string, { count: number; total: number }> = {};
+    const byPaymentMethod: Record<string, { count: number; total: number; fees: number }> = {};
     for (const order of orders) {
       const pm = order.paymentMethod;
-      if (!byPaymentMethod[pm]) byPaymentMethod[pm] = { count: 0, total: 0 };
+      if (!byPaymentMethod[pm]) byPaymentMethod[pm] = { count: 0, total: 0, fees: 0 };
       byPaymentMethod[pm].count++;
       byPaymentMethod[pm].total += order.total;
+      byPaymentMethod[pm].fees += order.feeAmount || 0;
     }
 
     // Revenue by order type
@@ -2894,7 +2903,7 @@ app.get("/api/tenants/:slug/reports/summary", requireAuth, async (req, res) => {
     }
     const hourly = Array.from({ length: 24 }, (_, h) => ({ hour: h, total: hourlyMap[h] || 0 }));
 
-    res.json({ totalRevenue, totalOrders, averageTicket, byPaymentMethod, byOrderType, topProducts, hourly, dateFrom, dateTo });
+    res.json({ totalRevenue, totalOrders, averageTicket, totalFees, totalFeesAbsorbed, netRevenue, byPaymentMethod, byOrderType, topProducts, hourly, dateFrom, dateTo });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Falha ao gerar relatório." });
@@ -2953,6 +2962,9 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
       discountType,
       notes,
       operatorName,
+      customerCpf,
+      cardBrand,
+      installments,
     } = req.body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -2978,7 +2990,23 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
     if (discount && parseFloat(discount) > 0) {
       discountAmount = discountType === "PERCENT" ? subtotal * (parseFloat(discount) / 100) : parseFloat(discount);
     }
-    const total = Math.max(0, subtotal - discountAmount);
+    const totalBeforeFee = Math.max(0, subtotal - discountAmount);
+
+    // Taxa de maquininha — recalculada no servidor a partir da config salva do tenant (nunca confia no valor vindo do cliente)
+    let feePercent = 0;
+    let feePassedToCustomer = false;
+    if ((paymentMethod === "CREDIT" || paymentMethod === "DEBIT") && cardBrand && tenant.paymentMethods) {
+      try {
+        const pm = JSON.parse(tenant.paymentMethods as string);
+        const methodKey = paymentMethod === "CREDIT" ? "credit" : "debit";
+        const cfg = pm?.[methodKey];
+        const installmentKey = paymentMethod === "CREDIT" ? String(installments || 1) : "1";
+        feePercent = cfg?.brandFees?.[cardBrand]?.installmentFees?.[installmentKey] ?? 0;
+        feePassedToCustomer = !!cfg?.passFeeToCustomer;
+      } catch {}
+    }
+    const feeAmount = totalBeforeFee * (feePercent / 100);
+    const total = feePassedToCustomer ? totalBeforeFee + feeAmount : totalBeforeFee;
 
     // Upsert customer if phone provided
     let customerId: string | undefined;
@@ -3005,6 +3033,10 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
         notes: notes || null,
         operatorName: operatorName || null,
         customerId: customerId || null,
+        customerCpf: customerCpf ? customerCpf.replace(/\D/g, "") : null,
+        feeAmount: feeAmount || null,
+        feePercent: feePercent || null,
+        feePassedToCustomer,
         status: "DELIVERED",
         total,
         items: { create: orderItems },
@@ -3698,6 +3730,7 @@ app.post("/api/owner/tenants/:tenantId/nfce/emit", requireAuth, async (req, res)
       total: order.total,
       paymentMethod: order.paymentMethod,
       customerName: order.customerName || undefined,
+      customerCpf: order.customerCpf || undefined,
     });
 
     // Atualiza pedido com resultado

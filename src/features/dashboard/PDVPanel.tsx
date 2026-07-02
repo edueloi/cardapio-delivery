@@ -8,11 +8,17 @@ import {
   Printer, StickyNote, Hash, AlertCircle, Smartphone,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import type { Tenant, Product, Order, PaymentConfig, StoneConfig } from "../../types";
+import type { Tenant, Product, Order, PaymentConfig, PaymentMethodConfig, StoneConfig } from "../../types";
 import { apiJson } from "../../lib/api";
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
+
+const maskCpf = (v: string) =>
+  v.replace(/\D/g, "").slice(0, 11)
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
 
 interface CartItem {
   product: Product;
@@ -59,6 +65,7 @@ export default function PDVPanel({
   // Customer
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  const [customerCpf, setCustomerCpf] = useState("");
 
   // Payment
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "DEBIT" | "CREDIT" | "PIX" | "VR" | "STONE">("CASH");
@@ -166,6 +173,19 @@ export default function PDVPanel({
   }, [subtotal, discountValue, discountType]);
 
   const total = Math.max(0, subtotal - discountAmount);
+
+  const feeInfo = useMemo(() => {
+    const methodKey = paymentMethod === "CREDIT" ? "credit" : paymentMethod === "DEBIT" ? "debit" : null;
+    if (!methodKey || !cardBrand) return { percent: 0, amount: 0, passToCustomer: false };
+    const cfg = paymentConfig[methodKey] as PaymentMethodConfig | undefined;
+    const installmentKey = methodKey === "credit" ? String(installments) : "1";
+    const percent = cfg?.brandFees?.[cardBrand]?.installmentFees?.[installmentKey] ?? 0;
+    const passToCustomer = !!cfg?.passFeeToCustomer;
+    const amount = total * (percent / 100);
+    return { percent, amount, passToCustomer };
+  }, [paymentMethod, cardBrand, installments, paymentConfig, total]);
+
+  const finalTotal = feeInfo.passToCustomer ? total + feeInfo.amount : total;
   const change = paymentMethod === "CASH" ? Math.max(0, Number(amountReceived) - total) : 0;
 
   const addToCart = useCallback((product: Product) => {
@@ -199,6 +219,7 @@ export default function PDVPanel({
     setSelectedComandaId(null);
     setCustomerName("");
     setCustomerPhone("");
+    setCustomerCpf("");
     setDiscountValue("");
     setAmountReceived("");
     setCardBrand("");
@@ -240,17 +261,20 @@ export default function PDVPanel({
     const orderData = {
       customerName: customerName || (selectedTableId ? `Mesa ${selectedTableId}` : "Venda PDV"),
       customerPhone: customerPhone || "00000000000",
+      customerCpf: customerCpf.replace(/\D/g, "").length === 11 ? customerCpf.replace(/\D/g, "") : undefined,
       orderType: selectedTableId ? "DINE_IN" : "TAKEAWAY",
       tableId: selectedTableId || undefined,
       paymentMethod: isStone ? `STONE_${stonePaymentType.toUpperCase()}` : paymentMethod,
       paymentMetadata: {
-        amountReceived: paymentMethod === "CASH" ? Number(amountReceived) : total,
+        amountReceived: paymentMethod === "CASH" ? Number(amountReceived) : finalTotal,
         change,
         cardBrand,
         installments: paymentMethod === "CREDIT" ? installments : 1,
       },
       discount: discountValue ? parseFloat(discountValue) : 0,
       discountType,
+      cardBrand: cardBrand || undefined,
+      installments: paymentMethod === "CREDIT" ? installments : 1,
       // Stone orders start as PENDING until terminal confirms
       status: isStone ? "PENDING" : undefined,
       items: cart.map((item) => ({
@@ -732,6 +756,19 @@ export default function PDVPanel({
               className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-8 pr-3 text-xs text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
             />
           </div>
+          {fiscalEnabled && (
+            <div className="relative col-span-2">
+              <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-white/30" />
+              <input
+                type="text"
+                placeholder="CPF na nota (opcional — Nota Fiscal Paulista)"
+                value={customerCpf}
+                maxLength={14}
+                onChange={(e) => setCustomerCpf(maskCpf(e.target.value))}
+                className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-8 pr-3 text-xs text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
+              />
+            </div>
+          )}
         </div>
 
         {/* Cart items */}
@@ -1006,9 +1043,15 @@ export default function PDVPanel({
                         <span>Desconto</span><span>-{fmt(discountAmount)}</span>
                       </div>
                     )}
+                    {feeInfo.amount > 0 && (
+                      <div className="flex justify-between text-xs text-amber-400">
+                        <span>Taxa maquininha ({feeInfo.percent.toFixed(2).replace(".", ",")}%){feeInfo.passToCustomer ? "" : " — absorvida"}</span>
+                        <span>{feeInfo.passToCustomer ? "+" : ""}{fmt(feeInfo.amount)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between">
                       <span className="text-[10px] font-black uppercase text-[#C9A227] tracking-widest">Total</span>
-                      <span className="text-2xl font-black text-white tabular-nums">{fmt(total)}</span>
+                      <span className="text-2xl font-black text-white tabular-nums">{fmt(finalTotal)}</span>
                     </div>
                   </div>
                 </div>

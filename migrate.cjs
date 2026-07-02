@@ -548,6 +548,28 @@ const migrations = [
     check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'condominium_tenants' AND COLUMN_NAME = 'local_address'",
     run: `ALTER TABLE condominium_tenants ADD COLUMN local_address TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL, ADD COLUMN local_hours TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL`,
   },
+  // CPF do consumidor na nota — usado para Nota Fiscal Paulista (crédito ao cliente)
+  {
+    name: 'add_orders_customer_cpf',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'customer_cpf'",
+    run: "ALTER TABLE orders ADD COLUMN customer_cpf VARCHAR(20) NULL",
+  },
+  // Taxa de maquininha — custo da adquirente e se foi repassado ao cliente
+  {
+    name: 'add_orders_fee_amount',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'fee_amount'",
+    run: "ALTER TABLE orders ADD COLUMN fee_amount DOUBLE NULL",
+  },
+  {
+    name: 'add_orders_fee_percent',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'fee_percent'",
+    run: "ALTER TABLE orders ADD COLUMN fee_percent DOUBLE NULL",
+  },
+  {
+    name: 'add_orders_fee_passed_to_customer',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'fee_passed_to_customer'",
+    run: "ALTER TABLE orders ADD COLUMN fee_passed_to_customer TINYINT(1) NOT NULL DEFAULT 0",
+  },
   {
     name: 'create_condominium_tenants_table',
     check: "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'condominium_tenants'",

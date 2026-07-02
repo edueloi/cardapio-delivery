@@ -467,6 +467,11 @@ model Order {
   nfceProtocol  String?   @map("nfce_protocol") // protocolo SEFAZ
   nfceXml       String?   @map("nfce_xml") @db.LongText // XML autorizado + URL DANFE (JSON)
   nfceNumber    Int?      @map("nfce_number")   // número sequencial da NFC-e
+  customerCpf   String?   @map("customer_cpf")  // CPF do consumidor — Nota Fiscal Paulista
+  // Taxa de maquininha
+  feeAmount           Float?   @map("fee_amount")             // valor da taxa cobrada pela adquirente (custo)
+  feePercent          Float?   @map("fee_percent")             // percentual aplicado (bandeira + parcelas)
+  feePassedToCustomer Boolean  @default(false) @map("fee_passed_to_customer") // se true, feeAmount já está somado em total
   total          Float
   tenantId      String   @map("tenant_id")
   createdAt     DateTime @default(now()) @map("created_at")

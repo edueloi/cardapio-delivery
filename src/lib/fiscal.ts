@@ -126,6 +126,8 @@ export async function emitirNfce(
   const dhEmi = now.toISOString().replace("Z", "-03:00");
   const cnpjClean = fiscal.cnpj.replace(/\D/g, "");
   const ieClean = fiscal.ie.replace(/\D/g, "");
+  const cpfDigits = order.customerCpf?.replace(/\D/g, "") ?? "";
+  const cpfClean = cpfDigits.length === 11 ? cpfDigits : "";
   const { tPag, xPag } = mapPaymentCode(order.paymentMethod);
 
   const det = order.items.map((item, i) => {
@@ -209,6 +211,8 @@ export async function emitirNfce(
             xPais: "Brasil",
           },
         },
+        // Destinatário — CPF do consumidor para Nota Fiscal Paulista (opcional)
+        ...(cpfClean ? { dest: { CNPJCPF: cpfClean, xNome: order.customerName?.slice(0, 60) || undefined } } : {}),
         // Itens
         det,
         // Totais

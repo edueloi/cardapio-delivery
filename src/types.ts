@@ -36,10 +36,18 @@ export interface DeliveryConfig {
   kmAllowBeyond?: boolean;       // whether to accept orders beyond last range
 }
 
+// Taxa da maquininha por bandeira. Para débito: installmentFees tem só a chave "1".
+// Para crédito: installmentFees mapeia número de parcelas (1 a 12) -> percentual (%).
+export interface BrandFeeConfig {
+  installmentFees: Record<string, number>; // ex: { "1": 2.5, "2": 3.5, "3": 4.2 }
+}
+
 export interface PaymentMethodConfig {
   enabled: boolean;
   label: string;
   acceptedBrands?: string[];
+  passFeeToCustomer?: boolean;               // repassa a taxa da maquininha ao cliente nesta forma de pagamento
+  brandFees?: Record<string, BrandFeeConfig>; // chave = nome da bandeira (mesmo valor de acceptedBrands)
 }
 
 export interface PaymentConfig {
@@ -423,6 +431,11 @@ export interface Order {
   nfceStatus?: NfceStatus | null;
   nfceProtocol?: string | null;
   nfceNumber?: number | null;
+  customerCpf?: string | null;
+  // Taxa de maquininha
+  feeAmount?: number | null;      // valor da taxa cobrada pela adquirente (custo)
+  feePercent?: number | null;     // percentual aplicado (bandeira + parcelas)
+  feePassedToCustomer?: boolean;  // se true, feeAmount já está somado em total
 }
 
 export interface OrderItem {

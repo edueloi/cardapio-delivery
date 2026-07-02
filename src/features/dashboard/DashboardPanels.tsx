@@ -2119,6 +2119,97 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
               )}
             </ContentCard>
 
+            {/* Taxas da Maquininha */}
+            <ContentCard padding="lg">
+              <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-1">Taxas da Maquininha</p>
+              <p className="text-[10px] text-slate-400 mb-6">Configure o percentual cobrado pela adquirente por bandeira e parcela. Esses valores alimentam o custo exibido no financeiro e, se ativado, o acréscimo cobrado do cliente no PDV.</p>
+
+              {(["credit", "debit"] as const).map((methodKey) => {
+                const methodConfig = payments[methodKey] as PaymentMethodConfig | undefined;
+                if (!methodConfig?.enabled) return null;
+                const brands = methodConfig.acceptedBrands?.length ? methodConfig.acceptedBrands : ["Visa", "Mastercard", "Elo"];
+                const installmentsRange = methodKey === "credit" ? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] : [1];
+                const brandFees = methodConfig.brandFees || {};
+
+                const updateFee = (brand: string, installment: number, value: string) => {
+                  const pct = parseFloat(value.replace(",", ".")) || 0;
+                  const current = brandFees[brand]?.installmentFees || {};
+                  setPayments({
+                    ...payments,
+                    [methodKey]: {
+                      ...methodConfig,
+                      brandFees: {
+                        ...brandFees,
+                        [brand]: { installmentFees: { ...current, [String(installment)]: pct } },
+                      },
+                    },
+                  });
+                };
+
+                return (
+                  <div key={methodKey} className="mb-6 last:mb-0 pb-6 last:pb-0 border-b last:border-0 border-slate-100">
+                    <div className="flex items-center justify-between mb-4">
+                      <p className="text-sm font-black text-slate-800">
+                        {methodKey === "credit" ? "Cartão de Crédito" : "Cartão de Débito"}
+                      </p>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Repassar taxa ao cliente</span>
+                        <Switch
+                          checked={!!methodConfig.passFeeToCustomer}
+                          onCheckedChange={(v) => setPayments({
+                            ...payments,
+                            [methodKey]: { ...methodConfig, passFeeToCustomer: v },
+                          })}
+                        />
+                      </label>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-[10px] border-collapse">
+                        <thead>
+                          <tr>
+                            <th className="text-left font-black uppercase tracking-widest text-slate-400 pb-2 pr-3">Bandeira</th>
+                            {installmentsRange.map((n) => (
+                              <th key={n} className="text-center font-black uppercase tracking-widest text-slate-400 pb-2 px-1">
+                                {methodKey === "credit" ? `${n}x` : "%"}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {brands.map((brand) => (
+                            <tr key={brand} className="border-t border-slate-50">
+                              <td className="py-1.5 pr-3 font-bold text-slate-600 whitespace-nowrap">{brand}</td>
+                              {installmentsRange.map((n) => (
+                                <td key={n} className="px-1 py-1.5">
+                                  <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={brandFees[brand]?.installmentFees?.[String(n)] ?? ""}
+                                    onChange={(e) => updateFee(brand, n, e.target.value)}
+                                    placeholder="0,0"
+                                    className="w-14 text-center bg-slate-50 border border-slate-100 rounded-lg py-1 outline-none focus:border-[#C9A227] transition-all"
+                                  />
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {!payments.credit?.enabled && !payments.debit?.enabled && (
+                <div className="text-center py-8 text-slate-400">
+                  <CreditCard className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                  <p className="text-[11px] font-black uppercase tracking-widest mb-1">Nenhum cartão habilitado</p>
+                  <p className="text-[10px]">Ative Crédito ou Débito na aba "Pagamentos" para configurar as taxas.</p>
+                </div>
+              )}
+            </ContentCard>
+
             {/* Futuras integrações */}
             <ContentCard padding="lg">
               <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-4">Outras Maquininhas (em breve)</p>

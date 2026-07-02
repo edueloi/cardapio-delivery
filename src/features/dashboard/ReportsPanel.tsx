@@ -17,7 +17,10 @@ interface ReportSummary {
   totalRevenue: number;
   totalOrders: number;
   averageTicket: number;
-  byPaymentMethod: Record<string, { count: number; total: number }>;
+  totalFees: number;
+  totalFeesAbsorbed: number;
+  netRevenue: number;
+  byPaymentMethod: Record<string, { count: number; total: number; fees: number }>;
   byOrderType: Record<string, { count: number; total: number }>;
   topProducts: { id: string; name: string; qty: number; total: number }[];
   hourly: { hour: number; total: number }[];
@@ -188,6 +191,14 @@ export default function ReportsPanel({ slug, tenant }: ReportsPanelProps) {
             <StatCard title="Produtos Vendidos" value={summary.topProducts.reduce((s, p) => s + p.qty, 0)} icon={Package} color="warning" delay={0.3} />
           </StatGrid>
 
+          {summary.totalFees > 0 && (
+            <StatGrid cols={3}>
+              <StatCard title="Taxa de Maquininha (custo)" value={fmt(summary.totalFees)} icon={CreditCard} color="warning" delay={0} />
+              <StatCard title="Absorvida pela Loja" value={fmt(summary.totalFeesAbsorbed)} icon={ArrowUpRight} color="danger" delay={0.1} />
+              <StatCard title="Receita Líquida" value={fmt(summary.netRevenue)} icon={TrendingUp} color="success" delay={0.2} />
+            </StatGrid>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Payment method breakdown */}
             <ContentCard>
@@ -216,6 +227,9 @@ export default function ReportsPanel({ slug, tenant }: ReportsPanelProps) {
                             style={{ width: `${pct}%` }}
                           />
                         </div>
+                        {data.fees > 0 && (
+                          <p className="text-[10px] text-amber-500 font-bold mt-1">Taxa maquininha: {fmt(data.fees)}</p>
+                        )}
                       </div>
                     );
                   })}
