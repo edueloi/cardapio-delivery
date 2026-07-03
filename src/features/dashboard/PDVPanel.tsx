@@ -20,6 +20,13 @@ const maskCpf = (v: string) =>
     .replace(/(\d{3})(\d)/, "$1.$2")
     .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
 
+// Máscara monetária estilo caixa eletrônico: digita os centavos, o valor "empurra" pra esquerda.
+// Trabalha sempre com o valor em centavos (string de dígitos) para não perder precisão.
+const maskCurrencyDigits = (digits: string) => digits.replace(/\D/g, "").replace(/^0+(?=\d)/, "").slice(0, 12);
+const digitsToNumber = (digits: string) => (parseInt(digits || "0", 10) || 0) / 100;
+const formatCurrencyDigits = (digits: string) => fmt(digitsToNumber(digits)).replace("R$", "").trim();
+const numberToDigits = (n: number) => String(Math.round(n * 100));
+
 interface CartItem {
   product: Product;
   quantity: number;
@@ -121,7 +128,7 @@ export default function PDVPanel({
     try {
       await apiJson(`/api/tenants/${tenant.slug}/cash/open`, {
         method: "POST",
-        body: JSON.stringify({ openingBalance: parseFloat(openingBalanceInput || "0") }),
+        body: JSON.stringify({ openingBalance: digitsToNumber(openingBalanceInput) }),
       });
       setShowOpenCashModal(false);
       setOpeningBalanceInput("");
@@ -139,7 +146,7 @@ export default function PDVPanel({
     try {
       await apiJson(`/api/tenants/${tenant.slug}/cash/close`, {
         method: "POST",
-        body: JSON.stringify({ closingBalance: parseFloat(closingBalanceInput || "0") }),
+        body: JSON.stringify({ closingBalance: digitsToNumber(closingBalanceInput) }),
       });
       setShowCloseCashModal(false);
       setClosingBalanceInput("");
@@ -260,7 +267,7 @@ export default function PDVPanel({
   }, [paymentMethod, cardBrand, installments, paymentConfig, total]);
 
   const finalTotal = feeInfo.passToCustomer ? total + feeInfo.amount : total;
-  const change = paymentMethod === "CASH" ? Math.max(0, Number(amountReceived) - total) : 0;
+  const change = paymentMethod === "CASH" ? Math.max(0, digitsToNumber(amountReceived) - total) : 0;
 
   const addToCart = useCallback((product: Product) => {
     setCart((prev) => {
@@ -404,7 +411,7 @@ export default function PDVPanel({
       tableId: selectedTableId || undefined,
       paymentMethod: isStone ? `STONE_${stonePaymentType.toUpperCase()}` : paymentMethod,
       paymentMetadata: {
-        amountReceived: paymentMethod === "CASH" ? Number(amountReceived) : finalTotal,
+        amountReceived: paymentMethod === "CASH" ? digitsToNumber(amountReceived) : finalTotal,
         change,
         cardBrand,
         installments: paymentMethod === "CREDIT" ? installments : 1,
@@ -506,7 +513,7 @@ export default function PDVPanel({
       ${discountAmount > 0 ? `<table><tr><td>Desconto</td><td style="text-align:right">-${fmt(discountAmount)}</td></tr></table>` : ""}
       <table><tr><td class="total">TOTAL</td><td class="total" style="text-align:right">${fmt(order.total)}</td></tr></table>
       <p>Pagamento: ${paymentMethod}</p>
-      ${paymentMethod === "CASH" ? `<p>Recebido: ${fmt(Number(amountReceived))}<br>Troco: ${fmt(change)}</p>` : ""}
+      ${paymentMethod === "CASH" ? `<p>Recebido: ${fmt(digitsToNumber(amountReceived))}<br>Troco: ${fmt(change)}</p>` : ""}
       <div class="separator"></div>
       <p style="text-align:center">Obrigado pela preferência!</p>
       </body></html>
@@ -1227,7 +1234,7 @@ export default function PDVPanel({
                 initial={{ scale: 0.95, y: 20, opacity: 0 }}
                 animate={{ scale: 1, y: 0, opacity: 1 }}
                 exit={{ scale: 0.95, y: 20, opacity: 0 }}
-                className="bg-[#0D1B3E] w-full max-w-4xl rounded-[2.5rem] shadow-2xl border border-white/5 overflow-hidden flex flex-col md:flex-row max-h-[90vh] relative"
+                className="bg-[#0D1B3E] w-full max-w-3xl rounded-[2rem] shadow-2xl border border-white/5 overflow-hidden flex flex-col md:flex-row max-h-[85vh] relative"
               >
                 {/* Botão fechar — sempre visível, no canto do modal */}
                 <button
@@ -1239,21 +1246,21 @@ export default function PDVPanel({
                 </button>
 
                 {/* Left: Summary */}
-                <div className="w-full md:w-80 bg-black/20 p-8 flex flex-col border-r border-white/5 overflow-y-auto">
+                <div className="w-full md:w-72 bg-black/20 p-6 flex flex-col border-r border-white/5 overflow-y-auto shrink-0">
                   <button
                     onClick={() => setShowCheckout(false)}
-                    className="flex items-center gap-2 text-white/40 hover:text-white transition-colors mb-6 group"
+                    className="flex items-center gap-2 text-white/40 hover:text-white transition-colors mb-5 group"
                   >
                     <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
                     <span className="text-[10px] font-black uppercase tracking-widest">Cancelar</span>
                   </button>
 
                   <p className="text-[10px] font-black uppercase text-white/40 tracking-[0.2em] mb-1">Resumo</p>
-                  <h3 className="text-xl font-black text-white mb-6 truncate">
+                  <h3 className="text-lg font-black text-white mb-4 truncate">
                     {selectedTableId ? `Mesa ${selectedTableId}` : customerName || "Venda Balcão"}
                   </h3>
 
-                  <div className="space-y-2 flex-1">
+                  <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar pr-1">
                     {cart.map((item) => (
                       <div key={item.product.id} className="flex justify-between text-xs border-b border-white/5 pb-2">
                         <span className="text-white/70 truncate mr-2">
@@ -1265,36 +1272,36 @@ export default function PDVPanel({
                     ))}
                   </div>
 
-                  <div className="mt-4 pt-4 border-t border-white/10 space-y-2">
+                  <div className="mt-4 pt-4 border-t border-white/10 space-y-1.5">
                     <div className="flex justify-between text-xs text-white/40">
-                      <span>Subtotal</span><span>{fmt(subtotal)}</span>
+                      <span>Subtotal</span><span className="tabular-nums">{fmt(subtotal)}</span>
                     </div>
                     {discountAmount > 0 && (
                       <div className="flex justify-between text-xs text-green-400">
-                        <span>Desconto</span><span>-{fmt(discountAmount)}</span>
+                        <span>Desconto</span><span className="tabular-nums">-{fmt(discountAmount)}</span>
                       </div>
                     )}
                     {feeInfo.amount > 0 && (
                       <div className="flex justify-between text-xs text-amber-400">
                         <span>Taxa maquininha ({feeInfo.percent.toFixed(2).replace(".", ",")}%){feeInfo.passToCustomer ? "" : " — absorvida"}</span>
-                        <span>{feeInfo.passToCustomer ? "+" : ""}{fmt(feeInfo.amount)}</span>
+                        <span className="tabular-nums">{feeInfo.passToCustomer ? "+" : ""}{fmt(feeInfo.amount)}</span>
                       </div>
                     )}
-                    <div className="flex justify-between">
-                      <span className="text-[10px] font-black uppercase text-[#C9A227] tracking-widest">Total</span>
+                    <div className="flex justify-between pt-2 mt-1 border-t border-white/10">
+                      <span className="text-[10px] font-black uppercase text-[#C9A227] tracking-widest self-end">Total</span>
                       <span className="text-2xl font-black text-white tabular-nums">{fmt(finalTotal)}</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Right: Payment */}
-                <div className="flex-1 flex flex-col min-h-0">
-                <div className="flex-1 p-8 pt-14 space-y-6 overflow-y-auto min-h-0">
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="flex-1 flex flex-col min-h-0 min-w-0">
+                <div className="overflow-y-auto min-h-0 p-6 pt-14">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                     {/* Payment methods */}
-                    <div className="space-y-3">
+                    <div className="space-y-2.5">
                       <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Forma de Pagamento</p>
-                      <div className="space-y-2">
+                      <div className="space-y-1.5">
                         {PAYMENT_METHODS.map((method) => {
                           const Icon = method.icon;
                           return (
@@ -1305,20 +1312,20 @@ export default function PDVPanel({
                                 if (method.id !== "CASH") setAmountReceived("");
                                 if (method.id === "CASH") setCardBrand("");
                               }}
-                              className={`flex items-center gap-3 p-3 rounded-2xl border w-full transition-all ${
+                              className={`flex items-center gap-3 p-2.5 rounded-xl border w-full transition-all ${
                                 paymentMethod === method.id
-                                  ? "bg-[#C9A227] border-[#C9A227] shadow-xl shadow-[#C9A227]/20"
+                                  ? "bg-[#C9A227] border-[#C9A227] shadow-lg shadow-[#C9A227]/20"
                                   : "bg-white/5 border-white/10 hover:bg-white/10"
                               }`}
                             >
-                              <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${paymentMethod === method.id ? "bg-white/20" : "bg-white/5"}`}>
-                                <Icon className="w-4 h-4 text-white" />
+                              <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${paymentMethod === method.id ? "bg-white/20" : "bg-white/5"}`}>
+                                <Icon className="w-3.5 h-3.5 text-white" />
                               </div>
                               <div className="flex-1 text-left">
-                                <p className="text-[11px] font-black uppercase tracking-widest text-white">{method.label}</p>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-white">{method.label}</p>
                                 <p className="text-[9px] text-white/40 font-bold">{method.desc}</p>
                               </div>
-                              {paymentMethod === method.id && <CheckCircle2 className="w-4 h-4 text-white" />}
+                              {paymentMethod === method.id && <CheckCircle2 className="w-3.5 h-3.5 text-white shrink-0" />}
                             </button>
                           );
                         })}
@@ -1326,24 +1333,41 @@ export default function PDVPanel({
                     </div>
 
                     {/* Context panel */}
-                    <div className="space-y-3">
+                    <div className="space-y-2.5">
                       {paymentMethod === "CASH" && (
                         <>
                           <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Troco</p>
-                          <div className="bg-white/5 rounded-[1.5rem] p-6 border border-white/10 space-y-4">
+                          <div className="bg-white/5 rounded-2xl p-4 border border-white/10 space-y-3">
                             <div className="space-y-1">
                               <label className="text-[10px] font-black uppercase text-[#C9A227] tracking-widest ml-1">Valor Recebido</label>
-                              <input
-                                type="number"
-                                value={amountReceived}
-                                onChange={(e) => setAmountReceived(e.target.value)}
-                                placeholder="0,00"
-                                className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-2xl font-black text-white focus:border-[#C9A227] outline-none text-center"
-                              />
+                              <div className="relative">
+                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl font-black text-white/30">R$</span>
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  autoFocus
+                                  value={formatCurrencyDigits(amountReceived)}
+                                  onChange={(e) => setAmountReceived(maskCurrencyDigits(e.target.value))}
+                                  placeholder="0,00"
+                                  className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 pl-11 pr-4 text-xl font-black text-white focus:border-[#C9A227] outline-none text-center [appearance:textfield]"
+                                />
+                              </div>
                             </div>
-                            <div className="text-center">
-                              <p className="text-[10px] font-black uppercase text-white/40 tracking-widest mb-1">Troco</p>
-                              <p className={`text-3xl font-black tabular-nums ${change > 0 ? "text-green-400" : "text-white/20"}`}>
+                            <div className="flex gap-1.5">
+                              {[total, Math.ceil(total / 10) * 10, Math.ceil(total / 50) * 50].filter((v, i, arr) => arr.indexOf(v) === i).slice(0, 3).map((v) => (
+                                <button
+                                  key={v}
+                                  type="button"
+                                  onClick={() => setAmountReceived(numberToDigits(v))}
+                                  className="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg py-1.5 text-[10px] font-black text-white/70 transition-colors"
+                                >
+                                  {fmt(v)}
+                                </button>
+                              ))}
+                            </div>
+                            <div className="flex items-center justify-between pt-2 border-t border-white/10">
+                              <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Troco</p>
+                              <p className={`text-xl font-black tabular-nums ${change > 0 ? "text-green-400" : "text-white/20"}`}>
                                 {fmt(change)}
                               </p>
                             </div>
@@ -1531,21 +1555,21 @@ export default function PDVPanel({
 
                   {/* Finalize button — sempre visível, fora da área rolável */}
                   {paymentMethod !== "STONE" || stoneStatus === "idle" ? (
-                    <div className="p-6 pt-4 border-t border-white/5 shrink-0 bg-[#0D1B3E]">
+                    <div className="px-6 py-4 border-t border-white/5 shrink-0 bg-black/20">
                       <button
                         disabled={
                           isProcessing ||
-                          (paymentMethod === "CASH" && amountReceived !== "" && Number(amountReceived) < total)
+                          (paymentMethod === "CASH" && amountReceived !== "" && digitsToNumber(amountReceived) < total)
                         }
                         onClick={handleCheckout}
-                        className="w-full bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-5 rounded-2xl transition-all shadow-2xl shadow-[#C9A227]/40 flex items-center justify-center gap-3 uppercase tracking-widest text-sm"
+                        className="w-full bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-3.5 rounded-xl transition-all shadow-lg shadow-[#C9A227]/25 flex items-center justify-center gap-2.5 uppercase tracking-widest text-xs"
                       >
                         {isProcessing ? (
-                          <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                          <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
                         ) : (
                           <>
                             {paymentMethod === "STONE" ? "Enviar para Maquininha" : "Finalizar Venda"}
-                            {paymentMethod === "STONE" ? <Smartphone className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
+                            {paymentMethod === "STONE" ? <Smartphone className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
                           </>
                         )}
                       </button>
@@ -1566,13 +1590,13 @@ export default function PDVPanel({
             >
               <motion.div
                 initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }}
-                className="bg-[#0D1B3E] w-full max-w-sm rounded-[2rem] p-8 space-y-6 shadow-2xl border border-white/5"
+                className="bg-[#0D1B3E] w-full max-w-sm rounded-[1.75rem] sm:rounded-[2rem] p-5 sm:p-8 space-y-5 sm:space-y-6 shadow-2xl border border-white/5 max-h-[90vh] overflow-y-auto"
               >
                 <div className="text-center space-y-2">
-                  <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto">
-                    <Banknote className="w-7 h-7" />
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto">
+                    <Banknote className="w-6 h-6 sm:w-7 sm:h-7" />
                   </div>
-                  <h3 className="text-lg font-black text-white uppercase tracking-widest">Abrir Caixa</h3>
+                  <h3 className="text-base sm:text-lg font-black text-white uppercase tracking-widest">Abrir Caixa</h3>
                   <p className="text-xs text-white/40">Informe o valor em dinheiro disponível para o fundo de troco.</p>
                 </div>
                 {cashError && (
@@ -1581,15 +1605,19 @@ export default function PDVPanel({
                   </div>
                 )}
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-white/40">Fundo de Caixa (R$)</label>
-                  <input
-                    type="number"
-                    autoFocus
-                    value={openingBalanceInput}
-                    onChange={(e) => setOpeningBalanceInput(e.target.value)}
-                    placeholder="0,00"
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-5 text-2xl font-black text-white text-center focus:border-emerald-400 outline-none"
-                  />
+                  <label className="text-[10px] font-black uppercase tracking-widest text-white/40">Fundo de Caixa</label>
+                  <div className="relative">
+                    <span className="absolute left-4 sm:left-5 top-1/2 -translate-y-1/2 text-lg sm:text-2xl font-black text-white/30">R$</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      autoFocus
+                      value={formatCurrencyDigits(openingBalanceInput)}
+                      onChange={(e) => setOpeningBalanceInput(maskCurrencyDigits(e.target.value))}
+                      placeholder="0,00"
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 sm:py-4 pl-11 sm:pl-14 pr-4 sm:pr-5 text-xl sm:text-2xl font-black text-white text-center focus:border-emerald-400 outline-none [appearance:textfield]"
+                    />
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <button
@@ -1620,13 +1648,13 @@ export default function PDVPanel({
             >
               <motion.div
                 initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }}
-                className="bg-[#0D1B3E] w-full max-w-sm rounded-[2rem] p-8 space-y-6 shadow-2xl border border-white/5"
+                className="bg-[#0D1B3E] w-full max-w-sm rounded-[1.75rem] sm:rounded-[2rem] p-5 sm:p-8 space-y-5 sm:space-y-6 shadow-2xl border border-white/5 max-h-[90vh] overflow-y-auto"
               >
                 <div className="text-center space-y-2">
-                  <div className="w-14 h-14 rounded-2xl bg-red-500/10 text-red-400 flex items-center justify-center mx-auto">
-                    <Lock className="w-7 h-7" />
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-red-500/10 text-red-400 flex items-center justify-center mx-auto">
+                    <Lock className="w-6 h-6 sm:w-7 sm:h-7" />
                   </div>
-                  <h3 className="text-lg font-black text-white uppercase tracking-widest">Fechar Caixa</h3>
+                  <h3 className="text-base sm:text-lg font-black text-white uppercase tracking-widest">Fechar Caixa</h3>
                   <p className="text-xs text-white/40">Confira o dinheiro em caixa antes de confirmar o fechamento.</p>
                 </div>
                 {cashError && (
@@ -1637,23 +1665,36 @@ export default function PDVPanel({
                 <div className="bg-white/5 rounded-2xl p-4 space-y-2 border border-white/10">
                   <div className="flex justify-between text-xs">
                     <span className="text-white/40">Fundo de abertura</span>
-                    <span className="font-bold text-white">{fmt(currentCash.openingBalance)}</span>
+                    <span className="font-bold text-white tabular-nums">{fmt(currentCash.openingBalance)}</span>
                   </div>
                   <div className="flex justify-between text-xs">
                     <span className="text-white/40">Esperado em caixa</span>
-                    <span className="font-black text-emerald-400">{fmt(currentCash.expectedBalance)}</span>
+                    <span className="font-black text-emerald-400 tabular-nums">{fmt(currentCash.expectedBalance)}</span>
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-white/40">Valor Contado (R$)</label>
-                  <input
-                    type="number"
-                    autoFocus
-                    value={closingBalanceInput}
-                    onChange={(e) => setClosingBalanceInput(e.target.value)}
-                    placeholder="0,00"
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-5 text-2xl font-black text-white text-center focus:border-red-400 outline-none"
-                  />
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-white/40">Valor Contado</label>
+                    <button
+                      type="button"
+                      onClick={() => setClosingBalanceInput(numberToDigits(currentCash.expectedBalance))}
+                      className="text-[10px] font-black uppercase text-emerald-400 hover:text-emerald-300 transition-colors"
+                    >
+                      Usar esperado
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <span className="absolute left-4 sm:left-5 top-1/2 -translate-y-1/2 text-lg sm:text-2xl font-black text-white/30">R$</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      autoFocus
+                      value={formatCurrencyDigits(closingBalanceInput)}
+                      onChange={(e) => setClosingBalanceInput(maskCurrencyDigits(e.target.value))}
+                      placeholder="0,00"
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 sm:py-4 pl-11 sm:pl-14 pr-4 sm:pr-5 text-xl sm:text-2xl font-black text-white text-center focus:border-red-400 outline-none [appearance:textfield]"
+                    />
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <button
