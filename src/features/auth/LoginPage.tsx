@@ -70,7 +70,7 @@ export default function LoginPage() {
         />
       )}
 
-      <div className="min-h-screen flex flex-col lg:flex-row">
+      <div className="h-screen flex flex-col lg:flex-row overflow-hidden">
 
         {/* ══ ESQUERDA — branding ══ */}
         <div className="hidden lg:flex flex-col w-[55%] shrink-0 bg-[#071020] relative overflow-hidden">
@@ -78,22 +78,21 @@ export default function LoginPage() {
           <div className="absolute -top-40 -left-40 w-[600px] h-[600px] rounded-full bg-[#C9A227]/[0.08] blur-[140px] pointer-events-none" />
           <div className="absolute bottom-0 right-0 w-[400px] h-[400px] rounded-full bg-blue-950/60 blur-[100px] pointer-events-none" />
 
-          <div className="relative z-10 flex flex-col h-full px-16 py-14">
-            {/* Logo em pill branco — grande */}
-            <div className="self-start">
-              <div className="bg-white rounded-2xl px-6 py-4 shadow-2xl shadow-black/40 inline-block">
-                <img src="/images/menu-flow-continue.png" alt="BoxSys" className="h-14 object-contain" />
-              </div>
+          <div className="relative z-10 flex flex-col h-full px-16 py-10 2xl:py-14">
+            {/* Logo solta, com glow sutil atrás — sem container branco */}
+            <div className="self-start relative">
+              <div className="absolute inset-0 bg-blue-500/20 blur-2xl rounded-full scale-90" />
+              <img src="/images/menu-flow-continue.png" alt="BoxSys" className="relative h-11 2xl:h-12 object-contain" />
             </div>
 
             {/* Headline */}
-            <div className="flex-1 flex flex-col justify-center gap-10 mt-12">
-              <div className="space-y-5">
+            <div className="flex-1 flex flex-col justify-center gap-6 2xl:gap-8 min-h-0 py-4">
+              <div className="space-y-3 2xl:space-y-4">
                 <div className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.3em] text-[#C9A227] bg-[#C9A227]/10 border border-[#C9A227]/20 rounded-full px-3.5 py-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#C9A227] animate-pulse" />
                   Painel Administrativo
                 </div>
-                <h1 className="text-[3rem] xl:text-[3.6rem] font-black text-white leading-[1.0] tracking-tight">
+                <h1 className="text-[2.1rem] 2xl:text-[3rem] font-black text-white leading-[1.05] tracking-tight">
                   Seu negócio<br />
                   <span className="text-[#C9A227]">na palma</span><br />
                   <span className="text-white/40">da mão</span>
@@ -120,7 +119,7 @@ export default function LoginPage() {
                   { value: "24/7", label: "Suporte" },
                   { value: "∞", label: "Pedidos" },
                 ].map((s) => (
-                  <div key={s.label} className="flex-1 bg-white/[0.04] border border-white/[0.07] rounded-2xl px-4 py-3.5 text-center">
+                  <div key={s.label} className="flex-1 bg-white/[0.04] border border-white/[0.07] rounded-2xl px-4 py-3 text-center">
                     <p className="text-[#C9A227] font-black text-xl">{s.value}</p>
                     <p className="text-white/25 text-[10px] font-medium mt-0.5">{s.label}</p>
                   </div>
@@ -128,29 +127,30 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <p className="text-white/15 text-[11px]">© 2025 BoxSys · Sistema de Gestão para Restaurantes</p>
+            <p className="text-white/15 text-[11px] shrink-0">© 2026 BoxSys · Sistema de Gestão para Restaurantes</p>
           </div>
         </div>
 
         {/* ══ DIREITA — formulário branco ══ */}
-        <div className="flex-1 flex flex-col bg-white min-h-screen">
+        <div className="flex-1 flex flex-col bg-white h-screen overflow-y-auto lg:overflow-hidden">
 
           {/* Header mobile */}
-          <div className="lg:hidden flex items-center justify-center pt-10 pb-2">
-            <div className="bg-[#071020] rounded-2xl px-6 py-4 shadow-xl">
-              <img src="/images/menu-flow-continue.png" alt="BoxSys" className="h-12 object-contain brightness-0 invert" />
+          <div className="lg:hidden flex items-center justify-center pt-8 pb-2 shrink-0 bg-[#071020]">
+            <div className="relative py-4">
+              <div className="absolute inset-0 bg-blue-500/20 blur-2xl rounded-full scale-90" />
+              <img src="/images/menu-flow-continue.png" alt="BoxSys" className="relative h-10 object-contain" />
             </div>
           </div>
 
           {/* Form */}
-          <div className="flex-1 flex items-center justify-center px-6 sm:px-12 py-10">
+          <div className="flex-1 flex items-center justify-center px-6 sm:px-12 py-6 lg:py-10 min-h-0">
             <div className="w-full max-w-[420px]">
 
-              <div className="mb-9">
+              <div className="mb-6 lg:mb-9">
                 <p className="text-[11px] font-black uppercase tracking-[0.25em] text-[#C9A227] mb-2">
                   Bem-vindo de volta
                 </p>
-                <h2 className="text-[2rem] font-black text-[#071020] tracking-tight leading-tight">
+                <h2 className="text-[1.75rem] lg:text-[2rem] font-black text-[#071020] tracking-tight leading-tight">
                   Faça seu login
                 </h2>
                 <p className="text-slate-400 text-sm mt-1.5">
@@ -259,8 +259,8 @@ export default function LoginPage() {
                 </button>
               </form>
 
-              <p className="text-center text-[11px] text-slate-300 mt-12">
-                © 2025 BoxSys · Sistema de Gestão para Restaurantes
+              <p className="text-center text-[11px] text-slate-300 mt-6 lg:mt-10">
+                © 2026 BoxSys · Sistema de Gestão para Restaurantes
               </p>
             </div>
           </div>

@@ -28,28 +28,27 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row">
+    <div className="h-screen flex flex-col lg:flex-row overflow-hidden">
 
       {/* ══ ESQUERDA — branding (espelho do login) ══ */}
       <div className="hidden lg:flex flex-col w-[55%] shrink-0 bg-[#071020] relative overflow-hidden">
         <div className="absolute -top-40 -left-40 w-[600px] h-[600px] rounded-full bg-[#C9A227]/[0.08] blur-[140px] pointer-events-none" />
         <div className="absolute bottom-0 right-0 w-[400px] h-[400px] rounded-full bg-blue-950/60 blur-[100px] pointer-events-none" />
 
-        <div className="relative z-10 flex flex-col h-full px-16 py-14">
-          <div className="self-start">
-            <div className="bg-white rounded-2xl px-6 py-4 shadow-2xl shadow-black/40 inline-block">
-              <img src="/images/menu-flow-continue.png" alt="BoxSys" className="h-14 object-contain" />
-            </div>
+        <div className="relative z-10 flex flex-col h-full px-16 py-10 2xl:py-14">
+          <div className="self-start relative">
+            <div className="absolute inset-0 bg-blue-500/20 blur-2xl rounded-full scale-90" />
+            <img src="/images/menu-flow-continue.png" alt="BoxSys" className="relative h-11 2xl:h-12 object-contain" />
           </div>
 
-          <div className="flex-1 flex flex-col justify-center gap-6">
+          <div className="flex-1 flex flex-col justify-center gap-6 min-h-0">
             <div className="w-16 h-16 rounded-2xl bg-[#C9A227]/10 border border-[#C9A227]/20 flex items-center justify-center">
               <svg className="w-8 h-8 text-[#C9A227]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
               </svg>
             </div>
             <div className="space-y-3">
-              <h1 className="text-[2.8rem] font-black text-white leading-tight tracking-tight">
+              <h1 className="text-[2.2rem] 2xl:text-[2.8rem] font-black text-white leading-tight tracking-tight">
                 Recupere seu<br />
                 <span className="text-[#C9A227]">acesso</span>
               </h1>
@@ -59,21 +58,22 @@ export default function ForgotPasswordPage() {
             </div>
           </div>
 
-          <p className="text-white/15 text-[11px]">© 2025 BoxSys · Sistema de Gestão para Restaurantes</p>
+          <p className="text-white/15 text-[11px] shrink-0">© 2026 BoxSys · Sistema de Gestão para Restaurantes</p>
         </div>
       </div>
 
       {/* ══ DIREITA — formulário branco ══ */}
-      <div className="flex-1 flex flex-col bg-white min-h-screen">
+      <div className="flex-1 flex flex-col bg-white h-screen overflow-y-auto lg:overflow-hidden">
 
         {/* Header mobile */}
-        <div className="lg:hidden flex items-center justify-center pt-10 pb-2">
-          <div className="bg-[#071020] rounded-2xl px-6 py-4 shadow-xl">
-            <img src="/images/menu-flow-continue.png" alt="BoxSys" className="h-12 object-contain brightness-0 invert" />
+        <div className="lg:hidden flex items-center justify-center pt-8 pb-2 shrink-0 bg-[#071020]">
+          <div className="relative py-4">
+            <div className="absolute inset-0 bg-blue-500/20 blur-2xl rounded-full scale-90" />
+            <img src="/images/menu-flow-continue.png" alt="BoxSys" className="relative h-10 object-contain" />
           </div>
         </div>
 
-        <div className="flex-1 flex items-center justify-center px-6 sm:px-12 py-10">
+        <div className="flex-1 flex items-center justify-center px-6 sm:px-12 py-6 lg:py-10 min-h-0">
           <div className="w-full max-w-[420px]">
 
             {sent ? (
