@@ -38,7 +38,7 @@ export default function ForgotPasswordPage() {
         <div className="relative z-10 flex flex-col h-full px-16 py-10 2xl:py-14">
           <div className="self-start relative">
             <div className="absolute inset-0 bg-blue-500/20 blur-2xl rounded-full scale-90" />
-            <img src="/images/menu-flow-continue.png" alt="BoxSys" className="relative h-11 2xl:h-12 object-contain" />
+            <img src="/images/menu-flow-continue.png" alt="BoxSys" className="relative h-16 2xl:h-20 object-contain" />
           </div>
 
           <div className="flex-1 flex flex-col justify-center gap-6 min-h-0">
@@ -69,7 +69,7 @@ export default function ForgotPasswordPage() {
         <div className="lg:hidden flex items-center justify-center pt-8 pb-2 shrink-0 bg-[#071020]">
           <div className="relative py-4">
             <div className="absolute inset-0 bg-blue-500/20 blur-2xl rounded-full scale-90" />
-            <img src="/images/menu-flow-continue.png" alt="BoxSys" className="relative h-10 object-contain" />
+            <img src="/images/menu-flow-continue.png" alt="BoxSys" className="relative h-14 object-contain" />
           </div>
         </div>
 

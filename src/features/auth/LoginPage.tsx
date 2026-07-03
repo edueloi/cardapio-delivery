@@ -5,15 +5,6 @@ import { useAuth } from "../../lib/auth";
 import { resolvePostAuthPath } from "./authRedirect";
 import LoadingScreen from "../../components/LoadingScreen";
 
-const FEATURES = [
-  { icon: "🍽️", label: "Cardápio Digital" },
-  { icon: "🖥️", label: "PDV Integrado" },
-  { icon: "👨‍🍳", label: "Monitor de Cozinha" },
-  { icon: "📦", label: "Estoque & Insumos" },
-  { icon: "📊", label: "Relatórios" },
-  { icon: "💬", label: "WhatsApp Bot" },
-];
-
 export default function LoginPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -78,38 +69,28 @@ export default function LoginPage() {
           <div className="absolute -top-40 -left-40 w-[600px] h-[600px] rounded-full bg-[#C9A227]/[0.08] blur-[140px] pointer-events-none" />
           <div className="absolute bottom-0 right-0 w-[400px] h-[400px] rounded-full bg-blue-950/60 blur-[100px] pointer-events-none" />
 
-          <div className="relative z-10 flex flex-col h-full px-16 py-10 2xl:py-14">
+          <div className="relative z-10 flex flex-col h-full px-16 py-10">
             {/* Logo solta, com glow sutil atrás — sem container branco */}
-            <div className="self-start relative">
-              <div className="absolute inset-0 bg-blue-500/20 blur-2xl rounded-full scale-90" />
-              <img src="/images/menu-flow-continue.png" alt="BoxSys" className="relative h-11 2xl:h-12 object-contain" />
+            <div className="self-start relative shrink-0">
+              <div className="absolute inset-0 bg-blue-500/20 blur-3xl rounded-full scale-90" />
+              <img src="/images/menu-flow-continue.png" alt="BoxSys" className="relative h-16 2xl:h-20 object-contain" />
             </div>
 
             {/* Headline */}
-            <div className="flex-1 flex flex-col justify-center gap-6 2xl:gap-8 min-h-0 py-4">
-              <div className="space-y-3 2xl:space-y-4">
+            <div className="flex-1 flex flex-col justify-center gap-8 min-h-0">
+              <div className="space-y-4">
                 <div className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.3em] text-[#C9A227] bg-[#C9A227]/10 border border-[#C9A227]/20 rounded-full px-3.5 py-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#C9A227] animate-pulse" />
                   Painel Administrativo
                 </div>
-                <h1 className="text-[2.1rem] 2xl:text-[3rem] font-black text-white leading-[1.05] tracking-tight">
+                <h1 className="text-[2.3rem] 2xl:text-[3rem] font-black text-white leading-[1.05] tracking-tight">
                   Seu negócio<br />
                   <span className="text-[#C9A227]">na palma</span><br />
                   <span className="text-white/40">da mão</span>
                 </h1>
-                <p className="text-white/30 text-sm leading-relaxed max-w-[280px]">
+                <p className="text-white/30 text-sm leading-relaxed max-w-[300px]">
                   Cardápio digital, PDV, cozinha, estoque e relatórios — tudo integrado em um só lugar.
                 </p>
-              </div>
-
-              {/* Feature pills */}
-              <div className="flex flex-wrap gap-2 max-w-[360px]">
-                {FEATURES.map((f) => (
-                  <div key={f.label} className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/[0.05] border border-white/[0.07]">
-                    <span className="text-sm leading-none">{f.icon}</span>
-                    <span className="text-white/45 text-[11px] font-semibold">{f.label}</span>
-                  </div>
-                ))}
               </div>
 
               {/* Stats */}
@@ -138,7 +119,7 @@ export default function LoginPage() {
           <div className="lg:hidden flex items-center justify-center pt-8 pb-2 shrink-0 bg-[#071020]">
             <div className="relative py-4">
               <div className="absolute inset-0 bg-blue-500/20 blur-2xl rounded-full scale-90" />
-              <img src="/images/menu-flow-continue.png" alt="BoxSys" className="relative h-10 object-contain" />
+              <img src="/images/menu-flow-continue.png" alt="BoxSys" className="relative h-14 object-contain" />
             </div>
           </div>
 
