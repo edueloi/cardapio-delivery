@@ -143,11 +143,18 @@ export default function DashboardPage() {
       ]);
     });
 
+    // Cardápio/estoque mudou (em qualquer aba, dispositivo ou usuário) — recarrega
+    // a árvore completa do tenant para manter tudo sincronizado sem precisar de F5.
+    socket.on("menu-updated", () => {
+      void fetchTenant();
+    });
+
     return () => {
       socket.off("new-order");
       socket.off("order-status-updated");
       socket.off("checkout-requested");
       socket.off("waiter-called");
+      socket.off("menu-updated");
     };
   }, [slug]);
 

@@ -2577,7 +2577,10 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
 export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, refresh: () => void }) {
   const [search, setSearch] = useState("");
   const [selectedCat, setSelectedCat] = useState<string>("all");
-  const [localCategories, setLocalCategories] = useState<any[]>([]);
+  // Lazy initializer: popula de imediato com o que o tenant já trouxer, evitando
+  // o "flash vazio" que aparecia sempre que esta tela era desmontada e remontada
+  // (ex: trocar para "Estoque" e voltar) antes do useEffect abaixo rodar.
+  const [localCategories, setLocalCategories] = useState<any[]>(() => tenant?.categories || []);
 
   // Category modal
   const [catModal, setCatModal] = useState<{ open: boolean; editing: { id: string; name: string } | null }>({ open: false, editing: null });
@@ -2762,6 +2765,74 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
     })));
   };
 
+  // ── Drag-and-drop: categorias e produtos ──────────────────────────────────
+  const [draggedCategoryId, setDraggedCategoryId] = useState<string | null>(null);
+  const [dragOverCategoryId, setDragOverCategoryId] = useState<string | null>(null);
+  const [draggedProduct, setDraggedProduct] = useState<{ id: string; categoryId: string } | null>(null);
+  const [dragOverProduct, setDragOverProduct] = useState<{ id: string; categoryId: string } | null>(null);
+
+  const reorderCategories = async (draggedId: string, targetId: string) => {
+    if (draggedId === targetId || !tenant) return;
+    const current = [...localCategories];
+    const fromIdx = current.findIndex(c => c.id === draggedId);
+    const toIdx = current.findIndex(c => c.id === targetId);
+    if (fromIdx === -1 || toIdx === -1) return;
+    const reordered = [...current];
+    const [moved] = reordered.splice(fromIdx, 1);
+    reordered.splice(toIdx, 0, moved);
+    setLocalCategories(reordered);
+    try {
+      await apiFetch('/api/categories/reorder', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId: tenant.id, orderedIds: reordered.map(c => c.id) }),
+      });
+    } catch {
+      setLocalCategories(current); // reverte em caso de falha
+    }
+  };
+
+  const reorderOrMoveProduct = async (
+    draggedProductId: string,
+    fromCategoryId: string,
+    targetProductId: string | null,
+    toCategoryId: string
+  ) => {
+    if (!tenant) return;
+    const previous = localCategories.map(c => ({ ...c, products: [...(c.products || [])] }));
+
+    let next = localCategories.map(c => ({ ...c, products: [...(c.products || [])] }));
+    const fromCat = next.find(c => c.id === fromCategoryId);
+    const draggedProd = fromCat?.products.find((p: any) => p.id === draggedProductId);
+    if (!fromCat || !draggedProd) return;
+
+    // Remove da categoria de origem
+    fromCat.products = fromCat.products.filter((p: any) => p.id !== draggedProductId);
+
+    const toCat = next.find(c => c.id === toCategoryId);
+    if (!toCat) return;
+    const targetIdx = targetProductId ? toCat.products.findIndex((p: any) => p.id === targetProductId) : -1;
+    const insertAt = targetIdx === -1 ? toCat.products.length : targetIdx;
+    toCat.products.splice(insertAt, 0, { ...draggedProd, categoryId: toCategoryId });
+
+    setLocalCategories(next);
+    try {
+      await apiFetch('/api/products/reorder', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantId: tenant.id,
+          categoryId: toCategoryId,
+          orderedIds: toCat.products.map((p: any) => p.id),
+          movedProductId: fromCategoryId !== toCategoryId ? draggedProductId : undefined,
+          targetCategoryId: fromCategoryId !== toCategoryId ? toCategoryId : undefined,
+        }),
+      });
+    } catch {
+      setLocalCategories(previous); // reverte em caso de falha
+    }
+  };
+
   const duplicateProductToCatalog = async () => {
     if (!editingProduct || !prodModal.categoryId) return;
     const res = await apiFetch('/api/products', {
@@ -2833,6 +2904,9 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
     }))
     .filter(cat => !search || cat.products.length > 0);
 
+  // Arrastar só faz sentido quando a ordem exibida é a ordem real (sem filtro de busca/categoria)
+  const dragEnabled = !search && selectedCat === "all";
+
   const fmt = (n: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
 
   return (
@@ -2893,13 +2967,40 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
 
       {/* Category + product list */}
       {visibleCategories.map(cat => (
-        <div key={cat.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div
+          key={cat.id}
+          draggable={dragEnabled}
+          onDragStart={() => dragEnabled && setDraggedCategoryId(cat.id)}
+          onDragOver={(e) => { if (dragEnabled) { e.preventDefault(); setDragOverCategoryId(cat.id); } }}
+          onDragLeave={() => setDragOverCategoryId(prev => prev === cat.id ? null : prev)}
+          onDrop={(e) => {
+            e.preventDefault();
+            if (dragEnabled && draggedCategoryId) void reorderCategories(draggedCategoryId, cat.id);
+            setDraggedCategoryId(null);
+            setDragOverCategoryId(null);
+          }}
+          onDragEnd={() => { setDraggedCategoryId(null); setDragOverCategoryId(null); }}
+          className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition-all ${
+            dragOverCategoryId === cat.id && draggedCategoryId && draggedCategoryId !== cat.id
+              ? 'border-[#C9A227] ring-2 ring-[#C9A227]/30'
+              : 'border-slate-200'
+          } ${draggedCategoryId === cat.id ? 'opacity-40' : ''}`}
+        >
           {/* Category header */}
-          <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/60 flex items-center justify-between gap-3">
-            <h3 className="font-black text-slate-800 uppercase tracking-widest text-xs">{cat.name}
-              <span className="ml-2 text-zinc-400 font-bold normal-case tracking-normal">{cat.products?.length || 0} itens</span>
-            </h3>
-            <div className="flex items-center gap-1">
+          <div className={`px-4 py-3 border-b border-slate-100 bg-slate-50/60 flex items-center justify-between gap-3 ${dragEnabled ? 'cursor-grab active:cursor-grabbing' : ''}`}>
+            <div className="flex items-center gap-2 min-w-0">
+              {dragEnabled && (
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="text-slate-300 shrink-0">
+                  <circle cx="5" cy="4" r="1.3" fill="currentColor"/><circle cx="11" cy="4" r="1.3" fill="currentColor"/>
+                  <circle cx="5" cy="8" r="1.3" fill="currentColor"/><circle cx="11" cy="8" r="1.3" fill="currentColor"/>
+                  <circle cx="5" cy="12" r="1.3" fill="currentColor"/><circle cx="11" cy="12" r="1.3" fill="currentColor"/>
+                </svg>
+              )}
+              <h3 className="font-black text-slate-800 uppercase tracking-widest text-xs truncate">{cat.name}
+                <span className="ml-2 text-zinc-400 font-bold normal-case tracking-normal">{cat.products?.length || 0} itens</span>
+              </h3>
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
               <button
                 onClick={() => openNewProduct(cat.id)}
                 className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest text-[#C9A227] hover:text-[#A8841C] px-2 py-1.5 rounded-lg hover:bg-amber-50 transition-colors"
@@ -2918,15 +3019,51 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
 
           <div className="divide-y divide-slate-50">
             {cat.products?.length === 0 && (
-              <div className="px-4 py-6 text-center">
-                <p className="text-xs text-slate-400 font-medium">Nenhum produto ainda.</p>
+              <div
+                onDragOver={(e) => { if (dragEnabled) e.preventDefault(); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (dragEnabled && draggedProduct) {
+                    void reorderOrMoveProduct(draggedProduct.id, draggedProduct.categoryId, null, cat.id);
+                  }
+                  setDraggedProduct(null);
+                  setDragOverProduct(null);
+                }}
+                className="px-4 py-6 text-center"
+              >
+                <p className="text-xs text-slate-400 font-medium">
+                  {dragEnabled && draggedProduct ? "Solte aqui para mover para esta categoria" : "Nenhum produto ainda."}
+                </p>
                 <button onClick={() => openNewProduct(cat.id)} className="mt-2 text-xs font-black text-[#C9A227] hover:underline">
                   + Adicionar produto
                 </button>
               </div>
             )}
             {cat.products?.map(prod => (
-              <div key={prod.id} className={`flex items-center gap-3 px-4 py-3 transition-all duration-300 ${!prod.available ? 'bg-slate-50/50 opacity-70' : 'bg-white'}`}>
+              <div
+                key={prod.id}
+                draggable={dragEnabled}
+                onDragStart={(e) => { e.stopPropagation(); if (dragEnabled) setDraggedProduct({ id: prod.id, categoryId: cat.id }); }}
+                onDragOver={(e) => {
+                  if (dragEnabled) { e.preventDefault(); e.stopPropagation(); setDragOverProduct({ id: prod.id, categoryId: cat.id }); }
+                }}
+                onDragLeave={() => setDragOverProduct(prev => prev?.id === prod.id ? null : prev)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (dragEnabled && draggedProduct) {
+                    void reorderOrMoveProduct(draggedProduct.id, draggedProduct.categoryId, prod.id, cat.id);
+                  }
+                  setDraggedProduct(null);
+                  setDragOverProduct(null);
+                }}
+                onDragEnd={() => { setDraggedProduct(null); setDragOverProduct(null); }}
+                className={`flex items-center gap-3 px-4 py-3 transition-all duration-300 ${!prod.available ? 'bg-slate-50/50 opacity-70' : 'bg-white'} ${dragEnabled ? 'cursor-grab active:cursor-grabbing' : ''} ${
+                  dragOverProduct?.id === prod.id && draggedProduct && draggedProduct.id !== prod.id
+                    ? 'ring-2 ring-inset ring-[#C9A227]/40 bg-amber-50/40'
+                    : ''
+                } ${draggedProduct?.id === prod.id ? 'opacity-40' : ''}`}
+              >
                 <div className={`w-12 h-12 bg-slate-100 rounded-xl overflow-hidden shrink-0 transition-all duration-500 ${!prod.available ? 'grayscale opacity-60 scale-95 border-2 border-slate-200' : 'border border-transparent'}`}>
                   {prod.imageUrl
                     ? <img src={prod.imageUrl} className="w-full h-full object-cover" />

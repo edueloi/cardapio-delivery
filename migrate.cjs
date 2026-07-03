@@ -616,6 +616,17 @@ const migrations = [
     check: "SELECT COLUMN_DEFAULT FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'kitchen_print' AND COLUMN_DEFAULT = '0'",
     run: "ALTER TABLE products MODIFY COLUMN kitchen_print TINYINT(1) NOT NULL DEFAULT 0",
   },
+  // Ordenação manual (drag-and-drop) de categorias e produtos no cardápio
+  {
+    name: 'add_categories_sort_order',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'categories' AND COLUMN_NAME = 'sort_order'",
+    run: "ALTER TABLE categories ADD COLUMN sort_order INT NOT NULL DEFAULT 0",
+  },
+  {
+    name: 'add_products_sort_order',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'sort_order'",
+    run: "ALTER TABLE products ADD COLUMN sort_order INT NOT NULL DEFAULT 0",
+  },
 ];
 
 async function run() {

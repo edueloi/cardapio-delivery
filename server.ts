@@ -1457,9 +1457,11 @@ app.get("/api/tenants/:slug", async (req, res) => {
       where: { slug },
       include: {
         categories: {
+          orderBy: { sortOrder: "asc" },
           include: {
             products: {
               where: { available: true, pdvOnly: false },
+              orderBy: { sortOrder: "asc" },
               include: {
                 variants: true,
                 inventoryItem: true
@@ -1604,8 +1606,10 @@ app.get("/api/admin/tenant/:slug", requireAuth, async (req, res) => {
     where: { id: tenant.id },
     include: {
       categories: {
+        orderBy: { sortOrder: "asc" },
         include: {
           products: {
+            orderBy: { sortOrder: "asc" },
             include: {
               variants: true,
               inventoryItem: true,
@@ -1933,9 +1937,14 @@ app.post("/api/categories", requireAuth, async (req, res) => {
   if (!tenant) return;
 
   try {
-    const category = await prisma.category.create({
-      data: { name, tenantId: tenant.id },
+    const maxOrder = await prisma.category.aggregate({
+      where: { tenantId: tenant.id },
+      _max: { sortOrder: true },
     });
+    const category = await prisma.category.create({
+      data: { name, tenantId: tenant.id, sortOrder: (maxOrder._max.sortOrder ?? -1) + 1 },
+    });
+    io.to(`tenant-${tenant.id}`).emit("menu-updated", { tenantId: tenant.id });
     res.json(category);
   } catch (error) {
     console.error(error);
@@ -1950,6 +1959,7 @@ app.patch("/api/categories/:id", requireAuth, async (req, res) => {
       where: { id: req.params.id },
       data: { name },
     });
+    io.to(`tenant-${category.tenantId}`).emit("menu-updated", { tenantId: category.tenantId });
     res.json(category);
   } catch (error) {
     res.status(500).json({ error: "Failed to update category" });
@@ -1958,10 +1968,32 @@ app.patch("/api/categories/:id", requireAuth, async (req, res) => {
 
 app.delete("/api/categories/:id", requireAuth, async (req, res) => {
   try {
-    await prisma.category.delete({ where: { id: req.params.id } });
+    const category = await prisma.category.delete({ where: { id: req.params.id } });
+    io.to(`tenant-${category.tenantId}`).emit("menu-updated", { tenantId: category.tenantId });
     res.json({ ok: true });
   } catch (error) {
     res.status(500).json({ error: "Failed to delete category" });
+  }
+});
+
+// Reordena categorias (drag-and-drop) — recebe array de ids na nova ordem
+app.patch("/api/categories/reorder", requireAuth, async (req, res) => {
+  const { tenantId, orderedIds } = req.body as { tenantId: string; orderedIds: string[] };
+  const tenant = await requireTenantById(req, res, tenantId);
+  if (!tenant) return;
+  if (!Array.isArray(orderedIds)) return res.status(400).json({ error: "orderedIds é obrigatório." });
+
+  try {
+    await prisma.$transaction(
+      orderedIds.map((id, index) =>
+        prisma.category.update({ where: { id }, data: { sortOrder: index } })
+      )
+    );
+    io.to(`tenant-${tenant.id}`).emit("menu-updated", { tenantId: tenant.id });
+    res.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to reorder categories" });
   }
 });
 
@@ -1971,6 +2003,10 @@ app.post("/api/products", requireAuth, async (req, res) => {
   if (!tenant) return;
 
   try {
+    const maxOrder = await prisma.product.aggregate({
+      where: { categoryId },
+      _max: { sortOrder: true },
+    });
     const product = await prisma.product.create({
       data: {
         name,
@@ -1982,6 +2018,7 @@ app.post("/api/products", requireAuth, async (req, res) => {
         available: true,
         pdvOnly: Boolean(pdvOnly),
         kitchenPrint: kitchenPrint === undefined ? false : Boolean(kitchenPrint),
+        sortOrder: (maxOrder._max.sortOrder ?? -1) + 1,
         inventoryItemId: inventoryItemId || null,
         extras: extras ? (typeof extras === 'string' ? extras : JSON.stringify(extras)) : null,
         scheduleRule: scheduleRule ? (typeof scheduleRule === 'string' ? scheduleRule : JSON.stringify(scheduleRule)) : null,
@@ -2007,6 +2044,7 @@ app.post("/api/products", requireAuth, async (req, res) => {
       );
     }
 
+    io.to(`tenant-${tenant.id}`).emit("menu-updated", { tenantId: tenant.id });
     res.json({ ...product, recipeId: recipeId || null });
   } catch (error) {
     console.error(error);
@@ -2061,6 +2099,7 @@ app.patch("/api/products/:id", requireAuth, async (req, res) => {
       );
     }
 
+    io.to(`tenant-${scoped.tenant.id}`).emit("menu-updated", { tenantId: scoped.tenant.id });
     res.json({ ...product, recipeId: recipeId !== undefined ? (recipeId || null) : undefined });
   } catch (error) {
     console.error(error);
@@ -2079,6 +2118,7 @@ app.patch("/api/products/:id/availability", requireAuth, async (req, res) => {
       where: { id: scoped.product.id },
       data: { available: Boolean(available) },
     });
+    io.to(`tenant-${scoped.tenant.id}`).emit("menu-updated", { tenantId: scoped.tenant.id });
     res.json(product);
   } catch (error) {
     console.error(error);
@@ -2092,10 +2132,42 @@ app.delete("/api/products/:id", requireAuth, async (req, res) => {
 
   try {
     await prisma.product.delete({ where: { id: scoped.product.id } });
+    io.to(`tenant-${scoped.tenant.id}`).emit("menu-updated", { tenantId: scoped.tenant.id });
     res.sendStatus(200);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to delete product" });
+  }
+});
+
+// Reordena produtos dentro de uma categoria e/ou move um produto para outra categoria (drag-and-drop)
+app.patch("/api/products/reorder", requireAuth, async (req, res) => {
+  const { tenantId, categoryId, orderedIds, movedProductId, targetCategoryId } = req.body as {
+    tenantId: string;
+    categoryId: string;
+    orderedIds: string[];
+    movedProductId?: string;
+    targetCategoryId?: string;
+  };
+  const tenant = await requireTenantById(req, res, tenantId);
+  if (!tenant) return;
+  if (!Array.isArray(orderedIds)) return res.status(400).json({ error: "orderedIds é obrigatório." });
+
+  try {
+    await prisma.$transaction([
+      // Move o produto de categoria antes de aplicar a nova ordem, se aplicável
+      ...(movedProductId && targetCategoryId
+        ? [prisma.product.update({ where: { id: movedProductId }, data: { categoryId: targetCategoryId } })]
+        : []),
+      ...orderedIds.map((id, index) =>
+        prisma.product.update({ where: { id }, data: { sortOrder: index, categoryId } })
+      ),
+    ]);
+    io.to(`tenant-${tenant.id}`).emit("menu-updated", { tenantId: tenant.id });
+    res.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to reorder products" });
   }
 });
 

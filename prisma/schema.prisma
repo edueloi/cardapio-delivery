@@ -386,6 +386,7 @@ model Category {
   id        String   @id @default(cuid())
   name      String
   tenantId  String   @map("tenant_id")
+  sortOrder Int      @default(0) @map("sort_order")
   createdAt DateTime @default(now()) @map("created_at")
 
   tenant   Tenant    @relation(fields: [tenantId], references: [id])
@@ -405,6 +406,7 @@ model Product {
   available   Boolean  @default(true)
   pdvOnly     Boolean  @default(false) @map("pdv_only")
   kitchenPrint Boolean @default(false) @map("kitchen_print") // true = vai para o painel de cozinha — dono marca manualmente o que precisa de preparo
+  sortOrder   Int      @default(0) @map("sort_order")
   autoDisableWhenOutOfStock Boolean @default(false) @map("auto_disable_when_out_of_stock")
   extras      String?  @db.Text // JSON: ProductExtra[]
   scheduleRule String? @map("schedule_rule") @db.Text // JSON: ProductScheduleRule
