@@ -241,8 +241,8 @@ export default function DashboardContent({
         </div>
       )}
       {activeTab === "pos" && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
+        <div className="flex flex-col h-[calc(100vh-6.5rem)] min-h-0">
+          <div className="flex items-center justify-between mb-4 shrink-0">
             <div>
               <h3 className="text-xl font-black text-slate-800 uppercase tracking-widest">PDV — Caixa</h3>
               <p className="text-xs text-slate-400 mt-0.5">Venda rápida integrada ao painel</p>
@@ -258,18 +258,20 @@ export default function DashboardContent({
               </Button>
             )}
           </div>
-          <PDVPanel
-            tenant={tenant}
-            onOrderCreated={refreshTenant}
-            checkoutRequests={checkoutRequests}
-            onClearTable={onClearTable}
-            orders={orders}
-          />
+          <div className="flex-1 min-h-0">
+            <PDVPanel
+              tenant={tenant}
+              onOrderCreated={refreshTenant}
+              checkoutRequests={checkoutRequests}
+              onClearTable={onClearTable}
+              orders={orders}
+            />
+          </div>
         </div>
       )}
       {activeTab === "waiter" && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
+        <div className="flex flex-col h-[calc(100vh-6.5rem)] min-h-0">
+          <div className="flex items-center justify-between mb-4 shrink-0">
             <div>
               <h3 className="text-xl font-black text-slate-800 uppercase tracking-widest">Garçom — Lançar Pedidos</h3>
               <p className="text-xs text-slate-400 mt-0.5">Mesas e comandas, sem acesso ao caixa</p>
@@ -283,14 +285,16 @@ export default function DashboardContent({
               Abrir em Tela Cheia
             </Button>
           </div>
-          <PDVPanel
-            tenant={tenant}
-            mode="waiter"
-            onOrderCreated={refreshTenant}
-            checkoutRequests={checkoutRequests}
-            onClearTable={onClearTable}
-            orders={orders}
-          />
+          <div className="flex-1 min-h-0">
+            <PDVPanel
+              tenant={tenant}
+              mode="waiter"
+              onOrderCreated={refreshTenant}
+              checkoutRequests={checkoutRequests}
+              onClearTable={onClearTable}
+              orders={orders}
+            />
+          </div>
         </div>
       )}
       {activeTab === "loyalty" && (

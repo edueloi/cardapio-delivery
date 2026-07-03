@@ -612,11 +612,15 @@ export default function TableMenuView() {
                           onClick={() => { setSelectedProduct(p); setSelectedExtras([]); setQty(1); setNotes(""); }}
                           className="group text-left bg-[#161d27] border border-white/[0.06] rounded-2xl overflow-hidden hover:border-amber-500/30 transition-all active:bg-[#1c2532]"
                         >
-                          <div className="aspect-[4/3] overflow-hidden bg-white/5">
-                            <img
-                              src={p.imageUrl || "/placeholder.png"}
-                              className="w-full h-full object-cover group-active:scale-105 transition-transform duration-300"
-                            />
+                          <div className="aspect-[4/3] overflow-hidden bg-white/5 flex items-center justify-center">
+                            {p.imageUrl ? (
+                              <img
+                                src={p.imageUrl}
+                                className="w-full h-full object-cover group-active:scale-105 transition-transform duration-300"
+                              />
+                            ) : (
+                              <Utensils className="w-8 h-8 text-white/20" />
+                            )}
                           </div>
                           <div className="p-3 space-y-1">
                             <h3 className="text-[13px] font-bold text-white leading-tight line-clamp-2">{p.name}</h3>
@@ -648,11 +652,15 @@ export default function TableMenuView() {
                           onClick={() => { setSelectedProduct(p); setSelectedExtras([]); setQty(1); setNotes(""); }}
                           className="group flex flex-col rounded-3xl bg-[#161d27] border border-white/[0.06] hover:bg-[#1c2532] hover:border-[#C9A227]/30 transition-all cursor-pointer overflow-hidden"
                         >
-                          <div className="aspect-[4/3] overflow-hidden bg-white/5 shrink-0">
-                            <img
-                              src={p.imageUrl || "/placeholder.png"}
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                            />
+                          <div className="aspect-[4/3] overflow-hidden bg-white/5 shrink-0 flex items-center justify-center">
+                            {p.imageUrl ? (
+                              <img
+                                src={p.imageUrl}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                              />
+                            ) : (
+                              <Utensils className="w-10 h-10 text-white/20" />
+                            )}
                           </div>
                           <div className="flex-1 p-5 space-y-2 flex flex-col justify-between">
                             <div>
@@ -966,13 +974,17 @@ export default function TableMenuView() {
                   className="fixed inset-0 z-[110] bg-[#fafafa] flex flex-col overflow-y-auto lg:absolute lg:inset-0 lg:z-40 lg:bg-[#0f1722]/95 lg:backdrop-blur-xl lg:flex-row lg:overflow-hidden"
                 >
                   {/* Header / Image Area */}
-                  <div className="relative h-[35vh] shrink-0 lg:h-full lg:w-[45%] xl:w-[40%] lg:border-r lg:border-white/5">
-                    <img 
-                      src={selectedProduct.imageUrl || "/placeholder.png"} 
-                      className="w-full h-full object-cover" 
-                      alt={selectedProduct.name}
-                    />
-                    
+                  <div className="relative h-[35vh] shrink-0 lg:h-full lg:w-[45%] xl:w-[40%] lg:border-r lg:border-white/5 bg-slate-100 lg:bg-white/5 flex items-center justify-center">
+                    {selectedProduct.imageUrl ? (
+                      <img
+                        src={selectedProduct.imageUrl}
+                        className="w-full h-full object-cover"
+                        alt={selectedProduct.name}
+                      />
+                    ) : (
+                      <Utensils className="w-16 h-16 text-slate-300 lg:text-white/20" />
+                    )}
+
                     <button
                       onClick={() => {
                         setSelectedProduct(null);

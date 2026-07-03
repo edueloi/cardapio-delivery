@@ -573,11 +573,15 @@ export default function PDVPanel({
                       >
                         {/* Image — square, object-contain so full product is visible */}
                         <div className="w-full aspect-square bg-gradient-to-br from-slate-50 to-slate-100 overflow-hidden relative flex items-center justify-center p-3">
-                          <img
-                            src={product.imageUrl || "/placeholder.png"}
-                            className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-300 drop-shadow-md"
-                            alt={product.name}
-                          />
+                          {product.imageUrl ? (
+                            <img
+                              src={product.imageUrl}
+                              className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-300 drop-shadow-md"
+                              alt={product.name}
+                            />
+                          ) : (
+                            <Utensils className="w-8 h-8 text-slate-300" />
+                          )}
                           {/* Cart qty badge */}
                           {inCart && (
                             <div className="absolute top-2 right-2 min-w-[26px] h-[26px] px-1.5 bg-[#C9A227] text-black text-xs font-black rounded-full flex items-center justify-center shadow-lg">
@@ -850,12 +854,16 @@ export default function PDVPanel({
             cart.map((item) => (
               <div key={item.product.id} className="bg-white/5 rounded-xl p-3 space-y-2">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0">
-                    <img
-                      src={item.product.imageUrl || "/placeholder.png"}
-                      className="w-full h-full object-cover"
-                      alt={item.product.name}
-                    />
+                  <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-white/10 flex items-center justify-center">
+                    {item.product.imageUrl ? (
+                      <img
+                        src={item.product.imageUrl}
+                        className="w-full h-full object-cover"
+                        alt={item.product.name}
+                      />
+                    ) : (
+                      <Utensils className="w-4 h-4 text-white/40" />
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <h4 className="text-xs font-bold truncate">{item.product.name}</h4>
@@ -1079,8 +1087,17 @@ export default function PDVPanel({
                 initial={{ scale: 0.95, y: 20, opacity: 0 }}
                 animate={{ scale: 1, y: 0, opacity: 1 }}
                 exit={{ scale: 0.95, y: 20, opacity: 0 }}
-                className="bg-[#0D1B3E] w-full max-w-4xl rounded-[2.5rem] shadow-2xl border border-white/5 overflow-hidden flex flex-col md:flex-row max-h-[90vh]"
+                className="bg-[#0D1B3E] w-full max-w-4xl rounded-[2.5rem] shadow-2xl border border-white/5 overflow-hidden flex flex-col md:flex-row max-h-[90vh] relative"
               >
+                {/* Botão fechar — sempre visível, no canto do modal */}
+                <button
+                  onClick={() => setShowCheckout(false)}
+                  title="Fechar"
+                  className="absolute top-5 right-5 z-10 w-9 h-9 rounded-full bg-white/5 hover:bg-white/15 text-white/50 hover:text-white flex items-center justify-center transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+
                 {/* Left: Summary */}
                 <div className="w-full md:w-80 bg-black/20 p-8 flex flex-col border-r border-white/5 overflow-y-auto">
                   <button
@@ -1088,7 +1105,7 @@ export default function PDVPanel({
                     className="flex items-center gap-2 text-white/40 hover:text-white transition-colors mb-6 group"
                   >
                     <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-                    <span className="text-[10px] font-black uppercase tracking-widest">Voltar</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest">Cancelar</span>
                   </button>
 
                   <p className="text-[10px] font-black uppercase text-white/40 tracking-[0.2em] mb-1">Resumo</p>
@@ -1131,7 +1148,8 @@ export default function PDVPanel({
                 </div>
 
                 {/* Right: Payment */}
-                <div className="flex-1 p-8 space-y-6 overflow-y-auto">
+                <div className="flex-1 flex flex-col min-h-0">
+                <div className="flex-1 p-8 pt-14 space-y-6 overflow-y-auto min-h-0">
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* Payment methods */}
                     <div className="space-y-3">
@@ -1369,26 +1387,29 @@ export default function PDVPanel({
                       )}
                     </div>
                   </div>
+                </div>
 
-                  {/* Finalize button */}
+                  {/* Finalize button — sempre visível, fora da área rolável */}
                   {paymentMethod !== "STONE" || stoneStatus === "idle" ? (
-                    <button
-                      disabled={
-                        isProcessing ||
-                        (paymentMethod === "CASH" && amountReceived !== "" && Number(amountReceived) < total)
-                      }
-                      onClick={handleCheckout}
-                      className="w-full bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-5 rounded-2xl transition-all shadow-2xl shadow-[#C9A227]/40 flex items-center justify-center gap-3 uppercase tracking-widest text-sm"
-                    >
-                      {isProcessing ? (
-                        <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        <>
-                          {paymentMethod === "STONE" ? "Enviar para Maquininha" : "Finalizar Venda"}
-                          {paymentMethod === "STONE" ? <Smartphone className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
-                        </>
-                      )}
-                    </button>
+                    <div className="p-6 pt-4 border-t border-white/5 shrink-0 bg-[#0D1B3E]">
+                      <button
+                        disabled={
+                          isProcessing ||
+                          (paymentMethod === "CASH" && amountReceived !== "" && Number(amountReceived) < total)
+                        }
+                        onClick={handleCheckout}
+                        className="w-full bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-5 rounded-2xl transition-all shadow-2xl shadow-[#C9A227]/40 flex items-center justify-center gap-3 uppercase tracking-widest text-sm"
+                      >
+                        {isProcessing ? (
+                          <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <>
+                            {paymentMethod === "STONE" ? "Enviar para Maquininha" : "Finalizar Venda"}
+                            {paymentMethod === "STONE" ? <Smartphone className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
+                          </>
+                        )}
+                      </button>
+                    </div>
                   ) : null}
                 </div>
               </motion.div>
