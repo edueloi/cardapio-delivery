@@ -12,7 +12,7 @@ import {
   useToast,
 } from "../../components";
 import { DatePicker } from "../../components/DatePicker";
-import { apiJson } from "../../lib/api";
+import { apiFetch, apiJson } from "../../lib/api";
 import type { Tenant, CashRegister, CashMovement } from "../../types";
 
 const fmt = (n: number) =>
@@ -219,12 +219,10 @@ export default function CashFlowPanel({ slug }: CashFlowPanelProps) {
   const [movementDesc,      setMovementDesc]      = useState("");
   const [movementLoading,   setMovementLoading]   = useState(false);
 
-  const authHeader = { Authorization: `Bearer ${localStorage.getItem("auth_token")}` };
-
   const fetchCaixa = useCallback(async () => {
     const [cashRes, movRes] = await Promise.all([
-      fetch(`/api/tenants/${slug}/cash/current`,   { headers: authHeader }),
-      fetch(`/api/tenants/${slug}/cash/movements`, { headers: authHeader }),
+      apiFetch(`/api/tenants/${slug}/cash/current`),
+      apiFetch(`/api/tenants/${slug}/cash/movements`),
     ]);
     setCurrentCash(cashRes.ok ? await cashRes.json() : null);
     setMovements(movRes.ok ? await movRes.json() : []);
@@ -234,7 +232,7 @@ export default function CashFlowPanel({ slug }: CashFlowPanelProps) {
     const params = new URLSearchParams();
     if (dateFrom) params.set("from", dateFrom);
     if (dateTo)   params.set("to",   dateTo);
-    const res = await fetch(`/api/tenants/${slug}/cash/summary?${params}`, { headers: authHeader });
+    const res = await apiFetch(`/api/tenants/${slug}/cash/summary?${params}`);
     setSummary(res.ok ? await res.json() : null);
   }, [slug, dateFrom, dateTo]);
 
@@ -242,7 +240,7 @@ export default function CashFlowPanel({ slug }: CashFlowPanelProps) {
     const params = new URLSearchParams();
     if (dateFrom) params.set("from", dateFrom);
     if (dateTo)   params.set("to",   dateTo);
-    const res = await fetch(`/api/tenants/${slug}/cash/history?${params}`, { headers: authHeader });
+    const res = await apiFetch(`/api/tenants/${slug}/cash/history?${params}`);
     setHistory(res.ok ? await res.json() : []);
   }, [slug, dateFrom, dateTo]);
 

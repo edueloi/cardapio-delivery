@@ -8,6 +8,7 @@ import {
   PageWrapper, SectionTitle, StatGrid, StatCard, ContentCard,
   Button, EmptyState,
 } from "../../components";
+import { apiFetch } from "../../lib/api";
 import type { Tenant } from "../../types";
 
 const fmt = (n: number) =>
@@ -88,12 +89,8 @@ export default function ReportsPanel({ slug, tenant }: ReportsPanelProps) {
     setLoading(true);
     try {
       const [summRes, dailyRes] = await Promise.all([
-        fetch(`/api/tenants/${slug}/reports/summary?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("auth_token")}` },
-        }),
-        fetch(`/api/tenants/${slug}/reports/daily?days=${period === "month" ? 30 : period === "week" ? 7 : 1}`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("auth_token")}` },
-        }),
+        apiFetch(`/api/tenants/${slug}/reports/summary?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+        apiFetch(`/api/tenants/${slug}/reports/daily?days=${period === "month" ? 30 : period === "week" ? 7 : 1}`),
       ]);
       if (summRes.ok) setSummary(await summRes.json());
       if (dailyRes.ok) setDailyData(await dailyRes.json());

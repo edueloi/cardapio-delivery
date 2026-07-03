@@ -11,6 +11,7 @@ import {
   useToast,
 } from "../../components";
 import { DatePicker } from "../../components/DatePicker";
+import { apiFetch } from "../../lib/api";
 import type { Tenant } from "../../types";
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
@@ -73,7 +74,6 @@ function catColor(cat: string): string {
 function useEntries(slug: string, dateFrom: string | null, dateTo: string | null) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
-  const authHeader = { Authorization: `Bearer ${localStorage.getItem("auth_token")}` };
 
   const fetch_ = useCallback(async () => {
     setLoading(true);
@@ -81,7 +81,7 @@ function useEntries(slug: string, dateFrom: string | null, dateTo: string | null
       const params = new URLSearchParams();
       if (dateFrom) params.set("from", dateFrom);
       if (dateTo)   params.set("to",   dateTo);
-      const res = await fetch(`/api/tenants/${slug}/entries?${params}`, { headers: authHeader });
+      const res = await apiFetch(`/api/tenants/${slug}/entries?${params}`);
       setEntries(res.ok ? await res.json() : []);
     } catch { setEntries([]); }
     finally { setLoading(false); }
@@ -266,8 +266,6 @@ export default function EntradasSaidasPanel({ slug, tenant }: Props) {
   const [formNotes,   setFormNotes]   = useState("");
   const [formError,   setFormError]   = useState("");
 
-  const authHeader = { Authorization: `Bearer ${localStorage.getItem("auth_token")}` };
-
   const openNew = (type: EntryType = "EXPENSE") => {
     setEditEntry(null);
     setFormType(type); setFormCat(""); setFormDesc("");
@@ -297,13 +295,9 @@ export default function EntradasSaidasPanel({ slug, tenant }: Props) {
         amount, date: formDate, notes: formNotes || null,
       });
       if (editEntry) {
-        await fetch(`/api/tenants/${slug}/entries/${editEntry.id}`, {
-          method: "PATCH", headers: { ...authHeader, "Content-Type": "application/json" }, body,
-        });
+        await apiFetch(`/api/tenants/${slug}/entries/${editEntry.id}`, { method: "PATCH", body });
       } else {
-        await fetch(`/api/tenants/${slug}/entries`, {
-          method: "POST", headers: { ...authHeader, "Content-Type": "application/json" }, body,
-        });
+        await apiFetch(`/api/tenants/${slug}/entries`, { method: "POST", body });
       }
       setShowModal(false);
       refetch();
@@ -315,9 +309,7 @@ export default function EntradasSaidasPanel({ slug, tenant }: Props) {
     if (!deleteEntry) return;
     setDeleting(true);
     try {
-      await fetch(`/api/tenants/${slug}/entries/${deleteEntry.id}`, {
-        method: "DELETE", headers: authHeader,
-      });
+      await apiFetch(`/api/tenants/${slug}/entries/${deleteEntry.id}`, { method: "DELETE" });
       setDeleteEntry(null);
       refetch();
     } catch { toast.error("Erro ao excluir."); }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { apiJson } from "../lib/api";
+import { apiFetch, apiJson } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import socket from "../lib/socket";
 import type { Order, Tenant } from "../types";
@@ -71,10 +71,7 @@ export default function PDVPage({ mode = "full" }: PDVPageProps) {
   const handleClearTable = async (tableId: string) => {
     if (!tenant) return;
     try {
-      await fetch(`/api/admin/${tenant.id}/table/${tableId}/clear`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${localStorage.getItem("auth_token")}` },
-      });
+      await apiFetch(`/api/admin/${tenant.id}/table/${tableId}/clear`, { method: "POST" });
       setCheckoutRequests((prev) => prev.filter((r) => r.tableId !== tableId));
       const ordersData = await apiJson<Order[]>(`/api/admin/${tenant.id}/orders`);
       setOrders(Array.isArray(ordersData) ? ordersData : []);

@@ -19,7 +19,6 @@ interface DashboardNavigationGroup {
 
 interface DashboardShellProps {
   tenantName?: string;
-  tenantLogoUrl?: string | null;
   slug: string;
   activeTab: string;
   navigationGroups: DashboardNavigationGroup[];
@@ -42,7 +41,6 @@ function findActiveItem(groups: DashboardNavigationGroup[], activeTab: string) {
 
 export default function DashboardShell({
   tenantName,
-  tenantLogoUrl,
   slug,
   activeTab,
   navigationGroups,
@@ -58,7 +56,7 @@ export default function DashboardShell({
   const tenantLabel   = tenantName || "Box Sys";
   const active        = findActiveItem(navigationGroups, activeTab);
   const ActiveIcon    = active?.item.icon;
-  const logoSrc       = tenantLogoUrl || "/images/logo.png";
+  const logoSrc       = "/images/logo.png";
 
   return (
     <div className="min-h-screen bg-[#F4F6FA] flex flex-col xl:flex-row font-sans relative">

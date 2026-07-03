@@ -9,7 +9,7 @@ import {
   Modal, ModalFooter, Button, Input, EmptyState, Pagination,
   useToast,
 } from "../../components";
-import { apiJson } from "../../lib/api";
+import { apiFetch, apiJson } from "../../lib/api";
 import type { Tenant, Order, Customer } from "../../types";
 
 const fmt = (n: number) =>
@@ -44,9 +44,7 @@ export default function CustomerCRMPanel({ slug, tenant }: CRMPanelProps) {
     try {
       const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) });
       if (searchTerm) params.set("search", searchTerm);
-      const res = await fetch(`/api/tenants/${slug}/customers?${params}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("auth_token")}` },
-      });
+      const res = await apiFetch(`/api/tenants/${slug}/customers?${params}`);
       if (res.ok) {
         const data = await res.json();
         setCustomers(data.customers);
@@ -64,9 +62,7 @@ export default function CustomerCRMPanel({ slug, tenant }: CRMPanelProps) {
   const fetchCustomerOrders = async (customer: Customer) => {
     setOrdersLoading(true);
     try {
-      const res = await fetch(`/api/tenants/${slug}/customers/${customer.id}/orders`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("auth_token")}` },
-      });
+      const res = await apiFetch(`/api/tenants/${slug}/customers/${customer.id}/orders`);
       if (res.ok) setCustomerOrders(await res.json());
     } catch (e) {
       console.error(e);

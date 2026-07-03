@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Eye, EyeOff, Lock, Mail, Store, User, CheckCircle2, XCircle, Clock } from "lucide-react";
 import { Button, Input } from "../../components";
 import { useAuth } from "../../lib/auth";
+import { setAuthToken } from "../../lib/api";
 
 function toSlug(value: string): string {
   return value
@@ -20,7 +21,7 @@ type InviteStatus = "loading" | "valid" | "used" | "expired" | "invalid";
 export default function InviteRegisterPage() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { refresh } = useAuth();
 
   const [inviteStatus, setInviteStatus] = useState<InviteStatus>("loading");
   const [inviteNote, setInviteNote] = useState<string | null>(null);
@@ -83,8 +84,9 @@ export default function InviteRegisterPage() {
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Falha ao criar conta."); setLoading(false); return; }
-      // Salva token e redireciona
-      localStorage.setItem("auth_token", data.token);
+      // Salva token, popula o estado de auth e redireciona
+      setAuthToken(data.token);
+      await refresh();
       setSuccess(true);
       setTimeout(() => navigate("/painel"), 1500);
     } catch {
