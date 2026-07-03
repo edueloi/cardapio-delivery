@@ -3,13 +3,11 @@ import {
   LayoutDashboard,
   MessageSquare,
   Utensils,
-  ExternalLink,
 } from "lucide-react";
 import {
   FilterLineSegmented,
   PageWrapper,
   SectionTitle,
-  Button,
 } from "../../components";
 import type { Order, Tenant } from "../../types";
 import {
@@ -243,22 +241,6 @@ export default function DashboardContent({
       )}
       {activeTab === "pos" && (
         <div className="flex flex-col h-[calc(100vh-6.5rem)] min-h-0">
-          <div className="flex items-center justify-between mb-4 shrink-0">
-            <div>
-              <h3 className="text-xl font-black text-slate-800 uppercase tracking-widest">PDV — Caixa</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Venda rápida integrada ao painel</p>
-            </div>
-            {!(window as any).pdvDesktop && (
-              <Button
-                variant="secondary"
-                size="sm"
-                iconLeft={<ExternalLink className="w-4 h-4" />}
-                onClick={() => window.open(`/pdv/${slug}`, "_blank", "width=1280,height=800")}
-              >
-                Abrir em Tela Cheia
-              </Button>
-            )}
-          </div>
           <div className="flex-1 min-h-0">
             <PDVPanel
               tenant={tenant}
@@ -266,26 +248,17 @@ export default function DashboardContent({
               checkoutRequests={checkoutRequests}
               onClearTable={onClearTable}
               orders={orders}
+              onOpenFullscreen={
+                (window as any).pdvDesktop
+                  ? undefined
+                  : () => window.open(`/pdv/${slug}`, "_blank", "width=1280,height=800")
+              }
             />
           </div>
         </div>
       )}
       {activeTab === "waiter" && (
         <div className="flex flex-col h-[calc(100vh-6.5rem)] min-h-0">
-          <div className="flex items-center justify-between mb-4 shrink-0">
-            <div>
-              <h3 className="text-xl font-black text-slate-800 uppercase tracking-widest">Garçom — Lançar Pedidos</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Mesas e comandas, sem acesso ao caixa</p>
-            </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              iconLeft={<ExternalLink className="w-4 h-4" />}
-              onClick={() => window.open(`/garcom/${slug}`, "_blank", "width=1024,height=768")}
-            >
-              Abrir em Tela Cheia
-            </Button>
-          </div>
           <div className="flex-1 min-h-0">
             <PDVPanel
               tenant={tenant}
@@ -294,6 +267,7 @@ export default function DashboardContent({
               checkoutRequests={checkoutRequests}
               onClearTable={onClearTable}
               orders={orders}
+              onOpenFullscreen={() => window.open(`/garcom/${slug}`, "_blank", "width=1024,height=768")}
             />
           </div>
         </div>

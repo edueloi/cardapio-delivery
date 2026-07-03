@@ -3,9 +3,9 @@ import {
   Search, Plus, Minus, X, ShoppingCart,
   Trash2, CreditCard, Banknote, QrCode,
   CheckCircle2, Receipt, Package,
-  ChevronRight, ArrowLeft,
+  ChevronRight, ChevronDown, ArrowLeft,
   Utensils, Tag, User, Phone, Percent,
-  Printer, StickyNote, Hash, AlertCircle, Smartphone, Lock,
+  Printer, StickyNote, Hash, AlertCircle, Smartphone, Lock, ExternalLink,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import type { Tenant, Product, Order, PaymentConfig, PaymentMethodConfig, StoneConfig } from "../../types";
@@ -47,6 +47,8 @@ interface PDVPanelProps {
   operatorName?: string | null;
   /** Chamados de garçom/pedir conta em aberto, para exibir alerta na grade de mesas. */
   waiterCalls?: Array<{ tableId: string; customerName: string; note: string; requestBill: boolean; timestamp: number }>;
+  /** Quando embutido no dashboard, abre a versão em tela cheia (nova aba) — omitido na própria tela cheia. */
+  onOpenFullscreen?: () => void;
 }
 
 const BASE_PAYMENT_METHODS = [
@@ -67,6 +69,7 @@ export default function PDVPanel({
   mode = "full",
   operatorName,
   waiterCalls = [],
+  onOpenFullscreen,
 }: PDVPanelProps) {
   const toast = useToast();
   const isWaiterMode = mode === "waiter";
@@ -654,6 +657,18 @@ export default function PDVPanel({
 
       {/* ── Left: Product Selection ── */}
       <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
+        {/* Fullscreen shortcut — só quando embutido no dashboard */}
+        {onOpenFullscreen && (
+          <div className="flex justify-end px-3 pt-2.5">
+            <button
+              onClick={onOpenFullscreen}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-[#0D1B3E] hover:bg-slate-50 transition-colors"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              Tela Cheia
+            </button>
+          </div>
+        )}
         {/* Cash register status bar */}
         {!isWaiterMode && !cashLoading && (
           <div className={`flex items-center justify-between gap-3 px-5 py-2.5 border-b shrink-0 ${
@@ -708,8 +723,8 @@ export default function PDVPanel({
         {activeTab === "products" && (
           <>
             {/* Search + categories */}
-            <div className="p-3 border-b border-slate-100 bg-white space-y-2.5">
-              <div className="relative">
+            <div className="p-3 border-b border-slate-100 bg-white flex flex-col sm:flex-row gap-2.5">
+              <div className="relative flex-1 min-w-0">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
                   type="text"
@@ -724,30 +739,20 @@ export default function PDVPanel({
                   </button>
                 )}
               </div>
-              <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
-                <button
-                  onClick={() => setSelectedCategoryId(null)}
-                  className={`px-3.5 py-1.5 rounded-full text-[11px] font-black uppercase tracking-widest whitespace-nowrap transition-all border ${
-                    !selectedCategoryId
-                      ? "bg-[#0D1B3E] text-white border-[#0D1B3E] shadow-sm"
-                      : "bg-white text-slate-500 border-slate-200 hover:border-slate-300 hover:text-slate-700"
-                  }`}
+              <div className="relative sm:w-56 shrink-0">
+                <select
+                  value={selectedCategoryId ?? "all"}
+                  onChange={(e) => setSelectedCategoryId(e.target.value === "all" ? null : e.target.value)}
+                  className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-xl py-2.5 pl-4 pr-9 text-sm font-bold text-slate-700 focus:border-[#C9A227] focus:bg-white outline-none transition-all cursor-pointer"
                 >
-                  Todos ({tenant.categories?.reduce((s, c) => s + c.products.length, 0) ?? 0})
-                </button>
-                {tenant.categories?.map((cat) => (
-                  <button
-                    key={cat.id}
-                    onClick={() => setSelectedCategoryId(selectedCategoryId === cat.id ? null : cat.id)}
-                    className={`px-3.5 py-1.5 rounded-full text-[11px] font-black uppercase tracking-widest whitespace-nowrap transition-all border ${
-                      selectedCategoryId === cat.id
-                        ? "bg-[#C9A227] text-black border-[#C9A227] shadow-sm"
-                        : "bg-white text-slate-500 border-slate-200 hover:border-slate-300 hover:text-slate-700"
-                    }`}
-                  >
-                    {cat.name} ({cat.products.length})
-                  </button>
-                ))}
+                  <option value="all">Todos ({tenant.categories?.reduce((s, c) => s + c.products.length, 0) ?? 0})</option>
+                  {tenant.categories?.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.name} ({cat.products.length})
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
               </div>
             </div>
 
@@ -1028,8 +1033,12 @@ export default function PDVPanel({
                 </span>
               )}
               {(selectedTableId || cart.length > 0) && (
-                <button onClick={clearCart} className="text-white/30 hover:text-red-400 transition-colors" title="Limpar pedido">
-                  <X className="w-5 h-5" />
+                <button
+                  onClick={clearCart}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-white/40 hover:text-red-400 hover:bg-red-400/10 transition-colors"
+                >
+                  <X className="w-3.5 h-3.5 shrink-0" />
+                  <span className="text-[10px] font-black uppercase tracking-wide whitespace-nowrap">Limpar Pedidos</span>
                 </button>
               )}
             </div>

@@ -1,8 +1,10 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { type LucideIcon, LogOut, Menu, Monitor, Utensils, X, ShieldCheck, Bell, ChefHat, ExternalLink } from "lucide-react";
+import { type LucideIcon, LogOut, Menu, Monitor, Utensils, X, ShieldCheck, Bell, ChefHat, ExternalLink, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { cn } from "@/src/lib/utils";
+
+const SIDEBAR_COLLAPSED_KEY = "boxsys_sidebar_collapsed";
 
 interface DashboardNavigationItem {
   id: string;
@@ -58,6 +60,15 @@ export default function DashboardShell({
   const ActiveIcon    = active?.item.icon;
   const logoSrc       = "/images/logo.png";
 
+  // Sidebar compacta (só ícones) — preferência persistida por navegador, independente do tenant.
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    try { return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1"; } catch { return false; }
+  });
+
+  useEffect(() => {
+    try { window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, isCollapsed ? "1" : "0"); } catch {}
+  }, [isCollapsed]);
+
   return (
     <div className="min-h-screen bg-[#F4F6FA] flex flex-col xl:flex-row font-sans relative">
 
@@ -105,30 +116,48 @@ export default function DashboardShell({
       {/* ══ SIDEBAR ══ */}
       <aside className={cn(
         "fixed inset-y-0 left-0 z-50 w-[82vw] max-w-[300px] bg-[#0A1628] text-slate-300 flex flex-col",
-        "transition-transform duration-300 ease-in-out",
-        "xl:w-64 xl:max-w-none xl:translate-x-0 xl:sticky xl:top-0 xl:h-screen shrink-0",
+        "transition-[transform,width] duration-300 ease-in-out",
+        "xl:max-w-none xl:translate-x-0 xl:sticky xl:top-0 xl:h-screen shrink-0",
+        isCollapsed ? "xl:w-20" : "xl:w-64",
         isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         {/* Logo header */}
-        <div className="px-5 pt-5 pb-4 flex items-center justify-between border-b border-white/[0.07]">
-          <div className="flex items-center gap-3 min-w-0">
+        <div className={cn("pt-5 pb-4 flex items-center border-b border-white/[0.07]", isCollapsed ? "px-3 justify-center" : "px-5 justify-between")}>
+          <div className={cn("flex items-center gap-3 min-w-0", isCollapsed && "justify-center")}>
             <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center shrink-0 p-1.5">
               <img src={logoSrc} alt="Logo" className="w-full h-full object-contain" />
             </div>
-            <p className="text-[13px] font-black text-white/90 leading-none truncate">Box Sys</p>
+            {!isCollapsed && <p className="text-[13px] font-black text-white/90 leading-none truncate">Box Sys</p>}
           </div>
-          <button onClick={onCloseMobileMenu} className="xl:hidden w-7 h-7 rounded-lg flex items-center justify-center text-white/30 hover:text-white transition-colors">
-            <X className="w-4 h-4" />
-          </button>
+          {!isCollapsed && (
+            <button onClick={onCloseMobileMenu} className="xl:hidden w-7 h-7 rounded-lg flex items-center justify-center text-white/30 hover:text-white transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
+        {/* Collapse toggle — só desktop */}
+        <button
+          onClick={() => setIsCollapsed((v) => !v)}
+          title={isCollapsed ? "Expandir menu" : "Recolher menu"}
+          className={cn(
+            "hidden xl:flex items-center gap-3 px-3 py-2.5 mx-2.5 mt-2 rounded-xl text-slate-500 hover:bg-white/[0.06] hover:text-white transition-all",
+            isCollapsed && "justify-center"
+          )}
+        >
+          {isCollapsed ? <PanelLeftOpen className="w-4 h-4 shrink-0" /> : <PanelLeftClose className="w-4 h-4 shrink-0" />}
+          {!isCollapsed && <span className="text-[11px] font-black uppercase tracking-widest">Recolher</span>}
+        </button>
+
         {/* Nav */}
-        <nav className="flex-1 py-3 px-2.5 space-y-4 overflow-y-auto custom-scrollbar">
+        <nav className="flex-1 py-3 px-2.5 space-y-4 overflow-y-auto overflow-x-hidden custom-scrollbar">
           {navigationGroups.map((group) => (
             <div key={group.id}>
-              <p className="px-3 mb-1 text-[9px] font-black uppercase tracking-[0.24em] text-white/20">
-                {group.label}
-              </p>
+              {!isCollapsed && (
+                <p className="px-3 mb-1 text-[9px] font-black uppercase tracking-[0.24em] text-white/20">
+                  {group.label}
+                </p>
+              )}
               <div className="space-y-0.5">
                 {group.items.map((item) => {
                   const isActive = activeTab === item.tab;
@@ -136,8 +165,10 @@ export default function DashboardShell({
                     <button
                       key={item.id}
                       onClick={() => onSelectTab(item.tab)}
+                      title={isCollapsed ? item.label : undefined}
                       className={cn(
                         "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left group",
+                        isCollapsed && "justify-center",
                         isActive
                           ? "bg-[#C9A227] text-white shadow-lg shadow-[#C9A227]/20"
                           : "text-slate-400 hover:bg-white/[0.06] hover:text-white"
@@ -147,9 +178,11 @@ export default function DashboardShell({
                         "w-4 h-4 shrink-0 transition-colors",
                         isActive ? "text-white" : "text-slate-500 group-hover:text-[#C9A227]"
                       )} />
-                      <span className="text-[12px] font-semibold tracking-wide leading-none">
-                        {item.label}
-                      </span>
+                      {!isCollapsed && (
+                        <span className="text-[12px] font-semibold tracking-wide leading-none">
+                          {item.label}
+                        </span>
+                      )}
                     </button>
                   );
                 })}
@@ -159,29 +192,47 @@ export default function DashboardShell({
 
           {/* Painéis externos — abrem em nova aba, fora do fluxo de abas do dashboard */}
           <div>
-            <p className="px-3 mb-1 text-[9px] font-black uppercase tracking-[0.24em] text-white/20">
-              Painéis
-            </p>
+            {!isCollapsed && (
+              <p className="px-3 mb-1 text-[9px] font-black uppercase tracking-[0.24em] text-white/20">
+                Painéis
+              </p>
+            )}
             <div className="space-y-0.5">
               <a
                 href={`/${slug}/display`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left group text-slate-400 hover:bg-white/[0.06] hover:text-white"
+                title={isCollapsed ? "Painel TV" : undefined}
+                className={cn(
+                  "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left group text-slate-400 hover:bg-white/[0.06] hover:text-white",
+                  isCollapsed && "justify-center"
+                )}
               >
                 <Monitor className="w-4 h-4 shrink-0 text-slate-500 group-hover:text-[#C9A227] transition-colors" />
-                <span className="text-[12px] font-semibold tracking-wide leading-none flex-1">Painel TV</span>
-                <ExternalLink className="w-3 h-3 shrink-0 text-white/20 group-hover:text-white/40" />
+                {!isCollapsed && (
+                  <>
+                    <span className="text-[12px] font-semibold tracking-wide leading-none flex-1">Painel TV</span>
+                    <ExternalLink className="w-3 h-3 shrink-0 text-white/20 group-hover:text-white/40" />
+                  </>
+                )}
               </a>
               <a
                 href={`/cozinha/${slug}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left group text-slate-400 hover:bg-white/[0.06] hover:text-white"
+                title={isCollapsed ? "Painel Cozinha" : undefined}
+                className={cn(
+                  "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left group text-slate-400 hover:bg-white/[0.06] hover:text-white",
+                  isCollapsed && "justify-center"
+                )}
               >
                 <ChefHat className="w-4 h-4 shrink-0 text-slate-500 group-hover:text-[#C9A227] transition-colors" />
-                <span className="text-[12px] font-semibold tracking-wide leading-none flex-1">Painel Cozinha</span>
-                <ExternalLink className="w-3 h-3 shrink-0 text-white/20 group-hover:text-white/40" />
+                {!isCollapsed && (
+                  <>
+                    <span className="text-[12px] font-semibold tracking-wide leading-none flex-1">Painel Cozinha</span>
+                    <ExternalLink className="w-3 h-3 shrink-0 text-white/20 group-hover:text-white/40" />
+                  </>
+                )}
               </a>
             </div>
           </div>
@@ -191,27 +242,39 @@ export default function DashboardShell({
         <div className="p-2.5 border-t border-white/[0.07] space-y-0.5">
           <Link
             to={`/${slug}`}
-            className="flex items-center gap-3 w-full px-3 py-2.5 text-slate-400 hover:text-white rounded-xl hover:bg-white/[0.06] group transition-all"
+            title={isCollapsed ? "Ver Cardápio" : undefined}
+            className={cn(
+              "flex items-center gap-3 w-full px-3 py-2.5 text-slate-400 hover:text-white rounded-xl hover:bg-white/[0.06] group transition-all",
+              isCollapsed && "justify-center"
+            )}
           >
             <Utensils className="w-4 h-4 shrink-0 group-hover:text-[#C9A227] transition-colors" />
-            <span className="text-[12px] font-semibold tracking-wide">Ver Cardápio</span>
+            {!isCollapsed && <span className="text-[12px] font-semibold tracking-wide">Ver Cardápio</span>}
           </Link>
           {isSuperAdmin && (
             <Link
               to="/superadmin"
-              className="flex items-center gap-3 w-full px-3 py-2.5 text-amber-400/60 hover:text-amber-400 rounded-xl hover:bg-amber-400/10 transition-all"
+              title={isCollapsed ? "Super Admin" : undefined}
+              className={cn(
+                "flex items-center gap-3 w-full px-3 py-2.5 text-amber-400/60 hover:text-amber-400 rounded-xl hover:bg-amber-400/10 transition-all",
+                isCollapsed && "justify-center"
+              )}
             >
               <ShieldCheck className="w-4 h-4 shrink-0" />
-              <span className="text-[12px] font-semibold tracking-wide">Super Admin</span>
+              {!isCollapsed && <span className="text-[12px] font-semibold tracking-wide">Super Admin</span>}
             </Link>
           )}
           {onLogout && (
             <button
               onClick={onLogout}
-              className="flex items-center gap-3 w-full px-3 py-2.5 text-slate-500 hover:text-red-400 rounded-xl hover:bg-white/[0.06] transition-all group"
+              title={isCollapsed ? "Sair" : undefined}
+              className={cn(
+                "flex items-center gap-3 w-full px-3 py-2.5 text-slate-500 hover:text-red-400 rounded-xl hover:bg-white/[0.06] transition-all group",
+                isCollapsed && "justify-center"
+              )}
             >
               <LogOut className="w-4 h-4 shrink-0" />
-              <span className="text-[12px] font-semibold tracking-wide">Sair</span>
+              {!isCollapsed && <span className="text-[12px] font-semibold tracking-wide">Sair</span>}
             </button>
           )}
         </div>

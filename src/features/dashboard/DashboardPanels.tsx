@@ -2997,6 +2997,8 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
     scheduleRuleEnabled: false,
     scheduleRuleType: "weekday" as "weekday" | "daterange" | "both",
     scheduleRuleWeekdays: [] as number[],
+    scheduleRuleStartTime: "",
+    scheduleRuleEndTime: "",
     scheduleRuleStartDate: "",
     scheduleRuleEndDate: "",
     variants: [] as { _key: string, name: string, price: string, description: string, inventoryItemId: string }[],
@@ -3058,7 +3060,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
 
   const openNewProduct = (categoryId: string) => {
     setEditingProduct(null);
-    setProdForm({ name: "", description: "", price: "", imageUrl: "", inventoryItemId: "", recipeId: "", available: true, pdvOnly: false, kitchenPrint: false, autoDisableWhenOutOfStock: false, scheduleRuleEnabled: false, scheduleRuleType: "weekday", scheduleRuleWeekdays: [], scheduleRuleStartDate: "", scheduleRuleEndDate: "", variants: [], extras: [], ncm: "", cfop: "5102", csosn: "400", unitCom: "UN", origem: 0, aliqIcms: 0 });
+    setProdForm({ name: "", description: "", price: "", imageUrl: "", inventoryItemId: "", recipeId: "", available: true, pdvOnly: false, kitchenPrint: false, autoDisableWhenOutOfStock: false, scheduleRuleEnabled: false, scheduleRuleType: "weekday", scheduleRuleWeekdays: [], scheduleRuleStartTime: "", scheduleRuleEndTime: "", scheduleRuleStartDate: "", scheduleRuleEndDate: "", variants: [], extras: [], ncm: "", cfop: "5102", csosn: "400", unitCom: "UN", origem: 0, aliqIcms: 0 });
     setExtraInput({ label: "", price: "" });
     setProdModal({ open: true, categoryId });
   };
@@ -3073,6 +3075,8 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
     let scheduleRuleEnabled = false;
     let scheduleRuleType: "weekday" | "daterange" | "both" = "weekday";
     let scheduleRuleWeekdays: number[] = [];
+    let scheduleRuleStartTime = "";
+    let scheduleRuleEndTime = "";
     let scheduleRuleStartDate = "";
     let scheduleRuleEndDate = "";
     try {
@@ -3081,6 +3085,8 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
         scheduleRuleEnabled = true;
         scheduleRuleType = rule.type || "weekday";
         scheduleRuleWeekdays = rule.weekdays || [];
+        scheduleRuleStartTime = rule.weekdayStartTime || "";
+        scheduleRuleEndTime = rule.weekdayEndTime || "";
         scheduleRuleStartDate = rule.startDate || "";
         scheduleRuleEndDate = rule.endDate || "";
       }
@@ -3095,6 +3101,8 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
       scheduleRuleEnabled,
       scheduleRuleType,
       scheduleRuleWeekdays,
+      scheduleRuleStartTime,
+      scheduleRuleEndTime,
       scheduleRuleStartDate,
       scheduleRuleEndDate,
       variants: prod.variants?.map((v: any) => ({ _key: v.id || crypto.randomUUID(), name: v.name, price: String(v.price), description: v.description || "", inventoryItemId: v.inventoryItemId || "" })) || [],
@@ -3118,6 +3126,8 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
       const rule: any = { type: prodForm.scheduleRuleType };
       if (prodForm.scheduleRuleType === "weekday" || prodForm.scheduleRuleType === "both") {
         rule.weekdays = prodForm.scheduleRuleWeekdays;
+        if (prodForm.scheduleRuleStartTime) rule.weekdayStartTime = prodForm.scheduleRuleStartTime;
+        if (prodForm.scheduleRuleEndTime) rule.weekdayEndTime = prodForm.scheduleRuleEndTime;
       }
       if (prodForm.scheduleRuleType === "daterange" || prodForm.scheduleRuleType === "both") {
         rule.startDate = prodForm.scheduleRuleStartDate;
@@ -3636,6 +3646,34 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
                         );
                       })}
                     </div>
+                  </div>
+                )}
+
+                {/* Horário nos dias ativos */}
+                {(prodForm.scheduleRuleType === "weekday" || prodForm.scheduleRuleType === "both") && (
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-amber-800 mb-2">Horário (opcional)</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] text-slate-500 font-bold block mb-1">Aparece às</label>
+                        <input
+                          type="time"
+                          value={prodForm.scheduleRuleStartTime}
+                          onChange={e => setProdForm(f => ({ ...f, scheduleRuleStartTime: e.target.value }))}
+                          className="w-full bg-white border border-amber-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400/30"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-500 font-bold block mb-1">Some às</label>
+                        <input
+                          type="time"
+                          value={prodForm.scheduleRuleEndTime}
+                          onChange={e => setProdForm(f => ({ ...f, scheduleRuleEndTime: e.target.value }))}
+                          className="w-full bg-white border border-amber-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400/30"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-slate-400 italic mt-1.5">Deixe em branco para ficar visível o dia todo (00:00–23:59).</p>
                   </div>
                 )}
 
