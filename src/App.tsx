@@ -95,14 +95,8 @@ function AnimatedRoutes() {
             }
           />
 
-          <Route
-            path="/cozinha/:slug"
-            element={
-              <AuthGuard>
-                <KitchenDisplayPage />
-              </AuthGuard>
-            }
-          />
+          {/* Login próprio (senha da cozinha) — não usa o AuthGuard do dashboard */}
+          <Route path="/cozinha/:slug" element={<KitchenDisplayPage />} />
 
           <Route
             path="/:slug/mesa/:tableId"

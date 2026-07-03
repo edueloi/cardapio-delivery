@@ -29,6 +29,7 @@ model Tenant {
   loyaltyConfig  String? @map("loyalty_config") @db.Text // JSON: LoyaltyConfig (pontos por real, mínimo pra resgate, etc)
   ifoodConfig    String? @map("ifood_config") @db.Text // JSON: IfoodConfig (clientId, clientSecret, merchantId, status, autoAccept, etc)
   displayPanelConfig String? @map("display_panel_config") @db.Text // JSON: DisplayPanelConfig (quais tipos de pedido aparecem no Painel TV)
+  kitchenPasswordHash String? @map("kitchen_password_hash") // senha simples do painel de cozinha (/cozinha/:slug), sem conta de usuário
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -50,6 +51,7 @@ model Tenant {
   suppliers   Supplier[]
   condominiums CondominiumTenant[]
   financialEntries FinancialEntry[]
+  kitchenSessions  KitchenSession[]
 
   @@map("tenants")
 }
@@ -135,6 +137,21 @@ model AuthSession {
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@map("auth_sessions")
+}
+
+// Sessão do painel de cozinha (/cozinha/:slug) — login por senha simples da loja,
+// sem conta de usuário. Pensado para um tablet/TV fixo, por isso expira em 1 ano
+// (na prática "sempre conectado"; só sai se deslogar manualmente ou limpar o navegador).
+model KitchenSession {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("kitchen_sessions")
 }
 
 model InviteToken {

@@ -28,6 +28,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Monitor,
+  ChefHat,
   Trash2,
   Image as ImageIcon,
   Package,
@@ -1316,6 +1317,81 @@ function CondominiumsCard({ tenant }: { tenant: Tenant | null }) {
   );
 }
 
+function KitchenPasswordCard({ tenantId }: { tenantId: string }) {
+  const toast = useToast();
+  const [hasPassword, setHasPassword] = useState<boolean | null>(null);
+  const [password, setPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    apiJson<{ hasPassword: boolean }>(`/api/admin/${tenantId}/kitchen/config`)
+      .then((data) => setHasPassword(data.hasPassword))
+      .catch(() => setHasPassword(false));
+  }, [tenantId]);
+
+  const handleSave = async () => {
+    if (password && password.length < 4) {
+      toast.error("A senha deve ter pelo menos 4 caracteres.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const data = await apiJson<{ hasPassword: boolean }>(`/api/admin/${tenantId}/kitchen/config`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      setHasPassword(data.hasPassword);
+      setPassword("");
+      toast.success(data.hasPassword ? "Senha da cozinha salva!" : "Senha da cozinha removida.");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao salvar senha.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ContentCard padding="lg">
+      <div className="flex items-center gap-3 mb-1">
+        <ChefHat className="w-4 h-4 text-slate-400" />
+        <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Painel de Cozinha</p>
+        {hasPassword !== null && (
+          <span className={`ml-auto text-[9px] font-black uppercase px-2 py-1 rounded-full ${hasPassword ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"}`}>
+            {hasPassword ? "Configurado" : "Não configurado"}
+          </span>
+        )}
+      </div>
+      <p className="text-[10px] text-slate-400 mb-6">
+        Defina uma senha para abrir a tela <strong>/cozinha/{"{sua-loja}"}</strong> em um tablet ou TV fixo na cozinha —
+        não precisa de conta de funcionário, só dessa senha. Fica conectado indefinidamente até alguém sair manualmente.
+      </p>
+      <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
+        <div className="flex-1 space-y-1.5">
+          <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">
+            {hasPassword ? "Nova senha (deixe em branco para manter a atual)" : "Senha da cozinha"}
+          </label>
+          <input
+            type="text"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Mínimo 4 caracteres"
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm font-bold focus:border-[#C9A227] outline-none transition-all"
+          />
+        </div>
+        <button
+          type="button"
+          disabled={saving || !password}
+          onClick={handleSave}
+          className="bg-[#0D1B3E] hover:bg-slate-800 disabled:opacity-40 text-white px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all shrink-0"
+        >
+          {saving ? "Salvando..." : "Salvar"}
+        </button>
+      </div>
+    </ContentCard>
+  );
+}
+
 export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, refresh: () => void }) {
   const toast = useToast();
   const [activeTab, setActiveTab] = useState<"general" | "hours" | "delivery" | "payments" | "maquinhas" | "fiscal">("general");
@@ -1678,6 +1754,8 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                 ))}
               </div>
             </ContentCard>
+
+            {tenant?.id && <KitchenPasswordCard tenantId={tenant.id} />}
 
           </motion.div>
         )}

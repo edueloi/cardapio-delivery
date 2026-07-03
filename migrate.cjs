@@ -731,6 +731,27 @@ const migrations = [
     check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenants' AND COLUMN_NAME = 'display_panel_config'",
     run: "ALTER TABLE tenants ADD COLUMN display_panel_config TEXT NULL",
   },
+  // Login próprio do Painel de Cozinha — senha simples por loja, sem conta de usuário
+  {
+    name: 'add_tenants_kitchen_password_hash',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenants' AND COLUMN_NAME = 'kitchen_password_hash'",
+    run: "ALTER TABLE tenants ADD COLUMN kitchen_password_hash VARCHAR(255) NULL",
+  },
+  {
+    name: 'create_kitchen_sessions_table',
+    check: "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'kitchen_sessions'",
+    run: `CREATE TABLE kitchen_sessions (
+      id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      tenant_id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      token VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      expires_at DATETIME(3) NOT NULL,
+      created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (id),
+      UNIQUE INDEX kitchen_sessions_token_key (token),
+      INDEX kitchen_sessions_tenant_id_idx (tenant_id),
+      CONSTRAINT kitchen_sessions_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE ON UPDATE CASCADE
+    ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+  },
 ];
 
 async function run() {

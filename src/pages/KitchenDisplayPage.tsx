@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
-import { apiJson, apiFetch } from "../lib/api";
-import { useAuth } from "../lib/auth";
+import { useParams } from "react-router-dom";
 import socket from "../lib/socket";
 import type { Order, Tenant } from "../types";
-import { ChefHat, Timer, Bell, CheckCircle2, LogOut, Utensils } from "lucide-react";
+import { ChefHat, Timer, Bell, CheckCircle2, LogOut, Utensils, Lock } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 const KITCHEN_STATUSES = ["PENDING", "PREPARING"] as const;
+
+function kitchenTokenKey(slug: string) {
+  return `kitchen_token_${slug}`;
+}
 
 function useElapsedMinutes(createdAt: string) {
   const [elapsed, setElapsed] = useState(0);
@@ -110,23 +112,110 @@ function KitchenTicket({
   );
 }
 
+function KitchenLoginScreen({ slug, onLoggedIn }: { slug: string; onLoggedIn: (token: string) => void }) {
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!password) return;
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/kitchen/${slug}/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || "Não foi possível entrar.");
+      onLoggedIn(data.token);
+    } catch (err: any) {
+      setError(err?.message || "Não foi possível entrar.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-[#0D1B3E] flex items-center justify-center p-6">
+      <form onSubmit={handleSubmit} className="bg-black/20 border border-white/10 rounded-[2rem] p-8 w-full max-w-sm space-y-6">
+        <div className="text-center space-y-3">
+          <div className="w-16 h-16 rounded-2xl bg-[#C9A227] flex items-center justify-center mx-auto">
+            <ChefHat className="w-8 h-8 text-black" />
+          </div>
+          <div>
+            <h1 className="text-lg font-black text-white uppercase tracking-widest">Painel de Cozinha</h1>
+            <p className="text-xs text-white/40 font-bold mt-1">Digite a senha da cozinha para entrar</p>
+          </div>
+        </div>
+        <div className="space-y-2">
+          <label className="text-[10px] font-black uppercase text-white/40 tracking-widest ml-1">Senha</label>
+          <div className="relative">
+            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+            <input
+              autoFocus
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••"
+              className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pl-11 pr-4 text-white placeholder-white/20 focus:border-[#C9A227] outline-none text-center text-lg font-black tracking-widest"
+            />
+          </div>
+          {error && <p className="text-xs text-red-400 font-bold text-center">{error}</p>}
+        </div>
+        <button
+          type="submit"
+          disabled={loading || !password}
+          className="w-full bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-40 text-black font-black py-3.5 rounded-2xl text-xs uppercase tracking-widest transition-all"
+        >
+          {loading ? "Entrando..." : "Entrar"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 export default function KitchenDisplayPage() {
   const { slug } = useParams<{ slug: string }>();
-  const { isAuthenticated, loading: authLoading, logout } = useAuth();
-  const navigate = useNavigate();
+  const [token, setToken] = useState<string | null>(() => (slug ? window.localStorage.getItem(kitchenTokenKey(slug)) : null));
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState(false);
   const [now, setNow] = useState(Date.now());
 
-  const fetchTenant = async () => {
+  const handleLoggedIn = (newToken: string) => {
+    if (!slug) return;
+    window.localStorage.setItem(kitchenTokenKey(slug), newToken);
+    setToken(newToken);
+    setAuthError(false);
+  };
+
+  const handleLogout = () => {
+    if (slug) {
+      fetch(`/api/kitchen/${slug}/logout`, { method: "POST", headers: { "X-Kitchen-Token": token || "" } }).catch(() => {});
+      window.localStorage.removeItem(kitchenTokenKey(slug));
+    }
+    setToken(null);
+    setTenant(null);
+  };
+
+  const fetchData = async (activeToken: string) => {
     if (!slug) return;
     try {
-      const data = await apiJson<Tenant>(`/api/admin/tenant/${slug}`);
-      setTenant(data);
-      socket.emit("join-tenant", data.id);
-      const ordersData = await apiJson<Order[]>(`/api/admin/${data.id}/orders`);
-      setOrders(Array.isArray(ordersData) ? ordersData : []);
+      const res = await fetch(`/api/kitchen/${slug}/data`, { headers: { "X-Kitchen-Token": activeToken } });
+      if (res.status === 401) {
+        window.localStorage.removeItem(kitchenTokenKey(slug));
+        setToken(null);
+        setAuthError(true);
+        return;
+      }
+      const data = await res.json();
+      setTenant(data.tenant);
+      setOrders(Array.isArray(data.orders) ? data.orders : []);
+      socket.emit("join-tenant", data.tenant.id);
     } catch {
       setTenant(null);
     } finally {
@@ -135,12 +224,12 @@ export default function KitchenDisplayPage() {
   };
 
   useEffect(() => {
-    if (authLoading) return;
-    if (!isAuthenticated) {
-      navigate(`/login?redirect=/cozinha/${slug}`);
+    if (!token) {
+      setLoading(false);
       return;
     }
-    fetchTenant();
+    setLoading(true);
+    fetchData(token);
 
     socket.on("new-order", (newOrder: Order) => {
       setOrders((prev) => [newOrder, ...prev]);
@@ -153,7 +242,7 @@ export default function KitchenDisplayPage() {
       socket.off("new-order");
       socket.off("order-status-updated");
     };
-  }, [slug, authLoading, isAuthenticated]);
+  }, [slug, token]);
 
   // Só para re-renderizar os cronômetros de forma consistente com o resto da tela
   useEffect(() => {
@@ -162,11 +251,12 @@ export default function KitchenDisplayPage() {
   }, []);
 
   const advanceStatus = async (order: Order) => {
+    if (!slug || !token) return;
     const nextStatus = order.status === "PENDING" ? "PREPARING" : "SHIPPED";
     try {
-      await apiFetch(`/api/orders/${order.id}/status`, {
+      await fetch(`/api/kitchen/${slug}/orders/${order.id}/status`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Kitchen-Token": token },
         body: JSON.stringify({ status: nextStatus }),
       });
       setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: nextStatus as Order["status"] } : o)));
@@ -186,15 +276,10 @@ export default function KitchenDisplayPage() {
   const toDo = kitchenOrders.filter((o) => o.status === "PENDING");
   const preparing = kitchenOrders.filter((o) => o.status === "PREPARING");
 
-  if (!isAuthenticated) {
-    return (
-      <div className="fixed inset-0 bg-[#0D1B3E] flex items-center justify-center">
-        <div className="text-center text-white space-y-4">
-          <p className="text-lg font-black">Acesso restrito</p>
-          <Link to="/login" className="underline text-[#C9A227]">Fazer login</Link>
-        </div>
-      </div>
-    );
+  if (!slug) return null;
+
+  if (!token) {
+    return <KitchenLoginScreen slug={slug} onLoggedIn={handleLoggedIn} />;
   }
 
   if (loading) {
@@ -209,8 +294,10 @@ export default function KitchenDisplayPage() {
     return (
       <div className="fixed inset-0 bg-[#0D1B3E] flex items-center justify-center">
         <div className="text-center space-y-4">
-          <p className="text-lg font-bold text-white">Painel de cozinha não encontrado</p>
-          <Link to="/login" className="text-[#C9A227] underline text-sm">Voltar ao login</Link>
+          <p className="text-lg font-bold text-white">
+            {authError ? "Sessão expirada — entre novamente" : "Painel de cozinha não encontrado"}
+          </p>
+          <button onClick={handleLogout} className="text-[#C9A227] underline text-sm">Voltar ao login</button>
         </div>
       </div>
     );
@@ -235,7 +322,7 @@ export default function KitchenDisplayPage() {
             Ao vivo
           </span>
           <button
-            onClick={() => { logout(); navigate("/login"); }}
+            onClick={handleLogout}
             className="flex items-center gap-1.5 text-[10px] font-black uppercase text-white/40 hover:text-white transition-colors bg-white/5 px-3 py-2 rounded-xl"
           >
             <LogOut className="w-3.5 h-3.5" />

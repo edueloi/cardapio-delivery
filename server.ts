@@ -6,6 +6,7 @@ import { createServer } from "http";
 import multer from "multer";
 import path from "path";
 import { fileURLToPath } from "url";
+import { randomBytes } from "crypto";
 import { createServer as createViteServer } from "vite";
 import { Server } from "socket.io";
 import { prisma as _prisma } from "./src/lib/prisma";
@@ -1799,28 +1800,24 @@ app.get("/api/orders/table/:slug/:tableId", async (req, res) => {
   }
 });
 
-app.patch("/api/orders/:id/status", requireAuth, async (req, res) => {
-  const tenantOrder = await requireTenantFromOrder(req, res, req.params.id);
-  if (!tenantOrder) return;
-
-  const { order } = tenantOrder;
-  const { status } = req.body;
-
-  try {
-    const updatedOrder = await prisma.order.update({
-      where: { id: order.id },
-      data: { status },
-      include: {
-        tenant: true,
-        items: {
-          include: {
-            product: true,
-          },
+// Atualiza o status de um pedido e aplica os efeitos colaterais (baixa de estoque/produção,
+// notificação via socket e WhatsApp). Compartilhada entre a rota autenticada normal e o
+// painel de cozinha (que usa sua própria sessão, sem conta de usuário).
+async function updateOrderStatus(orderId: string, previousStatus: string, status: string) {
+  const updatedOrder = await prisma.order.update({
+    where: { id: orderId },
+    data: { status },
+    include: {
+      tenant: true,
+      items: {
+        include: {
+          product: true,
         },
       },
-    });
+    },
+  });
 
-    if (status === "PREPARING" && order.status !== "PREPARING") {
+  if (status === "PREPARING" && previousStatus !== "PREPARING") {
       for (const item of updatedOrder.items) {
         // Deduct direct inventory link
         let inventoryItemId = item.productVariantId
@@ -1901,6 +1898,18 @@ app.patch("/api/orders/:id/status", requireAuth, async (req, res) => {
     io.to(`tenant-${updatedOrder.tenantId}`).emit("order-status-updated", updatedOrder);
     await sendOrderStatusMessage(updatedOrder, updatedOrder.tenant).catch(() => undefined);
 
+  return updatedOrder;
+}
+
+app.patch("/api/orders/:id/status", requireAuth, async (req, res) => {
+  const tenantOrder = await requireTenantFromOrder(req, res, req.params.id);
+  if (!tenantOrder) return;
+
+  const { order } = tenantOrder;
+  const { status } = req.body;
+
+  try {
+    const updatedOrder = await updateOrderStatus(order.id, order.status, status);
     res.json(updatedOrder);
   } catch (error) {
     console.error(error);
@@ -2053,6 +2062,123 @@ app.post("/api/tenants/:slug/ifood/webhook", async (req, res) => {
     console.error(error);
     res.status(500).json({ error: "Failed to process iFood webhook" });
   }
+});
+
+// ── Painel de Cozinha (login próprio, sem conta de usuário) ──────────────────
+// Pensado para um tablet/TV fixo na cozinha: o dono define uma senha em
+// Configurações, e quem abrir /cozinha/:slug digita essa senha uma vez —
+// sem precisar de conta de staff. A sessão dura 1 ano (fica "sempre conectado").
+const KITCHEN_SESSION_TTL_DAYS = 365;
+
+async function requireKitchenAuth(req: express.Request, res: express.Response, slug: string) {
+  const token = (req.headers["x-kitchen-token"] as string) || "";
+  if (!token) {
+    res.status(401).json({ error: "Sessão da cozinha expirada." });
+    return null;
+  }
+
+  const session = await prisma.kitchenSession.findUnique({ where: { token }, include: { tenant: true } });
+  if (!session || session.tenant.slug !== slug) {
+    res.status(401).json({ error: "Sessão da cozinha expirada." });
+    return null;
+  }
+  if (session.expiresAt.getTime() <= Date.now()) {
+    await prisma.kitchenSession.delete({ where: { id: session.id } }).catch(() => {});
+    res.status(401).json({ error: "Sessão da cozinha expirada." });
+    return null;
+  }
+
+  return session.tenant;
+}
+
+app.post("/api/kitchen/:slug/login", async (req, res) => {
+  const tenant = await prisma.tenant.findUnique({ where: { slug: req.params.slug } });
+  if (!tenant) return res.status(404).json({ error: "Loja não encontrada." });
+
+  if (!tenant.kitchenPasswordHash) {
+    return res.status(400).json({ error: "Senha da cozinha ainda não foi configurada pelo dono da loja." });
+  }
+
+  const { password } = req.body;
+  if (!password || !verifyPassword(String(password), tenant.kitchenPasswordHash)) {
+    return res.status(401).json({ error: "Senha incorreta." });
+  }
+
+  const token = randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + KITCHEN_SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
+  await prisma.kitchenSession.create({ data: { tenantId: tenant.id, token, expiresAt } });
+
+  res.json({ token });
+});
+
+app.post("/api/kitchen/:slug/logout", async (req, res) => {
+  const token = (req.headers["x-kitchen-token"] as string) || "";
+  if (token) await prisma.kitchenSession.deleteMany({ where: { token } }).catch(() => {});
+  res.json({ ok: true });
+});
+
+app.get("/api/kitchen/:slug/data", async (req, res) => {
+  const tenant = await requireKitchenAuth(req, res, req.params.slug);
+  if (!tenant) return;
+
+  try {
+    const orders = await prisma.order.findMany({
+      where: { tenantId: tenant.id },
+      include: { items: { include: { product: true } } },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    });
+    res.json({ tenant, orders });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao buscar dados da cozinha." });
+  }
+});
+
+app.patch("/api/kitchen/:slug/orders/:id/status", async (req, res) => {
+  const tenant = await requireKitchenAuth(req, res, req.params.slug);
+  if (!tenant) return;
+
+  const order = await prisma.order.findFirst({ where: { id: req.params.id, tenantId: tenant.id } });
+  if (!order) return res.status(404).json({ error: "Pedido não encontrado." });
+
+  try {
+    const updatedOrder = await updateOrderStatus(order.id, order.status, req.body.status);
+    res.json(updatedOrder);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to update order status" });
+  }
+});
+
+// Configuração da senha do painel de cozinha (feita pelo dono, autenticado normalmente)
+app.post("/api/admin/:tenantId/kitchen/config", requireAuth, async (req, res) => {
+  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  if (!tenant) return;
+
+  try {
+    const { password } = req.body;
+    if (password !== undefined && password !== null && password !== "") {
+      if (String(password).length < 4) {
+        return res.status(400).json({ error: "A senha deve ter pelo menos 4 caracteres." });
+      }
+      await prisma.tenant.update({ where: { id: tenant.id }, data: { kitchenPasswordHash: hashPassword(String(password)) } });
+    } else if (password === null || password === "") {
+      // Remove a senha — desativa o painel de cozinha até configurar de novo
+      await prisma.tenant.update({ where: { id: tenant.id }, data: { kitchenPasswordHash: null } });
+      await prisma.kitchenSession.deleteMany({ where: { tenantId: tenant.id } });
+    }
+    res.json({ hasPassword: password !== null && password !== "" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao salvar senha da cozinha." });
+  }
+});
+
+app.get("/api/admin/:tenantId/kitchen/config", requireAuth, async (req, res) => {
+  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  if (!tenant) return;
+  res.json({ hasPassword: !!tenant.kitchenPasswordHash });
 });
 
 app.post("/api/admin/:tenantId/table/:tableId/clear", requireAuth, async (req, res) => {
