@@ -655,6 +655,76 @@ const migrations = [
       CONSTRAINT customer_addresses_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE ON UPDATE CASCADE
     ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
   },
+  // Integração iFood — configuração da loja (client_id/secret, merchant_id, status) fica em tenants.ifood_config
+  {
+    name: 'add_tenants_ifood_config',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenants' AND COLUMN_NAME = 'ifood_config'",
+    run: "ALTER TABLE tenants ADD COLUMN ifood_config TEXT NULL",
+  },
+  // Origem do pedido (DIRECT, IFOOD, ...) e id do pedido no sistema de origem
+  {
+    name: 'add_orders_source',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'source'",
+    run: "ALTER TABLE orders ADD COLUMN source VARCHAR(191) NOT NULL DEFAULT 'DIRECT'",
+  },
+  {
+    name: 'add_orders_external_order_id',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'external_order_id'",
+    run: "ALTER TABLE orders ADD COLUMN external_order_id VARCHAR(191) NULL",
+  },
+  {
+    name: 'add_orders_source_external_idx',
+    check: "SELECT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND INDEX_NAME = 'orders_tenantId_source_externalOrderId_idx'",
+    run: "ALTER TABLE orders ADD INDEX orders_tenantId_source_externalOrderId_idx (tenant_id, source, external_order_id)",
+  },
+  // Vínculo de categoria/produto com o catálogo do iFood (sincronização)
+  {
+    name: 'add_categories_ifood_category_id',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'categories' AND COLUMN_NAME = 'ifood_category_id'",
+    run: "ALTER TABLE categories ADD COLUMN ifood_category_id VARCHAR(191) NULL",
+  },
+  {
+    name: 'add_products_ifood_item_id',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'ifood_item_id'",
+    run: "ALTER TABLE products ADD COLUMN ifood_item_id VARCHAR(191) NULL",
+  },
+  {
+    name: 'add_products_ifood_synced_at',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'ifood_synced_at'",
+    run: "ALTER TABLE products ADD COLUMN ifood_synced_at DATETIME(3) NULL",
+  },
+  // Financeiro — Entradas e Saídas (módulo já existente no frontend, sem backend até agora)
+  {
+    name: 'create_financial_entries_table',
+    check: "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'financial_entries'",
+    run: `CREATE TABLE financial_entries (
+      id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      tenant_id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      type VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      category VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      description VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      amount DOUBLE NOT NULL,
+      date DATE NOT NULL,
+      notes TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
+      source VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'MANUAL',
+      created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (id),
+      INDEX financial_entries_tenant_id_date_idx (tenant_id, date),
+      CONSTRAINT financial_entries_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE ON UPDATE CASCADE
+    ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+  },
+  // Taxa de serviço opcional (ex: 10% em mesas) — configurável em Configurações, sempre desmarcável no PDV
+  {
+    name: 'add_orders_service_fee_amount',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'service_fee_amount'",
+    run: "ALTER TABLE orders ADD COLUMN service_fee_amount DOUBLE NULL",
+  },
+  {
+    name: 'add_orders_service_fee_percent',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'service_fee_percent'",
+    run: "ALTER TABLE orders ADD COLUMN service_fee_percent DOUBLE NULL",
+  },
 ];
 
 async function run() {

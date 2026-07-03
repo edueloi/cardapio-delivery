@@ -21,6 +21,7 @@ import {
   Utensils,
   Wallet,
   ArrowLeftRight,
+  Bike,
 } from "lucide-react";
 import type { DashboardNavigationGroup } from "../types";
 
@@ -67,6 +68,13 @@ export const DASHBOARD_NAVIGATION: DashboardNavigationGroup[] = [
       { id: "promotions", label: "Promoções",         tab: "promotions",   icon: Star },
       { id: "bundles",    label: "Combos",             tab: "bundles",      icon: Layers },
       { id: "whatsapp",   label: "WhatsApp",          tab: "whatsapp",     icon: MessageSquare },
+    ],
+  },
+  {
+    id: "integracoes",
+    label: "Integrações",
+    items: [
+      { id: "ifood", label: "iFood", tab: "ifood", icon: Bike, ownerOnly: true },
     ],
   },
   {

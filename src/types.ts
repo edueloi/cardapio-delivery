@@ -50,6 +50,11 @@ export interface PaymentMethodConfig {
   brandFees?: Record<string, BrandFeeConfig>; // chave = nome da bandeira (mesmo valor de acceptedBrands)
 }
 
+export interface ServiceChargeConfig {
+  enabled: boolean;  // se true, a taxa vem pré-marcada no checkout do PDV (sempre desmarcável)
+  percent: number;   // ex: 10 = 10% sobre o subtotal dos itens
+}
+
 export interface PaymentConfig {
   pix?: PaymentMethodConfig;
   credit?: PaymentMethodConfig;
@@ -63,6 +68,7 @@ export interface PaymentConfig {
   };
   acceptedBrands?: string[];
   customBrands?: string[];
+  serviceCharge?: ServiceChargeConfig;
 }
 
 // orderMode: DELIVERY_ONLY = só delivery imediato; PREORDER_ONLY = só encomenda; BOTH = os dois
@@ -176,6 +182,15 @@ export interface CustomerLoyalty {
   points: number;
   totalSpent: number;
   ordersCount: number;
+}
+
+export interface IfoodConfig {
+  enabled: boolean;
+  merchantId: string | null;
+  clientId: string | null;
+  hasClientSecret?: boolean; // o backend nunca devolve o secret em texto puro
+  autoAcceptOrders: boolean;
+  status: "NOT_CONNECTED" | "PENDING_APPROVAL" | "CONNECTED" | "ERROR";
 }
 
 export interface Account {
@@ -437,6 +452,9 @@ export interface Order {
   feeAmount?: number | null;      // valor da taxa cobrada pela adquirente (custo)
   feePercent?: number | null;     // percentual aplicado (bandeira + parcelas)
   feePassedToCustomer?: boolean;  // se true, feeAmount já está somado em total
+  // Taxa de serviço (opcional, ex: 10% em mesas)
+  serviceFeeAmount?: number | null;
+  serviceFeePercent?: number | null;
 }
 
 export interface OrderItem {

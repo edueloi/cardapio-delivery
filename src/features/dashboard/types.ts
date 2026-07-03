@@ -23,7 +23,8 @@ export type DashboardTabId =
   | "bundles"
   | "entries"
   | "suppliers"
-  | "waiter";
+  | "waiter"
+  | "ifood";
 
 export type DashboardOrderTabId = "pending" | "preparing" | "shipped";
 
@@ -51,6 +52,7 @@ export const TAB_TO_PATH: Record<DashboardTabId, string> = {
   "entries": "entradas-saidas",
   "suppliers": "fornecedores",
   "waiter": "garcom",
+  "ifood": "ifood",
 };
 
 export const PATH_TO_TAB: Record<string, DashboardTabId> = Object.fromEntries(
@@ -88,7 +90,7 @@ export const ALL_PERMISSION_TABS: DashboardTabId[] = [
 ];
 
 // Tabs always visible to OWNER, never to non-owners regardless of permissions
-export const OWNER_ONLY_TABS: DashboardTabId[] = ["profile", "staff"];
+export const OWNER_ONLY_TABS: DashboardTabId[] = ["profile", "staff", "ifood"];
 
 // Helper: can this membership access a given tab?
 export function canAccess(membership: MyMembership | null, tab: DashboardTabId): boolean {

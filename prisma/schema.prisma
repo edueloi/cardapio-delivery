@@ -27,6 +27,7 @@ model Tenant {
   stoneConfig    String? @map("stone_config") @db.Text // JSON: StoneConfig
   fiscalConfig   String? @map("fiscal_config") @db.LongText // JSON: FiscalConfig (CNPJ, IE, CSC, cert A1, série, ambiente)
   loyaltyConfig  String? @map("loyalty_config") @db.Text // JSON: LoyaltyConfig (pontos por real, mínimo pra resgate, etc)
+  ifoodConfig    String? @map("ifood_config") @db.Text // JSON: IfoodConfig (clientId, clientSecret, merchantId, status, autoAccept, etc)
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -47,6 +48,7 @@ model Tenant {
   promotions  Promotion[]
   suppliers   Supplier[]
   condominiums CondominiumTenant[]
+  financialEntries FinancialEntry[]
 
   @@map("tenants")
 }
@@ -300,6 +302,25 @@ model CashMovement {
   @@map("cash_movements")
 }
 
+model FinancialEntry {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  type        String   // INCOME, EXPENSE
+  category    String   // "Delivery", "iFood", "Fornecedores", "Aluguel", etc
+  description String
+  amount      Float
+  date        DateTime @db.Date
+  notes       String?  @db.Text
+  source      String   @default("MANUAL") // MANUAL, IFOOD — origem do lançamento
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, date])
+  @@map("financial_entries")
+}
+
 model Customer {
   id           String   @id @default(cuid())
   tenantId     String   @map("tenant_id")
@@ -409,6 +430,7 @@ model Category {
   name      String
   tenantId  String   @map("tenant_id")
   sortOrder Int      @default(0) @map("sort_order")
+  ifoodCategoryId String? @map("ifood_category_id") // ID da categoria correspondente no catálogo iFood
   createdAt DateTime @default(now()) @map("created_at")
 
   tenant   Tenant    @relation(fields: [tenantId], references: [id])
@@ -442,6 +464,8 @@ model Product {
   createdAt   DateTime @default(now()) @map("created_at")
   inventoryItemId String? @map("inventory_item_id")
   recipeId        String? @map("recipe_id")
+  ifoodItemId     String? @map("ifood_item_id")   // ID do item correspondente no catálogo iFood
+  ifoodSyncedAt   DateTime? @map("ifood_synced_at") // última sincronização bem-sucedida com o iFood
 
   category  Category    @relation(fields: [categoryId], references: [id])
   tenant    Tenant      @relation(fields: [tenantId], references: [id])
@@ -476,6 +500,8 @@ model Order {
   address      String?
   status       String   @default("PENDING") // PENDING, PREPARING, SHIPPED, DELIVERED, CANCELLED
   orderType    String   @default("DELIVERY") @map("order_type")
+  source          String  @default("DIRECT") @map("source") // DIRECT (PDV/cardápio/whatsapp), IFOOD, etc — origem do pedido
+  externalOrderId String? @map("external_order_id") // ID do pedido no sistema de origem (ex: id do pedido no iFood)
   tableId      String?  @map("table_id")
   paymentMethod String  @default("CASH") @map("payment_method")
   paymentDetail String? @map("payment_detail") @db.Text
@@ -498,6 +524,9 @@ model Order {
   feeAmount           Float?   @map("fee_amount")             // valor da taxa cobrada pela adquirente (custo)
   feePercent          Float?   @map("fee_percent")             // percentual aplicado (bandeira + parcelas)
   feePassedToCustomer Boolean  @default(false) @map("fee_passed_to_customer") // se true, feeAmount já está somado em total
+  // Taxa de serviço (ex: 10% da mesa) — opcional, o cliente pode recusar no pagamento
+  serviceFeeAmount  Float?  @map("service_fee_amount")  // valor da taxa de serviço aplicada neste pedido
+  serviceFeePercent Float?  @map("service_fee_percent") // percentual aplicado (snapshot da config no momento do pedido)
   total          Float
   tenantId      String   @map("tenant_id")
   createdAt     DateTime @default(now()) @map("created_at")
@@ -506,6 +535,7 @@ model Order {
   tenant Tenant      @relation(fields: [tenantId], references: [id])
   items  OrderItem[]
 
+  @@index([tenantId, source, externalOrderId])
   @@map("orders")
 }
 

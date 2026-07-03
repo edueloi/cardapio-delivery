@@ -42,11 +42,11 @@ function firstOfMonthISO() {
 }
 
 // ─── Categorias padrão ────────────────────────────────────────────────────────
-const INCOME_CATEGORIES = ["Vendas Balcão", "Delivery", "Pix", "Cartão", "Dinheiro", "Outros"];
+const INCOME_CATEGORIES = ["Vendas Balcão", "Delivery", "iFood", "Pix", "Cartão", "Dinheiro", "Outros"];
 const EXPENSE_CATEGORIES = [
   "Fornecedores", "Aluguel", "Energia Elétrica", "Água", "Gás", "Internet",
   "Funcionários", "Impostos", "Material de Limpeza", "Embalagens",
-  "Manutenção", "Marketing", "Equipamentos", "Outros"
+  "Manutenção", "Marketing", "Equipamentos", "Taxa iFood", "Outros"
 ];
 
 // ─── Cores por categoria ──────────────────────────────────────────────────────
@@ -61,6 +61,8 @@ const CATEGORY_COLORS: Record<string, string> = {
   "Impostos": "bg-pink-100 text-pink-700",
   "Vendas Balcão": "bg-green-100 text-green-700",
   "Delivery": "bg-emerald-100 text-emerald-700",
+  "iFood": "bg-red-100 text-red-700",
+  "Taxa iFood": "bg-rose-100 text-rose-700",
 };
 
 function catColor(cat: string): string {

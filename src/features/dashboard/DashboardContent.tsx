@@ -25,6 +25,7 @@ import {
 } from "./DashboardPanels";
 import PDVPanel from "./PDVPanel";
 import LoyaltyPanel from "./LoyaltyPanel";
+import IfoodPanel from "./IfoodPanel";
 import CashFlowPanel from "./CashFlowPanel";
 import CustomerCRMPanel from "./CustomerCRMPanel";
 import ReportsPanel from "./ReportsPanel";
@@ -299,6 +300,9 @@ export default function DashboardContent({
       )}
       {activeTab === "loyalty" && (
         <LoyaltyPanel tenant={tenant} onUpdated={refreshTenant} />
+      )}
+      {activeTab === "ifood" && (
+        <IfoodPanel tenant={tenant} onNavigate={setActiveTab} />
       )}
       {activeTab === "promotions" && (
         <PromotionsPanel tenant={tenant} />

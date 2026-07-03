@@ -1977,6 +1977,80 @@ app.get("/api/admin/:tenantId/loyalty/customers", requireAuth, async (req, res) 
   }
 });
 
+// ── Integração iFood ──────────────────────────────────────────────────────────
+// Guarda apenas as credenciais/config da loja. A conexão real com a Merchant API
+// (pedidos, catálogo, financeiro) é ativada depois que o iFood aprova a homologação
+// do client_id/client_secret gerados no Portal do Parceiro.
+app.get("/api/admin/:tenantId/ifood/config", requireAuth, async (req, res) => {
+  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  if (!tenant) return;
+
+  try {
+    const config = tenant.ifoodConfig ? JSON.parse(tenant.ifoodConfig) : null;
+    // Nunca devolve o clientSecret em texto puro pro frontend — só indica se já foi preenchido
+    if (config?.clientSecret) {
+      config.hasClientSecret = true;
+      delete config.clientSecret;
+    }
+    res.json(config);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao buscar configuração do iFood." });
+  }
+});
+
+app.post("/api/admin/:tenantId/ifood/config", requireAuth, async (req, res) => {
+  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  if (!tenant) return;
+
+  try {
+    const { enabled, merchantId, clientId, clientSecret, autoAcceptOrders } = req.body;
+    const existing = tenant.ifoodConfig ? JSON.parse(tenant.ifoodConfig) : {};
+
+    const config = {
+      enabled: !!enabled,
+      merchantId: merchantId || existing.merchantId || null,
+      clientId: clientId || existing.clientId || null,
+      // só sobrescreve o secret se um novo valor foi enviado (evita apagar ao salvar outros campos)
+      clientSecret: clientSecret !== undefined && clientSecret !== "" ? clientSecret : (existing.clientSecret || null),
+      autoAcceptOrders: !!autoAcceptOrders,
+      status: existing.status || "NOT_CONNECTED", // NOT_CONNECTED | PENDING_APPROVAL | CONNECTED | ERROR
+    };
+
+    await prisma.tenant.update({
+      where: { id: tenant.id },
+      data: { ifoodConfig: JSON.stringify(config) },
+    });
+
+    const response = { ...config };
+    if (response.clientSecret) {
+      (response as any).hasClientSecret = true;
+      delete (response as any).clientSecret;
+    }
+    res.json(response);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao salvar configuração do iFood." });
+  }
+});
+
+// Webhook receiver — recebe eventos de pedido do iFood (PLACED, CONFIRMED, CANCELLED, etc).
+// Ainda não ativo: fica pronto para plugar assim que a homologação da Merchant API sair.
+app.post("/api/tenants/:slug/ifood/webhook", async (req, res) => {
+  const tenant = await prisma.tenant.findUnique({ where: { slug: req.params.slug } });
+  if (!tenant) return res.status(404).json({ error: "Loja não encontrada." });
+
+  try {
+    console.log(`[iFood webhook] ${tenant.slug}:`, JSON.stringify(req.body).slice(0, 500));
+    // TODO: quando a API estiver homologada, validar assinatura do iFood,
+    // buscar detalhes do pedido via Order API e criar Order local com source: "IFOOD".
+    res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to process iFood webhook" });
+  }
+});
+
 app.post("/api/admin/:tenantId/table/:tableId/clear", requireAuth, async (req, res) => {
   const tenant = await requireTenantById(req, res, req.params.tenantId);
   if (!tenant) return;
@@ -2551,6 +2625,105 @@ app.get("/api/tenants/:slug/cash/summary", requireAuth, async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to fetch cash summary" });
+  }
+});
+
+// ── Entradas e Saídas (financeiro geral) ─────────────────────────────────────
+app.get("/api/tenants/:slug/entries", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  if (!tenant) return;
+
+  try {
+    const { from, to } = req.query as { from?: string; to?: string };
+    const dateFrom = from ? new Date(from + "T00:00:00") : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const dateTo   = to   ? new Date(to   + "T23:59:59") : new Date();
+
+    const entries = await prisma.financialEntry.findMany({
+      where: { tenantId: tenant.id, date: { gte: dateFrom, lte: dateTo } },
+      orderBy: { date: "desc" },
+    });
+
+    res.json(entries.map((e) => ({
+      ...e,
+      date: e.date.toISOString().split("T")[0],
+    })));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to fetch entries" });
+  }
+});
+
+app.post("/api/tenants/:slug/entries", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  if (!tenant) return;
+
+  try {
+    const { type, category, description, amount, date, notes, source } = req.body;
+    if (!type || !category || !description || !amount || !date) {
+      return res.status(400).json({ error: "Campos obrigatórios faltando." });
+    }
+
+    const entry = await prisma.financialEntry.create({
+      data: {
+        tenantId: tenant.id,
+        type,
+        category,
+        description,
+        amount: parseFloat(amount),
+        date: new Date(date + "T00:00:00"),
+        notes: notes || null,
+        source: source || "MANUAL",
+      },
+    });
+
+    res.json({ ...entry, date: entry.date.toISOString().split("T")[0] });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to create entry" });
+  }
+});
+
+app.patch("/api/tenants/:slug/entries/:id", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  if (!tenant) return;
+
+  try {
+    const existing = await prisma.financialEntry.findFirst({ where: { id: req.params.id, tenantId: tenant.id } });
+    if (!existing) return res.status(404).json({ error: "Lançamento não encontrado." });
+
+    const { type, category, description, amount, date, notes } = req.body;
+    const entry = await prisma.financialEntry.update({
+      where: { id: existing.id },
+      data: {
+        ...(type !== undefined ? { type } : {}),
+        ...(category !== undefined ? { category } : {}),
+        ...(description !== undefined ? { description } : {}),
+        ...(amount !== undefined ? { amount: parseFloat(amount) } : {}),
+        ...(date !== undefined ? { date: new Date(date + "T00:00:00") } : {}),
+        ...(notes !== undefined ? { notes: notes || null } : {}),
+      },
+    });
+
+    res.json({ ...entry, date: entry.date.toISOString().split("T")[0] });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to update entry" });
+  }
+});
+
+app.delete("/api/tenants/:slug/entries/:id", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  if (!tenant) return;
+
+  try {
+    const existing = await prisma.financialEntry.findFirst({ where: { id: req.params.id, tenantId: tenant.id } });
+    if (!existing) return res.status(404).json({ error: "Lançamento não encontrado." });
+
+    await prisma.financialEntry.delete({ where: { id: existing.id } });
+    res.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to delete entry" });
   }
 });
 
@@ -3201,6 +3374,7 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
       customerCpf,
       cardBrand,
       installments,
+      serviceChargeIncluded,
     } = req.body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -3228,6 +3402,17 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
     }
     const totalBeforeFee = Math.max(0, subtotal - discountAmount);
 
+    // Taxa de serviço — recalculada no servidor a partir da config salva do tenant (nunca confia no valor vindo do cliente).
+    // Sempre opcional: só aplica se a loja tem a config ativada E o operador não desmarcou no pagamento.
+    let serviceFeePercent = 0;
+    if (serviceChargeIncluded && tenant.paymentMethods) {
+      try {
+        const pm = JSON.parse(tenant.paymentMethods as string);
+        if (pm?.serviceCharge?.enabled) serviceFeePercent = Number(pm.serviceCharge.percent) || 0;
+      } catch {}
+    }
+    const serviceFeeAmount = subtotal * (serviceFeePercent / 100);
+
     // Taxa de maquininha — recalculada no servidor a partir da config salva do tenant (nunca confia no valor vindo do cliente)
     let feePercent = 0;
     let feePassedToCustomer = false;
@@ -3248,7 +3433,7 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
       } catch {}
     }
     const feeAmount = totalBeforeFee * (feePercent / 100);
-    const total = feePassedToCustomer ? totalBeforeFee + feeAmount : totalBeforeFee;
+    const total = (feePassedToCustomer ? totalBeforeFee + feeAmount : totalBeforeFee) + serviceFeeAmount;
 
     // Upsert customer if phone provided
     let customerId: string | undefined;
@@ -3280,6 +3465,8 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
         feeAmount: feeAmount || null,
         feePercent: feePercent || null,
         feePassedToCustomer,
+        serviceFeeAmount: serviceFeeAmount || null,
+        serviceFeePercent: serviceFeeAmount ? serviceFeePercent : null,
         status: "DELIVERED",
         total,
         items: { create: orderItems },

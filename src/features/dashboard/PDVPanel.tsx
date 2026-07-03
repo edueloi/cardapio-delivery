@@ -85,6 +85,9 @@ export default function PDVPanel({
   const [selectedComandaId, setSelectedComandaId] = useState<string | null>(null);
   const [registeredTables, setRegisteredTables] = useState<Array<{ id: string; label: string }>>([]);
 
+  // Modal de detalhes da mesa/comanda — mostrado antes de ir pro carrinho, ao clicar "Abrir"
+  const [orderDetailsView, setOrderDetailsView] = useState<{ type: "table"; tableId: string } | { type: "comanda"; comanda: Order } | null>(null);
+
   // Customer
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -106,6 +109,9 @@ export default function PDVPanel({
   // Discount
   const [discountType, setDiscountType] = useState<"PERCENT" | "FIXED">("FIXED");
   const [discountValue, setDiscountValue] = useState<string>("");
+
+  // Taxa de serviço — vem pré-marcada se ativada nas configurações, mas sempre pode ser desmarcada no pagamento
+  const [serviceChargeChecked, setServiceChargeChecked] = useState(true);
 
   // Caixa (abertura/fechamento) — venda só é permitida com caixa aberto
   const [currentCash, setCurrentCash] = useState<{ id: string; openingBalance: number; openedAt: string; expectedBalance: number } | null>(null);
@@ -183,6 +189,11 @@ export default function PDVPanel({
     try { return tenant.paymentMethods ? JSON.parse(tenant.paymentMethods) as PaymentConfig : {}; }
     catch { return {}; }
   }, [tenant.paymentMethods]);
+
+  // Sincroniza o checkbox de taxa de serviço com o valor padrão configurado pelo dono
+  useEffect(() => {
+    setServiceChargeChecked(!!paymentConfig.serviceCharge?.enabled);
+  }, [paymentConfig.serviceCharge?.enabled]);
 
   const stoneCfg = useMemo<StoneConfig | null>(() => {
     try { return tenant.stoneConfig ? JSON.parse(tenant.stoneConfig) as StoneConfig : null; }
@@ -278,6 +289,12 @@ export default function PDVPanel({
 
   const total = Math.max(0, subtotal - discountAmount);
 
+  // Taxa de serviço — configurável em Configurações, sempre opcional no momento do pagamento
+  const serviceChargeConfig = paymentConfig.serviceCharge;
+  const serviceChargeAmount = (serviceChargeConfig?.enabled && serviceChargeChecked)
+    ? subtotal * ((serviceChargeConfig.percent || 0) / 100)
+    : 0;
+
   const feeInfo = useMemo(() => {
     if (paymentMethod === "PIX") {
       const cfg = paymentConfig.pix;
@@ -295,8 +312,8 @@ export default function PDVPanel({
     return { percent, amount, passToCustomer };
   }, [paymentMethod, cardBrand, installments, paymentConfig, total]);
 
-  const finalTotal = feeInfo.passToCustomer ? total + feeInfo.amount : total;
-  const change = paymentMethod === "CASH" ? Math.max(0, digitsToNumber(amountReceived) - total) : 0;
+  const finalTotal = (feeInfo.passToCustomer ? total + feeInfo.amount : total) + serviceChargeAmount;
+  const change = paymentMethod === "CASH" ? Math.max(0, digitsToNumber(amountReceived) - finalTotal) : 0;
 
   const addToCart = useCallback((product: Product) => {
     setCart((prev) => {
@@ -333,6 +350,7 @@ export default function PDVPanel({
     setDiscountValue("");
     setAmountReceived("");
     setCardBrand("");
+    setServiceChargeChecked(!!paymentConfig.serviceCharge?.enabled);
     setStoneStatus("idle");
     setStoneChargeId(null);
     setNfceStatus("idle");
@@ -361,6 +379,7 @@ export default function PDVPanel({
       if (e.key === "Escape") {
         if (showCheckout) setShowCheckout(false);
         else if (showComandaModal) setShowComandaModal(false);
+        else if (orderDetailsView) setOrderDetailsView(null);
         else if (showOpenCashModal) setShowOpenCashModal(false);
         else if (showCloseCashModal) setShowCloseCashModal(false);
         return;
@@ -378,7 +397,7 @@ export default function PDVPanel({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [isWaiterMode, cart.length, currentCash, showCheckout, showComandaModal, showOpenCashModal, showCloseCashModal]);
+  }, [isWaiterMode, cart.length, currentCash, showCheckout, showComandaModal, orderDetailsView, showOpenCashModal, showCloseCashModal]);
 
   const handleLoadTable = (tableId: string) => {
     const tableOrders = orders.filter(
@@ -396,7 +415,27 @@ export default function PDVPanel({
     });
     setCart(items);
     setSelectedTableId(tableId);
+    setOrderDetailsView(null);
     setActiveTab("products");
+  };
+
+  const handleLoadComanda = (comanda: Order) => {
+    setCart(
+      comanda.items
+        .filter((i) => i.product)
+        .map((i) => ({ product: i.product!, quantity: i.quantity, notes: i.notes || "", price: i.price }))
+    );
+    setSelectedComandaId(comanda.id);
+    setComandaNumber(comanda.customerName || "");
+    setOrderDetailsView(null);
+    setActiveTab("products");
+  };
+
+  // Vai direto pro pagamento de uma mesa/comanda já aberta, sem passar por "Adicionar mais itens"
+  const handleGoToCheckoutFromDetails = (view: NonNullable<typeof orderDetailsView>) => {
+    if (view.type === "table") handleLoadTable(view.tableId);
+    else handleLoadComanda(view.comanda);
+    setShowCheckout(true);
   };
 
   // Lança o pedido em uma mesa/comanda já aberta, sem cobrar — usado pelo modo garçom
@@ -451,6 +490,7 @@ export default function PDVPanel({
       discountType,
       cardBrand: cardBrand || undefined,
       installments: paymentMethod === "CREDIT" ? installments : 1,
+      serviceChargeIncluded: serviceChargeChecked && !!serviceChargeConfig?.enabled,
       // Stone orders start as PENDING until terminal confirms
       status: isStone ? "PENDING" : undefined,
       items: cart.map((item) => ({
@@ -860,7 +900,7 @@ export default function PDVPanel({
                   {activeTables.map((tbl) => (
                     <button
                       key={tbl.tableId}
-                      onClick={() => handleLoadTable(tbl.tableId)}
+                      onClick={() => setOrderDetailsView({ type: "table", tableId: tbl.tableId })}
                       className={`bg-white p-6 rounded-3xl border-2 hover:shadow-xl transition-all text-left space-y-4 group ${tbl.wantsCheckout ? 'border-red-300 hover:border-red-500' : 'border-slate-100 hover:border-[#C9A227]'}`}
                     >
                       <div className="flex items-center justify-between">
@@ -910,16 +950,7 @@ export default function PDVPanel({
                 .map((comanda) => (
                   <button
                     key={comanda.id}
-                    onClick={() => {
-                      setCart(
-                        comanda.items
-                          .filter((i) => i.product)
-                          .map((i) => ({ product: i.product!, quantity: i.quantity, notes: i.notes || "", price: i.price }))
-                      );
-                      setSelectedComandaId(comanda.id);
-                      setComandaNumber(comanda.customerName || "");
-                      setActiveTab("products");
-                    }}
+                    onClick={() => setOrderDetailsView({ type: "comanda", comanda })}
                     className="bg-white p-6 rounded-3xl border border-slate-100 hover:border-[#C9A227] hover:shadow-lg transition-all text-left space-y-3"
                   >
                     <div className="flex items-center justify-between">
@@ -1206,6 +1237,96 @@ export default function PDVPanel({
           </div>
         </div>
 
+        {/* ── Modal de Detalhes da Mesa/Comanda ── */}
+        <AnimatePresence>
+          {orderDetailsView && (() => {
+            const isTable = orderDetailsView.type === "table";
+            const title = isTable ? `Mesa ${orderDetailsView.tableId}` : `Comanda ${orderDetailsView.comanda.customerName}`;
+            const relatedOrders = isTable
+              ? orders.filter((o) => o.tableId === orderDetailsView.tableId && o.status !== "CANCELLED" && o.status !== "DELIVERED")
+              : [orderDetailsView.comanda];
+            const detailItems: Array<{ key: string; name: string; quantity: number; price: number; notes: string }> = [];
+            relatedOrders.forEach((order) => {
+              order.items.forEach((item) => {
+                if (!item.product) return;
+                const existing = detailItems.find((i) => i.key === item.productId && i.notes === (item.notes || ""));
+                if (existing) existing.quantity += item.quantity;
+                else detailItems.push({ key: item.productId, name: item.product.name, quantity: item.quantity, price: item.price, notes: item.notes || "" });
+              });
+            });
+            const detailSubtotal = detailItems.reduce((acc, i) => acc + i.price * i.quantity, 0);
+
+            return (
+              <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
+              >
+                <motion.div
+                  initial={{ scale: 0.95, y: 20, opacity: 0 }}
+                  animate={{ scale: 1, y: 0, opacity: 1 }}
+                  exit={{ scale: 0.95, y: 20, opacity: 0 }}
+                  className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
+                >
+                  <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                    <div>
+                      <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Detalhes</p>
+                      <h3 className="text-xl font-black text-slate-800">{title}</h3>
+                    </div>
+                    <button
+                      onClick={() => setOrderDetailsView(null)}
+                      className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-2">
+                    {detailItems.length === 0 ? (
+                      <p className="text-center text-xs text-slate-400 py-10">Nenhum item lançado ainda.</p>
+                    ) : (
+                      detailItems.map((item) => (
+                        <div key={item.key + item.notes} className="flex justify-between items-start text-sm border-b border-slate-50 pb-2.5">
+                          <div className="pr-3">
+                            <span className="font-bold text-slate-700">{item.quantity}x {item.name}</span>
+                            {item.notes && <p className="text-[11px] italic text-slate-400 mt-0.5">{item.notes}</p>}
+                          </div>
+                          <span className="font-black text-slate-800 whitespace-nowrap">{fmt(item.price * item.quantity)}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="p-6 pt-4 border-t border-slate-100 bg-slate-50 space-y-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total</span>
+                      <span className="text-2xl font-black text-slate-800">{fmt(detailSubtotal)}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        onClick={() => isTable ? handleLoadTable(orderDetailsView.tableId) : handleLoadComanda(orderDetailsView.comanda)}
+                        className="bg-white border border-slate-200 hover:border-[#C9A227] text-slate-700 font-black py-3.5 rounded-2xl text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Adicionar Itens
+                      </button>
+                      {!isWaiterMode && (
+                        <button
+                          disabled={detailItems.length === 0}
+                          onClick={() => handleGoToCheckoutFromDetails(orderDetailsView)}
+                          className="bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-3.5 rounded-2xl text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                        >
+                          Fechar Conta
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              </motion.div>
+            );
+          })()}
+        </AnimatePresence>
+
         {/* ── Comanda Modal ── */}
         <AnimatePresence>
           {showComandaModal && (
@@ -1346,6 +1467,20 @@ export default function PDVPanel({
                         <span>Taxa maquininha ({feeInfo.percent.toFixed(2).replace(".", ",")}%){feeInfo.passToCustomer ? "" : " — absorvida"}</span>
                         <span className="tabular-nums">{feeInfo.passToCustomer ? "+" : ""}{fmt(feeInfo.amount)}</span>
                       </div>
+                    )}
+                    {!!serviceChargeConfig?.enabled && (
+                      <label className="flex items-center justify-between text-xs text-[#C9A227] cursor-pointer gap-2">
+                        <span className="flex items-center gap-1.5">
+                          <input
+                            type="checkbox"
+                            checked={serviceChargeChecked}
+                            onChange={(e) => setServiceChargeChecked(e.target.checked)}
+                            className="w-3.5 h-3.5 rounded accent-[#C9A227]"
+                          />
+                          Taxa de serviço ({(serviceChargeConfig.percent || 0).toFixed(0)}%)
+                        </span>
+                        <span className="tabular-nums">{serviceChargeAmount > 0 ? `+${fmt(serviceChargeAmount)}` : fmt(0)}</span>
+                      </label>
                     )}
                     <div className="flex justify-between pt-2 mt-1 border-t border-white/10">
                       <span className="text-[10px] font-black uppercase text-[#C9A227] tracking-widest self-end">Total</span>

@@ -2315,6 +2315,50 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
               )}
             </ContentCard>
 
+            {/* Taxa de Serviço */}
+            <ContentCard padding="lg">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-1">
+                <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Taxa de Serviço</p>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Ativar</span>
+                  <Switch
+                    checked={!!payments.serviceCharge?.enabled}
+                    onCheckedChange={(v) => setPayments({
+                      ...payments,
+                      serviceCharge: { enabled: v, percent: payments.serviceCharge?.percent ?? 10 },
+                    })}
+                  />
+                </label>
+              </div>
+              <p className="text-[10px] text-slate-400 mb-6">
+                Percentual sobre o subtotal dos itens (ex: 10% em mesas). Quando ativada, vem pré-marcada no pagamento do PDV,
+                mas o operador sempre pode desmarcar ou ajustar caso o cliente não queira pagar.
+              </p>
+
+              {payments.serviceCharge?.enabled && (
+                <div className="flex items-center gap-3 bg-slate-50 border border-slate-100 rounded-2xl p-3 max-w-xs">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex-1">Percentual</span>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={payments.serviceCharge?.percent ?? ""}
+                      onChange={(e) => {
+                        const pct = parseFloat(e.target.value.replace(",", ".")) || 0;
+                        setPayments({
+                          ...payments,
+                          serviceCharge: { enabled: true, percent: pct },
+                        });
+                      }}
+                      placeholder="10"
+                      className="w-16 text-center bg-white border border-slate-200 rounded-lg py-1.5 text-xs font-bold outline-none focus:border-[#C9A227] transition-all"
+                    />
+                    <span className="text-xs font-bold text-slate-400">%</span>
+                  </div>
+                </div>
+              )}
+            </ContentCard>
+
             {/* Futuras integrações */}
             <ContentCard padding="lg">
               <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-4">Outras Maquininhas (em breve)</p>
