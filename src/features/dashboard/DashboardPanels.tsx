@@ -62,7 +62,7 @@ import {
 } from "lucide-react";
 import socket from "../../lib/socket";
 import { apiFetch, apiJson } from "../../lib/api";
-import { Order, Tenant, CashRegister, DeliveryConfig, DeliveryZone, KmRange, PaymentConfig, PaymentMethodConfig, StoneConfig, FiscalConfig } from "../../types";
+import { Order, Tenant, CashRegister, DeliveryConfig, DeliveryZone, KmRange, PaymentConfig, PaymentMethodConfig, StoneConfig, FiscalConfig, DisplayPanelConfig } from "../../types";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   Button, 
@@ -1363,6 +1363,12 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
     try { return tenant?.fiscalConfig ? JSON.parse(tenant.fiscalConfig) : DEFAULT_FISCAL; } catch { return DEFAULT_FISCAL; }
   });
 
+  const DEFAULT_DISPLAY_PANEL: DisplayPanelConfig = { showDelivery: false, showPickup: true, showDineIn: true };
+  const [displayPanel, setDisplayPanel] = useState<DisplayPanelConfig>(() => {
+    try { return tenant?.displayPanelConfig ? { ...DEFAULT_DISPLAY_PANEL, ...JSON.parse(tenant.displayPanelConfig) } : DEFAULT_DISPLAY_PANEL; }
+    catch { return DEFAULT_DISPLAY_PANEL; }
+  });
+
   useEffect(() => {
     if (tenant) {
       setForm({ name: tenant.name || "", description: tenant.description || "", logoUrl: tenant.logoUrl || "", whatsapp: maskPhone(tenant.whatsapp) || "", isOpen: tenant.isOpen ?? true, orderMode: (tenant.orderMode ?? "DELIVERY_ONLY") as "DELIVERY_ONLY" | "PREORDER_ONLY" | "BOTH", scheduleMode: tenant.scheduleMode ?? false, scheduleType: (tenant.scheduleType ?? "CLIENT_CHOOSES") as "CLIENT_CHOOSES" | "OWNER_DEFINES", scheduleNotes: tenant.scheduleNotes || "" });
@@ -1373,6 +1379,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
       try { setPayments(tenant.paymentMethods ? JSON.parse(tenant.paymentMethods) : DEFAULT_PAYMENTS); } catch { setPayments(DEFAULT_PAYMENTS); }
       try { setStone(tenant.stoneConfig ? JSON.parse(tenant.stoneConfig) : DEFAULT_STONE); } catch { setStone(DEFAULT_STONE); }
       try { setFiscal(tenant.fiscalConfig ? JSON.parse(tenant.fiscalConfig) : DEFAULT_FISCAL); } catch { setFiscal(DEFAULT_FISCAL); }
+      try { setDisplayPanel(tenant.displayPanelConfig ? { ...DEFAULT_DISPLAY_PANEL, ...JSON.parse(tenant.displayPanelConfig) } : DEFAULT_DISPLAY_PANEL); } catch { setDisplayPanel(DEFAULT_DISPLAY_PANEL); }
     }
   }, [tenant]);
 
@@ -1406,6 +1413,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
           paymentMethods: JSON.stringify(payments),
           stoneConfig: JSON.stringify(stone),
           fiscalConfig: JSON.stringify(fiscal),
+          displayPanelConfig: JSON.stringify(displayPanel),
           scheduleDays: JSON.stringify(scheduleDays),
         })
       });
@@ -1639,6 +1647,35 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                     </div>
                   )}
                 </div>
+              </div>
+            </ContentCard>
+
+            <ContentCard padding="lg">
+              <div className="flex items-center gap-3 mb-1">
+                <Monitor className="w-4 h-4 text-slate-400" />
+                <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Painel TV</p>
+              </div>
+              <p className="text-[10px] text-slate-400 mb-6">
+                Escolha quais tipos de pedido aparecem na tela pública de acompanhamento (aquela que fica exposta pro cliente ver "seu pedido está pronto").
+                Delivery fica desativado por padrão, já que é entregue no endereço do cliente, não retirado no local.
+              </p>
+              <div className="space-y-3">
+                {([
+                  { key: "showDineIn" as const, label: "Mesa / Salão", desc: "Pedidos feitos nas mesas do estabelecimento." },
+                  { key: "showPickup" as const, label: "Retirada no Balcão", desc: "Cliente busca o pedido presencialmente." },
+                  { key: "showDelivery" as const, label: "Delivery", desc: "Pedido é entregue no endereço do cliente — geralmente não faz sentido aparecer aqui." },
+                ]).map((opt) => (
+                  <div key={opt.key} className="flex items-center justify-between gap-4 bg-slate-50 border border-slate-100 rounded-2xl p-4">
+                    <div>
+                      <p className="text-xs font-black text-slate-700">{opt.label}</p>
+                      <p className="text-[11px] text-slate-400">{opt.desc}</p>
+                    </div>
+                    <Switch
+                      checked={displayPanel[opt.key]}
+                      onCheckedChange={(v) => setDisplayPanel({ ...displayPanel, [opt.key]: v })}
+                    />
+                  </div>
+                ))}
               </div>
             </ContentCard>
 

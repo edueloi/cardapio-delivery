@@ -1084,7 +1084,7 @@ app.patch("/api/owner/tenants/:tenantId", requireAuth, async (req, res) => {
   const tenant = await requireTenantById(req, res, req.params.tenantId);
   if (!tenant) return;
 
-  const { name, description, address, whatsapp, logoUrl, isOpen, scheduleMode, scheduleType, scheduleDays, scheduleNotes, orderMode, businessHours, deliveryConfig, paymentMethods, stoneConfig, fiscalConfig } = req.body;
+  const { name, description, address, whatsapp, logoUrl, isOpen, scheduleMode, scheduleType, scheduleDays, scheduleNotes, orderMode, businessHours, deliveryConfig, paymentMethods, stoneConfig, fiscalConfig, displayPanelConfig } = req.body;
   try {
     const updated = await prisma.tenant.update({
       where: { id: tenant.id },
@@ -1119,6 +1119,10 @@ app.patch("/api/owner/tenants/:tenantId", requireAuth, async (req, res) => {
         ...(fiscalConfig !== undefined && {
           fiscalConfig: (fiscalConfig === null || fiscalConfig === "null") ? null :
                         (typeof fiscalConfig === "string" ? fiscalConfig : JSON.stringify(fiscalConfig))
+        }),
+        ...(displayPanelConfig !== undefined && {
+          displayPanelConfig: (displayPanelConfig === null || displayPanelConfig === "null") ? null :
+                               (typeof displayPanelConfig === "string" ? displayPanelConfig : JSON.stringify(displayPanelConfig))
         }),
       },
     });
@@ -2475,10 +2479,21 @@ app.post("/api/tenants/:slug/cash/open", requireAuth, async (req, res) => {
   if (!tenant) return;
 
   try {
+    const existing = await prisma.cashRegister.findFirst({
+      where: { tenantId: tenant.id, status: "OPEN" },
+      orderBy: { openedAt: "desc" },
+    });
+    if (existing) {
+      // Já existe um caixa aberto — devolve ele em vez de criar um segundo (evita duplicidade
+      // por clique duplo / retry de rede, que deixava caixas OPEN órfãos no banco).
+      return res.json(existing);
+    }
+
     const openCash = await prisma.cashRegister.create({
       data: {
         tenantId: tenant.id,
-        openingBalance: parseFloat(req.body.openingBalance),
+        openingBalance: parseFloat(req.body.openingBalance) || 0,
+        operatorName: req.body.operatorName || null,
         status: "OPEN",
       },
     });

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { type LucideIcon, LogOut, Menu, Monitor, Utensils, X, ShieldCheck, Bell } from "lucide-react";
+import { type LucideIcon, LogOut, Menu, Monitor, Utensils, X, ShieldCheck, Bell, ChefHat } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 
 interface DashboardNavigationItem {
@@ -250,6 +250,18 @@ export default function DashboardShell({
               <Monitor className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#0A1628] transition-colors" />
               <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 group-hover:text-[#0A1628]">
                 Painel TV
+              </span>
+            </Link>
+
+            {/* Painel de Cozinha (KDS externo — tela dedicada pra cozinha) */}
+            <Link
+              to={`/cozinha/${slug}`}
+              target="_blank"
+              className="hidden lg:flex items-center gap-2 h-9 px-3.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300 transition-all group"
+            >
+              <ChefHat className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#0A1628] transition-colors" />
+              <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 group-hover:text-[#0A1628]">
+                Painel Cozinha
               </span>
             </Link>
 

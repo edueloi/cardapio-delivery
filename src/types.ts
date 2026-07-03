@@ -163,6 +163,15 @@ export interface Tenant {
   wppInstance?: WppInstance | null;
   wppBotConfig?: WppBotConfig | null;
   loyaltyConfig?: LoyaltyConfig | null;
+  displayPanelConfig?: string | null; // JSON string: DisplayPanelConfig
+}
+
+// Controla quais tipos de pedido aparecem no Painel TV (/:slug/display) — tela exposta pro cliente ver o status.
+// Delivery não é "retirado", então por padrão fica de fora; o dono pode reativar se quiser.
+export interface DisplayPanelConfig {
+  showDelivery: boolean;  // pedidos com orderType === "DELIVERY"
+  showPickup: boolean;    // pedidos com orderType === "TAKEAWAY" (retirada no balcão)
+  showDineIn: boolean;    // pedidos com orderType === "DINE_IN" (mesa/salão)
 }
 
 export interface LoyaltyConfig {

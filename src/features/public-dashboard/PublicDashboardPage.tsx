@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import socket from "../../lib/socket";
 import type { Order, Tenant } from "../../types";
@@ -59,8 +59,27 @@ export default function PublicDashboardPage() {
     };
   }, [slug]);
 
-  const preparingOrders = orders.filter(o => o.status === 'PREPARING');
-  const readyOrders = orders.filter(o => o.status === 'SHIPPED').slice(0, 12);
+  // Quais tipos de pedido aparecem no Painel TV — configurável em Configurações.
+  // Por padrão, Delivery fica de fora: um pedido entregue no endereço do cliente
+  // nunca é "retirado" presencialmente, então não faz sentido chamar aqui.
+  const displayConfig = useMemo(() => {
+    const defaults = { showDelivery: false, showPickup: true, showDineIn: true };
+    try {
+      return tenant?.displayPanelConfig ? { ...defaults, ...JSON.parse(tenant.displayPanelConfig) } : defaults;
+    } catch {
+      return defaults;
+    }
+  }, [tenant?.displayPanelConfig]);
+
+  const isOrderTypeVisible = (orderType: Order["orderType"]) => {
+    if (orderType === "DELIVERY") return displayConfig.showDelivery;
+    if (orderType === "DINE_IN") return displayConfig.showDineIn;
+    return displayConfig.showPickup; // TAKEAWAY e demais tipos de retirada
+  };
+
+  const visibleOrders = orders.filter(o => isOrderTypeVisible(o.orderType));
+  const preparingOrders = visibleOrders.filter(o => o.status === 'PREPARING');
+  const readyOrders = visibleOrders.filter(o => o.status === 'SHIPPED').slice(0, 12);
 
   if (!tenant) return (
     <div className="min-h-screen bg-[#050A18] flex items-center justify-center">

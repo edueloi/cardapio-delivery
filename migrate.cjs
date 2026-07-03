@@ -725,6 +725,12 @@ const migrations = [
     check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'service_fee_percent'",
     run: "ALTER TABLE orders ADD COLUMN service_fee_percent DOUBLE NULL",
   },
+  // Controla quais tipos de pedido (delivery/retirada/mesa) aparecem no Painel TV público
+  {
+    name: 'add_tenants_display_panel_config',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenants' AND COLUMN_NAME = 'display_panel_config'",
+    run: "ALTER TABLE tenants ADD COLUMN display_panel_config TEXT NULL",
+  },
 ];
 
 async function run() {

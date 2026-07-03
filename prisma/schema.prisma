@@ -28,6 +28,7 @@ model Tenant {
   fiscalConfig   String? @map("fiscal_config") @db.LongText // JSON: FiscalConfig (CNPJ, IE, CSC, cert A1, série, ambiente)
   loyaltyConfig  String? @map("loyalty_config") @db.Text // JSON: LoyaltyConfig (pontos por real, mínimo pra resgate, etc)
   ifoodConfig    String? @map("ifood_config") @db.Text // JSON: IfoodConfig (clientId, clientSecret, merchantId, status, autoAccept, etc)
+  displayPanelConfig String? @map("display_panel_config") @db.Text // JSON: DisplayPanelConfig (quais tipos de pedido aparecem no Painel TV)
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
