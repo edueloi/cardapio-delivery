@@ -1952,6 +1952,28 @@ app.post("/api/categories", requireAuth, async (req, res) => {
   }
 });
 
+// Reordena categorias (drag-and-drop) — recebe array de ids na nova ordem.
+// Precisa vir ANTES de "/api/categories/:id", senão o Express casa "reorder" como :id.
+app.patch("/api/categories/reorder", requireAuth, async (req, res) => {
+  const { tenantId, orderedIds } = req.body as { tenantId: string; orderedIds: string[] };
+  const tenant = await requireTenantById(req, res, tenantId);
+  if (!tenant) return;
+  if (!Array.isArray(orderedIds)) return res.status(400).json({ error: "orderedIds é obrigatório." });
+
+  try {
+    await prisma.$transaction(
+      orderedIds.map((id, index) =>
+        prisma.category.update({ where: { id }, data: { sortOrder: index } })
+      )
+    );
+    io.to(`tenant-${tenant.id}`).emit("menu-updated", { tenantId: tenant.id });
+    res.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to reorder categories" });
+  }
+});
+
 app.patch("/api/categories/:id", requireAuth, async (req, res) => {
   const { name } = req.body;
   try {
@@ -1973,27 +1995,6 @@ app.delete("/api/categories/:id", requireAuth, async (req, res) => {
     res.json({ ok: true });
   } catch (error) {
     res.status(500).json({ error: "Failed to delete category" });
-  }
-});
-
-// Reordena categorias (drag-and-drop) — recebe array de ids na nova ordem
-app.patch("/api/categories/reorder", requireAuth, async (req, res) => {
-  const { tenantId, orderedIds } = req.body as { tenantId: string; orderedIds: string[] };
-  const tenant = await requireTenantById(req, res, tenantId);
-  if (!tenant) return;
-  if (!Array.isArray(orderedIds)) return res.status(400).json({ error: "orderedIds é obrigatório." });
-
-  try {
-    await prisma.$transaction(
-      orderedIds.map((id, index) =>
-        prisma.category.update({ where: { id }, data: { sortOrder: index } })
-      )
-    );
-    io.to(`tenant-${tenant.id}`).emit("menu-updated", { tenantId: tenant.id });
-    res.json({ ok: true });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Failed to reorder categories" });
   }
 });
 
@@ -2049,6 +2050,38 @@ app.post("/api/products", requireAuth, async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to create product" });
+  }
+});
+
+// Reordena produtos dentro de uma categoria e/ou move um produto para outra categoria (drag-and-drop).
+// Precisa vir ANTES de "/api/products/:id", senão o Express casa "reorder" como :id.
+app.patch("/api/products/reorder", requireAuth, async (req, res) => {
+  const { tenantId, categoryId, orderedIds, movedProductId, targetCategoryId } = req.body as {
+    tenantId: string;
+    categoryId: string;
+    orderedIds: string[];
+    movedProductId?: string;
+    targetCategoryId?: string;
+  };
+  const tenant = await requireTenantById(req, res, tenantId);
+  if (!tenant) return;
+  if (!Array.isArray(orderedIds)) return res.status(400).json({ error: "orderedIds é obrigatório." });
+
+  try {
+    await prisma.$transaction([
+      // Move o produto de categoria antes de aplicar a nova ordem, se aplicável
+      ...(movedProductId && targetCategoryId
+        ? [prisma.product.update({ where: { id: movedProductId }, data: { categoryId: targetCategoryId } })]
+        : []),
+      ...orderedIds.map((id, index) =>
+        prisma.product.update({ where: { id }, data: { sortOrder: index, categoryId } })
+      ),
+    ]);
+    io.to(`tenant-${tenant.id}`).emit("menu-updated", { tenantId: tenant.id });
+    res.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to reorder products" });
   }
 });
 
@@ -2137,37 +2170,6 @@ app.delete("/api/products/:id", requireAuth, async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to delete product" });
-  }
-});
-
-// Reordena produtos dentro de uma categoria e/ou move um produto para outra categoria (drag-and-drop)
-app.patch("/api/products/reorder", requireAuth, async (req, res) => {
-  const { tenantId, categoryId, orderedIds, movedProductId, targetCategoryId } = req.body as {
-    tenantId: string;
-    categoryId: string;
-    orderedIds: string[];
-    movedProductId?: string;
-    targetCategoryId?: string;
-  };
-  const tenant = await requireTenantById(req, res, tenantId);
-  if (!tenant) return;
-  if (!Array.isArray(orderedIds)) return res.status(400).json({ error: "orderedIds é obrigatório." });
-
-  try {
-    await prisma.$transaction([
-      // Move o produto de categoria antes de aplicar a nova ordem, se aplicável
-      ...(movedProductId && targetCategoryId
-        ? [prisma.product.update({ where: { id: movedProductId }, data: { categoryId: targetCategoryId } })]
-        : []),
-      ...orderedIds.map((id, index) =>
-        prisma.product.update({ where: { id }, data: { sortOrder: index, categoryId } })
-      ),
-    ]);
-    io.to(`tenant-${tenant.id}`).emit("menu-updated", { tenantId: tenant.id });
-    res.json({ ok: true });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Failed to reorder products" });
   }
 });
 

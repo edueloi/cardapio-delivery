@@ -1,4 +1,10 @@
 import React, { useState, useEffect, useMemo } from "react";
+import {
+  DndContext, DragOverlay, PointerSensor, TouchSensor, useSensor, useSensors,
+  closestCenter, useDroppable, type DragStartEvent, type DragEndEvent,
+} from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { 
   ClipboardList, 
@@ -2574,6 +2580,232 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
   );
 }
 
+function SortableProductRow({
+  prod, dragEnabled, fmt, toggleProductAvailability, openEditProduct, setDeleteProductConfirm,
+}: {
+  prod: any;
+  dragEnabled: boolean;
+  fmt: (n: number) => string;
+  toggleProductAvailability: (prod: any) => void;
+  openEditProduct: (prod: any) => void;
+  setDeleteProductConfirm: (id: string) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: prod.id,
+    data: { type: "product", categoryId: prod.categoryId },
+    disabled: !dragEnabled,
+  });
+  const style = { transform: CSS.Transform.toString(transform), transition };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center gap-3 px-4 py-3 transition-colors ${!prod.available ? 'bg-slate-50/50 opacity-70' : 'bg-white'} ${isDragging ? 'opacity-40 z-10 relative' : ''}`}
+    >
+      {dragEnabled && (
+        <button
+          {...attributes}
+          {...listeners}
+          className="shrink-0 p-1 -ml-1 text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing touch-none"
+          title="Arrastar para reordenar ou mover"
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+            <circle cx="5" cy="4" r="1.3" fill="currentColor"/><circle cx="11" cy="4" r="1.3" fill="currentColor"/>
+            <circle cx="5" cy="8" r="1.3" fill="currentColor"/><circle cx="11" cy="8" r="1.3" fill="currentColor"/>
+            <circle cx="5" cy="12" r="1.3" fill="currentColor"/><circle cx="11" cy="12" r="1.3" fill="currentColor"/>
+          </svg>
+        </button>
+      )}
+      <div className={`w-12 h-12 bg-slate-100 rounded-xl overflow-hidden shrink-0 transition-all duration-500 ${!prod.available ? 'grayscale opacity-60 scale-95 border-2 border-slate-200' : 'border border-transparent'}`}>
+        {prod.imageUrl
+          ? <img src={prod.imageUrl} className="w-full h-full object-cover" />
+          : <div className="w-full h-full flex items-center justify-center text-slate-300"><Utensils className="w-5 h-5" /></div>
+        }
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <p className={`text-sm font-bold truncate transition-colors ${!prod.available ? 'text-slate-400 italic' : 'text-slate-800'}`}>{prod.name}</p>
+          {!prod.available && (
+            <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-white bg-slate-400 px-1.5 py-0.5 rounded-full shadow-sm">Inativo</span>
+          )}
+          {(prod as any).scheduleRule && (
+            <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-amber-700 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded-full">📅 Agendado</span>
+          )}
+        </div>
+        <p className="text-xs text-slate-400 font-medium flex items-center gap-2">
+          {prod.variants?.length > 0
+            ? `${prod.variants.length} variações • desde ${fmt(Math.min(...prod.variants.map((v: any) => v.price)))}`
+            : fmt(prod.price)
+          }
+          {prod.inventoryItem && (
+            <>
+              <span className="w-1 h-1 rounded-full bg-slate-300" />
+              <span className={`font-black uppercase text-[10px] ${
+                prod.inventoryItem.quantity <= 0
+                  ? "text-red-500"
+                  : prod.inventoryItem.quantity < 5
+                    ? "text-amber-500"
+                    : "text-green-600"
+              }`}>
+                {prod.inventoryItem.quantity <= 0
+                  ? "Esgotado"
+                  : `${prod.inventoryItem.quantity} ${prod.inventoryItem.unit || 'un'}`
+                }
+              </span>
+            </>
+          )}
+        </p>
+      </div>
+      <div className="flex items-center gap-1 shrink-0">
+        <button
+          onClick={() => toggleProductAvailability(prod)}
+          title={prod.available ? "Desativar produto" : "Ativar produto"}
+          className={`p-2 rounded-lg transition-colors ${prod.available ? 'text-green-500 hover:text-slate-400 hover:bg-slate-100' : 'text-slate-300 hover:text-green-500 hover:bg-green-50'}`}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            {prod.available
+              ? <><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.6"/><path d="M5.5 8L7 9.5L10.5 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></>
+              : <><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.6"/><path d="M6 6L10 10M10 6L6 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></>
+            }
+          </svg>
+        </button>
+        <button onClick={() => openEditProduct(prod)} className="p-2 text-slate-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors">
+          <Settings className="w-4 h-4" />
+        </button>
+        <button onClick={() => setDeleteProductConfirm(prod.id)} className="p-2 text-slate-300 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors">
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ProductRowGhost({ prod, fmt }: { prod: any; fmt: (n: number) => string }) {
+  return (
+    <div className="flex items-center gap-3 px-4 py-3 bg-white rounded-xl shadow-2xl border border-[#C9A227]/40 rotate-1">
+      <div className="w-12 h-12 bg-slate-100 rounded-xl overflow-hidden shrink-0">
+        {prod.imageUrl
+          ? <img src={prod.imageUrl} className="w-full h-full object-cover" />
+          : <div className="w-full h-full flex items-center justify-center text-slate-300"><Utensils className="w-5 h-5" /></div>
+        }
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-bold text-slate-800 truncate">{prod.name}</p>
+        <p className="text-xs text-slate-400 font-medium">{fmt(prod.price)}</p>
+      </div>
+    </div>
+  );
+}
+
+function EmptyCategoryDropZone({ categoryId, isDraggingProduct, openNewProduct }: {
+  categoryId: string;
+  isDraggingProduct: boolean;
+  openNewProduct: (categoryId: string) => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: `${categoryId}-empty`, data: { type: "category-drop", categoryId } });
+  return (
+    <div
+      ref={setNodeRef}
+      className={`px-4 py-6 text-center transition-colors ${isOver ? 'bg-amber-50' : ''}`}
+    >
+      <p className="text-xs text-slate-400 font-medium">
+        {isDraggingProduct ? "Solte aqui para mover para esta categoria" : "Nenhum produto ainda."}
+      </p>
+      <button onClick={() => openNewProduct(categoryId)} className="mt-2 text-xs font-black text-[#C9A227] hover:underline">
+        + Adicionar produto
+      </button>
+    </div>
+  );
+}
+
+function SortableCategoryCard({
+  cat, dragEnabled, openNewProduct, openEditCategory, openEditProduct,
+  toggleProductAvailability, setDeleteProductConfirm, fmt,
+}: {
+  cat: any;
+  dragEnabled: boolean;
+  openNewProduct: (categoryId: string) => void;
+  openEditCategory: (cat: any) => void;
+  openEditProduct: (prod: any) => void;
+  toggleProductAvailability: (prod: any) => void;
+  setDeleteProductConfirm: (id: string) => void;
+  fmt: (n: number) => string;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: cat.id,
+    data: { type: "category" },
+    disabled: !dragEnabled,
+  });
+  const style = { transform: CSS.Transform.toString(transform), transition };
+  const productIds = (cat.products || []).map((p: any) => p.id);
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-4 last:mb-0 ${isDragging ? 'opacity-40 z-10 relative' : ''}`}
+    >
+      {/* Category header */}
+      <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/60 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          {dragEnabled && (
+            <button
+              {...attributes}
+              {...listeners}
+              className="shrink-0 p-1 -ml-1 text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing touch-none"
+              title="Arrastar para reordenar categoria"
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <circle cx="5" cy="4" r="1.3" fill="currentColor"/><circle cx="11" cy="4" r="1.3" fill="currentColor"/>
+                <circle cx="5" cy="8" r="1.3" fill="currentColor"/><circle cx="11" cy="8" r="1.3" fill="currentColor"/>
+                <circle cx="5" cy="12" r="1.3" fill="currentColor"/><circle cx="11" cy="12" r="1.3" fill="currentColor"/>
+              </svg>
+            </button>
+          )}
+          <h3 className="font-black text-slate-800 uppercase tracking-widest text-xs truncate">{cat.name}
+            <span className="ml-2 text-zinc-400 font-bold normal-case tracking-normal">{cat.products?.length || 0} itens</span>
+          </h3>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => openNewProduct(cat.id)}
+            className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest text-[#C9A227] hover:text-[#A8841C] px-2 py-1.5 rounded-lg hover:bg-amber-50 transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" /> Produto
+          </button>
+          <button
+            onClick={() => openEditCategory(cat)}
+            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
+            title="Editar categoria"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      <div className="divide-y divide-slate-50">
+        {cat.products?.length === 0 && (
+          <EmptyCategoryDropZone categoryId={cat.id} isDraggingProduct={dragEnabled} openNewProduct={openNewProduct} />
+        )}
+        <SortableContext items={productIds} strategy={verticalListSortingStrategy}>
+          {cat.products?.map((prod: any) => (
+            <SortableProductRow
+              key={prod.id}
+              prod={{ ...prod, categoryId: cat.id }}
+              dragEnabled={dragEnabled}
+              fmt={fmt}
+              toggleProductAvailability={toggleProductAvailability}
+              openEditProduct={openEditProduct}
+              setDeleteProductConfirm={setDeleteProductConfirm}
+            />
+          ))}
+        </SortableContext>
+      </div>
+    </div>
+  );
+}
+
 export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, refresh: () => void }) {
   const [search, setSearch] = useState("");
   const [selectedCat, setSelectedCat] = useState<string>("all");
@@ -2765,11 +2997,13 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
     })));
   };
 
-  // ── Drag-and-drop: categorias e produtos ──────────────────────────────────
-  const [draggedCategoryId, setDraggedCategoryId] = useState<string | null>(null);
-  const [dragOverCategoryId, setDragOverCategoryId] = useState<string | null>(null);
-  const [draggedProduct, setDraggedProduct] = useState<{ id: string; categoryId: string } | null>(null);
-  const [dragOverProduct, setDragOverProduct] = useState<{ id: string; categoryId: string } | null>(null);
+  // ── Drag-and-drop: categorias e produtos (@dnd-kit) ────────────────────────
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } })
+  );
+  const [activeDragCategory, setActiveDragCategory] = useState<any | null>(null);
+  const [activeDragProduct, setActiveDragProduct] = useState<any | null>(null);
 
   const reorderCategories = async (draggedId: string, targetId: string) => {
     if (draggedId === targetId || !tenant) return;
@@ -2965,170 +3199,72 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
         </div>
       )}
 
-      {/* Category + product list */}
-      {visibleCategories.map(cat => (
-        <div
-          key={cat.id}
-          draggable={dragEnabled}
-          onDragStart={() => dragEnabled && setDraggedCategoryId(cat.id)}
-          onDragOver={(e) => { if (dragEnabled) { e.preventDefault(); setDragOverCategoryId(cat.id); } }}
-          onDragLeave={() => setDragOverCategoryId(prev => prev === cat.id ? null : prev)}
-          onDrop={(e) => {
-            e.preventDefault();
-            if (dragEnabled && draggedCategoryId) void reorderCategories(draggedCategoryId, cat.id);
-            setDraggedCategoryId(null);
-            setDragOverCategoryId(null);
-          }}
-          onDragEnd={() => { setDraggedCategoryId(null); setDragOverCategoryId(null); }}
-          className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition-all ${
-            dragOverCategoryId === cat.id && draggedCategoryId && draggedCategoryId !== cat.id
-              ? 'border-[#C9A227] ring-2 ring-[#C9A227]/30'
-              : 'border-slate-200'
-          } ${draggedCategoryId === cat.id ? 'opacity-40' : ''}`}
-        >
-          {/* Category header */}
-          <div className={`px-4 py-3 border-b border-slate-100 bg-slate-50/60 flex items-center justify-between gap-3 ${dragEnabled ? 'cursor-grab active:cursor-grabbing' : ''}`}>
-            <div className="flex items-center gap-2 min-w-0">
-              {dragEnabled && (
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="text-slate-300 shrink-0">
-                  <circle cx="5" cy="4" r="1.3" fill="currentColor"/><circle cx="11" cy="4" r="1.3" fill="currentColor"/>
-                  <circle cx="5" cy="8" r="1.3" fill="currentColor"/><circle cx="11" cy="8" r="1.3" fill="currentColor"/>
-                  <circle cx="5" cy="12" r="1.3" fill="currentColor"/><circle cx="11" cy="12" r="1.3" fill="currentColor"/>
-                </svg>
-              )}
-              <h3 className="font-black text-slate-800 uppercase tracking-widest text-xs truncate">{cat.name}
-                <span className="ml-2 text-zinc-400 font-bold normal-case tracking-normal">{cat.products?.length || 0} itens</span>
-              </h3>
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
-              <button
-                onClick={() => openNewProduct(cat.id)}
-                className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest text-[#C9A227] hover:text-[#A8841C] px-2 py-1.5 rounded-lg hover:bg-amber-50 transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" /> Produto
-              </button>
-              <button
-                onClick={() => openEditCategory(cat)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
-                title="Editar categoria"
-              >
-                <Settings className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
+      {/* Category + product list — um único DndContext cobre categorias e produtos,
+          permitindo arrastar um produto de uma categoria para outra. */}
+      <DndContext
+        sensors={dndSensors}
+        collisionDetection={closestCenter}
+        onDragStart={(e: DragStartEvent) => {
+          if (!dragEnabled) return;
+          const kind = (e.active.data.current as any)?.type;
+          if (kind === "category") {
+            setActiveDragCategory(categories.find(c => c.id === e.active.id) || null);
+          } else if (kind === "product") {
+            const cat = categories.find(c => c.id === (e.active.data.current as any).categoryId);
+            setActiveDragProduct(cat?.products?.find((p: any) => p.id === e.active.id) || null);
+          }
+        }}
+        onDragEnd={(e: DragEndEvent) => {
+          const { active, over } = e;
+          setActiveDragCategory(null);
+          setActiveDragProduct(null);
+          if (!dragEnabled || !over || active.id === over.id) return;
 
-          <div className="divide-y divide-slate-50">
-            {cat.products?.length === 0 && (
-              <div
-                onDragOver={(e) => { if (dragEnabled) e.preventDefault(); }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  if (dragEnabled && draggedProduct) {
-                    void reorderOrMoveProduct(draggedProduct.id, draggedProduct.categoryId, null, cat.id);
-                  }
-                  setDraggedProduct(null);
-                  setDragOverProduct(null);
-                }}
-                className="px-4 py-6 text-center"
-              >
-                <p className="text-xs text-slate-400 font-medium">
-                  {dragEnabled && draggedProduct ? "Solte aqui para mover para esta categoria" : "Nenhum produto ainda."}
-                </p>
-                <button onClick={() => openNewProduct(cat.id)} className="mt-2 text-xs font-black text-[#C9A227] hover:underline">
-                  + Adicionar produto
-                </button>
-              </div>
-            )}
-            {cat.products?.map(prod => (
-              <div
-                key={prod.id}
-                draggable={dragEnabled}
-                onDragStart={(e) => { e.stopPropagation(); if (dragEnabled) setDraggedProduct({ id: prod.id, categoryId: cat.id }); }}
-                onDragOver={(e) => {
-                  if (dragEnabled) { e.preventDefault(); e.stopPropagation(); setDragOverProduct({ id: prod.id, categoryId: cat.id }); }
-                }}
-                onDragLeave={() => setDragOverProduct(prev => prev?.id === prod.id ? null : prev)}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (dragEnabled && draggedProduct) {
-                    void reorderOrMoveProduct(draggedProduct.id, draggedProduct.categoryId, prod.id, cat.id);
-                  }
-                  setDraggedProduct(null);
-                  setDragOverProduct(null);
-                }}
-                onDragEnd={() => { setDraggedProduct(null); setDragOverProduct(null); }}
-                className={`flex items-center gap-3 px-4 py-3 transition-all duration-300 ${!prod.available ? 'bg-slate-50/50 opacity-70' : 'bg-white'} ${dragEnabled ? 'cursor-grab active:cursor-grabbing' : ''} ${
-                  dragOverProduct?.id === prod.id && draggedProduct && draggedProduct.id !== prod.id
-                    ? 'ring-2 ring-inset ring-[#C9A227]/40 bg-amber-50/40'
-                    : ''
-                } ${draggedProduct?.id === prod.id ? 'opacity-40' : ''}`}
-              >
-                <div className={`w-12 h-12 bg-slate-100 rounded-xl overflow-hidden shrink-0 transition-all duration-500 ${!prod.available ? 'grayscale opacity-60 scale-95 border-2 border-slate-200' : 'border border-transparent'}`}>
-                  {prod.imageUrl
-                    ? <img src={prod.imageUrl} className="w-full h-full object-cover" />
-                    : <div className="w-full h-full flex items-center justify-center text-slate-300"><Utensils className="w-5 h-5" /></div>
-                  }
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className={`text-sm font-bold truncate transition-colors ${!prod.available ? 'text-slate-400 italic' : 'text-slate-800'}`}>{prod.name}</p>
-                    {!prod.available && (
-                      <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-white bg-slate-400 px-1.5 py-0.5 rounded-full shadow-sm">Inativo</span>
-                    )}
-                    {(prod as any).scheduleRule && (
-                      <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-amber-700 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded-full">📅 Agendado</span>
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-400 font-medium flex items-center gap-2">
-                    {prod.variants?.length > 0
-                      ? `${prod.variants.length} variações • desde ${fmt(Math.min(...prod.variants.map((v: any) => v.price)))}`
-                      : fmt(prod.price)
-                    }
-                    {prod.inventoryItem && (
-                      <>
-                        <span className="w-1 h-1 rounded-full bg-slate-300" />
-                        <span className={`font-black uppercase text-[10px] ${
-                          prod.inventoryItem.quantity <= 0
-                            ? "text-red-500"
-                            : prod.inventoryItem.quantity < 5
-                              ? "text-amber-500"
-                              : "text-green-600"
-                        }`}>
-                          {prod.inventoryItem.quantity <= 0
-                            ? "Esgotado"
-                            : `${prod.inventoryItem.quantity} ${prod.inventoryItem.unit || 'un'}`
-                          }
-                        </span>
-                      </>
-                    )}
-                  </p>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    onClick={() => toggleProductAvailability(prod)}
-                    title={prod.available ? "Desativar produto" : "Ativar produto"}
-                    className={`p-2 rounded-lg transition-colors ${prod.available ? 'text-green-500 hover:text-slate-400 hover:bg-slate-100' : 'text-slate-300 hover:text-green-500 hover:bg-green-50'}`}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                      {prod.available
-                        ? <><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.6"/><path d="M5.5 8L7 9.5L10.5 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></>
-                        : <><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.6"/><path d="M6 6L10 10M10 6L6 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></>
-                      }
-                    </svg>
-                  </button>
-                  <button onClick={() => openEditProduct(prod)} className="p-2 text-slate-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors">
-                    <Settings className="w-4 h-4" />
-                  </button>
-                  <button onClick={() => setDeleteProductConfirm(prod.id)} className="p-2 text-slate-300 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
+          const activeType = (active.data.current as any)?.type;
+          const overType = (over.data.current as any)?.type;
+
+          if (activeType === "category" && overType === "category") {
+            void reorderCategories(String(active.id), String(over.id));
+            return;
+          }
+
+          if (activeType === "product") {
+            const fromCategoryId = (active.data.current as any).categoryId;
+            if (overType === "product") {
+              const toCategoryId = (over.data.current as any).categoryId;
+              void reorderOrMoveProduct(String(active.id), fromCategoryId, String(over.id), toCategoryId);
+            } else if (overType === "category-drop") {
+              // Soltou sobre o corpo de uma categoria vazia
+              void reorderOrMoveProduct(String(active.id), fromCategoryId, null, String(over.id));
+            }
+          }
+        }}
+        onDragCancel={() => { setActiveDragCategory(null); setActiveDragProduct(null); }}
+      >
+        <SortableContext items={visibleCategories.map(c => c.id)} strategy={verticalListSortingStrategy}>
+          {visibleCategories.map(cat => (
+            <SortableCategoryCard
+              key={cat.id}
+              cat={cat}
+              dragEnabled={dragEnabled}
+              openNewProduct={openNewProduct}
+              openEditCategory={openEditCategory}
+              openEditProduct={openEditProduct}
+              toggleProductAvailability={toggleProductAvailability}
+              setDeleteProductConfirm={setDeleteProductConfirm}
+              fmt={fmt}
+            />
+          ))}
+        </SortableContext>
+        <DragOverlay>
+          {activeDragCategory && (
+            <div className="bg-white rounded-2xl border-2 border-[#C9A227] shadow-2xl px-4 py-3 opacity-95 rotate-1">
+              <h3 className="font-black text-slate-800 uppercase tracking-widest text-xs">{activeDragCategory.name}</h3>
+            </div>
+          )}
+          {activeDragProduct && <ProductRowGhost prod={activeDragProduct} fmt={fmt} />}
+        </DragOverlay>
+      </DndContext>
 
       {/* Search no result */}
       {search && visibleCategories.length === 0 && categories.length > 0 && (
