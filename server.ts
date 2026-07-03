@@ -172,6 +172,26 @@ async function requireTenantBySlug(req: express.Request, res: express.Response, 
   return result.tenant;
 }
 
+// Soma pontos de fidelidade ao cliente com base no valor gasto, se o módulo estiver ativo
+// para o tenant. Silencioso em qualquer falha — pontuação nunca deve travar a criação do pedido.
+async function awardLoyaltyPoints(tenantLoyaltyConfigRaw: string | null | undefined, customerId: string, orderTotal: number) {
+  if (!tenantLoyaltyConfigRaw || !customerId) return;
+  try {
+    const config = JSON.parse(tenantLoyaltyConfigRaw);
+    if (!config?.enabled) return;
+    const pointsPerReal = Number(config.pointsPerReal) || 0;
+    if (pointsPerReal <= 0) return;
+    const pointsEarned = Math.floor(orderTotal * pointsPerReal);
+    if (pointsEarned <= 0) return;
+    await prisma.customer.update({
+      where: { id: customerId },
+      data: { loyaltyPoints: { increment: pointsEarned } },
+    });
+  } catch (err) {
+    console.error("[Loyalty] Falha ao somar pontos:", err);
+  }
+}
+
 async function requireTenantFromProduct(req: express.Request, res: express.Response, productId: string) {
   const product = await prisma.product.findUnique({
     where: { id: productId },
@@ -1642,6 +1662,13 @@ app.get("/api/admin/tenant/:slug", requireAuth, async (req, res) => {
     }
   }
 
+  // loyaltyConfig é guardado como JSON string no banco, mas o frontend espera o objeto já parseado
+  if (completeTenant) {
+    (completeTenant as any).loyaltyConfig = completeTenant.loyaltyConfig
+      ? (() => { try { return JSON.parse(completeTenant.loyaltyConfig as string); } catch { return null; } })()
+      : null;
+  }
+
   res.json(completeTenant);
 });
 
@@ -1686,10 +1713,24 @@ app.post("/api/orders", async (req, res) => {
       });
     }
 
+    // Vincula/atualiza o cliente pelo telefone e soma pontos de fidelidade, se o módulo estiver ativo
+    let customerId: string | undefined;
+    if (customerPhone && customerName) {
+      const digits = customerPhone.replace(/\D/g, "");
+      const customer = await prisma.customer.upsert({
+        where: { tenantId_phone: { tenantId, phone: digits } },
+        create: { tenantId, name: customerName, phone: digits, totalSpent: total, ordersCount: 1, lastOrderAt: new Date() },
+        update: { totalSpent: { increment: total }, ordersCount: { increment: 1 }, lastOrderAt: new Date() },
+      });
+      customerId = customer.id;
+      await awardLoyaltyPoints(tenant.loyaltyConfig as string | null, customer.id, total);
+    }
+
     const order = await prisma.order.create({
       data: {
         customerName,
         customerPhone,
+        customerId: customerId || null,
         address,
         orderType: orderType || "DELIVERY",
         paymentMethod: paymentMethod || "CASH",
@@ -1884,6 +1925,55 @@ app.get("/api/admin/:tenantId/orders", requireAuth, async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to fetch orders" });
+  }
+});
+
+// ── Fidelidade ──────────────────────────────────────────────────────────────
+app.post("/api/admin/:tenantId/loyalty/config", requireAuth, async (req, res) => {
+  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  if (!tenant) return;
+
+  try {
+    const { enabled, pointsPerReal, minPointsToRedeem, redemptionRatio, maxRedemptionValue } = req.body;
+    const config = {
+      enabled: !!enabled,
+      pointsPerReal: Number(pointsPerReal) || 1,
+      minPointsToRedeem: Number(minPointsToRedeem) || 0,
+      redemptionRatio: Number(redemptionRatio) || 0.1,
+      maxRedemptionValue: maxRedemptionValue !== undefined && maxRedemptionValue !== null && maxRedemptionValue !== ""
+        ? Number(maxRedemptionValue) : undefined,
+    };
+    await prisma.tenant.update({
+      where: { id: tenant.id },
+      data: { loyaltyConfig: JSON.stringify(config) },
+    });
+    res.json(config);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao salvar configuração de fidelidade." });
+  }
+});
+
+app.get("/api/admin/:tenantId/loyalty/customers", requireAuth, async (req, res) => {
+  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  if (!tenant) return;
+
+  try {
+    const customers = await prisma.customer.findMany({
+      where: { tenantId: tenant.id },
+      orderBy: { totalSpent: "desc" },
+    });
+    res.json(customers.map((c) => ({
+      id: c.id,
+      tenantId: c.tenantId,
+      customerPhone: c.phone,
+      points: c.loyaltyPoints,
+      totalSpent: c.totalSpent,
+      ordersCount: c.ordersCount,
+    })));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao buscar clientes." });
   }
 });
 
@@ -2494,6 +2584,76 @@ app.get("/api/tenants/:slug/customer-orders/:phone", async (req, res) => {
   }
 });
 
+// ── Cardápio digital: busca cliente + endereços salvos por telefone (sem login) ──
+// Usado no checkout público para pré-preencher nome e mostrar endereços já cadastrados.
+app.get("/api/tenants/:slug/public-customer/:phone", async (req, res) => {
+  const { slug, phone } = req.params;
+  const digits = phone.replace(/\D/g, "");
+
+  try {
+    const tenant = await prisma.tenant.findUnique({ where: { slug } });
+    if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+
+    const customer = await prisma.customer.findUnique({
+      where: { tenantId_phone: { tenantId: tenant.id, phone: digits } },
+      include: { addresses: { orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }] } },
+    });
+
+    if (!customer) return res.json(null);
+
+    res.json({
+      name: customer.name,
+      loyaltyPoints: customer.loyaltyPoints,
+      addresses: customer.addresses,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao buscar cliente." });
+  }
+});
+
+// Cria/atualiza cliente e adiciona um novo endereço (chamado quando o cliente confirma
+// os dados no checkout público — sem login, protegido só pelo tenant slug).
+app.post("/api/tenants/:slug/public-customer/:phone/address", async (req, res) => {
+  const { slug, phone } = req.params;
+  const digits = phone.replace(/\D/g, "");
+  const { name, label, cep, street, number, complement, neighborhood, city, state } = req.body;
+
+  if (!name || !street) return res.status(400).json({ error: "Nome e endereço são obrigatórios." });
+
+  try {
+    const tenant = await prisma.tenant.findUnique({ where: { slug } });
+    if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+
+    const customer = await prisma.customer.upsert({
+      where: { tenantId_phone: { tenantId: tenant.id, phone: digits } },
+      create: { tenantId: tenant.id, name, phone: digits },
+      update: { name },
+    });
+
+    const existingCount = await prisma.customerAddress.count({ where: { customerId: customer.id } });
+    const address = await prisma.customerAddress.create({
+      data: {
+        customerId: customer.id,
+        label: label || null,
+        cep: cep || null,
+        street,
+        number: number || null,
+        complement: complement || null,
+        neighborhood: neighborhood || null,
+        city: city || null,
+        state: state || null,
+        isDefault: existingCount === 0, // primeiro endereço cadastrado vira o padrão
+      },
+    });
+
+    res.json(address);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao salvar endereço." });
+  }
+});
+
 app.get("/api/tenants/:slug/inventory", requireAuth, async (req, res) => {
   const tenant = await requireTenantBySlug(req, res, req.params.slug);
   if (!tenant) return;
@@ -3099,6 +3259,7 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
         update: { totalSpent: { increment: total }, ordersCount: { increment: 1 }, lastOrderAt: new Date() },
       });
       customerId = customer.id;
+      await awardLoyaltyPoints(tenant.loyaltyConfig as string | null, customer.id, total);
     }
 
     const order = await prisma.order.create({

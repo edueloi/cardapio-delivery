@@ -26,6 +26,7 @@ import {
   Phone,
   Package,
   Layers,
+  Check,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import socket from "../../lib/socket";
@@ -252,6 +253,24 @@ function TenantSplash({ tenant, onDone }: { tenant: Tenant; onDone: () => void }
   );
 }
 
+// Formata o endereço do estabelecimento (guardado como JSON) em uma linha legível.
+// tenant.address nunca deve ser renderizado direto — vem como '{"street":...}'.
+function formatTenantAddress(rawAddress: string | null | undefined): string | null {
+  if (!rawAddress) return null;
+  try {
+    const a = JSON.parse(rawAddress);
+    const parts = [
+      a.street && a.number ? `${a.street}, ${a.number}` : a.street || "",
+      a.complement, a.neighborhood,
+      a.city && a.state ? `${a.city} - ${a.state}` : a.city || a.state,
+      a.cep ? `CEP ${a.cep.replace(/(\d{5})(\d{3})/, "$1-$2")}` : "",
+    ].filter(Boolean);
+    return parts.length ? parts.join(", ") : null;
+  } catch {
+    return typeof rawAddress === "string" && !rawAddress.startsWith("{") ? rawAddress : null;
+  }
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function MenuViewPage() {
   const { slug } = useParams();
@@ -289,6 +308,11 @@ export default function MenuViewPage() {
     scheduledDate: "", scheduledTime: "",
     isPreorder: false,
   });
+
+  // Cliente já cadastrado (identificado pelo telefone) — endereços salvos e pontos de fidelidade
+  const [savedCustomer, setSavedCustomer] = useState<{ name: string; loyaltyPoints: number; addresses: any[] } | null>(null);
+  const [selectedAddressId, setSelectedAddressId] = useState<string | "new" | null>(null);
+  const [customerLookupLoading, setCustomerLookupLoading] = useState(false);
 
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const categoryNavRef = useRef<HTMLDivElement>(null);
@@ -332,6 +356,48 @@ export default function MenuViewPage() {
     if (savedName || savedPhone)
       setForm((f) => ({ ...f, name: savedName ?? "", phone: maskPhone(savedPhone ?? "") }));
   }, [slug]);
+
+  // Ao completar o telefone (11 dígitos = celular com DDD), busca se o cliente já existe.
+  // Se existir, pré-preenche o nome e mostra os endereços salvos para escolha rápida.
+  useEffect(() => {
+    const digits = form.phone.replace(/\D/g, "");
+    if (digits.length !== 11) {
+      setSavedCustomer(null);
+      setSelectedAddressId(null);
+      return;
+    }
+    let cancelled = false;
+    setCustomerLookupLoading(true);
+    fetch(`/api/tenants/${slug}/public-customer/${digits}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        setSavedCustomer(data);
+        if (data) {
+          setForm((f) => ({ ...f, name: f.name || data.name }));
+          const defaultAddr = data.addresses?.find((a: any) => a.isDefault) || data.addresses?.[0];
+          setSelectedAddressId(defaultAddr ? defaultAddr.id : (data.addresses?.length ? null : "new"));
+        } else {
+          setSelectedAddressId("new");
+        }
+      })
+      .catch(() => { if (!cancelled) { setSavedCustomer(null); setSelectedAddressId("new"); } })
+      .finally(() => { if (!cancelled) setCustomerLookupLoading(false); });
+    return () => { cancelled = true; };
+  }, [form.phone, slug]);
+
+  // Ao escolher um endereço salvo, preenche os campos do formulário automaticamente
+  useEffect(() => {
+    if (!selectedAddressId || selectedAddressId === "new" || !savedCustomer) return;
+    const addr = savedCustomer.addresses.find((a: any) => a.id === selectedAddressId);
+    if (!addr) return;
+    setForm((f) => ({
+      ...f,
+      cep: addr.cep || "", street: addr.street || "", number: addr.number || "",
+      complement: addr.complement || "", neighborhood: addr.neighborhood || "",
+      city: addr.city || "", state: addr.state || "",
+    }));
+  }, [selectedAddressId, savedCustomer]);
 
   // Scroll spy + header collapse
   useEffect(() => {
@@ -503,6 +569,20 @@ export default function MenuViewPage() {
         const order = await res.json();
         localStorage.setItem(`customer_name_${slug}`, form.name);
         localStorage.setItem(`customer_phone_${slug}`, form.phone.replace(/\D/g, ""));
+
+        // Salva o endereço novo digitado (não um já existente escolhido) para reaproveitar na próxima compra
+        if (form.orderType === "DELIVERY" && selectedAddressId === "new" && form.street) {
+          fetch(`/api/tenants/${slug}/public-customer/${form.phone.replace(/\D/g, "")}/address`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: form.name, cep: form.cep.replace(/\D/g, ""), street: form.street,
+              number: form.number, complement: form.complement, neighborhood: form.neighborhood,
+              city: form.city, state: form.state,
+            }),
+          }).catch(() => {});
+        }
+
         setActiveOrder(order);
         setOrderSent(true);
         setCart([]);
@@ -911,7 +991,7 @@ export default function MenuViewPage() {
                   </div>
 
                   {/* Product grid */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                     {category.products.map((product, pIdx) => (
                       <ProductCard key={product.id} product={product} delay={pIdx * 0.04} onOpen={() => openProduct(product)} />
                     ))}
@@ -1333,12 +1413,66 @@ export default function MenuViewPage() {
                         <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Como devo te chamar?" className={cinput} />
                       </CField>
                       <CField label="WhatsApp">
-                        <input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: maskPhone(e.target.value) }))} placeholder="(00) 00000-0000" type="tel" inputMode="numeric" className={cinput} />
+                        <div className="relative">
+                          <input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: maskPhone(e.target.value) }))} placeholder="(00) 00000-0000" type="tel" inputMode="numeric" className={cinput} />
+                          {customerLookupLoading && <Loader2 className="w-4 h-4 animate-spin absolute right-3 top-1/2 -translate-y-1/2 text-slate-300" />}
+                        </div>
                       </CField>
+
+                      {savedCustomer && (
+                        <div className="flex items-center gap-2.5 bg-emerald-50 border border-emerald-200 rounded-xl px-3.5 py-2.5">
+                          <div className="w-7 h-7 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
+                            <Check className="w-3.5 h-3.5 text-white" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-black text-emerald-800 truncate">Bem-vindo(a) de volta, {savedCustomer.name}!</p>
+                            {savedCustomer.loyaltyPoints > 0 && (
+                              <p className="text-[10px] text-emerald-600 font-bold">Você tem {savedCustomer.loyaltyPoints} pontos de fidelidade</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                       {form.orderType === "DELIVERY" && (
                         <div className="space-y-3">
                           <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Endereço de entrega</p>
+
+                          {savedCustomer && savedCustomer.addresses.length > 0 && (
+                            <div className="space-y-2">
+                              {savedCustomer.addresses.map((addr: any) => (
+                                <button
+                                  key={addr.id}
+                                  type="button"
+                                  onClick={() => setSelectedAddressId(addr.id)}
+                                  className={`w-full flex items-start gap-3 p-3 rounded-2xl border-2 text-left transition-all ${
+                                    selectedAddressId === addr.id ? "border-slate-900 bg-slate-50" : "border-slate-200 hover:border-slate-300"
+                                  }`}
+                                >
+                                  <MapPin className={`w-4 h-4 shrink-0 mt-0.5 ${selectedAddressId === addr.id ? "text-slate-900" : "text-slate-400"}`} />
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-xs font-bold text-slate-800 truncate">
+                                      {addr.label || "Endereço"}{addr.isDefault ? " · Padrão" : ""}
+                                    </p>
+                                    <p className="text-[11px] text-slate-500 truncate">
+                                      {addr.street}{addr.number ? `, ${addr.number}` : ""}{addr.neighborhood ? ` — ${addr.neighborhood}` : ""}
+                                    </p>
+                                  </div>
+                                </button>
+                              ))}
+                              <button
+                                type="button"
+                                onClick={() => { setSelectedAddressId("new"); setForm((f) => ({ ...f, cep: "", street: "", number: "", complement: "", neighborhood: "", city: "", state: "" })); }}
+                                className={`w-full flex items-center gap-2 p-3 rounded-2xl border-2 border-dashed text-xs font-bold transition-all ${
+                                  selectedAddressId === "new" ? "border-slate-900 text-slate-900" : "border-slate-200 text-slate-400 hover:border-slate-300"
+                                }`}
+                              >
+                                <Plus className="w-3.5 h-3.5" /> Usar outro endereço
+                              </button>
+                            </div>
+                          )}
+
+                          {(selectedAddressId === "new" || !savedCustomer || savedCustomer.addresses.length === 0) && (
+                            <>
                           <div className="flex gap-2">
                             <CField label="CEP" className="flex-1">
                               <div className="relative">
@@ -1380,6 +1514,8 @@ export default function MenuViewPage() {
                               <input value={form.state} onChange={(e) => setForm((f) => ({ ...f, state: e.target.value.toUpperCase().slice(0, 2) }))} placeholder="SP" className={cinput} maxLength={2} />
                             </CField>
                           </div>
+                            </>
+                          )}
                         </div>
                       )}
 
@@ -1388,7 +1524,7 @@ export default function MenuViewPage() {
                           <MapPin className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
                           <div>
                             <p className="text-[10px] font-black uppercase tracking-widest text-blue-400 mb-1">Retirada no local</p>
-                            <p className="text-sm font-bold text-blue-800">{tenant.address || "Consulte o estabelecimento"}</p>
+                            <p className="text-sm font-bold text-blue-800">{formatTenantAddress(tenant.address) || "Consulte o estabelecimento"}</p>
                           </div>
                         </div>
                       )}
@@ -1775,7 +1911,7 @@ function ProductCard({ product, delay, onOpen }: { product: Product; delay: numb
       <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden hover:shadow-lg hover:border-slate-200 transition-all duration-300">
         {/* Full-width image */}
         {hasImage && (
-          <div className="relative w-full h-[160px] overflow-hidden bg-slate-50">
+          <div className="relative w-full aspect-[4/3] overflow-hidden bg-slate-50">
             <img
               src={product.imageUrl!}
               className="w-full h-full object-cover group-hover:scale-107 transition-transform duration-700 ease-out"
@@ -2232,21 +2368,7 @@ function InfoPanel({ tenant, enabledPayments }: { tenant: Tenant; enabledPayment
   let hours: Record<string, { enabled: boolean; open: string; close: string }> | null = null;
   try { if (tenant.businessHours) hours = JSON.parse(tenant.businessHours); } catch {}
 
-  const addressStr = (() => {
-    if (!tenant.address) return null;
-    try {
-      const a = JSON.parse(tenant.address);
-      const parts = [
-        a.street && a.number ? `${a.street}, ${a.number}` : a.street || "",
-        a.complement, a.neighborhood,
-        a.city && a.state ? `${a.city} - ${a.state}` : a.city || a.state,
-        a.cep ? `CEP ${a.cep.replace(/(\d{5})(\d{3})/, "$1-$2")}` : "",
-      ].filter(Boolean);
-      return parts.length ? parts.join(", ") : null;
-    } catch {
-      return typeof tenant.address === "string" && !tenant.address.startsWith("{") ? tenant.address : null;
-    }
-  })();
+  const addressStr = formatTenantAddress(tenant.address);
 
   const whatsappStr = (() => {
     if (!tenant.whatsapp) return null;

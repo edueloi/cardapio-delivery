@@ -26,6 +26,7 @@ model Tenant {
   paymentMethods String? @map("payment_methods") @db.Text // JSON: PaymentConfig
   stoneConfig    String? @map("stone_config") @db.Text // JSON: StoneConfig
   fiscalConfig   String? @map("fiscal_config") @db.LongText // JSON: FiscalConfig (CNPJ, IE, CSC, cert A1, série, ambiente)
+  loyaltyConfig  String? @map("loyalty_config") @db.Text // JSON: LoyaltyConfig (pontos por real, mínimo pra resgate, etc)
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -305,7 +306,7 @@ model Customer {
   name         String
   phone        String
   email        String?
-  address      String?
+  address      String?  // legado — endereço único antigo, mantido por compatibilidade
   notes        String?
   loyaltyPoints Int     @default(0) @map("loyalty_points")
   totalSpent   Float    @default(0) @map("total_spent")
@@ -314,10 +315,31 @@ model Customer {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  addresses CustomerAddress[]
 
   @@unique([tenantId, phone])
   @@map("customers")
+}
+
+model CustomerAddress {
+  id           String   @id @default(cuid())
+  customerId   String   @map("customer_id")
+  label        String?  // ex: "Casa", "Trabalho" — opcional
+  cep          String?
+  street       String
+  number       String?
+  complement   String?
+  neighborhood String?
+  city         String?
+  state        String?
+  isDefault    Boolean  @default(false) @map("is_default")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@map("customer_addresses")
 }
 
 model PasswordResetToken {

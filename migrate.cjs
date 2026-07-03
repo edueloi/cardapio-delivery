@@ -627,6 +627,34 @@ const migrations = [
     check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'sort_order'",
     run: "ALTER TABLE products ADD COLUMN sort_order INT NOT NULL DEFAULT 0",
   },
+  // Configuração do módulo de Fidelidade (pontos por real, mínimo pra resgate, etc)
+  {
+    name: 'add_tenants_loyalty_config',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenants' AND COLUMN_NAME = 'loyalty_config'",
+    run: "ALTER TABLE tenants ADD COLUMN loyalty_config TEXT NULL",
+  },
+  // Múltiplos endereços por cliente — usado no cardápio digital (busca por telefone)
+  {
+    name: 'create_customer_addresses_table',
+    check: "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'customer_addresses'",
+    run: `CREATE TABLE customer_addresses (
+      id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      customer_id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      label VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
+      cep VARCHAR(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
+      street VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      number VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
+      complement VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
+      neighborhood VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
+      city VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
+      state VARCHAR(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
+      is_default TINYINT(1) NOT NULL DEFAULT 0,
+      created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (id),
+      INDEX customer_addresses_customer_id_idx (customer_id),
+      CONSTRAINT customer_addresses_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE ON UPDATE CASCADE
+    ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+  },
 ];
 
 async function run() {
