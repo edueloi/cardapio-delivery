@@ -5,7 +5,7 @@ import {
   CheckCircle2, Receipt, Package,
   ChevronRight, ArrowLeft,
   Utensils, Tag, User, Phone, Percent,
-  Printer, StickyNote, Hash, AlertCircle, Smartphone,
+  Printer, StickyNote, Hash, AlertCircle, Smartphone, Lock,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import type { Tenant, Product, Order, PaymentConfig, PaymentMethodConfig, StoneConfig } from "../../types";
@@ -83,10 +83,73 @@ export default function PDVPanel({
   const [stoneStatus, setStoneStatus] = useState<"idle" | "sending" | "waiting" | "paid" | "failed">("idle");
   const [stoneChargeId, setStoneChargeId] = useState<string | null>(null);
   const stonePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const discountInputRef = useRef<HTMLInputElement>(null);
 
   // Discount
   const [discountType, setDiscountType] = useState<"PERCENT" | "FIXED">("FIXED");
   const [discountValue, setDiscountValue] = useState<string>("");
+
+  // Caixa (abertura/fechamento) — venda só é permitida com caixa aberto
+  const [currentCash, setCurrentCash] = useState<{ id: string; openingBalance: number; openedAt: string; expectedBalance: number } | null>(null);
+  const [cashLoading, setCashLoading] = useState(true);
+  const [showOpenCashModal, setShowOpenCashModal] = useState(false);
+  const [showCloseCashModal, setShowCloseCashModal] = useState(false);
+  const [openingBalanceInput, setOpeningBalanceInput] = useState("");
+  const [closingBalanceInput, setClosingBalanceInput] = useState("");
+  const [cashActionLoading, setCashActionLoading] = useState(false);
+  const [cashError, setCashError] = useState("");
+
+  const fetchCurrentCash = useCallback(async () => {
+    try {
+      const data = await apiJson<typeof currentCash>(`/api/tenants/${tenant.slug}/cash/current`);
+      setCurrentCash(data);
+    } catch {
+      setCurrentCash(null);
+    } finally {
+      setCashLoading(false);
+    }
+  }, [tenant.slug]);
+
+  useEffect(() => {
+    if (!isWaiterMode) void fetchCurrentCash();
+    else setCashLoading(false);
+  }, [fetchCurrentCash, isWaiterMode]);
+
+  const handleOpenCash = async () => {
+    setCashActionLoading(true);
+    setCashError("");
+    try {
+      await apiJson(`/api/tenants/${tenant.slug}/cash/open`, {
+        method: "POST",
+        body: JSON.stringify({ openingBalance: parseFloat(openingBalanceInput || "0") }),
+      });
+      setShowOpenCashModal(false);
+      setOpeningBalanceInput("");
+      await fetchCurrentCash();
+    } catch (err: any) {
+      setCashError(err?.message ?? "Erro ao abrir o caixa.");
+    } finally {
+      setCashActionLoading(false);
+    }
+  };
+
+  const handleCloseCash = async () => {
+    setCashActionLoading(true);
+    setCashError("");
+    try {
+      await apiJson(`/api/tenants/${tenant.slug}/cash/close`, {
+        method: "POST",
+        body: JSON.stringify({ closingBalance: parseFloat(closingBalanceInput || "0") }),
+      });
+      setShowCloseCashModal(false);
+      setClosingBalanceInput("");
+      await fetchCurrentCash();
+    } catch (err: any) {
+      setCashError(err?.message ?? "Erro ao fechar o caixa.");
+    } finally {
+      setCashActionLoading(false);
+    }
+  };
 
   // Item notes editor
   const [editingItemNotes, setEditingItemNotes] = useState<string | null>(null);
@@ -250,6 +313,36 @@ export default function PDVPanel({
       .catch(() => setRegisteredTables([]));
   }, [tenant.slug]);
 
+  // Atalhos de teclado: F2 pagar, F4 desconto, Esc fecha o modal/checkout aberto.
+  // Ignorados quando o foco está em campo de texto (exceto Esc), para não atrapalhar digitação.
+  useEffect(() => {
+    if (isWaiterMode) return;
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isTyping = target.tagName === "INPUT" || target.tagName === "TEXTAREA";
+
+      if (e.key === "Escape") {
+        if (showCheckout) setShowCheckout(false);
+        else if (showComandaModal) setShowComandaModal(false);
+        else if (showOpenCashModal) setShowOpenCashModal(false);
+        else if (showCloseCashModal) setShowCloseCashModal(false);
+        return;
+      }
+
+      if (isTyping) return;
+
+      if (e.key === "F2") {
+        e.preventDefault();
+        if (cart.length > 0 && currentCash && !showCheckout) setShowCheckout(true);
+      } else if (e.key === "F4") {
+        e.preventDefault();
+        if (!showCheckout) discountInputRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [isWaiterMode, cart.length, currentCash, showCheckout, showComandaModal, showOpenCashModal, showCloseCashModal]);
+
   const handleLoadTable = (tableId: string) => {
     const tableOrders = orders.filter(
       (o) => o.tableId === tableId && o.status !== "CANCELLED" && o.status !== "DELIVERED"
@@ -298,7 +391,7 @@ export default function PDVPanel({
   };
 
   const handleCheckout = async () => {
-    if (cart.length === 0) return;
+    if (cart.length === 0 || !currentCash) return;
     setIsProcessing(true);
 
     const isStone = paymentMethod === "STONE";
@@ -481,6 +574,34 @@ export default function PDVPanel({
 
       {/* ── Left: Product Selection ── */}
       <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
+        {/* Cash register status bar */}
+        {!isWaiterMode && !cashLoading && (
+          <div className={`flex items-center justify-between gap-3 px-5 py-2.5 border-b shrink-0 ${
+            currentCash ? "bg-emerald-50/60 border-emerald-100" : "bg-red-50/60 border-red-100"
+          }`}>
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className={`w-2 h-2 rounded-full shrink-0 ${currentCash ? "bg-emerald-500 animate-pulse" : "bg-red-500"}`} />
+              {currentCash ? (
+                <p className="text-[11px] font-black uppercase tracking-wide text-emerald-700 truncate">
+                  Caixa aberto <span className="font-bold normal-case text-emerald-600/80">· Fundo {fmt(currentCash.openingBalance)} · Esperado {fmt(currentCash.expectedBalance)}</span>
+                </p>
+              ) : (
+                <p className="text-[11px] font-black uppercase tracking-wide text-red-700">Caixa fechado — abra para começar a vender</p>
+              )}
+            </div>
+            <button
+              onClick={() => currentCash ? setShowCloseCashModal(true) : setShowOpenCashModal(true)}
+              className={`shrink-0 px-3.5 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors ${
+                currentCash
+                  ? "bg-white text-red-600 border border-red-200 hover:bg-red-50"
+                  : "bg-[#0D1B3E] text-white hover:bg-[#0D1B3E]/90"
+              }`}
+            >
+              {currentCash ? "Fechar Caixa" : "Abrir Caixa"}
+            </button>
+          </div>
+        )}
+
         {/* Tabs */}
         <div className="flex bg-white border-b border-slate-100 px-3 gap-1 pt-2">
           {(["products", "tables", "comandas"] as const).map((tab) => (
@@ -605,19 +726,19 @@ export default function PDVPanel({
                         </div>
 
                         {/* Info */}
-                        <div className="px-3 py-2.5 flex flex-col gap-0.5">
+                        <div className="px-3 py-2.5 flex flex-col gap-1 border-t border-slate-100">
                           <h4 className="text-[13px] font-bold text-slate-800 line-clamp-1 leading-snug">{product.name}</h4>
                           {product.description && (
                             <p className="text-[10px] text-slate-400 line-clamp-1 leading-tight">{product.description}</p>
                           )}
-                          <div className="flex items-center justify-between mt-2">
-                            <span className="text-[15px] font-black text-[#C9A227] leading-none">{fmt(product.price)}</span>
-                            <div className={`w-7 h-7 rounded-xl flex items-center justify-center transition-all duration-200 ${
+                          <div className="flex items-center justify-between mt-1">
+                            <span className="text-[17px] font-black text-[#0D1B3E] leading-none tabular-nums">{fmt(product.price)}</span>
+                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-200 shrink-0 ${
                               inCart
-                                ? "bg-[#C9A227] text-black shadow-md"
-                                : "bg-slate-100 text-slate-400 group-hover:bg-[#C9A227] group-hover:text-black"
+                                ? "bg-[#C9A227] text-black shadow-md shadow-[#C9A227]/30"
+                                : "bg-[#0D1B3E]/5 text-[#0D1B3E] group-hover:bg-[#C9A227] group-hover:text-black"
                             }`}>
-                              <Plus className="w-4 h-4" />
+                              <Plus className="w-4 h-4" strokeWidth={2.5} />
                             </div>
                           </div>
                         </div>
@@ -788,20 +909,34 @@ export default function PDVPanel({
       {/* ── Right: Order/Cart Panel ── */}
       <div className="w-full lg:w-[380px] xl:w-[420px] flex flex-col bg-[#0D1B3E] rounded-[2rem] text-white overflow-hidden shadow-xl relative shrink-0">
         {/* Header */}
-        <div className="p-6 border-b border-white/5">
+        <div className="p-6 border-b border-white/5 bg-white/[0.02]">
           <div className="flex items-center justify-between mb-1">
-            <h3 className="text-lg font-black uppercase tracking-widest">
-              {selectedTableId ? `Mesa ${selectedTableId}` : "Novo Pedido"}
-            </h3>
-            {(selectedTableId || cart.length > 0) && (
-              <button onClick={clearCart} className="text-white/30 hover:text-red-400 transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            )}
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-[#C9A227]/15 text-[#C9A227] flex items-center justify-center shrink-0">
+                <ShoppingCart className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-base font-black uppercase tracking-widest leading-none">
+                  {selectedTableId ? `Mesa ${selectedTableId}` : "Novo Pedido"}
+                </h3>
+                <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest mt-1">
+                  {selectedTableId ? "Fechamento de Conta" : "Venda Rápida Balcão"}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {cart.length > 0 && (
+                <span className="bg-[#C9A227] text-black text-[10px] font-black rounded-full min-w-[22px] h-[22px] px-1.5 flex items-center justify-center">
+                  {cart.reduce((s, i) => s + i.quantity, 0)}
+                </span>
+              )}
+              {(selectedTableId || cart.length > 0) && (
+                <button onClick={clearCart} className="text-white/30 hover:text-red-400 transition-colors" title="Limpar pedido">
+                  <X className="w-5 h-5" />
+                </button>
+              )}
+            </div>
           </div>
-          <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest">
-            {selectedTableId ? "Fechamento de Conta" : "Venda Rápida Balcão"}
-          </p>
         </div>
 
         {/* Customer info (compact) */}
@@ -852,7 +987,7 @@ export default function PDVPanel({
             </div>
           ) : (
             cart.map((item) => (
-              <div key={item.product.id} className="bg-white/5 rounded-xl p-3 space-y-2">
+              <div key={item.product.id} className="bg-white/[0.04] border border-white/5 rounded-xl p-3 space-y-2 hover:border-white/10 transition-colors">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-white/10 flex items-center justify-center">
                     {item.product.imageUrl ? (
@@ -867,21 +1002,21 @@ export default function PDVPanel({
                   </div>
                   <div className="flex-1 min-w-0">
                     <h4 className="text-xs font-bold truncate">{item.product.name}</h4>
-                    <p className="text-[10px] font-black text-[#C9A227]">{fmt(item.price)}</p>
+                    <p className="text-[10px] font-bold text-white/40">{fmt(item.price)} un.</p>
                   </div>
-                  <div className="flex items-center gap-2 bg-white/5 rounded-lg px-1 py-1">
-                    <button onClick={() => updateQuantity(item.product.id, -1)} className="p-1 hover:text-[#C9A227] transition-colors">
+                  <div className="flex items-center gap-1.5 bg-black/20 rounded-lg px-1 py-1 shrink-0">
+                    <button onClick={() => updateQuantity(item.product.id, -1)} className="w-5 h-5 flex items-center justify-center rounded-md hover:bg-white/10 hover:text-[#C9A227] transition-colors">
                       <Minus className="w-3 h-3" />
                     </button>
-                    <span className="text-xs font-bold w-4 text-center">{item.quantity}</span>
-                    <button onClick={() => updateQuantity(item.product.id, 1)} className="p-1 hover:text-[#C9A227] transition-colors">
+                    <span className="text-xs font-black w-5 text-center tabular-nums">{item.quantity}</span>
+                    <button onClick={() => updateQuantity(item.product.id, 1)} className="w-5 h-5 flex items-center justify-center rounded-md hover:bg-white/10 hover:text-[#C9A227] transition-colors">
                       <Plus className="w-3 h-3" />
                     </button>
                   </div>
-                  <span className="text-xs font-black tabular-nums text-white/70">
+                  <span className="text-xs font-black tabular-nums text-[#C9A227] w-16 text-right shrink-0">
                     {fmt(item.price * item.quantity)}
                   </span>
-                  <button onClick={() => removeFromCart(item.product.id)} className="p-1 text-white/20 hover:text-red-400 transition-colors">
+                  <button onClick={() => removeFromCart(item.product.id)} className="p-1 text-white/20 hover:text-red-400 transition-colors shrink-0">
                     <Trash2 className="w-3 h-3" />
                   </button>
                 </div>
@@ -938,12 +1073,15 @@ export default function PDVPanel({
             <div className="relative flex-1">
               <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-white/30" />
               <input
+                ref={discountInputRef}
                 type="number"
                 placeholder={discountType === "PERCENT" ? "Desconto %" : "Desconto R$"}
                 value={discountValue}
                 onChange={(e) => setDiscountValue(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-8 pr-3 text-xs text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
+                title="Atalho: F4"
+                className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-8 pr-8 text-xs text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
               />
+              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[8px] font-bold text-white/20">F4</span>
             </div>
             {discountAmount > 0 && (
               <span className="text-xs font-black text-green-400 whitespace-nowrap">-{fmt(discountAmount)}</span>
@@ -951,18 +1089,18 @@ export default function PDVPanel({
           </div>
 
           {/* Totals */}
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <div className="flex justify-between text-[10px] font-black uppercase text-white/30">
               <span>Subtotal</span>
-              <span>{fmt(subtotal)}</span>
+              <span className="tabular-nums">{fmt(subtotal)}</span>
             </div>
             {discountAmount > 0 && (
               <div className="flex justify-between text-[10px] font-black uppercase text-green-400">
                 <span>Desconto</span>
-                <span>-{fmt(discountAmount)}</span>
+                <span className="tabular-nums">-{fmt(discountAmount)}</span>
               </div>
             )}
-            <div className="flex justify-between items-end">
+            <div className="flex justify-between items-end pt-2 mt-1 border-t border-white/10">
               <span className="text-xs font-black uppercase tracking-widest text-[#C9A227]">Total</span>
               <span className="text-3xl font-black tracking-tighter tabular-nums">{fmt(total)}</span>
             </div>
@@ -989,12 +1127,14 @@ export default function PDVPanel({
             </button>
             {!isWaiterMode && (
               <button
-                disabled={cart.length === 0}
+                disabled={cart.length === 0 || !currentCash}
+                title={!currentCash ? "Abra o caixa para receber pagamentos" : "Atalho: F2"}
                 onClick={() => setShowCheckout(true)}
-                className="bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-3 rounded-2xl transition-all shadow-xl shadow-[#C9A227]/20 flex items-center justify-center gap-2 uppercase tracking-widest text-[10px]"
+                className="relative bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-3 rounded-2xl transition-all shadow-xl shadow-[#C9A227]/20 flex items-center justify-center gap-2 uppercase tracking-widest text-[10px]"
               >
                 Pagar
                 <ChevronRight className="w-4 h-4" />
+                <span className="absolute top-1 right-1.5 text-[8px] font-bold opacity-40">F2</span>
               </button>
             )}
           </div>
@@ -1411,6 +1551,124 @@ export default function PDVPanel({
                       </button>
                     </div>
                   ) : null}
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ── Abrir Caixa Modal ── */}
+        <AnimatePresence>
+          {showOpenCashModal && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-center justify-center p-4"
+            >
+              <motion.div
+                initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }}
+                className="bg-[#0D1B3E] w-full max-w-sm rounded-[2rem] p-8 space-y-6 shadow-2xl border border-white/5"
+              >
+                <div className="text-center space-y-2">
+                  <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto">
+                    <Banknote className="w-7 h-7" />
+                  </div>
+                  <h3 className="text-lg font-black text-white uppercase tracking-widest">Abrir Caixa</h3>
+                  <p className="text-xs text-white/40">Informe o valor em dinheiro disponível para o fundo de troco.</p>
+                </div>
+                {cashError && (
+                  <div className="bg-red-500/10 border border-red-500/20 text-red-300 text-xs font-bold rounded-xl px-4 py-2.5 text-center">
+                    {cashError}
+                  </div>
+                )}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-white/40">Fundo de Caixa (R$)</label>
+                  <input
+                    type="number"
+                    autoFocus
+                    value={openingBalanceInput}
+                    onChange={(e) => setOpeningBalanceInput(e.target.value)}
+                    placeholder="0,00"
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-5 text-2xl font-black text-white text-center focus:border-emerald-400 outline-none"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => { setShowOpenCashModal(false); setCashError(""); }}
+                    className="bg-white/5 hover:bg-white/10 text-white/60 font-black py-3.5 rounded-2xl text-[10px] uppercase tracking-widest transition-all"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    disabled={cashActionLoading}
+                    onClick={handleOpenCash}
+                    className="bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-black py-3.5 rounded-2xl text-[10px] uppercase tracking-widest transition-all"
+                  >
+                    {cashActionLoading ? "Abrindo..." : "Abrir Caixa"}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ── Fechar Caixa Modal ── */}
+        <AnimatePresence>
+          {showCloseCashModal && currentCash && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-center justify-center p-4"
+            >
+              <motion.div
+                initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }}
+                className="bg-[#0D1B3E] w-full max-w-sm rounded-[2rem] p-8 space-y-6 shadow-2xl border border-white/5"
+              >
+                <div className="text-center space-y-2">
+                  <div className="w-14 h-14 rounded-2xl bg-red-500/10 text-red-400 flex items-center justify-center mx-auto">
+                    <Lock className="w-7 h-7" />
+                  </div>
+                  <h3 className="text-lg font-black text-white uppercase tracking-widest">Fechar Caixa</h3>
+                  <p className="text-xs text-white/40">Confira o dinheiro em caixa antes de confirmar o fechamento.</p>
+                </div>
+                {cashError && (
+                  <div className="bg-red-500/10 border border-red-500/20 text-red-300 text-xs font-bold rounded-xl px-4 py-2.5 text-center">
+                    {cashError}
+                  </div>
+                )}
+                <div className="bg-white/5 rounded-2xl p-4 space-y-2 border border-white/10">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-white/40">Fundo de abertura</span>
+                    <span className="font-bold text-white">{fmt(currentCash.openingBalance)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-white/40">Esperado em caixa</span>
+                    <span className="font-black text-emerald-400">{fmt(currentCash.expectedBalance)}</span>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-white/40">Valor Contado (R$)</label>
+                  <input
+                    type="number"
+                    autoFocus
+                    value={closingBalanceInput}
+                    onChange={(e) => setClosingBalanceInput(e.target.value)}
+                    placeholder="0,00"
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-5 text-2xl font-black text-white text-center focus:border-red-400 outline-none"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => { setShowCloseCashModal(false); setCashError(""); }}
+                    className="bg-white/5 hover:bg-white/10 text-white/60 font-black py-3.5 rounded-2xl text-[10px] uppercase tracking-widest transition-all"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    disabled={cashActionLoading}
+                    onClick={handleCloseCash}
+                    className="bg-red-500 hover:bg-red-400 disabled:opacity-50 text-white font-black py-3.5 rounded-2xl text-[10px] uppercase tracking-widest transition-all"
+                  >
+                    {cashActionLoading ? "Fechando..." : "Confirmar Fechamento"}
+                  </button>
                 </div>
               </motion.div>
             </motion.div>
