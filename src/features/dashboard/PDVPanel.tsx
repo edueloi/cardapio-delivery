@@ -10,6 +10,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import type { Tenant, Product, Order, PaymentConfig, PaymentMethodConfig, StoneConfig } from "../../types";
 import { apiJson } from "../../lib/api";
+import { useToast } from "../../components";
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
@@ -42,6 +43,10 @@ interface PDVPanelProps {
   orders?: Order[];
   /** "waiter" = garçom: só lança pedidos em mesa/comanda, sem acesso a pagamento/caixa. */
   mode?: "full" | "waiter";
+  /** Nome de quem está operando — gravado em cada pedido lançado (usado no placar do garçom). */
+  operatorName?: string | null;
+  /** Chamados de garçom/pedir conta em aberto, para exibir alerta na grade de mesas. */
+  waiterCalls?: Array<{ tableId: string; customerName: string; note: string; requestBill: boolean; timestamp: number }>;
 }
 
 const BASE_PAYMENT_METHODS = [
@@ -60,9 +65,12 @@ export default function PDVPanel({
   onClearTable,
   orders = [],
   mode = "full",
+  operatorName,
+  waiterCalls = [],
 }: PDVPanelProps) {
+  const toast = useToast();
   const isWaiterMode = mode === "waiter";
-  const [activeTab, setActiveTab] = useState<"products" | "tables" | "comandas">("products");
+  const [activeTab, setActiveTab] = useState<"products" | "tables" | "comandas">(isWaiterMode ? "tables" : "products");
   // Em telas menores que lg, o carrinho vira um painel deslizante aberto sob demanda
   // (por um botão flutuante), em vez de ficar sempre empilhado ocupando a tela.
   const [showCartDrawer, setShowCartDrawer] = useState(false);
@@ -405,6 +413,7 @@ export default function PDVPanel({
           orderType: "DINE_IN",
           tableId: selectedTableId || undefined,
           paymentMethod: "CASH",
+          operatorName: operatorName || undefined,
           items: cart.map((item) => ({ productId: item.product.id, quantity: item.quantity, price: item.price, notes: item.notes || undefined })),
           status: "PENDING",
         }),
@@ -474,7 +483,7 @@ export default function PDVPanel({
       onOrderCreated?.();
     } catch (err) {
       console.error(err);
-      alert("Erro ao processar venda.");
+      toast.error("Erro ao processar venda.");
     } finally {
       setIsProcessing(false);
     }
@@ -1202,7 +1211,7 @@ export default function PDVPanel({
           {showComandaModal && (
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="absolute inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
+              className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
             >
               <motion.div
                 initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }}
@@ -1247,6 +1256,7 @@ export default function PDVPanel({
                             customerPhone: "00000000000",
                             orderType: "DINE_IN",
                             paymentMethod: "CASH",
+                            operatorName: operatorName || undefined,
                             items: cart.map((i) => ({ productId: i.product.id, quantity: i.quantity, price: i.price, notes: i.notes || undefined })),
                             status: "PENDING",
                           }),

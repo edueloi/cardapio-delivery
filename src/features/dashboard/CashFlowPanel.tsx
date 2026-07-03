@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   PageWrapper, SectionTitle, ContentCard,
   Modal, ModalFooter, Button, Input, EmptyState, Switch,
+  useToast,
 } from "../../components";
 import { DatePicker } from "../../components/DatePicker";
 import { apiJson } from "../../lib/api";
@@ -192,6 +193,7 @@ function HistoryCard({ h }: { h: CashRegister & { movements?: CashMovement[] } }
 
 // ─── Componente principal ────────────────────────────────────────────────────
 export default function CashFlowPanel({ slug }: CashFlowPanelProps) {
+  const toast = useToast();
   const [currentCash, setCurrentCash] = useState<CashRegister | null>(null);
   const [movements,   setMovements]   = useState<CashMovement[]>([]);
   const [history,     setHistory]     = useState<(CashRegister & { movements?: CashMovement[] })[]>([]);
@@ -272,7 +274,7 @@ export default function CashFlowPanel({ slug }: CashFlowPanelProps) {
       await apiJson(`/api/tenants/${slug}/cash/open`, { method: "POST", body: JSON.stringify({ openingBalance: parseFloat(openingBalance || "0"), operatorName }) });
       setShowOpenModal(false); setOpeningBalance("0"); setOperatorName("");
       fetchCaixa();
-    } catch { alert("Erro ao abrir caixa."); }
+    } catch { toast.error("Erro ao abrir caixa."); }
     finally { setOpenLoading(false); }
   };
 
@@ -282,7 +284,7 @@ export default function CashFlowPanel({ slug }: CashFlowPanelProps) {
       await apiJson(`/api/tenants/${slug}/cash/close`, { method: "POST", body: JSON.stringify({ closingBalance: parseFloat(closingBalance || "0"), notes: closeNotes }) });
       setShowCloseModal(false); setClosingBalance(""); setCloseNotes("");
       fetchAll();
-    } catch { alert("Erro ao fechar caixa."); }
+    } catch { toast.error("Erro ao fechar caixa."); }
     finally { setCloseLoading(false); }
   };
 
@@ -292,7 +294,7 @@ export default function CashFlowPanel({ slug }: CashFlowPanelProps) {
       await apiJson(`/api/tenants/${slug}/cash/movement`, { method: "POST", body: JSON.stringify({ type: movementType, amount: parseFloat(movementAmount || "0"), description: movementDesc }) });
       setShowMovementModal(false); setMovementAmount(""); setMovementDesc("");
       fetchCaixa();
-    } catch { alert("Erro ao registrar movimento."); }
+    } catch { toast.error("Erro ao registrar movimento."); }
     finally { setMovementLoading(false); }
   };
 

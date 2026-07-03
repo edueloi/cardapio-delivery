@@ -12,6 +12,7 @@ import { apiFetch, apiJson } from "../../lib/api";
 import {
   Button, Input, Modal, ModalFooter, EmptyState,
   StatCard, StatGrid, ContentCard, PageWrapper, SectionTitle,
+  useToast,
 } from "../../components";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -140,6 +141,7 @@ interface CondominiumItem {
 }
 
 function CondominiumsTab() {
+  const toast = useToast();
   const [condominiums, setCondominiums] = useState<CondominiumItem[]>([]);
   const [allTenants, setAllTenants] = useState<{ id: string; name: string; slug: string; logoUrl: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -213,7 +215,7 @@ function CondominiumsTab() {
         else await loadAll();
       }
       setShowForm(false);
-    } catch (e: any) { alert(e.message || "Erro ao salvar."); }
+    } catch (e: any) { toast.error(e.message || "Erro ao salvar."); }
     setSaving(false);
   }
 
@@ -243,7 +245,7 @@ function CondominiumsTab() {
         } : c));
       }
       setLinkTenantId("");
-    } catch (e: any) { alert(e.message || "Erro ao vincular."); }
+    } catch (e: any) { toast.error(e.message || "Erro ao vincular."); }
     setLinking(null);
   }
 
@@ -280,7 +282,7 @@ function CondominiumsTab() {
       setCondominiums(prev => prev.map(c => c.id === condId ? { ...c, [type === "logo" ? "logoUrl" : "bannerUrl"]: null } : c));
       setRemoveImageConfirm(null);
     } catch (e: any) {
-      alert(e.message || "Erro ao remover imagem.");
+      toast.error(e.message || "Erro ao remover imagem.");
     } finally {
       setRemovingImage(false);
     }

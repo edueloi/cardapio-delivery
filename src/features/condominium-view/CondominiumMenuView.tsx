@@ -5,6 +5,7 @@ import {
   Store, Search, Check, MapPin, Phone, User, Truck, Package,
   Send, Loader2, CheckCircle2, Clock, Star, Zap,
 } from "lucide-react";
+import { useToast } from "../../components";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -233,6 +234,7 @@ function CheckoutDrawer({ items, tenant, primary, deliveryFee, minOrder, enabled
   enabledPays: typeof PAY_CONFIG;
   onClose: () => void; onOrderPlaced: () => void;
 }) {
+  const toast = useToast();
   const [step, setStep] = useState<CheckoutStep>("info");
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
@@ -285,8 +287,8 @@ function CheckoutDrawer({ items, tenant, primary, deliveryFee, minOrder, enabled
         }),
       });
       if (res.ok) setStep("done");
-      else alert("Erro ao enviar pedido. Tente novamente.");
-    } catch { alert("Erro de conexão."); }
+      else toast.error("Erro ao enviar pedido. Tente novamente.");
+    } catch { toast.error("Erro de conexão."); }
     setLoading(false);
   }
 

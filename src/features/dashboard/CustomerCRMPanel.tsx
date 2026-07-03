@@ -7,6 +7,7 @@ import {
 import {
   PageWrapper, SectionTitle, StatGrid, StatCard, ContentCard,
   Modal, ModalFooter, Button, Input, EmptyState, Pagination,
+  useToast,
 } from "../../components";
 import { apiJson } from "../../lib/api";
 import type { Tenant, Order, Customer } from "../../types";
@@ -20,6 +21,7 @@ interface CRMPanelProps {
 }
 
 export default function CustomerCRMPanel({ slug, tenant }: CRMPanelProps) {
+  const toast = useToast();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -107,7 +109,7 @@ export default function CustomerCRMPanel({ slug, tenant }: CRMPanelProps) {
       }
       setShowForm(false);
       fetchCustomers();
-    } catch { alert("Erro ao salvar cliente."); }
+    } catch { toast.error("Erro ao salvar cliente."); }
     finally { setFormLoading(false); }
   };
 

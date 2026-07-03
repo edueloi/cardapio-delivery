@@ -8,6 +8,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import {
   PageWrapper, Modal, ModalFooter, Button, Input, EmptyState,
+  useToast,
 } from "../../components";
 import { DatePicker } from "../../components/DatePicker";
 import type { Tenant } from "../../types";
@@ -238,6 +239,7 @@ function exportPDF(entries: Entry[], tenant: Tenant, dateFrom: string | null, da
 interface Props { slug: string; tenant: Tenant; }
 
 export default function EntradasSaidasPanel({ slug, tenant }: Props) {
+  const toast = useToast();
   const [dateFrom, setDateFrom] = useState<string | null>(firstOfMonthISO());
   const [dateTo,   setDateTo]   = useState<string | null>(todayISO());
   const { entries, loading, refetch } = useEntries(slug, dateFrom, dateTo);
@@ -316,7 +318,7 @@ export default function EntradasSaidasPanel({ slug, tenant }: Props) {
       });
       setDeleteEntry(null);
       refetch();
-    } catch { alert("Erro ao excluir."); }
+    } catch { toast.error("Erro ao excluir."); }
     finally { setDeleting(false); }
   };
 

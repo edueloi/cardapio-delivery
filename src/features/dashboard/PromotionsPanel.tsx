@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Plus, Trash2, Edit2, Image as ImageIcon, Star, ToggleLeft, ToggleRight, GripVertical, X, Check, ExternalLink } from "lucide-react";
 import { apiFetch, apiJson } from "../../lib/api";
+import { ConfirmModal } from "../../components";
 import type { Tenant, Product } from "../../types";
 
 interface Promotion {
@@ -43,6 +44,7 @@ export default function PromotionsPanel({ tenant }: Props) {
   const [saving, setSaving] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
@@ -129,7 +131,6 @@ export default function PromotionsPanel({ tenant }: Props) {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Remover essa promoção?")) return;
     await apiJson(`/api/admin/promotions/${id}`, { method: "DELETE" });
     await load();
   };
@@ -235,7 +236,7 @@ export default function PromotionsPanel({ tenant }: Props) {
                     <Edit2 className="w-3.5 h-3.5" /> Editar
                   </button>
                   <button
-                    onClick={() => handleDelete(p.id)}
+                    onClick={() => setDeleteConfirm(p.id)}
                     className="ml-auto p-1.5 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -396,6 +397,19 @@ export default function PromotionsPanel({ tenant }: Props) {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!deleteConfirm}
+        onClose={() => setDeleteConfirm(null)}
+        onConfirm={async () => {
+          if (deleteConfirm) await handleDelete(deleteConfirm);
+          setDeleteConfirm(null);
+        }}
+        title="Remover promoção"
+        message="Tem certeza que deseja remover essa promoção?"
+        confirmLabel="Remover"
+        variant="danger"
+      />
     </div>
   );
 }

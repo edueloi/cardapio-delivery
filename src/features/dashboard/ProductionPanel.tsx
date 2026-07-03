@@ -40,6 +40,7 @@ import {
   StatGrid,
   Switch,
   Textarea,
+  useToast,
 } from "../../components";
 import { apiJson } from "../../lib/api";
 import {
@@ -136,6 +137,7 @@ function flattenProducts(tenant: Tenant | null) {
 }
 
 export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
+  const toast = useToast();
   const [recipes, setRecipes] = useState<ProductionRecipe[]>([]);
   const [runs, setRuns] = useState<ProductionRun[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
@@ -438,7 +440,7 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
                           size="sm"
                           variant="ghost"
                           title="Duplicar receita"
-                          onClick={() => void handleDuplicateRecipe(tenant.slug, recipe, fetchData)}
+                          onClick={() => void handleDuplicateRecipe(tenant.slug, recipe, fetchData, toast.error)}
                         >
                           <Copy className="h-4 w-4" />
                         </IconButton>
@@ -810,7 +812,7 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
             setRecipeToDelete(null);
             await fetchData();
           } catch (error) {
-            window.alert(error instanceof Error ? error.message : "Falha ao excluir receita.");
+            toast.error(error instanceof Error ? error.message : "Falha ao excluir receita.");
           } finally {
             setDeleting(false);
           }
@@ -871,7 +873,7 @@ function UnitCombobox({
   );
 }
 
-async function handleDuplicateRecipe(slug: string, recipe: ProductionRecipe, refresh: () => Promise<void>) {
+async function handleDuplicateRecipe(slug: string, recipe: ProductionRecipe, refresh: () => Promise<void>, onError: (message: string) => void) {
   try {
     await apiJson(`/api/tenants/${slug}/production/recipes`, {
       method: "POST",
@@ -889,7 +891,7 @@ async function handleDuplicateRecipe(slug: string, recipe: ProductionRecipe, ref
     });
     await refresh();
   } catch (error) {
-    window.alert(error instanceof Error ? error.message : "Falha ao duplicar receita.");
+    onError(error instanceof Error ? error.message : "Falha ao duplicar receita.");
   }
 }
 
@@ -909,6 +911,7 @@ function RecipeEditorModal({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
+  const toast = useToast();
   const [name, setName] = useState(recipe?.name || "");
   const [description, setDescription] = useState(recipe?.description || "");
   const [productId, setProductId] = useState(recipe?.productId || "");
@@ -969,7 +972,7 @@ function RecipeEditorModal({
 
       await onSaved();
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "Falha ao salvar receita.");
+      toast.error(error instanceof Error ? error.message : "Falha ao salvar receita.");
     } finally {
       setSaving(false);
     }
@@ -1210,6 +1213,7 @@ function ProductionRunModal({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
+  const toast = useToast();
   const [quantityProduced, setQuantityProduced] = useState(String(recipe.outputQuantity || 1));
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
@@ -1231,7 +1235,7 @@ function ProductionRunModal({
       });
       await onSaved();
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "Falha ao registrar produção.");
+      toast.error(error instanceof Error ? error.message : "Falha ao registrar produção.");
     } finally {
       setSaving(false);
     }

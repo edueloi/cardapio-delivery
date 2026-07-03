@@ -7,11 +7,12 @@ import {
 import { motion } from "motion/react";
 import type { Tenant, LoyaltyConfig, CustomerLoyalty } from "../../types";
 import { apiJson, apiFetch } from "../../lib/api";
-import { 
-  ContentCard, 
+import {
+  ContentCard,
   SectionTitle,
   StatCard,
-  StatGrid
+  StatGrid,
+  useToast
 } from "../../components";
 
 const fmt = (n: number) =>
@@ -23,6 +24,7 @@ interface LoyaltyPanelProps {
 }
 
 export default function LoyaltyPanel({ tenant, onUpdated }: LoyaltyPanelProps) {
+  const toast = useToast();
   const [config, setConfig] = useState<LoyaltyConfig>(tenant.loyaltyConfig || {
     id: "",
     tenantId: tenant.id,
@@ -63,10 +65,10 @@ export default function LoyaltyPanel({ tenant, onUpdated }: LoyaltyPanelProps) {
         body: JSON.stringify(config)
       });
       onUpdated();
-      alert("Configurações salvas!");
+      toast.success("Configurações salvas!");
     } catch (err) {
       console.error(err);
-      alert("Erro ao salvar.");
+      toast.error("Erro ao salvar.");
     } finally {
       setIsSaving(false);
     }

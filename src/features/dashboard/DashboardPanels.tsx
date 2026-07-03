@@ -93,7 +93,8 @@ import {
   FilterLineSearch,
   FilterLineDateRange,
   DatePicker,
-  usePagination
+  usePagination,
+  useToast
 } from "../../components";
 import { DASHBOARD_NAVIGATION } from "./config/navigation";
 import { type DashboardOrderTabId, type DashboardTabId } from "./types";
@@ -664,6 +665,7 @@ export function StaffList({ tenant }: { tenant: Tenant | null }) {
 
 // Componente de Upload de Imagem Reutilizável
 function ImageUploader({ value, onChange, label, description }: { value: string, onChange: (val: string) => void, label: string, description?: string }) {
+  const toast = useToast();
   const [uploading, setUploading] = useState(false);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -685,7 +687,7 @@ function ImageUploader({ value, onChange, label, description }: { value: string,
       }
     } catch (err) {
       console.error(err);
-      alert("Erro ao enviar imagem");
+      toast.error("Erro ao enviar imagem");
     } finally {
       setUploading(false);
     }
@@ -1315,6 +1317,7 @@ function CondominiumsCard({ tenant }: { tenant: Tenant | null }) {
 }
 
 export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, refresh: () => void }) {
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState<"general" | "hours" | "delivery" | "payments" | "maquinhas" | "fiscal">("general");
   const [form, setForm] = useState({
     name: tenant?.name || "",
@@ -1411,7 +1414,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
       setTimeout(() => setSaved(false), 3000);
     } catch (err: any) {
       console.error(err);
-      alert(err.message || "Erro ao salvar configurações");
+      toast.error(err.message || "Erro ao salvar configurações");
     } finally {
       setSaving(false);
     }
@@ -2807,6 +2810,7 @@ function SortableCategoryCard({
 }
 
 export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, refresh: () => void }) {
+  const toast = useToast();
   const [search, setSearch] = useState("");
   const [selectedCat, setSelectedCat] = useState<string>("all");
   // Lazy initializer: popula de imediato com o que o tenant já trouxer, evitando
@@ -3088,7 +3092,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
         ? { ...cat, products: [...(cat.products || []), saved] }
         : cat
     ));
-    alert(`"${saved.name}" duplicado no catálogo com sucesso!`);
+    toast.success(`"${saved.name}" duplicado no catálogo com sucesso!`);
   };
 
   const duplicateProductToInventory = async () => {
@@ -3107,7 +3111,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
       })
     });
     const saved = await res.json();
-    alert(`"${saved.name}" criado no Estoque! Vá em Estoque para configurar quantidade e unidades.`);
+    toast.success(`"${saved.name}" criado no Estoque! Vá em Estoque para configurar quantidade e unidades.`);
   };
 
   const toggleProductAvailability = async (prod: any) => {

@@ -5,7 +5,7 @@
 
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
-import { AuthGuard } from "./components";
+import { AuthGuard, ToastProvider } from "./components";
 import MenuView from "./pages/MenuView";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
@@ -142,7 +142,9 @@ function AnimatedRoutes() {
 export default function App() {
   return (
     <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <AnimatedRoutes />
+      <ToastProvider>
+        <AnimatedRoutes />
+      </ToastProvider>
     </Router>
   );
 }
