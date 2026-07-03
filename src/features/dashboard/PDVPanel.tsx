@@ -63,6 +63,9 @@ export default function PDVPanel({
 }: PDVPanelProps) {
   const isWaiterMode = mode === "waiter";
   const [activeTab, setActiveTab] = useState<"products" | "tables" | "comandas">("products");
+  // Em telas menores que lg, o carrinho vira um painel deslizante aberto sob demanda
+  // (por um botão flutuante), em vez de ficar sempre empilhado ocupando a tela.
+  const [showCartDrawer, setShowCartDrawer] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -208,15 +211,33 @@ export default function PDVPanel({
     }
   };
 
-  const PAYMENT_METHODS = useMemo(() =>
-    stoneCfg?.enabled
-      ? BASE_PAYMENT_METHODS
-      : BASE_PAYMENT_METHODS.filter((m) => m.id !== "STONE"),
-  [stoneCfg]);
+  // Mapeia cada forma de pagamento do PDV para a chave correspondente em PaymentConfig
+  // (configurada em Configurações → Pagamentos), usada tanto para saber se está habilitada
+  // quanto para buscar as bandeiras aceitas.
+  const PAYMENT_CONFIG_KEY_MAP: Partial<Record<string, keyof PaymentConfig>> = {
+    CASH: "cash", PIX: "pix", CREDIT: "credit", DEBIT: "debit", VR: "meal",
+  };
+
+  const PAYMENT_METHODS = useMemo(() => {
+    return BASE_PAYMENT_METHODS.filter((m) => {
+      if (m.id === "STONE") return !!stoneCfg?.enabled;
+      const key = PAYMENT_CONFIG_KEY_MAP[m.id];
+      const cfg = key ? (paymentConfig[key] as any) : undefined;
+      // Sem configuração salva ainda = habilitado por padrão (não bloqueia quem nunca configurou)
+      return cfg?.enabled !== false;
+    });
+  }, [stoneCfg, paymentConfig]);
+
+  // Se a forma selecionada foi desabilitada nas Configurações, troca para a primeira disponível
+  useEffect(() => {
+    if (PAYMENT_METHODS.length === 0) return;
+    if (!PAYMENT_METHODS.some((m) => m.id === paymentMethod)) {
+      setPaymentMethod(PAYMENT_METHODS[0].id as any);
+    }
+  }, [PAYMENT_METHODS, paymentMethod]);
 
   const CARD_BRANDS = useMemo(() => {
-    const methodMap: Record<string, keyof PaymentConfig> = { CREDIT: "credit", DEBIT: "debit", VR: "meal" };
-    const key = methodMap[paymentMethod];
+    const key = PAYMENT_CONFIG_KEY_MAP[paymentMethod];
     const cfg = key ? (paymentConfig[key] as any) : null;
     if (cfg?.acceptedBrands?.length) return cfg.acceptedBrands as string[];
     return ["Visa", "Mastercard", "Elo", "American Express", "Hipercard", "VR", "Sodexo", "Ticket", "Alelo"];
@@ -308,6 +329,7 @@ export default function PDVPanel({
     setStoneChargeId(null);
     setNfceStatus("idle");
     setNfceMessage("");
+    setShowCartDrawer(false);
     if (stonePollRef.current) clearInterval(stonePollRef.current);
   };
 
@@ -529,8 +551,10 @@ export default function PDVPanel({
     }
   };
 
+  const cartItemCount = cart.reduce((s, i) => s + i.quantity, 0);
+
   return (
-    <div className="flex flex-col lg:flex-row gap-2 lg:gap-4 h-full min-h-0">
+    <div className="relative flex flex-col lg:flex-row gap-2 lg:gap-4 h-full min-h-0">
       {/* ── Success flash + NFC-e ── */}
       <AnimatePresence>
         {showSuccess && (
@@ -913,13 +937,39 @@ export default function PDVPanel({
         )}
       </div>
 
+      {/* ── Floating cart button (mobile/tablet, < lg) ── */}
+      {!showCartDrawer && (
+        <button
+          onClick={() => setShowCartDrawer(true)}
+          className="lg:hidden fixed bottom-5 right-5 z-40 w-16 h-16 rounded-full bg-[#C9A227] text-black shadow-2xl shadow-black/30 flex items-center justify-center active:scale-95 transition-transform"
+        >
+          <ShoppingCart className="w-6 h-6" />
+          {cartItemCount > 0 && (
+            <span className="absolute -top-1 -right-1 min-w-[24px] h-6 px-1.5 bg-[#0D1B3E] text-white text-xs font-black rounded-full flex items-center justify-center border-2 border-[#F4F6FA]">
+              {cartItemCount}
+            </span>
+          )}
+        </button>
+      )}
+
       {/* ── Right: Order/Cart Panel ── */}
-      <div className="w-full lg:w-[380px] xl:w-[420px] flex flex-col bg-[#0D1B3E] rounded-[2rem] text-white overflow-hidden shadow-xl relative shrink-0">
+      <div className={`${
+        showCartDrawer
+          ? "fixed inset-0 z-40 lg:static lg:z-auto"
+          : "hidden lg:flex"
+      } w-full lg:w-[380px] xl:w-[420px] flex-col bg-[#0D1B3E] rounded-none lg:rounded-[2rem] text-white overflow-hidden shadow-xl relative shrink-0`}>
         {/* Header */}
         <div className="p-6 border-b border-white/5 bg-white/[0.02]">
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-[#C9A227]/15 text-[#C9A227] flex items-center justify-center shrink-0">
+              <button
+                onClick={() => setShowCartDrawer(false)}
+                className="lg:hidden w-9 h-9 rounded-xl bg-white/5 hover:bg-white/10 text-white/60 hover:text-white flex items-center justify-center shrink-0 transition-colors -ml-1"
+                title="Voltar para os produtos"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+              <div className="hidden lg:flex w-9 h-9 rounded-xl bg-[#C9A227]/15 text-[#C9A227] items-center justify-center shrink-0">
                 <ShoppingCart className="w-4 h-4" />
               </div>
               <div>

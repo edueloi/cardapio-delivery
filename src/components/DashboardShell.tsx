@@ -58,10 +58,10 @@ export default function DashboardShell({
   const ActiveIcon    = active?.item.icon;
 
   return (
-    <div className="min-h-screen bg-[#F4F6FA] flex flex-col lg:flex-row font-sans relative">
+    <div className="min-h-screen bg-[#F4F6FA] flex flex-col xl:flex-row font-sans relative">
 
       {/* ══ MOBILE TOPBAR ══ */}
-      <div className="lg:hidden sticky top-0 z-40 bg-[#0A1628] border-b border-white/[0.07]">
+      <div className="xl:hidden sticky top-0 z-40 bg-[#0A1628] border-b border-white/[0.07]">
         <div className="flex items-center justify-between gap-3 px-4 h-14">
           {/* Logo + nome */}
           <div className="flex items-center gap-2.5 min-w-0">
@@ -108,7 +108,7 @@ export default function DashboardShell({
       <aside className={cn(
         "fixed inset-y-0 left-0 z-50 w-[82vw] max-w-[300px] bg-[#0A1628] text-slate-300 flex flex-col",
         "transition-transform duration-300 ease-in-out",
-        "lg:w-64 lg:max-w-none lg:translate-x-0 lg:sticky lg:top-0 lg:h-screen shrink-0",
+        "xl:w-64 xl:max-w-none xl:translate-x-0 xl:sticky xl:top-0 xl:h-screen shrink-0",
         isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         {/* Logo header */}
@@ -122,7 +122,7 @@ export default function DashboardShell({
               <p className="text-[13px] font-black text-white/90 leading-none truncate">{tenantLabel}</p>
             </div>
           </div>
-          <button onClick={onCloseMobileMenu} className="lg:hidden w-7 h-7 rounded-lg flex items-center justify-center text-white/30 hover:text-white transition-colors">
+          <button onClick={onCloseMobileMenu} className="xl:hidden w-7 h-7 rounded-lg flex items-center justify-center text-white/30 hover:text-white transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -200,7 +200,7 @@ export default function DashboardShell({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 xl:hidden"
             onClick={onCloseMobileMenu}
           />
         )}
@@ -210,7 +210,7 @@ export default function DashboardShell({
       <main className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
 
         {/* ══ DESKTOP TOPBAR ══ */}
-        <header className="hidden lg:flex items-center justify-between gap-4 bg-white border-b border-slate-200/80 sticky top-0 z-30 px-6 lg:px-8 h-16 shrink-0">
+        <header className="hidden xl:flex items-center justify-between gap-4 bg-white border-b border-slate-200/80 sticky top-0 z-30 px-6 lg:px-8 h-16 shrink-0">
 
           {/* Esquerda — breadcrumb da aba ativa */}
           <div className="flex items-center gap-3 min-w-0">
