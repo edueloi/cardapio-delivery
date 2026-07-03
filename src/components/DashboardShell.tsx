@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { type LucideIcon, LogOut, Menu, Monitor, Utensils, X, ShieldCheck, Bell, ChefHat } from "lucide-react";
+import { type LucideIcon, LogOut, Menu, Monitor, Utensils, X, ShieldCheck, Bell, ChefHat, ExternalLink } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 
 interface DashboardNavigationItem {
@@ -19,6 +19,7 @@ interface DashboardNavigationGroup {
 
 interface DashboardShellProps {
   tenantName?: string;
+  tenantLogoUrl?: string | null;
   slug: string;
   activeTab: string;
   navigationGroups: DashboardNavigationGroup[];
@@ -41,6 +42,7 @@ function findActiveItem(groups: DashboardNavigationGroup[], activeTab: string) {
 
 export default function DashboardShell({
   tenantName,
+  tenantLogoUrl,
   slug,
   activeTab,
   navigationGroups,
@@ -56,6 +58,7 @@ export default function DashboardShell({
   const tenantLabel   = tenantName || "Box Sys";
   const active        = findActiveItem(navigationGroups, activeTab);
   const ActiveIcon    = active?.item.icon;
+  const logoSrc       = tenantLogoUrl || "/images/logo.png";
 
   return (
     <div className="min-h-screen bg-[#F4F6FA] flex flex-col xl:flex-row font-sans relative">
@@ -63,15 +66,12 @@ export default function DashboardShell({
       {/* ══ MOBILE TOPBAR ══ */}
       <div className="xl:hidden sticky top-0 z-40 bg-[#0A1628] border-b border-white/[0.07]">
         <div className="flex items-center justify-between gap-3 px-4 h-14">
-          {/* Logo + nome */}
+          {/* Logo */}
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center shrink-0 p-1">
-              <img src="/images/logo.png" alt="Logo" className="w-full h-full object-contain" />
+              <img src={logoSrc} alt="Logo" className="w-full h-full object-contain" />
             </div>
-            <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#C9A227]/70 leading-none">Box Sys</p>
-              <p className="text-[12px] font-black text-white leading-tight truncate max-w-[130px]">{tenantLabel}</p>
-            </div>
+            <p className="text-[12px] font-black text-white leading-tight truncate max-w-[170px]">Box Sys</p>
           </div>
 
           {/* Ações mobile */}
@@ -115,12 +115,9 @@ export default function DashboardShell({
         <div className="px-5 pt-5 pb-4 flex items-center justify-between border-b border-white/[0.07]">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center shrink-0 p-1.5">
-              <img src="/images/logo.png" alt="Logo" className="w-full h-full object-contain" />
+              <img src={logoSrc} alt="Logo" className="w-full h-full object-contain" />
             </div>
-            <div className="min-w-0">
-              <p className="text-[9px] font-bold uppercase tracking-[0.22em] text-[#C9A227]/60 leading-none mb-0.5">Box Sys</p>
-              <p className="text-[13px] font-black text-white/90 leading-none truncate">{tenantLabel}</p>
-            </div>
+            <p className="text-[13px] font-black text-white/90 leading-none truncate">Box Sys</p>
           </div>
           <button onClick={onCloseMobileMenu} className="xl:hidden w-7 h-7 rounded-lg flex items-center justify-center text-white/30 hover:text-white transition-colors">
             <X className="w-4 h-4" />
@@ -161,6 +158,35 @@ export default function DashboardShell({
               </div>
             </div>
           ))}
+
+          {/* Painéis externos — abrem em nova aba, fora do fluxo de abas do dashboard */}
+          <div>
+            <p className="px-3 mb-1 text-[9px] font-black uppercase tracking-[0.24em] text-white/20">
+              Painéis
+            </p>
+            <div className="space-y-0.5">
+              <a
+                href={`/${slug}/display`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left group text-slate-400 hover:bg-white/[0.06] hover:text-white"
+              >
+                <Monitor className="w-4 h-4 shrink-0 text-slate-500 group-hover:text-[#C9A227] transition-colors" />
+                <span className="text-[12px] font-semibold tracking-wide leading-none flex-1">Painel TV</span>
+                <ExternalLink className="w-3 h-3 shrink-0 text-white/20 group-hover:text-white/40" />
+              </a>
+              <a
+                href={`/cozinha/${slug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left group text-slate-400 hover:bg-white/[0.06] hover:text-white"
+              >
+                <ChefHat className="w-4 h-4 shrink-0 text-slate-500 group-hover:text-[#C9A227] transition-colors" />
+                <span className="text-[12px] font-semibold tracking-wide leading-none flex-1">Painel Cozinha</span>
+                <ExternalLink className="w-3 h-3 shrink-0 text-white/20 group-hover:text-white/40" />
+              </a>
+            </div>
+          </div>
         </nav>
 
         {/* Footer links */}
@@ -231,53 +257,10 @@ export default function DashboardShell({
             ) : (
               <h2 className="text-[15px] font-black text-[#0A1628]">Painel Operacional</h2>
             )}
-
-            {/* Badge tenant */}
-            <div className="hidden sm:flex items-center gap-1.5 bg-[#0A1628]/5 border border-[#0A1628]/10 rounded-lg px-2.5 py-1.5 ml-1">
-              <div className="w-1.5 h-1.5 rounded-full bg-[#C9A227]" />
-              <span className="text-[11px] font-black text-[#0A1628]/60 uppercase tracking-wider">{tenantLabel}</span>
-            </div>
           </div>
 
           {/* Direita — ações */}
           <div className="flex items-center gap-2 shrink-0">
-            {/* Painel TV */}
-            <Link
-              to={`/${slug}/display`}
-              target="_blank"
-              className="hidden lg:flex items-center gap-2 h-9 px-3.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300 transition-all group"
-            >
-              <Monitor className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#0A1628] transition-colors" />
-              <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 group-hover:text-[#0A1628]">
-                Painel TV
-              </span>
-            </Link>
-
-            {/* Painel de Cozinha (KDS externo — tela dedicada pra cozinha) */}
-            <Link
-              to={`/cozinha/${slug}`}
-              target="_blank"
-              className="hidden lg:flex items-center gap-2 h-9 px-3.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300 transition-all group"
-            >
-              <ChefHat className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#0A1628] transition-colors" />
-              <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 group-hover:text-[#0A1628]">
-                Painel Cozinha
-              </span>
-            </Link>
-
-            {/* Ver Cardápio */}
-            <Link
-              to={`/${slug}`}
-              className="hidden lg:flex items-center gap-2 h-9 px-3.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300 transition-all group"
-            >
-              <Utensils className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#0A1628] transition-colors" />
-              <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 group-hover:text-[#0A1628]">
-                Ver Cardápio
-              </span>
-            </Link>
-
-            {/* Divider */}
-            <div className="hidden lg:block w-px h-6 bg-slate-200" />
 
             {/* Notificações placeholder */}
             <button className="w-9 h-9 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-[#0A1628] transition-all">

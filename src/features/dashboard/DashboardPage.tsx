@@ -239,6 +239,7 @@ export default function DashboardPage() {
     <>
       <DashboardShell
         tenantName={tenant.name}
+        tenantLogoUrl={tenant.logoUrl}
         slug={slug ?? ""}
         activeTab={activeTab}
         navigationGroups={filteredNavigation}
