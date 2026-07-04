@@ -20,6 +20,7 @@ interface RegisterProductionRoutesOptions {
     req: Request,
     res: Response,
     slug: string,
+    tabId?: string,
   ) => Promise<any | null>;
   currentAccount: (req: Request) => { name?: string | null } | null;
 }
@@ -605,7 +606,7 @@ export function registerProductionRoutes({
   currentAccount,
 }: RegisterProductionRoutesOptions) {
   app.get("/api/tenants/:slug/production/recipes", requireAuth, async (req, res) => {
-    const tenant = await requireTenantBySlug(req, res, req.params.slug);
+    const tenant = await requireTenantBySlug(req, res, req.params.slug, "production");
     if (!tenant) return;
 
     try {
@@ -621,7 +622,7 @@ export function registerProductionRoutes({
   });
 
   app.post("/api/tenants/:slug/production/recipes", requireAuth, async (req, res) => {
-    const tenant = await requireTenantBySlug(req, res, req.params.slug);
+    const tenant = await requireTenantBySlug(req, res, req.params.slug, "production");
     if (!tenant) return;
 
     const name = String(req.body?.name || "").trim();
@@ -707,7 +708,7 @@ export function registerProductionRoutes({
   });
 
   app.patch("/api/tenants/:slug/production/recipes/:id", requireAuth, async (req, res) => {
-    const tenant = await requireTenantBySlug(req, res, req.params.slug);
+    const tenant = await requireTenantBySlug(req, res, req.params.slug, "production");
     if (!tenant) return;
 
     const name = String(req.body?.name || "").trim();
@@ -806,7 +807,7 @@ export function registerProductionRoutes({
   });
 
   app.delete("/api/tenants/:slug/production/recipes/:id", requireAuth, async (req, res) => {
-    const tenant = await requireTenantBySlug(req, res, req.params.slug);
+    const tenant = await requireTenantBySlug(req, res, req.params.slug, "production");
     if (!tenant) return;
 
     try {
@@ -836,7 +837,7 @@ export function registerProductionRoutes({
   });
 
   app.get("/api/tenants/:slug/production/runs", requireAuth, async (req, res) => {
-    const tenant = await requireTenantBySlug(req, res, req.params.slug);
+    const tenant = await requireTenantBySlug(req, res, req.params.slug, "production");
     if (!tenant) return;
 
     try {
@@ -852,7 +853,7 @@ export function registerProductionRoutes({
   });
 
   app.post("/api/tenants/:slug/production/runs", requireAuth, async (req, res) => {
-    const tenant = await requireTenantBySlug(req, res, req.params.slug);
+    const tenant = await requireTenantBySlug(req, res, req.params.slug, "production");
     if (!tenant) return;
 
     const recipeId = String(req.body?.recipeId || "");

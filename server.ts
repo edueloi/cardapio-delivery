@@ -20,6 +20,7 @@ import {
   getAuthorizedTenantBySlug,
   hashPassword,
   listAccountTenants,
+  membershipCanAccess,
   requireAuth,
   type AuthenticatedRequest,
   verifyPassword,
@@ -35,7 +36,7 @@ import {
   restoreAllSessions,
   sendMessage,
 } from "./src/backend/wpp/baileys-manager";
-import { sendOrderCreatedMessage, sendOrderStatusMessage, sendOwnerOrderAlert } from "./src/backend/wpp/messages";
+import { sendOrderCreatedMessage, sendOrderStatusMessage, sendOwnerOrderAlert, sendLoyaltyPointsMessage } from "./src/backend/wpp/messages";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -141,7 +142,7 @@ async function ensureWppSetup(tenantId: string, tenantName: string) {
   return { instance, config };
 }
 
-async function requireTenantById(req: express.Request, res: express.Response, tenantId: string) {
+async function requireTenantById(req: express.Request, res: express.Response, tenantId: string, tabId?: string) {
   const account = currentAccount(req);
   if (!account) {
     res.status(401).json({ error: "Login obrigatório." });
@@ -154,10 +155,16 @@ async function requireTenantById(req: express.Request, res: express.Response, te
     return null;
   }
 
+  if (tabId && !membershipCanAccess(result.membership, tabId)) {
+    res.status(403).json({ error: "Você não tem permissão para acessar esta área." });
+    return null;
+  }
+
+  (req as AuthenticatedRequest).membership = result.membership;
   return result.tenant;
 }
 
-async function requireTenantBySlug(req: express.Request, res: express.Response, slug: string) {
+async function requireTenantBySlug(req: express.Request, res: express.Response, slug: string, tabId?: string) {
   const account = currentAccount(req);
   if (!account) {
     res.status(401).json({ error: "Login obrigatório." });
@@ -170,26 +177,39 @@ async function requireTenantBySlug(req: express.Request, res: express.Response, 
     return null;
   }
 
+  if (tabId && !membershipCanAccess(result.membership, tabId)) {
+    res.status(403).json({ error: "Você não tem permissão para acessar esta área." });
+    return null;
+  }
+
+  (req as AuthenticatedRequest).membership = result.membership;
   return result.tenant;
 }
 
 // Soma pontos de fidelidade ao cliente com base no valor gasto, se o módulo estiver ativo
-// para o tenant. Silencioso em qualquer falha — pontuação nunca deve travar a criação do pedido.
-async function awardLoyaltyPoints(tenantLoyaltyConfigRaw: string | null | undefined, customerId: string, orderTotal: number) {
-  if (!tenantLoyaltyConfigRaw || !customerId) return;
+// para o tenant. Silencioso em qualquer falha — pontuação nunca deve travar o fluxo do pedido.
+// Retorna os pontos ganhos e o novo saldo (usados para notificar o cliente via WhatsApp).
+async function awardLoyaltyPoints(
+  tenantLoyaltyConfigRaw: string | null | undefined,
+  customerId: string,
+  orderTotal: number
+): Promise<{ pointsEarned: number; newBalance: number } | null> {
+  if (!tenantLoyaltyConfigRaw || !customerId) return null;
   try {
     const config = JSON.parse(tenantLoyaltyConfigRaw);
-    if (!config?.enabled) return;
+    if (!config?.enabled) return null;
     const pointsPerReal = Number(config.pointsPerReal) || 0;
-    if (pointsPerReal <= 0) return;
+    if (pointsPerReal <= 0) return null;
     const pointsEarned = Math.floor(orderTotal * pointsPerReal);
-    if (pointsEarned <= 0) return;
-    await prisma.customer.update({
+    if (pointsEarned <= 0) return null;
+    const updated = await prisma.customer.update({
       where: { id: customerId },
       data: { loyaltyPoints: { increment: pointsEarned } },
     });
+    return { pointsEarned, newBalance: updated.loyaltyPoints };
   } catch (err) {
     console.error("[Loyalty] Falha ao somar pontos:", err);
+    return null;
   }
 }
 
@@ -204,7 +224,7 @@ async function requireTenantFromProduct(req: express.Request, res: express.Respo
     return null;
   }
 
-  const tenant = await requireTenantById(req, res, product.tenantId);
+  const tenant = await requireTenantById(req, res, product.tenantId, "menu");
   if (!tenant) return null;
 
   return { product, tenant };
@@ -228,7 +248,7 @@ async function requireTenantFromOrder(req: express.Request, res: express.Respons
     return null;
   }
 
-  const tenant = await requireTenantById(req, res, order.tenantId);
+  const tenant = await requireTenantById(req, res, order.tenantId, "live-orders");
   if (!tenant) return null;
 
   return { order, tenant };
@@ -241,7 +261,7 @@ async function requireTenantFromInventoryItem(req: express.Request, res: express
     return null;
   }
 
-  const tenant = await requireTenantById(req, res, item.tenantId);
+  const tenant = await requireTenantById(req, res, item.tenantId, "inventory");
   if (!tenant) return null;
 
   return { item, tenant };
@@ -1304,7 +1324,7 @@ app.get("/api/owner/tenants/:tenantId/my-membership", requireAuth, async (req, r
 // ─────────────────────────────────────────────────────────────────────────────
 
 app.get("/api/owner/tenants/:tenantId/wpp", requireAuth, async (req, res) => {
-  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  const tenant = await requireTenantById(req, res, req.params.tenantId, "whatsapp");
   if (!tenant) return;
 
   await ensureWppSetup(tenant.id, tenant.name);
@@ -1320,7 +1340,7 @@ app.get("/api/owner/tenants/:tenantId/wpp", requireAuth, async (req, res) => {
 });
 
 app.post("/api/owner/tenants/:tenantId/wpp/connect", requireAuth, async (req, res) => {
-  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  const tenant = await requireTenantById(req, res, req.params.tenantId, "whatsapp");
   if (!tenant) return;
 
   await ensureWppSetup(tenant.id, tenant.name);
@@ -1329,7 +1349,7 @@ app.post("/api/owner/tenants/:tenantId/wpp/connect", requireAuth, async (req, re
 });
 
 app.get("/api/owner/tenants/:tenantId/wpp/status", requireAuth, async (req, res) => {
-  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  const tenant = await requireTenantById(req, res, req.params.tenantId, "whatsapp");
   if (!tenant) return;
 
   const info = getSessionInfo(tenant.id);
@@ -1337,7 +1357,7 @@ app.get("/api/owner/tenants/:tenantId/wpp/status", requireAuth, async (req, res)
 });
 
 app.get("/api/owner/tenants/:tenantId/wpp/qr", requireAuth, async (req, res) => {
-  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  const tenant = await requireTenantById(req, res, req.params.tenantId, "whatsapp");
   if (!tenant) return;
 
   res.json({
@@ -1347,7 +1367,7 @@ app.get("/api/owner/tenants/:tenantId/wpp/qr", requireAuth, async (req, res) => 
 });
 
 app.post("/api/owner/tenants/:tenantId/wpp/disconnect", requireAuth, async (req, res) => {
-  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  const tenant = await requireTenantById(req, res, req.params.tenantId, "whatsapp");
   if (!tenant) return;
 
   await disconnectSession(tenant.id);
@@ -1355,7 +1375,7 @@ app.post("/api/owner/tenants/:tenantId/wpp/disconnect", requireAuth, async (req,
 });
 
 app.patch("/api/owner/tenants/:tenantId/wpp/config", requireAuth, async (req, res) => {
-  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  const tenant = await requireTenantById(req, res, req.params.tenantId, "whatsapp");
   if (!tenant) return;
 
   const {
@@ -1415,7 +1435,7 @@ app.patch("/api/owner/tenants/:tenantId/wpp/config", requireAuth, async (req, re
 });
 
 app.post("/api/owner/tenants/:tenantId/wpp/test", requireAuth, async (req, res) => {
-  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  const tenant = await requireTenantById(req, res, req.params.tenantId, "whatsapp");
   if (!tenant) return;
 
   const { phone, message } = req.body;
@@ -1718,7 +1738,8 @@ app.post("/api/orders", async (req, res) => {
       });
     }
 
-    // Vincula/atualiza o cliente pelo telefone e soma pontos de fidelidade, se o módulo estiver ativo
+    // Vincula/atualiza o cliente pelo telefone. Pontos de fidelidade são concedidos
+    // somente quando o pedido é marcado como entregue (ver updateOrderStatus).
     let customerId: string | undefined;
     if (customerPhone && customerName) {
       const digits = customerPhone.replace(/\D/g, "");
@@ -1728,7 +1749,6 @@ app.post("/api/orders", async (req, res) => {
         update: { totalSpent: { increment: total }, ordersCount: { increment: 1 }, lastOrderAt: new Date() },
       });
       customerId = customer.id;
-      await awardLoyaltyPoints(tenant.loyaltyConfig as string | null, customer.id, total);
     }
 
     const order = await prisma.order.create({
@@ -1898,6 +1918,17 @@ async function updateOrderStatus(orderId: string, previousStatus: string, status
     io.to(`tenant-${updatedOrder.tenantId}`).emit("order-status-updated", updatedOrder);
     await sendOrderStatusMessage(updatedOrder, updatedOrder.tenant).catch(() => undefined);
 
+    if (status === "DELIVERED" && previousStatus !== "DELIVERED" && updatedOrder.customerId) {
+      const result = await awardLoyaltyPoints(
+        updatedOrder.tenant.loyaltyConfig as string | null,
+        updatedOrder.customerId,
+        updatedOrder.total
+      );
+      if (result) {
+        await sendLoyaltyPointsMessage(updatedOrder, updatedOrder.tenant, result.pointsEarned, result.newBalance).catch(() => undefined);
+      }
+    }
+
   return updatedOrder;
 }
 
@@ -1943,7 +1974,7 @@ app.get("/api/admin/:tenantId/orders", requireAuth, async (req, res) => {
 
 // ── Fidelidade ──────────────────────────────────────────────────────────────
 app.post("/api/admin/:tenantId/loyalty/config", requireAuth, async (req, res) => {
-  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  const tenant = await requireTenantById(req, res, req.params.tenantId, "loyalty");
   if (!tenant) return;
 
   try {
@@ -1968,7 +1999,7 @@ app.post("/api/admin/:tenantId/loyalty/config", requireAuth, async (req, res) =>
 });
 
 app.get("/api/admin/:tenantId/loyalty/customers", requireAuth, async (req, res) => {
-  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  const tenant = await requireTenantById(req, res, req.params.tenantId, "loyalty");
   if (!tenant) return;
 
   try {
@@ -1995,7 +2026,7 @@ app.get("/api/admin/:tenantId/loyalty/customers", requireAuth, async (req, res) 
 // (pedidos, catálogo, financeiro) é ativada depois que o iFood aprova a homologação
 // do client_id/client_secret gerados no Portal do Parceiro.
 app.get("/api/admin/:tenantId/ifood/config", requireAuth, async (req, res) => {
-  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  const tenant = await requireTenantById(req, res, req.params.tenantId, "profile");
   if (!tenant) return;
 
   try {
@@ -2013,7 +2044,7 @@ app.get("/api/admin/:tenantId/ifood/config", requireAuth, async (req, res) => {
 });
 
 app.post("/api/admin/:tenantId/ifood/config", requireAuth, async (req, res) => {
-  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  const tenant = await requireTenantById(req, res, req.params.tenantId, "profile");
   if (!tenant) return;
 
   try {
@@ -2153,7 +2184,7 @@ app.patch("/api/kitchen/:slug/orders/:id/status", async (req, res) => {
 
 // Configuração da senha do painel de cozinha (feita pelo dono, autenticado normalmente)
 app.post("/api/admin/:tenantId/kitchen/config", requireAuth, async (req, res) => {
-  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  const tenant = await requireTenantById(req, res, req.params.tenantId, "kds");
   if (!tenant) return;
 
   try {
@@ -2176,13 +2207,13 @@ app.post("/api/admin/:tenantId/kitchen/config", requireAuth, async (req, res) =>
 });
 
 app.get("/api/admin/:tenantId/kitchen/config", requireAuth, async (req, res) => {
-  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  const tenant = await requireTenantById(req, res, req.params.tenantId, "kds");
   if (!tenant) return;
   res.json({ hasPassword: !!tenant.kitchenPasswordHash });
 });
 
 app.post("/api/admin/:tenantId/table/:tableId/clear", requireAuth, async (req, res) => {
-  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  const tenant = await requireTenantById(req, res, req.params.tenantId, "tables");
   if (!tenant) return;
 
   const { tableId } = req.params;
@@ -2227,7 +2258,7 @@ app.patch("/api/tenants/:id", requireAuth, async (req, res) => {
 
 app.post("/api/categories", requireAuth, async (req, res) => {
   const { name, tenantId } = req.body;
-  const tenant = await requireTenantById(req, res, tenantId);
+  const tenant = await requireTenantById(req, res, tenantId, "menu");
   if (!tenant) return;
 
   try {
@@ -2250,7 +2281,7 @@ app.post("/api/categories", requireAuth, async (req, res) => {
 // Precisa vir ANTES de "/api/categories/:id", senão o Express casa "reorder" como :id.
 app.patch("/api/categories/reorder", requireAuth, async (req, res) => {
   const { tenantId, orderedIds } = req.body as { tenantId: string; orderedIds: string[] };
-  const tenant = await requireTenantById(req, res, tenantId);
+  const tenant = await requireTenantById(req, res, tenantId, "menu");
   if (!tenant) return;
   if (!Array.isArray(orderedIds)) return res.status(400).json({ error: "orderedIds é obrigatório." });
 
@@ -2294,7 +2325,7 @@ app.delete("/api/categories/:id", requireAuth, async (req, res) => {
 
 app.post("/api/products", requireAuth, async (req, res) => {
   const { name, description, price, imageUrl, categoryId, tenantId, variants, inventoryItemId, pdvOnly, kitchenPrint, extras, scheduleRule, recipeId } = req.body;
-  const tenant = await requireTenantById(req, res, tenantId);
+  const tenant = await requireTenantById(req, res, tenantId, "menu");
   if (!tenant) return;
 
   try {
@@ -2357,7 +2388,7 @@ app.patch("/api/products/reorder", requireAuth, async (req, res) => {
     movedProductId?: string;
     targetCategoryId?: string;
   };
-  const tenant = await requireTenantById(req, res, tenantId);
+  const tenant = await requireTenantById(req, res, tenantId, "menu");
   if (!tenant) return;
   if (!Array.isArray(orderedIds)) return res.status(400).json({ error: "orderedIds é obrigatório." });
 
@@ -2512,7 +2543,7 @@ app.get("/api/tenants/:slug/orders", async (req, res) => {
 });
 
 app.get("/api/tenants/:slug/finance-summary", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "finance");
   if (!tenant) return;
 
   try {
@@ -2567,7 +2598,7 @@ app.get("/api/tenants/:slug/finance-summary", requireAuth, async (req, res) => {
 });
 
 app.get("/api/tenants/:slug/cash/current", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "finance");
   if (!tenant) return;
 
   try {
@@ -2601,7 +2632,7 @@ app.get("/api/tenants/:slug/cash/current", requireAuth, async (req, res) => {
 });
 
 app.post("/api/tenants/:slug/cash/open", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "finance");
   if (!tenant) return;
 
   try {
@@ -2632,7 +2663,7 @@ app.post("/api/tenants/:slug/cash/open", requireAuth, async (req, res) => {
 });
 
 app.post("/api/tenants/:slug/cash/close", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "finance");
   if (!tenant) return;
 
   try {
@@ -2676,7 +2707,7 @@ app.post("/api/tenants/:slug/cash/close", requireAuth, async (req, res) => {
 });
 
 app.get("/api/tenants/:slug/cash/history", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "finance");
   if (!tenant) return;
 
   try {
@@ -2704,7 +2735,7 @@ app.get("/api/tenants/:slug/cash/history", requireAuth, async (req, res) => {
 
 // Resumo financeiro por período (entradas automáticas via orders + movimentos manuais)
 app.get("/api/tenants/:slug/cash/summary", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "finance");
   if (!tenant) return;
 
   try {
@@ -2771,7 +2802,7 @@ app.get("/api/tenants/:slug/cash/summary", requireAuth, async (req, res) => {
 
 // ── Entradas e Saídas (financeiro geral) ─────────────────────────────────────
 app.get("/api/tenants/:slug/entries", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "entries");
   if (!tenant) return;
 
   try {
@@ -2795,7 +2826,7 @@ app.get("/api/tenants/:slug/entries", requireAuth, async (req, res) => {
 });
 
 app.post("/api/tenants/:slug/entries", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "entries");
   if (!tenant) return;
 
   try {
@@ -2825,7 +2856,7 @@ app.post("/api/tenants/:slug/entries", requireAuth, async (req, res) => {
 });
 
 app.patch("/api/tenants/:slug/entries/:id", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "entries");
   if (!tenant) return;
 
   try {
@@ -2853,7 +2884,7 @@ app.patch("/api/tenants/:slug/entries/:id", requireAuth, async (req, res) => {
 });
 
 app.delete("/api/tenants/:slug/entries/:id", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "entries");
   if (!tenant) return;
 
   try {
@@ -2969,7 +3000,7 @@ app.post("/api/tenants/:slug/public-customer/:phone/address", async (req, res) =
 });
 
 app.get("/api/tenants/:slug/inventory", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "inventory");
   if (!tenant) return;
 
   try {
@@ -2987,7 +3018,7 @@ app.get("/api/tenants/:slug/inventory", requireAuth, async (req, res) => {
 });
 
 app.post("/api/inventory/categories", requireAuth, async (req, res) => {
-  const tenant = await requireTenantById(req, res, req.body.tenantId);
+  const tenant = await requireTenantById(req, res, req.body.tenantId, "inventory");
   if (!tenant) return;
 
   try {
@@ -3006,7 +3037,7 @@ app.post("/api/inventory/categories", requireAuth, async (req, res) => {
 });
 
 app.get("/api/tenants/:slug/inventory/categories", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "inventory");
   if (!tenant) return;
 
   try {
@@ -3023,7 +3054,7 @@ app.get("/api/tenants/:slug/inventory/categories", requireAuth, async (req, res)
 });
 
 app.get("/api/tenants/:slug/inventory", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "inventory");
   if (!tenant) return;
 
   try {
@@ -3040,7 +3071,7 @@ app.get("/api/tenants/:slug/inventory", requireAuth, async (req, res) => {
 });
 
 app.post("/api/inventory/items", requireAuth, async (req, res) => {
-  const tenant = await requireTenantById(req, res, req.body.tenantId);
+  const tenant = await requireTenantById(req, res, req.body.tenantId, "inventory");
   if (!tenant) return;
 
   const {
@@ -3182,7 +3213,7 @@ app.delete("/api/inventory/items/:id", requireAuth, async (req, res) => {
 });
 
 app.get("/api/tenants/:slug/production/recipes", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "production");
   if (!tenant) return;
 
   try {
@@ -3213,7 +3244,7 @@ app.get("/api/tenants/:slug/production/recipes", requireAuth, async (req, res) =
 // ─────────────────────────────────────────────────────────────
 
 app.post("/api/tenants/:slug/cash/movement", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "finance");
   if (!tenant) return;
 
   try {
@@ -3245,7 +3276,7 @@ app.post("/api/tenants/:slug/cash/movement", requireAuth, async (req, res) => {
 });
 
 app.get("/api/tenants/:slug/cash/movements", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "finance");
   if (!tenant) return;
 
   try {
@@ -3271,7 +3302,7 @@ app.get("/api/tenants/:slug/cash/movements", requireAuth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 
 app.get("/api/tenants/:slug/customers", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "customers");
   if (!tenant) return;
 
   try {
@@ -3305,7 +3336,7 @@ app.get("/api/tenants/:slug/customers", requireAuth, async (req, res) => {
 });
 
 app.get("/api/tenants/:slug/customers/by-phone/:phone", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "customers");
   if (!tenant) return;
 
   try {
@@ -3320,7 +3351,7 @@ app.get("/api/tenants/:slug/customers/by-phone/:phone", requireAuth, async (req,
 });
 
 app.post("/api/tenants/:slug/customers", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "customers");
   if (!tenant) return;
 
   try {
@@ -3340,7 +3371,7 @@ app.post("/api/tenants/:slug/customers", requireAuth, async (req, res) => {
 });
 
 app.patch("/api/tenants/:slug/customers/:id", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "customers");
   if (!tenant) return;
 
   try {
@@ -3360,7 +3391,7 @@ app.patch("/api/tenants/:slug/customers/:id", requireAuth, async (req, res) => {
 });
 
 app.get("/api/tenants/:slug/customers/:id/orders", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "customers");
   if (!tenant) return;
 
   try {
@@ -3385,7 +3416,7 @@ app.get("/api/tenants/:slug/customers/:id/orders", requireAuth, async (req, res)
 // ─────────────────────────────────────────────────────────────
 
 app.get("/api/tenants/:slug/reports/summary", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "reports");
   if (!tenant) return;
 
   try {
@@ -3461,7 +3492,7 @@ app.get("/api/tenants/:slug/reports/summary", requireAuth, async (req, res) => {
 });
 
 app.get("/api/tenants/:slug/reports/daily", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "reports");
   if (!tenant) return;
 
   try {
@@ -3496,7 +3527,7 @@ app.get("/api/tenants/:slug/reports/daily", requireAuth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 
 app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "pos");
   if (!tenant) return;
 
   try {
@@ -3662,7 +3693,7 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 app.post("/api/tenants/:slug/stone/charge", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "pos");
   if (!tenant) return;
 
   let stoneCfg: { enabled: boolean; secretKey: string; stonecode: string } | null = null;
@@ -3807,7 +3838,7 @@ app.post("/api/tenants/:slug/stone/webhook", async (req, res) => {
 
 // Poll Stone charge status (fallback when webhook is not available)
 app.get("/api/tenants/:slug/stone/charge/:chargeId", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "pos");
   if (!tenant) return;
 
   let stoneCfg: { enabled: boolean; secretKey: string; stonecode: string } | null = null;
@@ -3884,6 +3915,8 @@ app.get("/api/tenants/:slug/promotions", async (req, res) => {
 });
 
 app.get("/api/admin/:tenantId/promotions", requireAuth, async (req, res) => {
+  const tenant = await requireTenantById(req, res, req.params.tenantId, "promotions");
+  if (!tenant) return;
   const { tenantId } = req.params;
   try {
     const promotions = await prisma.promotion.findMany({
@@ -3898,6 +3931,8 @@ app.get("/api/admin/:tenantId/promotions", requireAuth, async (req, res) => {
 });
 
 app.post("/api/admin/:tenantId/promotions", requireAuth, async (req, res) => {
+  const tenant = await requireTenantById(req, res, req.params.tenantId, "promotions");
+  if (!tenant) return;
   const { tenantId } = req.params;
   const { title, description, imageUrl, linkProductId, active, startsAt, endsAt, sortOrder } = req.body;
   try {
@@ -3922,6 +3957,11 @@ app.post("/api/admin/:tenantId/promotions", requireAuth, async (req, res) => {
 
 app.patch("/api/admin/promotions/:id", requireAuth, async (req, res) => {
   const { id } = req.params;
+  const existingPromo = await prisma.promotion.findUnique({ where: { id } });
+  if (!existingPromo) return res.status(404).json({ error: "Promoção não encontrada." });
+  const tenant = await requireTenantById(req, res, existingPromo.tenantId, "promotions");
+  if (!tenant) return;
+
   const { title, description, imageUrl, linkProductId, active, startsAt, endsAt, sortOrder } = req.body;
   try {
     const promo = await prisma.promotion.update({
@@ -3945,6 +3985,11 @@ app.patch("/api/admin/promotions/:id", requireAuth, async (req, res) => {
 
 app.delete("/api/admin/promotions/:id", requireAuth, async (req, res) => {
   const { id } = req.params;
+  const existingPromo = await prisma.promotion.findUnique({ where: { id } });
+  if (!existingPromo) return res.status(404).json({ error: "Promoção não encontrada." });
+  const tenant = await requireTenantById(req, res, existingPromo.tenantId, "promotions");
+  if (!tenant) return;
+
   try {
     await prisma.promotion.delete({ where: { id } });
     res.json({ success: true });
@@ -3983,9 +4028,9 @@ app.get("/api/tenants/:slug/bundles", async (req, res) => {
 // Admin: listar todos (incluindo indisponíveis)
 app.get("/api/admin/:slug/bundles", requireAuth, async (req, res) => {
   const { slug } = req.params;
+  const tenant = await requireTenantBySlug(req, res, slug, "menu");
+  if (!tenant) return;
   try {
-    const tenant = await (prisma as any).tenant.findUnique({ where: { slug } });
-    if (!tenant) return res.status(404).json({ error: "Tenant not found" });
     const rows = await (prisma as any).$queryRawUnsafe(
       `SELECT * FROM product_bundles WHERE tenant_id = ? ORDER BY sort_order ASC, created_at ASC`,
       tenant.id
@@ -4007,10 +4052,10 @@ app.get("/api/admin/:slug/bundles", requireAuth, async (req, res) => {
 // Admin: criar combo
 app.post("/api/admin/:slug/bundles", requireAuth, async (req, res) => {
   const { slug } = req.params;
+  const tenant = await requireTenantBySlug(req, res, slug, "menu");
+  if (!tenant) return;
   const { name, description, imageUrl, price, available, sortOrder, steps } = req.body;
   try {
-    const tenant = await (prisma as any).tenant.findUnique({ where: { slug } });
-    if (!tenant) return res.status(404).json({ error: "Tenant not found" });
     const id = require("crypto").randomBytes(12).toString("base64url");
     await (prisma as any).$executeRawUnsafe(
       `INSERT INTO product_bundles (id, tenant_id, name, description, image_url, price, available, sort_order, steps) VALUES (?,?,?,?,?,?,?,?,?)`,
@@ -4028,6 +4073,11 @@ app.post("/api/admin/:slug/bundles", requireAuth, async (req, res) => {
 // Admin: atualizar combo
 app.patch("/api/admin/bundles/:id", requireAuth, async (req, res) => {
   const { id } = req.params;
+  const existingRows = await (prisma as any).$queryRawUnsafe(`SELECT tenant_id FROM product_bundles WHERE id = ?`, id) as any[];
+  if (!existingRows[0]) return res.status(404).json({ error: "Combo não encontrado." });
+  const tenant = await requireTenantById(req, res, existingRows[0].tenant_id, "menu");
+  if (!tenant) return;
+
   const { name, description, imageUrl, price, available, sortOrder, steps } = req.body;
   try {
     await (prisma as any).$executeRawUnsafe(
@@ -4045,6 +4095,11 @@ app.patch("/api/admin/bundles/:id", requireAuth, async (req, res) => {
 // Admin: deletar combo
 app.delete("/api/admin/bundles/:id", requireAuth, async (req, res) => {
   const { id } = req.params;
+  const existingRows = await (prisma as any).$queryRawUnsafe(`SELECT tenant_id FROM product_bundles WHERE id = ?`, id) as any[];
+  if (!existingRows[0]) return res.status(404).json({ error: "Combo não encontrado." });
+  const tenant = await requireTenantById(req, res, existingRows[0].tenant_id, "menu");
+  if (!tenant) return;
+
   try {
     await (prisma as any).$executeRawUnsafe(`DELETE FROM product_bundles WHERE id=?`, id);
     res.json({ success: true });
@@ -4057,7 +4112,7 @@ app.delete("/api/admin/bundles/:id", requireAuth, async (req, res) => {
 
 // ── Mesas do estabelecimento (persistidas — usadas pelo PDV/garçom em qualquer dispositivo) ──
 app.get("/api/tenants/:slug/tables", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "tables");
   if (!tenant) return;
   try {
     const tables = await (prisma as any).restaurantTable.findMany({
@@ -4071,7 +4126,7 @@ app.get("/api/tenants/:slug/tables", requireAuth, async (req, res) => {
 });
 
 app.post("/api/tenants/:slug/tables", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "tables");
   if (!tenant) return;
   try {
     const label = String(req.body?.label ?? "").trim();
@@ -4088,7 +4143,7 @@ app.post("/api/tenants/:slug/tables", requireAuth, async (req, res) => {
 });
 
 app.delete("/api/tenants/:slug/tables/:id", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "tables");
   if (!tenant) return;
   try {
     const existing = await (prisma as any).restaurantTable.findFirst({ where: { id: req.params.id, tenantId: tenant.id } });
@@ -4101,7 +4156,7 @@ app.delete("/api/tenants/:slug/tables/:id", requireAuth, async (req, res) => {
 });
 
 app.get("/api/tenants/:slug/suppliers", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "suppliers");
   if (!tenant) return;
   try {
     const suppliers = await (prisma as any).supplier.findMany({
@@ -4119,7 +4174,7 @@ app.get("/api/tenants/:slug/suppliers", requireAuth, async (req, res) => {
 });
 
 app.post("/api/tenants/:slug/suppliers", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "suppliers");
   if (!tenant) return;
   try {
     const { inventoryItemIds = [], ...data } = req.body;
@@ -4141,7 +4196,7 @@ app.post("/api/tenants/:slug/suppliers", requireAuth, async (req, res) => {
 });
 
 app.put("/api/tenants/:slug/suppliers/:id", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "suppliers");
   if (!tenant) return;
   try {
     const existing = await (prisma as any).supplier.findFirst({ where: { id: req.params.id, tenantId: tenant.id } });
@@ -4166,7 +4221,7 @@ app.put("/api/tenants/:slug/suppliers/:id", requireAuth, async (req, res) => {
 });
 
 app.delete("/api/tenants/:slug/suppliers/:id", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "suppliers");
   if (!tenant) return;
   try {
     const existing = await (prisma as any).supplier.findFirst({ where: { id: req.params.id, tenantId: tenant.id } });
@@ -4181,7 +4236,7 @@ app.delete("/api/tenants/:slug/suppliers/:id", requireAuth, async (req, res) => 
 // ─── Supplier Catalog Items ───────────────────────────────────────────────────
 
 app.get("/api/tenants/:slug/suppliers/:supplierId/catalog", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "suppliers");
   if (!tenant) return;
   try {
     const supplier = await (prisma as any).supplier.findFirst({ where: { id: req.params.supplierId, tenantId: tenant.id } });
@@ -4197,7 +4252,7 @@ app.get("/api/tenants/:slug/suppliers/:supplierId/catalog", requireAuth, async (
 });
 
 app.post("/api/tenants/:slug/suppliers/:supplierId/catalog", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "suppliers");
   if (!tenant) return;
   try {
     const supplier = await (prisma as any).supplier.findFirst({ where: { id: req.params.supplierId, tenantId: tenant.id } });
@@ -4221,7 +4276,7 @@ app.post("/api/tenants/:slug/suppliers/:supplierId/catalog", requireAuth, async 
 });
 
 app.put("/api/tenants/:slug/suppliers/:supplierId/catalog/:itemId", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "suppliers");
   if (!tenant) return;
   try {
     const supplier = await (prisma as any).supplier.findFirst({ where: { id: req.params.supplierId, tenantId: tenant.id } });
@@ -4244,7 +4299,7 @@ app.put("/api/tenants/:slug/suppliers/:supplierId/catalog/:itemId", requireAuth,
 });
 
 app.delete("/api/tenants/:slug/suppliers/:supplierId/catalog/:itemId", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug);
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "suppliers");
   if (!tenant) return;
   try {
     await (prisma as any).supplierCatalogItem.delete({ where: { id: req.params.itemId } });
@@ -4303,7 +4358,7 @@ if (process.env.NODE_ENV !== "production") {
 
 // POST /api/owner/tenants/:tenantId/nfce/emit — emite NFC-e para um pedido
 app.post("/api/owner/tenants/:tenantId/nfce/emit", requireAuth, async (req, res) => {
-  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  const tenant = await requireTenantById(req, res, req.params.tenantId, "finance");
   if (!tenant) return;
 
   const { orderId } = req.body as { orderId: string };
@@ -4379,7 +4434,7 @@ app.post("/api/owner/tenants/:tenantId/nfce/emit", requireAuth, async (req, res)
 
 // POST /api/owner/tenants/:tenantId/nfce/cancel — cancela NFC-e
 app.post("/api/owner/tenants/:tenantId/nfce/cancel", requireAuth, async (req, res) => {
-  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  const tenant = await requireTenantById(req, res, req.params.tenantId, "finance");
   if (!tenant) return;
 
   const { orderId, justificativa } = req.body as { orderId: string; justificativa: string };
@@ -4413,7 +4468,7 @@ app.post("/api/owner/tenants/:tenantId/nfce/cancel", requireAuth, async (req, re
 
 // GET /api/owner/tenants/:tenantId/nfce/status/:orderId — status da NFC-e de um pedido
 app.get("/api/owner/tenants/:tenantId/nfce/status/:orderId", requireAuth, async (req, res) => {
-  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  const tenant = await requireTenantById(req, res, req.params.tenantId, "finance");
   if (!tenant) return;
 
   const order = await prisma.order.findFirst({
@@ -4429,14 +4484,10 @@ app.patch("/api/owner/products/:productId/fiscal", requireAuth, async (req, res)
   const { productId } = req.params;
   const { ncm, cfop, csosn, unitCom, origem, aliqIcms } = req.body;
   try {
-    // Verifica se o produto pertence a tenant do usuário
-    const authReq = req as AuthenticatedRequest;
     const product = await prisma.product.findUnique({ where: { id: productId }, select: { tenantId: true } });
     if (!product) return res.status(404).json({ error: "Produto não encontrado." });
-    const membership = await prisma.tenantMembership.findFirst({
-      where: { tenantId: product.tenantId, accountId: authReq.account.id },
-    });
-    if (!membership) return res.status(403).json({ error: "Sem permissão." });
+    const tenant = await requireTenantById(req, res, product.tenantId, "menu");
+    if (!tenant) return;
 
     const updated = await prisma.product.update({
       where: { id: productId },

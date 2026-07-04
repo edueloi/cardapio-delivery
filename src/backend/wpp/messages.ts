@@ -150,3 +150,44 @@ export async function sendOrderStatusMessage(order: {
 
   await sendMessage(order.tenantId, order.customerPhone, text);
 }
+
+// ─── Customer: loyalty points earned ──────────────────────────────────────────
+
+export async function sendLoyaltyPointsMessage(
+  order: {
+    tenantId: string;
+    customerPhone: string;
+    customerName: string;
+    items: Array<{ quantity: number; price: number; product?: { name?: string | null } | null }>;
+  },
+  tenant: { name: string; slug: string; loyaltyConfig?: string | null },
+  pointsEarned: number,
+  newBalance: number
+) {
+  const { allowed } = await canSend(order.tenantId, "sendStatusUpdates");
+  if (!allowed) return;
+
+  let minPointsToRedeem = 0;
+  try {
+    minPointsToRedeem = Number(JSON.parse(tenant.loyaltyConfig || "{}")?.minPointsToRedeem) || 0;
+  } catch {}
+
+  const baseUrl = (process.env.APP_URL || "http://localhost:3000").replace(/\/$/, "");
+  const earnedLines = order.items
+    .map((item) => `${item.quantity} x ${item.product?.name || "Item"} = ${pointsEarned} pontos`)
+    .join("\n");
+
+  const missing = minPointsToRedeem - newBalance;
+  const redeemLine = missing > 0
+    ? `\n*Faltam ${missing} pontos* para seu próximo resgate.\n`
+    : `\nVocê já pode resgatar seus pontos! 🎁\n`;
+
+  const text =
+    `🎊 Parabéns, ${order.customerName}, você ganhou *${pointsEarned} pontos* no *Programa de Fidelidade* ⭐\n\n` +
+    `Acúmulo ref. ao seu pedido:\n${earnedLines}\n\n` +
+    `⭐ Seu saldo atual é de *${newBalance} pontos*\n` +
+    redeemLine + `\n` +
+    `Veja mais em:\n${baseUrl}/${tenant.slug}`;
+
+  await sendMessage(order.tenantId, order.customerPhone, text);
+}
