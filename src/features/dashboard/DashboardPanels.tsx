@@ -371,6 +371,21 @@ const PERM_TABS = [
 
 const PERM_GROUPS = ["Operação", "Catálogo", "Financeiro", "Marketing", "Administração"];
 
+// ─── Presets de cargo — atalhos que já marcam o pacote de permissões certo ────
+const ROLE_PRESETS = [
+  { id: "waiter",    label: "Garçom",       tabs: ["waiter", "tables"] },
+  { id: "cashier",   label: "Caixa / PDV",  tabs: ["pos", "tables", "live-orders", "history"] },
+  { id: "kitchen",   label: "Cozinha",      tabs: ["kds", "live-orders"] },
+  { id: "custom",    label: "Personalizado", tabs: null },
+] as const;
+
+function matchRolePreset(permissions: string[] | null): string {
+  if (permissions === null) return "custom";
+  const sorted = [...permissions].sort().join(",");
+  const found = ROLE_PRESETS.find(p => p.tabs && [...p.tabs].sort().join(",") === sorted);
+  return found?.id ?? "custom";
+}
+
 interface StaffMember {
   id: string;
   role: "OWNER" | "ADMIN" | "STAFF";
@@ -467,12 +482,20 @@ export function StaffList({ tenant }: { tenant: Tenant | null }) {
   const [inviteRole, setInviteRole] = useState<"ADMIN" | "STAFF">("STAFF");
   const [inviteName, setInviteName] = useState("");
   const [invitePerms, setInvitePerms] = useState<string[] | null>(null);
+  const [invitePreset, setInvitePreset] = useState<string>("custom");
   const [inviteError, setInviteError] = useState("");
 
   // Edit form
   const [editRole, setEditRole] = useState<"ADMIN" | "STAFF">("STAFF");
   const [editName, setEditName] = useState("");
   const [editPerms, setEditPerms] = useState<string[] | null>(null);
+  const [editPreset, setEditPreset] = useState<string>("custom");
+
+  const applyPreset = (presetId: string, setPerms: (p: string[] | null) => void, setPreset: (p: string) => void) => {
+    setPreset(presetId);
+    const preset = ROLE_PRESETS.find(p => p.id === presetId);
+    if (preset?.tabs) setPerms([...preset.tabs]);
+  };
 
   const fetchMembers = async () => {
     if (!tenant) return;
@@ -503,7 +526,7 @@ export function StaffList({ tenant }: { tenant: Tenant | null }) {
         setMembers(prev => [...prev, data as StaffMember]);
       }
       setInviteModal(false);
-      setInviteEmail(""); setInviteName(""); setInviteRole("STAFF"); setInvitePerms(null);
+      setInviteEmail(""); setInviteName(""); setInviteRole("STAFF"); setInvitePerms(null); setInvitePreset("custom");
     } catch (err: any) {
       setInviteError(err.message || "Erro ao adicionar membro.");
     } finally { setSaving(false); }
@@ -546,6 +569,7 @@ export function StaffList({ tenant }: { tenant: Tenant | null }) {
     setEditRole(m.role as "ADMIN" | "STAFF");
     setEditName(m.name || "");
     setEditPerms(m.permissions);
+    setEditPreset(matchRolePreset(m.permissions));
   };
 
   const roleColor = (role: string) => role === "OWNER" ? "bg-[#0D1B3E] text-white" : role === "ADMIN" ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600";
@@ -663,9 +687,23 @@ export function StaffList({ tenant }: { tenant: Tenant | null }) {
             </div>
             <p className="text-[9px] text-slate-400 mt-2 ml-1">{inviteRole === "ADMIN" ? "Admin pode fazer tudo que o proprietário definir, exceto configurações e equipe." : "Staff tem acesso limitado às telas selecionadas."}</p>
           </div>
+          {inviteRole === "STAFF" && (
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Cargo (atalho de permissões)</p>
+              <div className="grid grid-cols-2 gap-2">
+                {ROLE_PRESETS.map(p => (
+                  <button key={p.id} type="button" onClick={() => applyPreset(p.id, setInvitePerms, setInvitePreset)}
+                    className={`py-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${invitePreset === p.id ? "bg-[#C9A227] border-[#C9A227] text-white" : "bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300"}`}>
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[9px] text-slate-400 mt-2 ml-1">Escolha um cargo para marcar automaticamente as telas certas, ou ajuste manualmente abaixo.</p>
+            </div>
+          )}
           <div>
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Permissões de acesso</p>
-            <PermissionsEditor permissions={invitePerms} onChange={setInvitePerms} />
+            <PermissionsEditor permissions={invitePerms} onChange={(next) => { setInvitePerms(next); setInvitePreset(matchRolePreset(next)); }} />
           </div>
         </div>
       </Modal>
@@ -697,9 +735,23 @@ export function StaffList({ tenant }: { tenant: Tenant | null }) {
               ))}
             </div>
           </div>
+          {editRole === "STAFF" && (
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Cargo (atalho de permissões)</p>
+              <div className="grid grid-cols-2 gap-2">
+                {ROLE_PRESETS.map(p => (
+                  <button key={p.id} type="button" onClick={() => applyPreset(p.id, setEditPerms, setEditPreset)}
+                    className={`py-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${editPreset === p.id ? "bg-[#C9A227] border-[#C9A227] text-white" : "bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300"}`}>
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[9px] text-slate-400 mt-2 ml-1">Escolha um cargo para marcar automaticamente as telas certas, ou ajuste manualmente abaixo.</p>
+            </div>
+          )}
           <div>
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Permissões de acesso</p>
-            <PermissionsEditor permissions={editPerms} onChange={setEditPerms} />
+            <PermissionsEditor permissions={editPerms} onChange={(next) => { setEditPerms(next); setEditPreset(matchRolePreset(next)); }} />
           </div>
         </div>
       </Modal>
