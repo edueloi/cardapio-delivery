@@ -27,7 +27,7 @@ model Tenant {
   stoneConfig    String? @map("stone_config") @db.Text // JSON: StoneConfig
   fiscalConfig   String? @map("fiscal_config") @db.LongText // JSON: FiscalConfig (CNPJ, IE, CSC, cert A1, série, ambiente)
   loyaltyConfig  String? @map("loyalty_config") @db.Text // JSON: LoyaltyConfig (pontos por real, mínimo pra resgate, etc)
-  ifoodConfig    String? @map("ifood_config") @db.Text // JSON: IfoodConfig (clientId, clientSecret, merchantId, status, autoAccept, etc)
+  ifoodConfig    String? @map("ifood_config") @db.Text // JSON: IfoodConfig (merchantId, accessToken, refreshToken, tokenExpiresAt, status, autoAccept — client_id/secret são globais, em SystemConfig)
   displayPanelConfig String? @map("display_panel_config") @db.Text // JSON: DisplayPanelConfig (quais tipos de pedido aparecem no Painel TV)
   kitchenPasswordHash String? @map("kitchen_password_hash") // senha simples do painel de cozinha (/cozinha/:slug), sem conta de usuário
   createdAt   DateTime @default(now()) @map("created_at")
@@ -54,6 +54,16 @@ model Tenant {
   kitchenSessions  KitchenSession[]
 
   @@map("tenants")
+}
+
+// Configuração global do sistema (não por tenant) — ex: credenciais de desenvolvedor
+// da integração iFood (client_id/secret da aplicação BoxSys, editável só por Super Admin).
+model SystemConfig {
+  key       String   @id
+  value     String?  @db.Text
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_config")
 }
 
 model Account {

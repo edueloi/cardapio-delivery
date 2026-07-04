@@ -21,7 +21,6 @@ import {
   Utensils,
   Wallet,
   ArrowLeftRight,
-  Bike,
 } from "lucide-react";
 import type { DashboardNavigationGroup } from "../types";
 
@@ -70,13 +69,8 @@ export const DASHBOARD_NAVIGATION: DashboardNavigationGroup[] = [
       { id: "whatsapp",   label: "WhatsApp",          tab: "whatsapp",     icon: MessageSquare },
     ],
   },
-  {
-    id: "integracoes",
-    label: "Integrações",
-    items: [
-      { id: "ifood", label: "iFood", tab: "ifood", icon: Bike, ownerOnly: true },
-    ],
-  },
+  // Integração iFood (grupo "Integrações") escondida do menu até termos client_id de
+  // desenvolvedor aprovado pelo iFood — código e rotas seguem prontos, só sem entrada visível.
   {
     id: "administracao",
     label: "Administração",

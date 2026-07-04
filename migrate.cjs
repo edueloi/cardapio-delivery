@@ -752,6 +752,18 @@ const migrations = [
       CONSTRAINT kitchen_sessions_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE ON UPDATE CASCADE
     ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
   },
+  // Configuração global do sistema (chave/valor) — usada pelas credenciais de desenvolvedor
+  // da integração iFood (client_id/secret da aplicação BoxSys), editável só por Super Admin.
+  {
+    name: 'create_system_config_table',
+    check: "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'system_config'",
+    run: `CREATE TABLE system_config (
+      \`key\` VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      value TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
+      updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`key\`)
+    ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+  },
 ];
 
 async function run() {
