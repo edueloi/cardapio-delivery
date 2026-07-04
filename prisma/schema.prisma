@@ -52,6 +52,7 @@ model Tenant {
   condominiums CondominiumTenant[]
   financialEntries FinancialEntry[]
   kitchenSessions  KitchenSession[]
+  inviteTokens     InviteToken[]
 
   @@map("tenants")
 }
@@ -174,7 +175,16 @@ model InviteToken {
   createdAt   DateTime @default(now()) @map("created_at")
   note        String?  // observação opcional (ex: "Para João da pizzaria X")
 
+  // Preenchidos apenas em convites de equipe (dono convidando alguém para um tenant já existente).
+  // Quando tenantId é null, é um convite genérico de super admin (cria conta, sem loja vinculada).
+  tenantId    String?  @map("tenant_id")
+  targetEmail String?  @map("target_email") // e-mail para o qual o convite de equipe foi enviado
+  role        String?  // ADMIN | STAFF — cargo a ser aplicado na TenantMembership criada na aceitação
+  permissions String?  @db.Text // JSON: string[] tab ids, ou null = acesso total
+  memberName  String?  @map("member_name") // apelido a ser gravado na TenantMembership (ex: "João — Caixa")
+
   createdBy Account @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("invite_tokens")
 }

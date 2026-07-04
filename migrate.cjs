@@ -764,6 +764,37 @@ const migrations = [
       PRIMARY KEY (\`key\`)
     ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
   },
+  // ── Convite de equipe por e-mail (dono convida garçom/staff sem exigir cadastro prévio) ──
+  {
+    name: 'add_invite_tokens_tenant_id',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'invite_tokens' AND COLUMN_NAME = 'tenant_id'",
+    run: "ALTER TABLE invite_tokens ADD COLUMN tenant_id VARCHAR(191) NULL",
+  },
+  {
+    name: 'add_invite_tokens_tenant_id_fkey',
+    check: "SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'invite_tokens' AND CONSTRAINT_NAME = 'invite_tokens_tenant_id_fkey'",
+    run: "ALTER TABLE invite_tokens ADD CONSTRAINT invite_tokens_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE ON UPDATE CASCADE",
+  },
+  {
+    name: 'add_invite_tokens_role',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'invite_tokens' AND COLUMN_NAME = 'role'",
+    run: "ALTER TABLE invite_tokens ADD COLUMN role VARCHAR(191) NULL",
+  },
+  {
+    name: 'add_invite_tokens_permissions',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'invite_tokens' AND COLUMN_NAME = 'permissions'",
+    run: "ALTER TABLE invite_tokens ADD COLUMN permissions TEXT NULL",
+  },
+  {
+    name: 'add_invite_tokens_member_name',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'invite_tokens' AND COLUMN_NAME = 'member_name'",
+    run: "ALTER TABLE invite_tokens ADD COLUMN member_name VARCHAR(191) NULL",
+  },
+  {
+    name: 'add_invite_tokens_target_email',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'invite_tokens' AND COLUMN_NAME = 'target_email'",
+    run: "ALTER TABLE invite_tokens ADD COLUMN target_email VARCHAR(191) NULL",
+  },
 ];
 
 async function run() {

@@ -60,17 +60,20 @@ function baseLayout(content: string) {
 
 // ─── Email: convite de cadastro ───────────────────────────────────────────────
 
-export async function sendInviteEmail(to: string, inviteToken: string, note?: string | null) {
+export async function sendInviteEmail(to: string, inviteToken: string, note?: string | null, tenantName?: string | null) {
   const link = `${APP_URL}/cadastro/${inviteToken}`;
+  const isTeamInvite = !!tenantName;
   const html = baseLayout(`
     <h2 style="margin:0 0 8px;font-size:22px;font-weight:900;color:#0D1B3E;">Você foi convidado!</h2>
     <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.6;">
-      Você recebeu um convite para criar sua conta no <strong>BoxSys</strong> e começar a gerenciar seu estabelecimento.
+      ${isTeamInvite
+        ? `Você foi convidado para fazer parte da equipe de <strong>${tenantName}</strong> no <strong>BoxSys</strong>.`
+        : `Você recebeu um convite para criar sua conta no <strong>BoxSys</strong> e começar a gerenciar seu estabelecimento.`}
     </p>
     ${note ? `<div style="background:#f1f5f9;border-radius:12px;padding:16px 20px;margin-bottom:24px;">
       <p style="margin:0;font-size:13px;color:#64748b;">${note}</p>
     </div>` : ""}
-    <p style="margin:0 0 12px;font-size:14px;color:#64748b;">Clique no botão abaixo para criar sua conta:</p>
+    <p style="margin:0 0 12px;font-size:14px;color:#64748b;">Clique no botão abaixo para criar sua conta e senha de acesso:</p>
     <div style="text-align:center;margin:28px 0;">
       <a href="${link}" style="display:inline-block;background:#C9A227;color:#ffffff;font-size:15px;font-weight:900;text-decoration:none;padding:14px 36px;border-radius:12px;letter-spacing:0.5px;">
         Criar minha conta
@@ -87,7 +90,7 @@ export async function sendInviteEmail(to: string, inviteToken: string, note?: st
   await transporter.sendMail({
     from: MAIL_FROM,
     to,
-    subject: "Seu convite para o BoxSys chegou!",
+    subject: isTeamInvite ? `Convite para a equipe de ${tenantName} — BoxSys` : "Seu convite para o BoxSys chegou!",
     html,
   });
 }

@@ -468,11 +468,18 @@ app.get("/api/auth/invite/:token", async (req, res) => {
   try {
     const invite = await prisma.inviteToken.findUnique({
       where: { token: req.params.token },
+      include: { tenant: { select: { name: true } } },
     });
     if (!invite) return res.status(404).json({ error: "Convite não encontrado." });
     if (invite.usedAt) return res.status(410).json({ error: "Este convite já foi utilizado." });
     if (new Date() > new Date(invite.expiresAt)) return res.status(410).json({ error: "Este convite expirou." });
-    res.json({ valid: true, note: invite.note });
+    res.json({
+      valid: true,
+      note: invite.note,
+      isTeamInvite: !!(invite as any).tenantId,
+      tenantName: (invite as any).tenant?.name ?? null,
+      targetEmail: (invite as any).targetEmail ?? null,
+    });
   } catch (error) {
     res.status(500).json({ error: "Falha ao validar convite." });
   }
@@ -494,8 +501,13 @@ app.post("/api/auth/register-invite", async (req, res) => {
     const existing = await prisma.account.findUnique({ where: { email: normalizedEmail } });
     if (existing) return res.status(400).json({ error: "E-mail já cadastrado." });
 
+    const isTeamInvite = !!(invite as any).tenantId;
+    if (isTeamInvite && (invite as any).targetEmail && (invite as any).targetEmail !== normalizedEmail) {
+      return res.status(400).json({ error: "Este convite foi enviado para outro e-mail." });
+    }
+
     let tenantData: { name: string; slug: string } | null = null;
-    if (establishmentName) {
+    if (!isTeamInvite && establishmentName) {
       const slug = sanitizeSlug(establishmentSlug || establishmentName);
       if (!slug) return res.status(400).json({ error: "Slug inválido." });
       const existingTenant = await prisma.tenant.findUnique({ where: { slug } });
@@ -508,7 +520,17 @@ app.post("/api/auth/register-invite", async (req, res) => {
         data: { name: String(name).trim(), email: normalizedEmail, passwordHash: hashPassword(String(password)) },
       });
       let tenant = null;
-      if (tenantData) {
+      if (isTeamInvite) {
+        await tx.tenantMembership.create({
+          data: {
+            accountId: account.id,
+            tenantId: (invite as any).tenantId,
+            role: (invite as any).role || "STAFF",
+            name: (invite as any).memberName || null,
+            permissions: (invite as any).permissions ?? null,
+          },
+        });
+      } else if (tenantData) {
         tenant = await tx.tenant.create({ data: tenantData });
         await tx.tenantMembership.create({
           data: { accountId: account.id, tenantId: tenant.id, role: "OWNER" },
@@ -1197,20 +1219,53 @@ app.get("/api/owner/tenants/:tenantId/staff", requireAuth, async (req, res) => {
   const myMembership = await prisma.tenantMembership.findFirst({ where: { accountId: account.id, tenantId: tenant.id } });
   if (!myMembership || myMembership.role !== "OWNER") return res.status(403).json({ error: "Apenas o proprietário pode gerenciar a equipe." });
 
-  const members = await prisma.tenantMembership.findMany({
-    where: { tenantId: tenant.id },
-    include: { account: { select: { id: true, email: true, name: true } } },
-    orderBy: { createdAt: "asc" },
-  });
+  const [members, pendingInvites] = await Promise.all([
+    prisma.tenantMembership.findMany({
+      where: { tenantId: tenant.id },
+      include: { account: { select: { id: true, email: true, name: true } } },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.inviteToken.findMany({
+      where: { tenantId: tenant.id, usedAt: null, expiresAt: { gt: new Date() } },
+      orderBy: { createdAt: "asc" },
+    }),
+  ]);
 
-  res.json(members.map((m: any) => ({
-    id: m.id,
-    role: m.role,
-    name: m.name ?? null,
-    permissions: m.permissions ? JSON.parse(m.permissions) : null,
-    createdAt: m.createdAt,
-    account: m.account,
-  })));
+  res.json({
+    members: members.map((m: any) => ({
+      id: m.id,
+      role: m.role,
+      name: m.name ?? null,
+      permissions: m.permissions ? JSON.parse(m.permissions) : null,
+      createdAt: m.createdAt,
+      account: m.account,
+    })),
+    pendingInvites: pendingInvites.map((i: any) => ({
+      id: i.id,
+      email: i.targetEmail,
+      role: i.role,
+      name: i.memberName ?? null,
+      permissions: i.permissions ? JSON.parse(i.permissions) : null,
+      createdAt: i.createdAt,
+      expiresAt: i.expiresAt,
+    })),
+  });
+});
+
+// Cancela um convite de equipe pendente
+app.delete("/api/owner/tenants/:tenantId/staff/invite/:inviteId", requireAuth, async (req, res) => {
+  const tenant = await requireTenantById(req, res, req.params.tenantId);
+  if (!tenant) return;
+
+  const account = currentAccount(req)!;
+  const myMembership = await prisma.tenantMembership.findFirst({ where: { accountId: account.id, tenantId: tenant.id } });
+  if (!myMembership || myMembership.role !== "OWNER") return res.status(403).json({ error: "Apenas o proprietário pode cancelar convites." });
+
+  const invite = await prisma.inviteToken.findFirst({ where: { id: req.params.inviteId, tenantId: tenant.id } });
+  if (!invite) return res.status(404).json({ error: "Convite não encontrado." });
+
+  await prisma.inviteToken.delete({ where: { id: invite.id } });
+  res.json({ ok: true });
 });
 
 // Invite a new staff member by email
@@ -1226,9 +1281,50 @@ app.post("/api/owner/tenants/:tenantId/staff/invite", requireAuth, async (req, r
   if (!email || !role) return res.status(400).json({ error: "email e role são obrigatórios." });
   if (!["ADMIN", "STAFF"].includes(role)) return res.status(400).json({ error: "role deve ser ADMIN ou STAFF." });
 
+  const normalizedEmail = normalizeEmail(email);
+
   // Find the account by email
-  const targetAccount = await prisma.account.findUnique({ where: { email: email.trim().toLowerCase() } });
-  if (!targetAccount) return res.status(404).json({ error: "Nenhuma conta encontrada com este e-mail. O usuário precisa se registrar primeiro." });
+  const targetAccount = await prisma.account.findUnique({ where: { email: normalizedEmail } });
+
+  if (!targetAccount) {
+    // Sem conta ainda: cria um convite por e-mail em vez de exigir cadastro prévio.
+    // A membership só é criada quando o convidado aceita (ver /api/auth/register-invite).
+    const existingInvite = await prisma.inviteToken.findFirst({
+      where: { tenantId: tenant.id, targetEmail: normalizedEmail, usedAt: null },
+    });
+    if (existingInvite && new Date(existingInvite.expiresAt) > new Date()) {
+      return res.status(409).json({ error: "Já existe um convite pendente para este e-mail." });
+    }
+
+    const token = [...Array(32)].map(() => Math.random().toString(36)[2]).join("");
+    const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+    const invite = await prisma.inviteToken.create({
+      data: {
+        token,
+        createdById: account.id,
+        expiresAt,
+        tenantId: tenant.id,
+        targetEmail: normalizedEmail,
+        role,
+        memberName: name || null,
+        permissions: permissions ? JSON.stringify(permissions) : null,
+      },
+    });
+
+    sendInviteEmail(normalizedEmail, token, null, tenant.name).catch((err) => {
+      console.error("[mailer] staff invite:", err);
+    });
+
+    return res.status(202).json({
+      pending: true,
+      inviteId: invite.id,
+      email: normalizedEmail,
+      role,
+      name: name || null,
+      permissions: permissions ?? null,
+      message: "Convite enviado por e-mail. O acesso será liberado assim que a pessoa criar a conta.",
+    });
+  }
 
   // Check if already a member
   const existing = await prisma.tenantMembership.findFirst({ where: { accountId: targetAccount.id, tenantId: tenant.id } });

@@ -380,6 +380,16 @@ interface StaffMember {
   account: { id: string; email: string; name: string };
 }
 
+interface PendingInvite {
+  id: string;
+  email: string;
+  role: "ADMIN" | "STAFF";
+  name: string | null;
+  permissions: string[] | null;
+  createdAt: string;
+  expiresAt: string;
+}
+
 function PermissionsEditor({
   permissions,
   onChange,
@@ -443,11 +453,14 @@ function PermissionsEditor({
 
 export function StaffList({ tenant }: { tenant: Tenant | null }) {
   const [members, setMembers] = useState<StaffMember[]>([]);
+  const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
   const [loading, setLoading] = useState(true);
   const [inviteModal, setInviteModal] = useState(false);
   const [editingMember, setEditingMember] = useState<StaffMember | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<StaffMember | null>(null);
+  const [cancelInviteConfirm, setCancelInviteConfirm] = useState<PendingInvite | null>(null);
   const [saving, setSaving] = useState(false);
+  const [inviteSentMessage, setInviteSentMessage] = useState("");
 
   // Invite form
   const [inviteEmail, setInviteEmail] = useState("");
@@ -465,8 +478,9 @@ export function StaffList({ tenant }: { tenant: Tenant | null }) {
     if (!tenant) return;
     setLoading(true);
     try {
-      const data = await apiJson(`/api/owner/tenants/${tenant.id}/staff`) as StaffMember[];
-      setMembers(data);
+      const data = await apiJson(`/api/owner/tenants/${tenant.id}/staff`) as { members: StaffMember[]; pendingInvites: PendingInvite[] };
+      setMembers(data.members);
+      setPendingInvites(data.pendingInvites);
     } catch { /* ignore */ }
     finally { setLoading(false); }
   };
@@ -481,13 +495,27 @@ export function StaffList({ tenant }: { tenant: Tenant | null }) {
       const data = await apiJson(`/api/owner/tenants/${tenant.id}/staff/invite`, {
         method: "POST",
         body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole, name: inviteName || null, permissions: invitePerms }),
-      }) as StaffMember;
-      setMembers(prev => [...prev, data]);
+      }) as StaffMember & { pending?: boolean; message?: string };
+      if (data.pending) {
+        setInviteSentMessage(data.message || "Convite enviado por e-mail.");
+        await fetchMembers();
+      } else {
+        setMembers(prev => [...prev, data as StaffMember]);
+      }
       setInviteModal(false);
       setInviteEmail(""); setInviteName(""); setInviteRole("STAFF"); setInvitePerms(null);
     } catch (err: any) {
       setInviteError(err.message || "Erro ao adicionar membro.");
     } finally { setSaving(false); }
+  };
+
+  const handleCancelInvite = async () => {
+    if (!tenant || !cancelInviteConfirm) return;
+    try {
+      await apiJson(`/api/owner/tenants/${tenant.id}/staff/invite/${cancelInviteConfirm.id}`, { method: "DELETE" });
+      setPendingInvites(prev => prev.filter(i => i.id !== cancelInviteConfirm.id));
+    } catch { /* ignore */ }
+    finally { setCancelInviteConfirm(null); }
   };
 
   const handleUpdate = async () => {
@@ -528,17 +556,23 @@ export function StaffList({ tenant }: { tenant: Tenant | null }) {
     <PageWrapper>
       <div className="flex items-center justify-between mb-6">
         <SectionTitle title="Equipe" description="Gerencie membros e defina o que cada um pode acessar" icon={ClipboardList} />
-        <Button variant="primary" onClick={() => setInviteModal(true)} iconLeft={<Plus className="w-4 h-4" />}>
+        <Button variant="primary" onClick={() => { setInviteSentMessage(""); setInviteModal(true); }} iconLeft={<Plus className="w-4 h-4" />}>
           Adicionar membro
         </Button>
       </div>
+
+      {inviteSentMessage && (
+        <div className="bg-green-50 border border-green-200 text-green-700 rounded-2xl px-4 py-3 text-xs font-bold flex items-center gap-2 mb-4">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />{inviteSentMessage}
+        </div>
+      )}
 
       <ContentCard padding="none" className="overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center p-16">
             <div className="w-8 h-8 border-4 border-[#C9A227] border-t-transparent rounded-full animate-spin" />
           </div>
-        ) : members.length === 0 ? (
+        ) : members.length === 0 && pendingInvites.length === 0 ? (
           <EmptyState
             title="Nenhum membro ainda"
             description="Adicione colaboradores e defina exatamente o que cada um pode ver e fazer."
@@ -569,6 +603,26 @@ export function StaffList({ tenant }: { tenant: Tenant | null }) {
                     </button>
                   </div>
                 )}
+              </div>
+            ))}
+            {pendingInvites.map(i => (
+              <div key={i.id} className="flex items-center gap-4 p-5 hover:bg-slate-50/60 transition-colors bg-amber-50/30">
+                <div className="w-11 h-11 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center font-black text-sm shrink-0">
+                  {(i.name || i.email || "?")[0].toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-black text-slate-800 text-sm truncate">{i.name || i.email}</p>
+                  <p className="text-[10px] text-amber-600 truncate font-bold">Convite pendente — {i.email}</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${roleColor(i.role)}`}>{roleLabel(i.role)}</span>
+                  <span className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-slate-100 text-slate-500">{permLabel(i.permissions)}</span>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button onClick={() => setCancelInviteConfirm(i)} className="p-2 rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -658,6 +712,17 @@ export function StaffList({ tenant }: { tenant: Tenant | null }) {
         title="Remover membro"
         message={<>Tem certeza que deseja remover <strong>{deleteConfirm?.name || deleteConfirm?.account.name}</strong> da equipe?</>}
         confirmLabel="Remover"
+        variant="danger"
+      />
+
+      {/* Cancel Invite Confirm */}
+      <ConfirmModal
+        isOpen={!!cancelInviteConfirm}
+        onClose={() => setCancelInviteConfirm(null)}
+        onConfirm={handleCancelInvite}
+        title="Cancelar convite"
+        message={<>Tem certeza que deseja cancelar o convite para <strong>{cancelInviteConfirm?.name || cancelInviteConfirm?.email}</strong>?</>}
+        confirmLabel="Cancelar convite"
         variant="danger"
       />
     </PageWrapper>

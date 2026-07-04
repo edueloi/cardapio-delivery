@@ -25,6 +25,8 @@ export default function InviteRegisterPage() {
 
   const [inviteStatus, setInviteStatus] = useState<InviteStatus>("loading");
   const [inviteNote, setInviteNote] = useState<string | null>(null);
+  const [isTeamInvite, setIsTeamInvite] = useState(false);
+  const [inviteTenantName, setInviteTenantName] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     name: "",
@@ -51,6 +53,11 @@ export default function InviteRegisterPage() {
         return r.json().then((d: any) => {
           setInviteStatus("valid");
           setInviteNote(d.note || null);
+          setIsTeamInvite(!!d.isTeamInvite);
+          setInviteTenantName(d.tenantName || null);
+          if (d.targetEmail) {
+            setForm(f => ({ ...f, email: d.targetEmail }));
+          }
         });
       })
       .catch(() => setInviteStatus("invalid"));
@@ -162,9 +169,15 @@ export default function InviteRegisterPage() {
         <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 mb-6 flex items-start gap-3">
           <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
           <div>
-            <p className="text-xs font-black text-amber-800">Convite válido</p>
+            <p className="text-xs font-black text-amber-800">
+              {isTeamInvite ? `Convite para a equipe de ${inviteTenantName || "um estabelecimento"}` : "Convite válido"}
+            </p>
             {inviteNote && <p className="text-xs text-amber-700 mt-0.5">{inviteNote}</p>}
-            <p className="text-[10px] text-amber-600 mt-0.5">Este link é de uso único e expirará após o cadastro.</p>
+            <p className="text-[10px] text-amber-600 mt-0.5">
+              {isTeamInvite
+                ? "Crie sua senha para acessar o sistema. Seu acesso já vem configurado pelo proprietário."
+                : "Este link é de uso único e expirará após o cadastro."}
+            </p>
           </div>
         </div>
 
@@ -184,6 +197,7 @@ export default function InviteRegisterPage() {
               onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
               iconLeft={<Mail className="w-4 h-4" />}
               placeholder="seuemail@dominio.com"
+              disabled={isTeamInvite}
             />
           </div>
 
@@ -202,32 +216,34 @@ export default function InviteRegisterPage() {
             hint="Mínimo de 6 caracteres"
           />
 
-          <div className="border-t border-slate-100 pt-4">
-            <p className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3">
-              Estabelecimento (opcional)
-            </p>
-            <div className="grid sm:grid-cols-2 gap-4">
-              <Input
-                label="Nome do estabelecimento"
-                value={form.establishmentName}
-                onChange={e => setForm(f => ({ ...f, establishmentName: e.target.value }))}
-                iconLeft={<Store className="w-4 h-4" />}
-                placeholder="Ex: Pastelaria do Edu"
-                hint="Deixe em branco para criar depois"
-              />
-              <Input
-                label="Slug do link"
-                value={form.establishmentSlug}
-                onChange={e => {
-                  setSlugEdited(true);
-                  setForm(f => ({ ...f, establishmentSlug: toSlug(e.target.value) }));
-                }}
-                placeholder="pastelaria-do-edu"
-                error={slugError || undefined}
-                hint={!slugError && form.establishmentSlug ? `/${form.establishmentSlug}` : undefined}
-              />
+          {!isTeamInvite && (
+            <div className="border-t border-slate-100 pt-4">
+              <p className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3">
+                Estabelecimento (opcional)
+              </p>
+              <div className="grid sm:grid-cols-2 gap-4">
+                <Input
+                  label="Nome do estabelecimento"
+                  value={form.establishmentName}
+                  onChange={e => setForm(f => ({ ...f, establishmentName: e.target.value }))}
+                  iconLeft={<Store className="w-4 h-4" />}
+                  placeholder="Ex: Pastelaria do Edu"
+                  hint="Deixe em branco para criar depois"
+                />
+                <Input
+                  label="Slug do link"
+                  value={form.establishmentSlug}
+                  onChange={e => {
+                    setSlugEdited(true);
+                    setForm(f => ({ ...f, establishmentSlug: toSlug(e.target.value) }));
+                  }}
+                  placeholder="pastelaria-do-edu"
+                  error={slugError || undefined}
+                  hint={!slugError && form.establishmentSlug ? `/${form.establishmentSlug}` : undefined}
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-sm text-red-700 font-medium">
