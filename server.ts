@@ -142,7 +142,7 @@ async function ensureWppSetup(tenantId: string, tenantName: string) {
   return { instance, config };
 }
 
-async function requireTenantById(req: express.Request, res: express.Response, tenantId: string, tabId?: string) {
+async function requireTenantById(req: express.Request, res: express.Response, tenantId: string, tabId?: string | string[]) {
   const account = currentAccount(req);
   if (!account) {
     res.status(401).json({ error: "Login obrigatório." });
@@ -155,7 +155,8 @@ async function requireTenantById(req: express.Request, res: express.Response, te
     return null;
   }
 
-  if (tabId && !membershipCanAccess(result.membership, tabId)) {
+  const tabIds = tabId ? (Array.isArray(tabId) ? tabId : [tabId]) : [];
+  if (tabIds.length > 0 && !tabIds.some(t => membershipCanAccess(result.membership, t))) {
     res.status(403).json({ error: "Você não tem permissão para acessar esta área." });
     return null;
   }
@@ -164,7 +165,7 @@ async function requireTenantById(req: express.Request, res: express.Response, te
   return result.tenant;
 }
 
-async function requireTenantBySlug(req: express.Request, res: express.Response, slug: string, tabId?: string) {
+async function requireTenantBySlug(req: express.Request, res: express.Response, slug: string, tabId?: string | string[]) {
   const account = currentAccount(req);
   if (!account) {
     res.status(401).json({ error: "Login obrigatório." });
@@ -177,7 +178,8 @@ async function requireTenantBySlug(req: express.Request, res: express.Response, 
     return null;
   }
 
-  if (tabId && !membershipCanAccess(result.membership, tabId)) {
+  const tabIds = tabId ? (Array.isArray(tabId) ? tabId : [tabId]) : [];
+  if (tabIds.length > 0 && !tabIds.some(t => membershipCanAccess(result.membership, t))) {
     res.status(403).json({ error: "Você não tem permissão para acessar esta área." });
     return null;
   }
@@ -248,7 +250,7 @@ async function requireTenantFromOrder(req: express.Request, res: express.Respons
     return null;
   }
 
-  const tenant = await requireTenantById(req, res, order.tenantId, "live-orders");
+  const tenant = await requireTenantById(req, res, order.tenantId, ["live-orders", "waiter", "kds", "pos"]);
   if (!tenant) return null;
 
   return { order, tenant };
@@ -3623,7 +3625,7 @@ app.get("/api/tenants/:slug/reports/daily", requireAuth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 
 app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug, "pos");
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, ["pos", "waiter"]);
   if (!tenant) return;
 
   try {
