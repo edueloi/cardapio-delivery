@@ -22,6 +22,7 @@ import {
   TableManagement,
 } from "./DashboardPanels";
 import PDVPanel from "./PDVPanel";
+import WaiterPanel from "./WaiterPanel";
 import LoyaltyPanel from "./LoyaltyPanel";
 import IfoodPanel from "./IfoodPanel";
 import CashFlowPanel from "./CashFlowPanel";
@@ -260,13 +261,12 @@ export default function DashboardContent({
       {activeTab === "waiter" && (
         <div className="flex flex-col h-[calc(100vh-6.5rem)] min-h-0">
           <div className="flex-1 min-h-0">
-            <PDVPanel
+            <WaiterPanel
               tenant={tenant}
-              mode="waiter"
+              operatorName={membership?.name || null}
               onOrderCreated={refreshTenant}
-              checkoutRequests={checkoutRequests}
-              onClearTable={onClearTable}
               orders={orders}
+              waiterCalls={waiterCalls}
               onOpenFullscreen={() => window.open(`/garcom/${slug}`, "_blank", "width=1024,height=768")}
             />
           </div>

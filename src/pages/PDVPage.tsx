@@ -5,6 +5,7 @@ import { useAuth } from "../lib/auth";
 import socket from "../lib/socket";
 import type { Order, Tenant } from "../types";
 import PDVPanel from "../features/dashboard/PDVPanel";
+import WaiterPanel from "../features/dashboard/WaiterPanel";
 import { ShoppingBag, X } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -20,7 +21,9 @@ export default function PDVPage({ mode = "full" }: PDVPageProps) {
   const isWaiterMode = mode === "waiter";
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [operatorName, setOperatorName] = useState<string | null>(null);
   const [checkoutRequests, setCheckoutRequests] = useState<Array<{ tableId: string; customerName: string; timestamp: number }>>([]);
+  const [waiterCalls, setWaiterCalls] = useState<Array<{ tableId: string; customerName: string; note: string; requestBill: boolean; timestamp: number }>>([]);
   const [newOrderAlerts, setNewOrderAlerts] = useState<Array<{ id: string; customerName: string; orderType: string; total: number; timestamp: number }>>([]);
   const [loading, setLoading] = useState(true);
 
@@ -32,6 +35,9 @@ export default function PDVPage({ mode = "full" }: PDVPageProps) {
       socket.emit("join-tenant", data.id);
       const ordersData = await apiJson<Order[]>(`/api/admin/${data.id}/orders`);
       setOrders(Array.isArray(ordersData) ? ordersData : []);
+      apiJson<{ name: string | null }>(`/api/owner/tenants/${data.id}/my-membership`)
+        .then((m) => setOperatorName(m.name || null))
+        .catch(() => {});
     } catch {
       setTenant(null);
     } finally {
@@ -61,10 +67,15 @@ export default function PDVPage({ mode = "full" }: PDVPageProps) {
       new Audio("/notification.mp3").play().catch(() => {});
       setCheckoutRequests((prev) => [{ tableId, customerName, timestamp: Date.now() }, ...prev]);
     });
+    socket.on("waiter-called", ({ tableId, customerName, note, requestBill }) => {
+      new Audio("/notification.mp3").play().catch(() => {});
+      setWaiterCalls((prev) => [{ tableId, customerName, note, requestBill, timestamp: Date.now() }, ...prev]);
+    });
     return () => {
       socket.off("new-order");
       socket.off("order-status-updated");
       socket.off("checkout-requested");
+      socket.off("waiter-called");
     };
   }, [slug, authLoading, isAuthenticated]);
 
@@ -112,6 +123,28 @@ export default function PDVPage({ mode = "full" }: PDVPageProps) {
 
   const isDesktop = !!(window as any).pdvDesktop;
 
+  const refreshOrders = () => {
+    if (tenant) {
+      apiJson<Order[]>(`/api/admin/${tenant.id}/orders`)
+        .then((data) => setOrders(Array.isArray(data) ? data : []))
+        .catch(() => {});
+    }
+  };
+
+  if (isWaiterMode) {
+    return (
+      <div className={`fixed inset-0 flex flex-col overflow-hidden ${isDesktop ? "top-[40px]" : "top-0"}`}>
+        <WaiterPanel
+          tenant={tenant}
+          operatorName={operatorName}
+          onOrderCreated={refreshOrders}
+          orders={orders}
+          waiterCalls={waiterCalls}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className={`fixed inset-0 flex flex-col bg-[#f1f5f9] overflow-hidden ${isDesktop ? "top-[40px]" : "top-0"}`}>
       {/* Topbar — hidden inside Electron */}
@@ -124,7 +157,7 @@ export default function PDVPage({ mode = "full" }: PDVPageProps) {
             <div>
               <p className="text-sm font-black">{tenant.name}</p>
               <p className="text-[10px] text-white/40 uppercase tracking-widest font-bold">
-                {isWaiterMode ? "Garçom — Lançar Pedidos" : "PDV — Ponto de Venda"}
+                PDV — Ponto de Venda
               </p>
             </div>
           </div>
@@ -133,15 +166,13 @@ export default function PDVPage({ mode = "full" }: PDVPageProps) {
               <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
               Online
             </span>
-            {!isWaiterMode && (
-              <Link
-                to={`/dashboard/${slug}/pdv`}
-                className="flex items-center gap-1.5 text-[10px] font-black uppercase text-white/40 hover:text-white transition-colors bg-white/5 px-3 py-2 rounded-xl"
-              >
-                <X className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Fechar</span>
-              </Link>
-            )}
+            <Link
+              to={`/dashboard/${slug}/pdv`}
+              className="flex items-center gap-1.5 text-[10px] font-black uppercase text-white/40 hover:text-white transition-colors bg-white/5 px-3 py-2 rounded-xl"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Fechar</span>
+            </Link>
           </div>
         </div>
       )}
@@ -151,13 +182,8 @@ export default function PDVPage({ mode = "full" }: PDVPageProps) {
         <PDVPanel
           tenant={tenant}
           mode={mode}
-          onOrderCreated={() => {
-            if (tenant) {
-              apiJson<Order[]>(`/api/admin/${tenant.id}/orders`)
-                .then((data) => setOrders(Array.isArray(data) ? data : []))
-                .catch(() => {});
-            }
-          }}
+          operatorName={operatorName}
+          onOrderCreated={refreshOrders}
           checkoutRequests={checkoutRequests}
           onClearTable={handleClearTable}
           orders={orders}

@@ -262,6 +262,7 @@ export interface ProductExtra {
   id: string;       // uuid gerado no front
   label: string;    // "Gelo", "Limão", "Sem Cebola"
   price?: number;   // 0 = gratuito
+  imageUrl?: string;
 }
 
 export interface Product {
@@ -431,6 +432,7 @@ export interface ProductVariant {
   name: string;
   description?: string;
   price: number;
+  imageUrl?: string | null;
   inventoryItemId?: string | null;
 }
 
@@ -451,6 +453,8 @@ export interface Order {
   tenantId: string;
   createdAt: string;
   items: OrderItem[];
+  operatorName?: string | null;
+  customerId?: string | null;
   // NFC-e
   nfceKey?: string | null;
   nfceStatus?: NfceStatus | null;

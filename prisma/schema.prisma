@@ -523,6 +523,7 @@ model ProductVariant {
   name        String // e.g. "300ml", "500ml", "Inteira", "Meia"
   description String?
   price       Float
+  imageUrl    String? @map("image_url")
   inventoryItemId String? @map("inventory_item_id")
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)

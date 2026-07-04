@@ -1935,7 +1935,14 @@ async function updateOrderStatus(orderId: string, previousStatus: string, status
     },
   });
 
-  if (status === "PREPARING" && previousStatus !== "PREPARING") {
+  // Debita estoque ao entrar em preparo — ou, se o pedido pulou PREPARING e foi direto
+  // para DELIVERED (ex: garçom marcando mesa como servida sem passar pelo KDS), debita
+  // agora mesmo, pra garantir que a baixa aconteça uma única vez por pedido.
+  const shouldDeductInventory =
+    (status === "PREPARING" && previousStatus !== "PREPARING") ||
+    (status === "DELIVERED" && previousStatus !== "DELIVERED" && previousStatus !== "PREPARING" && previousStatus !== "SHIPPED");
+
+  if (shouldDeductInventory) {
       for (const item of updatedOrder.items) {
         // Deduct direct inventory link
         let inventoryItemId = item.productVariantId
@@ -2016,7 +2023,11 @@ async function updateOrderStatus(orderId: string, previousStatus: string, status
     io.to(`tenant-${updatedOrder.tenantId}`).emit("order-status-updated", updatedOrder);
     await sendOrderStatusMessage(updatedOrder, updatedOrder.tenant).catch(() => undefined);
 
-    if (status === "DELIVERED" && previousStatus !== "DELIVERED" && updatedOrder.customerId) {
+    // Pedidos DINE_IN (comanda de garçom): "DELIVERED" aqui significa "prato servido",
+    // não "conta paga" — o pagamento/faturamento da mesa é um pedido separado, lançado
+    // pelo caixa/PDV completo (que já dá pontos na própria criação). Por isso pontos de
+    // fidelidade só disparam nesta transição para pedidos que não são de mesa.
+    if (status === "DELIVERED" && previousStatus !== "DELIVERED" && updatedOrder.orderType !== "DINE_IN" && updatedOrder.customerId) {
       const result = await awardLoyaltyPoints(
         updatedOrder.tenant.loyaltyConfig as string | null,
         updatedOrder.customerId,
@@ -2452,6 +2463,7 @@ app.post("/api/products", requireAuth, async (req, res) => {
                 name: variant.name,
                 price: parseFloat(variant.price),
                 description: variant.description,
+                imageUrl: variant.imageUrl || null,
               })),
             }
           : undefined,
@@ -2538,6 +2550,7 @@ app.patch("/api/products/:id", requireAuth, async (req, res) => {
                   name: variant.name,
                   price: parseFloat(variant.price),
                   description: variant.description,
+                  imageUrl: variant.imageUrl || null,
                 })),
               }
             : undefined,
@@ -3621,6 +3634,46 @@ app.get("/api/tenants/:slug/reports/daily", requireAuth, async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────
+// Placar do garçom: comandas lançadas hoje, agrupadas por operador
+// ─────────────────────────────────────────────────────────────
+
+app.get("/api/tenants/:slug/waiter/leaderboard", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "waiter");
+  if (!tenant) return;
+
+  try {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const orders = await prisma.order.findMany({
+      where: {
+        tenantId: tenant.id,
+        orderType: "DINE_IN",
+        status: { not: "CANCELLED" },
+        createdAt: { gte: startOfDay },
+        operatorName: { not: null },
+      },
+      select: { operatorName: true, total: true },
+    });
+
+    const byOperator = new Map<string, { operatorName: string; orderCount: number; total: number }>();
+    for (const o of orders) {
+      const name = o.operatorName as string;
+      const entry = byOperator.get(name) ?? { operatorName: name, orderCount: 0, total: 0 };
+      entry.orderCount += 1;
+      entry.total += o.total;
+      byOperator.set(name, entry);
+    }
+
+    const leaderboard = Array.from(byOperator.values()).sort((a, b) => b.total - a.total);
+    res.json(leaderboard);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao buscar placar." });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
 // PDV: create order with discount + customer sync
 // ─────────────────────────────────────────────────────────────
 
@@ -3645,11 +3698,19 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
       cardBrand,
       installments,
       serviceChargeIncluded,
+      source,
     } = req.body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "Nenhum item no pedido." });
     }
+
+    // Lançamento do garçom (comanda) para a cozinha ver: nasce PENDING, sem debitar
+    // estoque nem dar pontos agora — isso acontece depois, quando o pedido avançar de
+    // status (igual ao delivery), via updateOrderStatus. Evita duplicar efeitos quando
+    // a comanda for fechada/faturada mais tarde. PDV completo (caixa) continua igual:
+    // fatura e debita na hora, pois ali a venda já está confirmada/paga.
+    const isWaiterComanda = source === "waiter" && orderType === "DINE_IN";
 
     // Fetch products and calculate totals
     const productIds = items.map((i: any) => i.productId);
@@ -3705,16 +3766,25 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
     const feeAmount = totalBeforeFee * (feePercent / 100);
     const total = (feePassedToCustomer ? totalBeforeFee + feeAmount : totalBeforeFee) + serviceFeeAmount;
 
-    // Upsert customer if phone provided
+    // Upsert customer if phone provided. Para comanda de garçom, o vínculo com o cliente
+    // (totalSpent/ordersCount/pontos) só é gravado quando o pedido for entregue — senão
+    // conta a "venda" antes da mesa ser fechada e duplica pontos na transição de status.
     let customerId: string | undefined;
     if (customerPhone && customerPhone !== "00000000000" && customerName) {
-      const customer = await prisma.customer.upsert({
-        where: { tenantId_phone: { tenantId: tenant.id, phone: customerPhone } },
-        create: { tenantId: tenant.id, name: customerName, phone: customerPhone, totalSpent: total, ordersCount: 1, lastOrderAt: new Date() },
-        update: { totalSpent: { increment: total }, ordersCount: { increment: 1 }, lastOrderAt: new Date() },
-      });
-      customerId = customer.id;
-      await awardLoyaltyPoints(tenant.loyaltyConfig as string | null, customer.id, total);
+      if (isWaiterComanda) {
+        const existing = await prisma.customer.findUnique({
+          where: { tenantId_phone: { tenantId: tenant.id, phone: customerPhone } },
+        });
+        customerId = existing?.id;
+      } else {
+        const customer = await prisma.customer.upsert({
+          where: { tenantId_phone: { tenantId: tenant.id, phone: customerPhone } },
+          create: { tenantId: tenant.id, name: customerName, phone: customerPhone, totalSpent: total, ordersCount: 1, lastOrderAt: new Date() },
+          update: { totalSpent: { increment: total }, ordersCount: { increment: 1 }, lastOrderAt: new Date() },
+        });
+        customerId = customer.id;
+        await awardLoyaltyPoints(tenant.loyaltyConfig as string | null, customer.id, total);
+      }
     }
 
     const order = await prisma.order.create({
@@ -3737,43 +3807,48 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
         feePassedToCustomer,
         serviceFeeAmount: serviceFeeAmount || null,
         serviceFeePercent: serviceFeeAmount ? serviceFeePercent : null,
-        status: "DELIVERED",
+        status: isWaiterComanda ? "PENDING" : "DELIVERED",
         total,
         items: { create: orderItems },
       },
       include: { items: { include: { product: true } } },
     });
 
-    // Register cash movement for the payment
-    const currentCash = await prisma.cashRegister.findFirst({
-      where: { tenantId: tenant.id, status: "OPEN" },
-      orderBy: { openedAt: "desc" },
-    });
-    if (currentCash) {
-      const pmType = `PAYMENT_${paymentMethod}`;
-      await prisma.cashMovement.create({
-        data: {
-          cashRegisterId: currentCash.id,
-          tenantId: tenant.id,
-          type: pmType,
-          amount: total,
-          description: `Venda PDV #${order.id.slice(-6).toUpperCase()}`,
-          orderId: order.id,
-          operatorName: operatorName || null,
-        },
+    // Comanda do garçom ainda não é venda faturada — sem movimento de caixa e sem
+    // debitar estoque agora. Isso acontece quando o pedido avançar de status
+    // (PREPARING debita estoque, DELIVERED fecha a venda), igual ao delivery.
+    if (!isWaiterComanda) {
+      // Register cash movement for the payment
+      const currentCash = await prisma.cashRegister.findFirst({
+        where: { tenantId: tenant.id, status: "OPEN" },
+        orderBy: { openedAt: "desc" },
       });
-    }
-
-    // Deduct inventory
-    for (const item of order.items) {
-      if (item.product?.inventoryItemId) {
-        await prisma.inventoryItem.update({
-          where: { id: item.product.inventoryItemId },
+      if (currentCash) {
+        const pmType = `PAYMENT_${paymentMethod}`;
+        await prisma.cashMovement.create({
           data: {
-            quantity: { decrement: item.quantity },
-            movements: { create: { type: "OUT", quantity: item.quantity, reason: "SALE", orderId: order.id } },
+            cashRegisterId: currentCash.id,
+            tenantId: tenant.id,
+            type: pmType,
+            amount: total,
+            description: `Venda PDV #${order.id.slice(-6).toUpperCase()}`,
+            orderId: order.id,
+            operatorName: operatorName || null,
           },
-        }).catch(() => {}); // non-blocking
+        });
+      }
+
+      // Deduct inventory
+      for (const item of order.items) {
+        if (item.product?.inventoryItemId) {
+          await prisma.inventoryItem.update({
+            where: { id: item.product.inventoryItemId },
+            data: {
+              quantity: { decrement: item.quantity },
+              movements: { create: { type: "OUT", quantity: item.quantity, reason: "SALE", orderId: order.id } },
+            },
+          }).catch(() => {}); // non-blocking
+        }
       }
     }
 

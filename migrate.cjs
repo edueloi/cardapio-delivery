@@ -795,6 +795,12 @@ const migrations = [
     check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'invite_tokens' AND COLUMN_NAME = 'target_email'",
     run: "ALTER TABLE invite_tokens ADD COLUMN target_email VARCHAR(191) NULL",
   },
+  // Imagem por variação de produto (ex: foto específica do tamanho "Grande")
+  {
+    name: 'add_product_variants_image_url',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'product_variants' AND COLUMN_NAME = 'image_url'",
+    run: "ALTER TABLE product_variants ADD COLUMN image_url VARCHAR(191) NULL",
+  },
 ];
 
 async function run() {

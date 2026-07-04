@@ -457,7 +457,7 @@ export default function PDVPanel({
           paymentMethod: "CASH",
           operatorName: operatorName || undefined,
           items: cart.map((item) => ({ productId: item.product.id, quantity: item.quantity, price: item.price, notes: item.notes || undefined })),
-          status: "PENDING",
+          ...(isWaiterMode ? { source: "waiter" } : {}),
         }),
       });
       clearCart();
@@ -1388,7 +1388,7 @@ export default function PDVPanel({
                             paymentMethod: "CASH",
                             operatorName: operatorName || undefined,
                             items: cart.map((i) => ({ productId: i.product.id, quantity: i.quantity, price: i.price, notes: i.notes || undefined })),
-                            status: "PENDING",
+                            ...(isWaiterMode ? { source: "waiter" } : {}),
                           }),
                         });
                         setCart([]);
