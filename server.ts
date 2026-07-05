@@ -4482,45 +4482,96 @@ app.delete("/api/tenants/:slug/suppliers/:supplierId/catalog/:itemId", requireAu
   }
 });
 
+// Escapa para uso seguro dentro de atributos/texto HTML — evita quebrar o head
+// (ou permitir injeção) quando nome/descrição da loja têm aspas, & ou < >.
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+const SITE_BASE_URL = process.env.MAIL_APP_URL ?? process.env.APP_URL ?? "https://boxsys.com.br";
+const DEFAULT_OG_IMAGE = `${SITE_BASE_URL}/images/logo.png`;
+const SEO_EXCLUDED_SLUGS = ["api", "login", "register", "admin", "assets", "uploads", "cond", "garcom", "pdv", "cozinha"];
+
+function toAbsoluteUrl(url: string): string {
+  return /^https?:\/\//i.test(url) ? url : `${SITE_BASE_URL}${url.startsWith("/") ? "" : "/"}${url}`;
+}
+
+// Resolve título/descrição/imagem do preview de compartilhamento (Open Graph) a partir
+// do slug na URL — usado tanto no fallback de produção (dist/index.html) quanto em dev
+// (index.html transformado pelo Vite), para o link do cardápio de cada loja mostrar o
+// nome, a descrição e o logo dela em vez dos valores genéricos do sistema.
+async function resolveSeoMeta(requestPath: string): Promise<{ title: string; description: string; image: string; url: string }> {
+  const slug = requestPath.split("/").filter(Boolean)[0];
+
+  let title = "Box Sys — Cardápio Digital";
+  let description = "Peça agora pelo nosso cardápio digital!";
+  let image = DEFAULT_OG_IMAGE;
+
+  if (slug && !SEO_EXCLUDED_SLUGS.includes(slug)) {
+    try {
+      const tenant = await prisma.tenant.findUnique({ where: { slug } });
+      if (tenant) {
+        title = `${tenant.name} | Cardápio Digital`;
+        description = tenant.description || "Confira nosso cardápio e faça seu pedido online!";
+        image = tenant.logoUrl ? toAbsoluteUrl(tenant.logoUrl) : DEFAULT_OG_IMAGE;
+      }
+    } catch (e) {
+      console.error("SEO Error:", e);
+    }
+  }
+
+  return { title, description, image, url: `${SITE_BASE_URL}${requestPath}` };
+}
+
+function injectSeoMeta(html: string, seo: { title: string; description: string; image: string; url: string }): string {
+  const safeTitle = escapeHtml(seo.title);
+  const safeDescription = escapeHtml(seo.description);
+  return html
+    .replace(/<title>.*?<\/title>/, `<title>${safeTitle}</title>`)
+    .replace(/{{TITLE}}/g, safeTitle)
+    .replace(/{{DESCRIPTION}}/g, safeDescription)
+    .replace(/{{IMAGE}}/g, seo.image)
+    .replace(
+      /<meta property="og:image" content="[^"]*"\s*\/>/,
+      `<meta property="og:image" content="${seo.image}" />\n    <meta property="og:url" content="${seo.url}" />\n    <meta property="og:site_name" content="Box Sys" />`
+    );
+}
+
 if (process.env.NODE_ENV !== "production") {
   const vite = await createViteServer({
     server: { middlewareMode: true },
     appType: "spa",
   });
+
+  app.use(async (req, res, next) => {
+    if (req.method !== "GET" || req.path.startsWith("/api") || req.path.includes(".")) return next();
+    try {
+      const rootIndexPath = path.join(process.cwd(), "index.html");
+      const rawHtml = fs.readFileSync(rootIndexPath, "utf-8");
+      const seo = await resolveSeoMeta(req.path);
+      const html = await vite.transformIndexHtml(req.originalUrl, injectSeoMeta(rawHtml, seo));
+      res.status(200).set({ "Content-Type": "text/html" }).send(html);
+    } catch (e) {
+      vite.ssrFixStacktrace(e as Error);
+      next(e);
+    }
+  });
+
   app.use(vite.middlewares);
 } else {
   const distPath = path.join(process.cwd(), "dist");
   app.use(express.static(distPath));
 
   app.get("*", async (req, res) => {
-    const parts = req.path.split("/").filter(Boolean);
-    const slug = parts[0];
-    
-    // Default values
-    let title = "Cardápio Digital";
-    let description = "Peça agora pelo nosso cardápio digital!";
-    let image = "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800";
-
-    if (slug && !["api", "login", "register", "admin", "assets", "uploads"].includes(slug)) {
-      try {
-        const tenant = await prisma.tenant.findUnique({ where: { slug } });
-        if (tenant) {
-          title = `${tenant.name} | Cardápio Digital`;
-          description = tenant.description || "Confira nosso cardápio e faça seu pedido online!";
-          image = tenant.logoUrl || image;
-        }
-      } catch (e) {
-        console.error("SEO Error:", e);
-      }
-    }
-
+    const seo = await resolveSeoMeta(req.path);
     try {
       const indexHtml = fs.readFileSync(path.join(distPath, "index.html"), "utf-8");
-      const injectedHtml = indexHtml
-        .replace(/{{TITLE}}/g, title)
-        .replace(/{{DESCRIPTION}}/g, description)
-        .replace(/{{IMAGE}}/g, image);
-      res.send(injectedHtml);
+      res.send(injectSeoMeta(indexHtml, seo));
     } catch (e) {
       res.sendFile(path.join(distPath, "index.html"));
     }

@@ -13,6 +13,7 @@ export default defineConfig(({mode}) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
+        injectRegister: false,
         includeAssets: ['images/app_celular.png', 'favicon.ico'],
         manifest: {
           name: 'Box Sys PDV',
@@ -44,6 +45,10 @@ export default defineConfig(({mode}) => {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
           navigateFallback: '/index.html',
           navigateFallbackDenylist: [/^\/api/, /^\/socket\.io/],
+          // O SW novo assume controle imediatamente (sem esperar todas as abas antigas
+          // fecharem) — evita usuários ficarem travados em uma versão desatualizada.
+          skipWaiting: true,
+          clientsClaim: true,
         },
       }),
     ],
