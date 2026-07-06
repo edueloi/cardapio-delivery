@@ -2866,6 +2866,49 @@ app.post("/api/tenants/:slug/cash/close", requireAuth, async (req, res) => {
   }
 });
 
+// Anexa a cada movimento de venda (orderId preenchido) os dados completos do pedido —
+// valor bruto, desconto, taxa de maquininha/serviço e itens vendidos — para a tela de
+// Fluxo de Caixa poder detalhar cada venda sem só mostrar o valor líquido lançado.
+// CashMovement.orderId não é uma relação Prisma formal (é só uma string solta), então
+// o join é feito em memória com um segundo findMany, sem precisar de migration.
+async function attachOrderDetails<T extends { orderId?: string | null }>(movements: T[]) {
+  const orderIds = [...new Set(movements.map((m) => m.orderId).filter((id): id is string => !!id))];
+  if (orderIds.length === 0) return movements.map((m) => ({ ...m, order: null }));
+
+  const orders: any[] = await prisma.order.findMany({
+    where: { id: { in: orderIds } },
+    include: { items: { include: { product: { select: { name: true } } } } },
+  });
+  const orderMap = new Map<string, any>(orders.map((o) => [o.id, o]));
+
+  return movements.map((m) => {
+    const order = m.orderId ? orderMap.get(m.orderId) : null;
+    if (!order) return { ...m, order: null };
+    const grossTotal = order.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    return {
+      ...m,
+      order: {
+        id: order.id,
+        grossTotal,
+        discount: order.discount || 0,
+        discountType: order.discountType,
+        feeAmount: order.feeAmount || 0,
+        feePercent: order.feePercent,
+        feePassedToCustomer: order.feePassedToCustomer,
+        serviceFeeAmount: order.serviceFeeAmount || 0,
+        serviceFeePercent: order.serviceFeePercent,
+        total: order.total,
+        items: order.items.map((item) => ({
+          productName: item.product?.name || "Produto removido",
+          quantity: item.quantity,
+          price: item.price,
+          notes: item.notes,
+        })),
+      },
+    };
+  });
+}
+
 app.get("/api/tenants/:slug/cash/history", requireAuth, async (req, res) => {
   const tenant = await requireTenantBySlug(req, res, req.params.slug, "finance");
   if (!tenant) return;
@@ -2886,7 +2929,14 @@ app.get("/api/tenants/:slug/cash/history", requireAuth, async (req, res) => {
       take: 100,
     });
 
-    res.json(history);
+    const historyWithOrders = await Promise.all(
+      history.map(async (register: any) => ({
+        ...register,
+        movements: await attachOrderDetails(register.movements),
+      }))
+    );
+
+    res.json(historyWithOrders);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to fetch cash history" });
@@ -3435,6 +3485,11 @@ app.post("/api/tenants/:slug/cash/movement", requireAuth, async (req, res) => {
   }
 });
 
+// Anexa a cada movimento de venda (orderId preenchido) os dados completos do pedido —
+// valor bruto, desconto, taxa de maquininha/serviço e itens vendidos — para a tela de
+// Fluxo de Caixa poder detalhar cada venda sem só mostrar o valor líquido lançado.
+// CashMovement.orderId não é uma relação Prisma formal (é só uma string solta), então
+// o join é feito em memória com um segundo findMany, sem precisar de migration.
 app.get("/api/tenants/:slug/cash/movements", requireAuth, async (req, res) => {
   const tenant = await requireTenantBySlug(req, res, req.params.slug, "finance");
   if (!tenant) return;
@@ -3450,7 +3505,7 @@ app.get("/api/tenants/:slug/cash/movements", requireAuth, async (req, res) => {
       where: { cashRegisterId: currentCash.id },
       orderBy: { createdAt: "asc" },
     });
-    res.json(movements);
+    res.json(await attachOrderDetails(movements));
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Falha ao buscar movimentos." });

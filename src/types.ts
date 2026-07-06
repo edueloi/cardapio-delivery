@@ -523,6 +523,27 @@ export interface CashRegister {
   operatorName?: string | null;
 }
 
+export interface CashMovementOrderItem {
+  productName: string;
+  quantity: number;
+  price: number;
+  notes?: string | null;
+}
+
+export interface CashMovementOrder {
+  id: string;
+  grossTotal: number;       // soma dos itens antes de desconto/taxa
+  discount: number;
+  discountType?: string | null; // PERCENT | FIXED
+  feeAmount: number;        // taxa de maquininha
+  feePercent?: number | null;
+  feePassedToCustomer: boolean;
+  serviceFeeAmount: number; // taxa de serviço (ex: 10% mesa)
+  serviceFeePercent?: number | null;
+  total: number;            // valor final do pedido
+  items: CashMovementOrderItem[];
+}
+
 export interface CashMovement {
   id: string;
   cashRegisterId: string;
@@ -533,6 +554,7 @@ export interface CashMovement {
   orderId?: string | null;
   operatorName?: string | null;
   createdAt: string;
+  order?: CashMovementOrder | null;
 }
 
 // ─── Product Bundles / Combos ─────────────────────────────────────────────────

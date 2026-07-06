@@ -3,7 +3,7 @@ import {
   Wallet, ArrowDownCircle, ArrowUpCircle, Lock, Unlock,
   TrendingUp, Banknote, CreditCard, QrCode, Receipt, History,
   CheckCircle2, CalendarDays, Filter, AlertCircle, RefreshCw,
-  ArrowLeftRight, ChevronRight,
+  ArrowLeftRight, ChevronRight, ChevronDown, Tag, Percent,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -113,21 +113,103 @@ function MethodChip({ type, value, total }: { type: string; value: number; total
 }
 
 // ─── Linha de movimento ──────────────────────────────────────────────────────
+// Quando o movimento vem de uma venda (m.order presente), a linha fica clicável e
+// expande o detalhamento: valor bruto dos itens, desconto, taxa de maquininha/serviço
+// (e se foi repassada ao cliente), valor líquido, e a lista de itens vendidos.
 function MovementRow({ m }: { m: CashMovement }) {
+  const [expanded, setExpanded] = useState(false);
   const meta = MOVEMENT_META[m.type] || MOVEMENT_META.PAYMENT_CASH;
   const Icon = meta.icon;
+  const order = m.order;
+  const isExpandable = !!order;
+
   return (
-    <div className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50/70 rounded-xl transition-colors">
-      <div className={`w-9 h-9 rounded-xl ${meta.bg} flex items-center justify-center shrink-0`}>
-        <Icon className={`w-4 h-4 ${meta.color}`} />
+    <div className="rounded-xl overflow-hidden">
+      <div
+        onClick={() => isExpandable && setExpanded((v) => !v)}
+        className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isExpandable ? "cursor-pointer hover:bg-slate-50/70" : ""}`}
+      >
+        <div className={`w-9 h-9 rounded-xl ${meta.bg} flex items-center justify-center shrink-0`}>
+          <Icon className={`w-4 h-4 ${meta.color}`} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-slate-800 truncate">{m.description || meta.label}</p>
+          <p className="text-[10px] text-slate-400">{fmtDateTime(m.createdAt)}{m.operatorName ? ` · ${m.operatorName}` : ""}</p>
+        </div>
+        <span className={`text-sm font-black shrink-0 tabular-nums ${meta.isOut ? "text-red-500" : "text-green-600"}`}>
+          {meta.isOut ? "−" : "+"}{fmt(m.amount)}
+        </span>
+        {isExpandable && (
+          <ChevronDown className={`w-4 h-4 text-slate-300 shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`} />
+        )}
       </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-slate-800 truncate">{m.description || meta.label}</p>
-        <p className="text-[10px] text-slate-400">{fmtDateTime(m.createdAt)}{m.operatorName ? ` · ${m.operatorName}` : ""}</p>
-      </div>
-      <span className={`text-sm font-black shrink-0 tabular-nums ${meta.isOut ? "text-red-500" : "text-green-600"}`}>
-        {meta.isOut ? "−" : "+"}{fmt(m.amount)}
-      </span>
+
+      <AnimatePresence>
+        {expanded && order && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="mx-4 mb-3 p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-3">
+              {/* Itens vendidos */}
+              <div className="space-y-1.5">
+                {order.items.map((item, idx) => (
+                  <div key={idx} className="flex items-center justify-between text-xs">
+                    <span className="text-slate-600 font-semibold">{item.quantity}x {item.productName}</span>
+                    <span className="text-slate-500 tabular-nums">{fmt(item.price * item.quantity)}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="h-px bg-slate-200" />
+
+              {/* Detalhamento financeiro */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-400 font-bold">Valor bruto</span>
+                  <span className="text-slate-600 tabular-nums">{fmt(order.grossTotal)}</span>
+                </div>
+                {order.discount > 0 && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400 font-bold flex items-center gap-1">
+                      <Tag className="w-3 h-3" /> Desconto{order.discountType === "PERCENT" ? " (%)" : ""}
+                    </span>
+                    <span className="text-red-500 tabular-nums">−{fmt(order.discount)}</span>
+                  </div>
+                )}
+                {order.feeAmount > 0 && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400 font-bold flex items-center gap-1">
+                      <Percent className="w-3 h-3" /> Taxa maquininha{order.feePercent ? ` (${order.feePercent.toFixed(2)}%)` : ""}
+                    </span>
+                    <span className={`tabular-nums ${order.feePassedToCustomer ? "text-slate-400" : "text-red-500"}`}>
+                      {order.feePassedToCustomer ? `${fmt(order.feeAmount)} (repassada ao cliente)` : `−${fmt(order.feeAmount)}`}
+                    </span>
+                  </div>
+                )}
+                {order.serviceFeeAmount > 0 && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400 font-bold">Taxa de serviço{order.serviceFeePercent ? ` (${order.serviceFeePercent}%)` : ""}</span>
+                    <span className="text-slate-600 tabular-nums">+{fmt(order.serviceFeeAmount)}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-200">
+                  <span className="text-slate-700 font-black">Total recebido</span>
+                  <span className="text-slate-800 font-black tabular-nums">{fmt(order.total)}</span>
+                </div>
+                {!order.feePassedToCustomer && order.feeAmount > 0 && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-700 font-black">Líquido real (após taxa)</span>
+                    <span className="text-green-600 font-black tabular-nums">{fmt(order.total - order.feeAmount)}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
