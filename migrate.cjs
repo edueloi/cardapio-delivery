@@ -825,6 +825,85 @@ const migrations = [
     check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'counter_ticket_number'",
     run: "ALTER TABLE orders ADD COLUMN counter_ticket_number INT NULL",
   },
+  // ── Recorrências financeiras (água/luz, aluguel, sistema...) com parcelas e juros por atraso ──
+  {
+    name: 'create_recurring_entries_table',
+    check: "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'recurring_entries'",
+    run: `CREATE TABLE recurring_entries (
+      id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      tenant_id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      type VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      category VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      description VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      frequency VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'FIXED',
+      amount DOUBLE NULL,
+      due_day INT NOT NULL,
+      start_date DATE NOT NULL,
+      end_date DATE NULL,
+      installments_total INT NULL,
+      late_fee_enabled TINYINT(1) NOT NULL DEFAULT 0,
+      late_fee_rate DOUBLE NULL,
+      late_fee_interval VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
+      active TINYINT(1) NOT NULL DEFAULT 1,
+      notes TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
+      last_generated_for VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
+      created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (id),
+      INDEX recurring_entries_tenant_id_active_idx (tenant_id, active),
+      CONSTRAINT recurring_entries_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE ON UPDATE CASCADE
+    ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+  },
+  {
+    name: 'add_financial_entries_recurring_entry_id',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'financial_entries' AND COLUMN_NAME = 'recurring_entry_id'",
+    run: "ALTER TABLE financial_entries ADD COLUMN recurring_entry_id VARCHAR(191) NULL",
+  },
+  {
+    name: 'add_financial_entries_recurring_entry_id_fkey',
+    check: "SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'financial_entries' AND CONSTRAINT_NAME = 'financial_entries_recurring_entry_id_fkey'",
+    run: "ALTER TABLE financial_entries ADD CONSTRAINT financial_entries_recurring_entry_id_fkey FOREIGN KEY (recurring_entry_id) REFERENCES recurring_entries(id) ON DELETE SET NULL ON UPDATE CASCADE",
+  },
+  {
+    name: 'add_financial_entries_recurring_entry_id_idx',
+    check: "SELECT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'financial_entries' AND INDEX_NAME = 'financial_entries_recurring_entry_id_idx'",
+    run: "ALTER TABLE financial_entries ADD INDEX financial_entries_recurring_entry_id_idx (recurring_entry_id)",
+  },
+  {
+    name: 'add_financial_entries_due_date',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'financial_entries' AND COLUMN_NAME = 'due_date'",
+    run: "ALTER TABLE financial_entries ADD COLUMN due_date DATE NULL",
+  },
+  {
+    name: 'add_financial_entries_paid_at',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'financial_entries' AND COLUMN_NAME = 'paid_at'",
+    run: "ALTER TABLE financial_entries ADD COLUMN paid_at DATETIME(3) NULL",
+  },
+  {
+    name: 'add_financial_entries_status',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'financial_entries' AND COLUMN_NAME = 'status'",
+    run: "ALTER TABLE financial_entries ADD COLUMN status VARCHAR(191) NOT NULL DEFAULT 'PAID'",
+  },
+  {
+    name: 'add_financial_entries_installment_number',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'financial_entries' AND COLUMN_NAME = 'installment_number'",
+    run: "ALTER TABLE financial_entries ADD COLUMN installment_number INT NULL",
+  },
+  {
+    name: 'add_financial_entries_installments_total',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'financial_entries' AND COLUMN_NAME = 'installments_total'",
+    run: "ALTER TABLE financial_entries ADD COLUMN installments_total INT NULL",
+  },
+  {
+    name: 'add_financial_entries_base_amount',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'financial_entries' AND COLUMN_NAME = 'base_amount'",
+    run: "ALTER TABLE financial_entries ADD COLUMN base_amount DOUBLE NULL",
+  },
+  {
+    name: 'add_financial_entries_late_fee_applied',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'financial_entries' AND COLUMN_NAME = 'late_fee_applied'",
+    run: "ALTER TABLE financial_entries ADD COLUMN late_fee_applied DOUBLE NULL",
+  },
 ];
 
 async function run() {

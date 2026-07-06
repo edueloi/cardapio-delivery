@@ -52,6 +52,7 @@ model Tenant {
   suppliers   Supplier[]
   condominiums CondominiumTenant[]
   financialEntries FinancialEntry[]
+  recurringEntries RecurringEntry[]
   kitchenSessions  KitchenSession[]
   inviteTokens     InviteToken[]
 
@@ -354,10 +355,59 @@ model FinancialEntry {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // Gerado a partir de uma recorrência (água/luz, aluguel, etc)
+  recurringEntryId String?   @map("recurring_entry_id")
+  dueDate          DateTime? @db.Date @map("due_date")     // vencimento — pode ser diferente de "date" (data efetiva de pagamento)
+  paidAt           DateTime? @map("paid_at")
+  status           String    @default("PAID") @map("status") // PENDING (recorrência variável aguardando valor/pagamento) | PAID
+  installmentNumber Int?     @map("installment_number")   // parcela atual (1-based), quando a recorrência tem parcelas
+  installmentsTotal Int?     @map("installments_total")    // total de parcelas, snapshot no momento da geração
+  baseAmount        Float?   @map("base_amount")           // valor original antes de juros (quando lateFeeApplied > 0)
+  lateFeeApplied    Float?   @map("late_fee_applied")      // juros calculado e somado ao amount por atraso
+
+  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  recurringEntry  RecurringEntry? @relation(fields: [recurringEntryId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, date])
+  @@index([recurringEntryId])
   @@map("financial_entries")
+}
+
+// Regra de recorrência financeira: gastos/receitas que se repetem todo mês
+// (água, luz, aluguel, sistema, etc). Pode ser FIXED (valor constante, gerado
+// automaticamente já como PAID) ou VARIABLE (sistema cria o lançamento do mês
+// como PENDING, com amount null, esperando o usuário preencher e confirmar).
+model RecurringEntry {
+  id           String   @id @default(cuid())
+  tenantId     String   @map("tenant_id")
+  type         String   // INCOME, EXPENSE
+  category     String
+  description  String
+  frequency    String   @default("FIXED") // FIXED | VARIABLE
+  amount       Float?   // obrigatório quando FIXED; null quando VARIABLE (preenchido lançamento a lançamento)
+  dueDay       Int      @map("due_day")   // dia do mês em que vence (1-28, para evitar meses sem o dia)
+  startDate    DateTime @db.Date @map("start_date")
+  endDate      DateTime? @db.Date @map("end_date") // null = sem prazo definido
+
+  // Parcelamento — quando definido, a recorrência para de gerar novos lançamentos após atingir o total
+  installmentsTotal Int? @map("installments_total") // null = recorrência sem prazo de parcelas (contínua)
+
+  // Juros por atraso — aplicado quando o lançamento gerado passa do dueDate ainda em PENDING/sem pagamento
+  lateFeeEnabled  Boolean @default(false) @map("late_fee_enabled")
+  lateFeeRate     Float?  @map("late_fee_rate")     // taxa percentual (ex: 1 = 1%)
+  lateFeeInterval String? @map("late_fee_interval") // DAILY | MONTHLY | YEARLY — periodicidade da taxa acima
+
+  active      Boolean  @default(true)
+  notes       String?  @db.Text
+  lastGeneratedFor String? @map("last_generated_for") // "YYYY-MM" do último mês em que gerou lançamento — controla idempotência
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant  Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  entries FinancialEntry[]
+
+  @@index([tenantId, active])
+  @@map("recurring_entries")
 }
 
 model Customer {

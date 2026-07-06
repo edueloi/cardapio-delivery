@@ -27,6 +27,7 @@ import {
 } from "./src/backend/auth";
 import { parseProductionRecipeRecord } from "./src/backend/production";
 import { registerProductionRoutes } from "./src/backend/production-routes";
+import { generateDueEntries, runLazyGeneration, applyLateFees, calculateLateFee } from "./src/backend/recurring";
 import { sendInviteEmail, sendPasswordResetEmail } from "./src/backend/mailer";
 import {
   connectSession,
@@ -3016,6 +3017,9 @@ app.get("/api/tenants/:slug/entries", requireAuth, async (req, res) => {
   if (!tenant) return;
 
   try {
+    await runLazyGeneration(prisma, tenant.id);
+    await applyLateFees(prisma, tenant.id);
+
     const { from, to } = req.query as { from?: string; to?: string };
     const dateFrom = from ? new Date(from + "T00:00:00") : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
     const dateTo   = to   ? new Date(to   + "T23:59:59") : new Date();
@@ -3028,10 +3032,174 @@ app.get("/api/tenants/:slug/entries", requireAuth, async (req, res) => {
     res.json(entries.map((e) => ({
       ...e,
       date: e.date.toISOString().split("T")[0],
+      dueDate: e.dueDate ? e.dueDate.toISOString().split("T")[0] : null,
     })));
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to fetch entries" });
+  }
+});
+
+// ── Recorrências financeiras (água/luz, aluguel, sistema, etc) ───────────────
+app.get("/api/tenants/:slug/recurring-entries", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "entries");
+  if (!tenant) return;
+
+  try {
+    const entries = await prisma.recurringEntry.findMany({
+      where: { tenantId: tenant.id },
+      orderBy: { createdAt: "desc" },
+    });
+    res.json(entries.map((e: any) => ({
+      ...e,
+      startDate: e.startDate.toISOString().split("T")[0],
+      endDate: e.endDate ? e.endDate.toISOString().split("T")[0] : null,
+    })));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to fetch recurring entries" });
+  }
+});
+
+app.post("/api/tenants/:slug/recurring-entries", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "entries");
+  if (!tenant) return;
+
+  try {
+    const {
+      type, category, description, frequency, amount, dueDay, startDate, endDate,
+      installmentsTotal, lateFeeEnabled, lateFeeRate, lateFeeInterval, notes,
+    } = req.body;
+
+    if (!type || !category || !description || !frequency || !dueDay || !startDate) {
+      return res.status(400).json({ error: "Campos obrigatórios faltando." });
+    }
+    if (frequency === "FIXED" && (!amount || amount <= 0)) {
+      return res.status(400).json({ error: "Recorrência fixa exige um valor." });
+    }
+
+    const entry = await prisma.recurringEntry.create({
+      data: {
+        tenantId: tenant.id,
+        type, category, description, frequency,
+        amount: frequency === "FIXED" ? parseFloat(amount) : null,
+        dueDay: parseInt(dueDay, 10),
+        startDate: new Date(startDate + "T00:00:00"),
+        endDate: endDate ? new Date(endDate + "T00:00:00") : null,
+        installmentsTotal: installmentsTotal ? parseInt(installmentsTotal, 10) : null,
+        lateFeeEnabled: !!lateFeeEnabled,
+        lateFeeRate: lateFeeEnabled && lateFeeRate ? parseFloat(lateFeeRate) : null,
+        lateFeeInterval: lateFeeEnabled ? (lateFeeInterval || "MONTHLY") : null,
+        notes: notes || null,
+      },
+    });
+
+    await generateDueEntries(prisma, entry);
+
+    res.json({ ...entry, startDate: entry.startDate.toISOString().split("T")[0], endDate: entry.endDate ? entry.endDate.toISOString().split("T")[0] : null });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to create recurring entry" });
+  }
+});
+
+app.patch("/api/tenants/:slug/recurring-entries/:id", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "entries");
+  if (!tenant) return;
+
+  try {
+    const existing = await prisma.recurringEntry.findFirst({ where: { id: req.params.id, tenantId: tenant.id } });
+    if (!existing) return res.status(404).json({ error: "Recorrência não encontrada." });
+
+    const {
+      type, category, description, amount, dueDay, endDate,
+      lateFeeEnabled, lateFeeRate, lateFeeInterval, active, notes,
+    } = req.body;
+
+    const entry = await prisma.recurringEntry.update({
+      where: { id: existing.id },
+      data: {
+        ...(type !== undefined ? { type } : {}),
+        ...(category !== undefined ? { category } : {}),
+        ...(description !== undefined ? { description } : {}),
+        ...(amount !== undefined ? { amount: existing.frequency === "FIXED" ? parseFloat(amount) : null } : {}),
+        ...(dueDay !== undefined ? { dueDay: parseInt(dueDay, 10) } : {}),
+        ...(endDate !== undefined ? { endDate: endDate ? new Date(endDate + "T00:00:00") : null } : {}),
+        ...(lateFeeEnabled !== undefined ? { lateFeeEnabled: !!lateFeeEnabled } : {}),
+        ...(lateFeeRate !== undefined ? { lateFeeRate: lateFeeEnabled === false ? null : (lateFeeRate ? parseFloat(lateFeeRate) : null) } : {}),
+        ...(lateFeeInterval !== undefined ? { lateFeeInterval } : {}),
+        ...(active !== undefined ? { active: !!active } : {}),
+        ...(notes !== undefined ? { notes: notes || null } : {}),
+      },
+    });
+
+    res.json({ ...entry, startDate: entry.startDate.toISOString().split("T")[0], endDate: entry.endDate ? entry.endDate.toISOString().split("T")[0] : null });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to update recurring entry" });
+  }
+});
+
+app.delete("/api/tenants/:slug/recurring-entries/:id", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "entries");
+  if (!tenant) return;
+
+  try {
+    const existing = await prisma.recurringEntry.findFirst({ where: { id: req.params.id, tenantId: tenant.id } });
+    if (!existing) return res.status(404).json({ error: "Recorrência não encontrada." });
+
+    await prisma.recurringEntry.delete({ where: { id: existing.id } });
+    res.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to delete recurring entry" });
+  }
+});
+
+// Preenche/confirma um lançamento gerado por recorrência VARIABLE (ex: conta de luz do mês)
+app.post("/api/tenants/:slug/entries/:id/confirm", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "entries");
+  if (!tenant) return;
+
+  try {
+    const existing = await prisma.financialEntry.findFirst({
+      where: { id: req.params.id, tenantId: tenant.id },
+      include: { recurringEntry: true },
+    });
+    if (!existing) return res.status(404).json({ error: "Lançamento não encontrado." });
+
+    const { amount, date } = req.body as { amount: number; date?: string };
+    if (!amount || amount <= 0) return res.status(400).json({ error: "Informe um valor válido." });
+
+    const paidAt = date ? new Date(date + "T00:00:00") : new Date();
+    const baseAmount = parseFloat(String(amount));
+
+    // Se o pagamento ocorre após o vencimento e a recorrência tem juros configurados,
+    // calcula o juro de atraso já no momento da confirmação.
+    const rec = existing.recurringEntry;
+    let lateFeeApplied: number | null = null;
+    let finalAmount = baseAmount;
+    if (rec?.lateFeeEnabled && rec.lateFeeRate && existing.dueDate) {
+      const fee = calculateLateFee(baseAmount, new Date(existing.dueDate), paidAt, rec.lateFeeRate, rec.lateFeeInterval || "MONTHLY");
+      if (fee > 0) { lateFeeApplied = fee; finalAmount = baseAmount + fee; }
+    }
+
+    const entry = await prisma.financialEntry.update({
+      where: { id: existing.id },
+      data: {
+        amount: finalAmount,
+        baseAmount,
+        lateFeeApplied,
+        status: "PAID",
+        paidAt,
+        ...(date ? { date: paidAt } : {}),
+      },
+    });
+
+    res.json({ ...entry, date: entry.date.toISOString().split("T")[0], dueDate: entry.dueDate ? entry.dueDate.toISOString().split("T")[0] : null });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to confirm entry" });
   }
 });
 

@@ -3,7 +3,7 @@ import {
   ArrowDownCircle, ArrowUpCircle, Plus, Filter, Download,
   Trash2, Edit2, TrendingUp, TrendingDown, Wallet,
   FileSpreadsheet, FileText, Search, X, CheckCircle2, AlertCircle,
-  CalendarDays, RefreshCw, Tag, ChevronDown,
+  CalendarDays, RefreshCw, Tag, ChevronDown, Repeat, Clock, Percent, Pause, Play,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -27,6 +27,35 @@ interface Entry {
   date: string;       // YYYY-MM-DD
   notes?: string | null;
   createdAt: string;
+  recurringEntryId?: string | null;
+  dueDate?: string | null;
+  status?: "PENDING" | "PAID";
+  installmentNumber?: number | null;
+  installmentsTotal?: number | null;
+  baseAmount?: number | null;
+  lateFeeApplied?: number | null;
+}
+
+type Frequency = "FIXED" | "VARIABLE";
+type LateFeeInterval = "DAILY" | "MONTHLY" | "YEARLY";
+
+interface RecurringEntry {
+  id: string;
+  tenantId: string;
+  type: EntryType;
+  category: string;
+  description: string;
+  frequency: Frequency;
+  amount: number | null;
+  dueDay: number;
+  startDate: string;
+  endDate: string | null;
+  installmentsTotal: number | null;
+  lateFeeEnabled: boolean;
+  lateFeeRate: number | null;
+  lateFeeInterval: LateFeeInterval | null;
+  active: boolean;
+  notes?: string | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -90,6 +119,27 @@ function useEntries(slug: string, dateFrom: string | null, dateTo: string | null
   useEffect(() => { fetch_(); }, [fetch_]);
   return { entries, loading, refetch: fetch_ };
 }
+
+function useRecurringEntries(slug: string) {
+  const [recurring, setRecurring] = useState<RecurringEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetch_ = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await apiFetch(`/api/tenants/${slug}/recurring-entries`);
+      setRecurring(res.ok ? await res.json() : []);
+    } catch { setRecurring([]); }
+    finally { setLoading(false); }
+  }, [slug]);
+
+  useEffect(() => { fetch_(); }, [fetch_]);
+  return { recurring, loading, refetch: fetch_ };
+}
+
+const LATE_FEE_INTERVAL_LABELS: Record<LateFeeInterval, string> = {
+  DAILY: "ao dia", MONTHLY: "ao mês", YEARLY: "ao ano",
+};
 
 // ─── Exportação Excel ─────────────────────────────────────────────────────────
 function exportExcel(entries: Entry[], tenant: Tenant, dateFrom: string | null, dateTo: string | null) {
@@ -242,9 +292,37 @@ interface Props { slug: string; tenant: Tenant; }
 
 export default function EntradasSaidasPanel({ slug, tenant }: Props) {
   const toast = useToast();
+  const [tab, setTab] = useState<"entries" | "recurring">("entries");
   const [dateFrom, setDateFrom] = useState<string | null>(firstOfMonthISO());
   const [dateTo,   setDateTo]   = useState<string | null>(todayISO());
   const { entries, loading, refetch } = useEntries(slug, dateFrom, dateTo);
+  const { recurring, loading: loadingRecurring, refetch: refetchRecurring } = useRecurringEntries(slug);
+
+  // Confirmar lançamento pendente (recorrência variável) — preencher valor real do mês
+  const [confirmEntry, setConfirmEntry] = useState<Entry | null>(null);
+  const [confirmAmount, setConfirmAmount] = useState("");
+  const [confirming, setConfirming] = useState(false);
+
+  const openConfirm = (e: Entry) => {
+    setConfirmEntry(e);
+    setConfirmAmount("");
+  };
+
+  const handleConfirmPending = async () => {
+    if (!confirmEntry) return;
+    const amount = parseFloat(confirmAmount);
+    if (!amount || amount <= 0) { toast.error("Informe um valor válido."); return; }
+    setConfirming(true);
+    try {
+      await apiFetch(`/api/tenants/${slug}/entries/${confirmEntry.id}/confirm`, {
+        method: "POST",
+        body: JSON.stringify({ amount }),
+      });
+      setConfirmEntry(null);
+      refetch();
+    } catch { toast.error("Erro ao confirmar lançamento."); }
+    finally { setConfirming(false); }
+  };
 
   const [search,       setSearch]       = useState("");
   const [typeFilter,   setTypeFilter]   = useState<"ALL" | EntryType>("ALL");
@@ -316,6 +394,119 @@ export default function EntradasSaidasPanel({ slug, tenant }: Props) {
     finally { setDeleting(false); }
   };
 
+  // ─── Recorrências ────────────────────────────────────────────────────────────
+  const [showRecModal, setShowRecModal] = useState(false);
+  const [editRec,      setEditRec]      = useState<RecurringEntry | null>(null);
+  const [deleteRec,    setDeleteRec]    = useState<RecurringEntry | null>(null);
+  const [savingRec,    setSavingRec]    = useState(false);
+  const [deletingRec,  setDeletingRec]  = useState(false);
+
+  const [recType,        setRecType]        = useState<EntryType>("EXPENSE");
+  const [recCat,         setRecCat]         = useState("");
+  const [recDesc,        setRecDesc]        = useState("");
+  const [recFrequency,   setRecFrequency]   = useState<Frequency>("FIXED");
+  const [recAmount,      setRecAmount]      = useState("");
+  const [recDueDay,      setRecDueDay]      = useState("5");
+  const [recStartDate,   setRecStartDate]   = useState(todayISO());
+  const [recHasEndDate,  setRecHasEndDate]  = useState(false);
+  const [recEndDate,     setRecEndDate]     = useState(todayISO());
+  const [recHasInstallments, setRecHasInstallments] = useState(false);
+  const [recInstallments,    setRecInstallments]    = useState("12");
+  const [recLateFeeEnabled,  setRecLateFeeEnabled]  = useState(false);
+  const [recLateFeeRate,     setRecLateFeeRate]     = useState("1");
+  const [recLateFeeInterval, setRecLateFeeInterval] = useState<LateFeeInterval>("MONTHLY");
+  const [recNotes,           setRecNotes]           = useState("");
+  const [recError,           setRecError]           = useState("");
+
+  const openNewRec = (type: EntryType = "EXPENSE") => {
+    setEditRec(null);
+    setRecType(type); setRecCat(""); setRecDesc(""); setRecFrequency("FIXED");
+    setRecAmount(""); setRecDueDay("5"); setRecStartDate(todayISO());
+    setRecHasEndDate(false); setRecEndDate(todayISO());
+    setRecHasInstallments(false); setRecInstallments("12");
+    setRecLateFeeEnabled(false); setRecLateFeeRate("1"); setRecLateFeeInterval("MONTHLY");
+    setRecNotes(""); setRecError("");
+    setShowRecModal(true);
+  };
+
+  const openEditRec = (r: RecurringEntry) => {
+    setEditRec(r);
+    setRecType(r.type); setRecCat(r.category); setRecDesc(r.description); setRecFrequency(r.frequency);
+    setRecAmount(r.amount != null ? String(r.amount) : ""); setRecDueDay(String(r.dueDay));
+    setRecStartDate(r.startDate);
+    setRecHasEndDate(!!r.endDate); setRecEndDate(r.endDate || todayISO());
+    setRecHasInstallments(!!r.installmentsTotal); setRecInstallments(r.installmentsTotal ? String(r.installmentsTotal) : "12");
+    setRecLateFeeEnabled(r.lateFeeEnabled); setRecLateFeeRate(r.lateFeeRate != null ? String(r.lateFeeRate) : "1");
+    setRecLateFeeInterval(r.lateFeeInterval || "MONTHLY");
+    setRecNotes(r.notes || ""); setRecError("");
+    setShowRecModal(true);
+  };
+
+  const handleSaveRec = async () => {
+    if (!recDesc.trim()) { setRecError("Informe uma descrição."); return; }
+    if (!recCat) { setRecError("Selecione uma categoria."); return; }
+    if (recFrequency === "FIXED") {
+      const amount = parseFloat(recAmount);
+      if (!amount || amount <= 0) { setRecError("Informe o valor fixo mensal."); return; }
+    }
+    const dueDay = parseInt(recDueDay, 10);
+    if (!dueDay || dueDay < 1 || dueDay > 28) { setRecError("Dia de vencimento deve ser entre 1 e 28."); return; }
+    if (recLateFeeEnabled) {
+      const rate = parseFloat(recLateFeeRate);
+      if (!rate || rate <= 0) { setRecError("Informe a taxa de juros por atraso."); return; }
+    }
+
+    setSavingRec(true);
+    setRecError("");
+    try {
+      const body = JSON.stringify({
+        type: recType, category: recCat, description: recDesc.trim(),
+        frequency: recFrequency,
+        amount: recFrequency === "FIXED" ? parseFloat(recAmount) : null,
+        dueDay,
+        startDate: recStartDate,
+        endDate: recHasEndDate ? recEndDate : null,
+        installmentsTotal: recHasInstallments ? parseInt(recInstallments, 10) : null,
+        lateFeeEnabled: recLateFeeEnabled,
+        lateFeeRate: recLateFeeEnabled ? parseFloat(recLateFeeRate) : null,
+        lateFeeInterval: recLateFeeEnabled ? recLateFeeInterval : null,
+        notes: recNotes || null,
+      });
+      if (editRec) {
+        await apiFetch(`/api/tenants/${slug}/recurring-entries/${editRec.id}`, { method: "PATCH", body });
+      } else {
+        await apiFetch(`/api/tenants/${slug}/recurring-entries`, { method: "POST", body });
+      }
+      setShowRecModal(false);
+      refetchRecurring();
+      refetch();
+    } catch { setRecError("Erro ao salvar. Tente novamente."); }
+    finally { setSavingRec(false); }
+  };
+
+  const handleToggleActiveRec = async (r: RecurringEntry) => {
+    try {
+      await apiFetch(`/api/tenants/${slug}/recurring-entries/${r.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ active: !r.active }),
+      });
+      refetchRecurring();
+    } catch { toast.error("Erro ao atualizar recorrência."); }
+  };
+
+  const handleDeleteRec = async () => {
+    if (!deleteRec) return;
+    setDeletingRec(true);
+    try {
+      await apiFetch(`/api/tenants/${slug}/recurring-entries/${deleteRec.id}`, { method: "DELETE" });
+      setDeleteRec(null);
+      refetchRecurring();
+    } catch { toast.error("Erro ao excluir recorrência."); }
+    finally { setDeletingRec(false); }
+  };
+
+  const recCategories = recType === "INCOME" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+
   const setPreset = (preset: string) => {
     const now = new Date();
     if (preset === "today") { setDateFrom(todayISO()); setDateTo(todayISO()); }
@@ -354,37 +545,78 @@ export default function EntradasSaidasPanel({ slug, tenant }: Props) {
   return (
     <PageWrapper>
       {/* ── Header ── */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
         <div>
           <h2 className="text-xl font-black text-slate-800">Entradas e Saídas</h2>
           <p className="text-xs text-slate-400 mt-0.5">Controle financeiro completo do estabelecimento</p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <button onClick={refetch} className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors shrink-0">
-            <RefreshCw className="w-4 h-4" />
-          </button>
-          <div className="relative group">
-            <button className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:border-slate-300 hover:bg-slate-50 transition-colors">
-              <Download className="w-3.5 h-3.5" /> <span className="hidden xs:inline">Exportar</span> <ChevronDown className="w-3 h-3" />
+        {tab === "entries" ? (
+          <div className="flex items-center gap-2 flex-wrap">
+            <button onClick={refetch} className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors shrink-0">
+              <RefreshCw className="w-4 h-4" />
             </button>
-            <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-20 py-1 hidden group-hover:block w-44">
-              <button onClick={() => exportExcel(filtered, tenant, dateFrom, dateTo)} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
-                <FileSpreadsheet className="w-4 h-4 text-green-600" /> Exportar Excel
+            <div className="relative group">
+              <button className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:border-slate-300 hover:bg-slate-50 transition-colors">
+                <Download className="w-3.5 h-3.5" /> <span className="hidden xs:inline">Exportar</span> <ChevronDown className="w-3 h-3" />
               </button>
-              <button onClick={() => exportPDF(filtered, tenant, dateFrom, dateTo)} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
-                <FileText className="w-4 h-4 text-red-500" /> Exportar PDF
-              </button>
+              <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-20 py-1 hidden group-hover:block w-44">
+                <button onClick={() => exportExcel(filtered, tenant, dateFrom, dateTo)} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
+                  <FileSpreadsheet className="w-4 h-4 text-green-600" /> Exportar Excel
+                </button>
+                <button onClick={() => exportPDF(filtered, tenant, dateFrom, dateTo)} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
+                  <FileText className="w-4 h-4 text-red-500" /> Exportar PDF
+                </button>
+              </div>
             </div>
+            <button onClick={() => openNew("INCOME")} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-green-600 hover:bg-green-700 text-white text-xs font-bold transition-colors shadow-sm">
+              <ArrowDownCircle className="w-3.5 h-3.5" /> <span>Entrada</span>
+            </button>
+            <button onClick={() => openNew("EXPENSE")} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-xs font-bold transition-colors shadow-sm">
+              <ArrowUpCircle className="w-3.5 h-3.5" /> <span>Saída</span>
+            </button>
           </div>
-          <button onClick={() => openNew("INCOME")} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-green-600 hover:bg-green-700 text-white text-xs font-bold transition-colors shadow-sm">
-            <ArrowDownCircle className="w-3.5 h-3.5" /> <span>Entrada</span>
-          </button>
-          <button onClick={() => openNew("EXPENSE")} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-xs font-bold transition-colors shadow-sm">
-            <ArrowUpCircle className="w-3.5 h-3.5" /> <span>Saída</span>
-          </button>
-        </div>
+        ) : (
+          <div className="flex items-center gap-2 flex-wrap">
+            <button onClick={refetchRecurring} className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors shrink-0">
+              <RefreshCw className="w-4 h-4" />
+            </button>
+            <button onClick={() => openNewRec("INCOME")} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-green-600 hover:bg-green-700 text-white text-xs font-bold transition-colors shadow-sm">
+              <ArrowDownCircle className="w-3.5 h-3.5" /> <span>Receita</span>
+            </button>
+            <button onClick={() => openNewRec("EXPENSE")} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-xs font-bold transition-colors shadow-sm">
+              <ArrowUpCircle className="w-3.5 h-3.5" /> <span>Despesa</span>
+            </button>
+          </div>
+        )}
       </div>
 
+      {/* ── Abas ── */}
+      <div className="flex bg-slate-100 p-1 rounded-xl mb-5 w-full sm:w-auto sm:inline-flex">
+        <button onClick={() => setTab("entries")}
+          className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-xs font-black transition-all ${tab === "entries" ? "bg-white text-slate-800 shadow-sm" : "text-slate-400"}`}
+        >
+          <Wallet className="w-3.5 h-3.5" /> Lançamentos
+        </button>
+        <button onClick={() => setTab("recurring")}
+          className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-xs font-black transition-all ${tab === "recurring" ? "bg-white text-slate-800 shadow-sm" : "text-slate-400"}`}
+        >
+          <Repeat className="w-3.5 h-3.5" /> Recorrências
+          {recurring.filter(r => r.active).length > 0 && (
+            <span className="ml-1 bg-[#C9A227] text-white text-[9px] font-black rounded-full px-1.5 py-0.5">{recurring.filter(r => r.active).length}</span>
+          )}
+        </button>
+      </div>
+
+      {tab === "recurring" ? (
+        <RecurringEntriesTab
+          recurring={recurring}
+          loading={loadingRecurring}
+          onEdit={openEditRec}
+          onToggleActive={handleToggleActiveRec}
+          onDelete={setDeleteRec}
+        />
+      ) : (
+      <>
       {/* ── KPIs ── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
         <div className="rounded-2xl bg-green-50 border border-green-100 p-4 flex sm:flex-col items-center sm:items-start gap-3 sm:gap-0">
@@ -545,8 +777,10 @@ export default function EntradasSaidasPanel({ slug, tenant }: Props) {
                   className="flex items-start sm:items-center gap-3 px-4 sm:px-5 py-3.5 hover:bg-slate-50/70 transition-colors group"
                 >
                   {/* Ícone */}
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 sm:mt-0 ${e.type === "INCOME" ? "bg-green-100" : "bg-red-100"}`}>
-                    {e.type === "INCOME"
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 sm:mt-0 ${e.status === "PENDING" ? "bg-amber-100" : e.type === "INCOME" ? "bg-green-100" : "bg-red-100"}`}>
+                    {e.status === "PENDING"
+                      ? <Clock className="w-4 h-4 text-amber-600" />
+                      : e.type === "INCOME"
                       ? <ArrowDownCircle className="w-4 h-4 text-green-600" />
                       : <ArrowUpCircle className="w-4 h-4 text-red-600" />
                     }
@@ -557,15 +791,37 @@ export default function EntradasSaidasPanel({ slug, tenant }: Props) {
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-semibold text-slate-800 truncate max-w-[160px] sm:max-w-none">{e.description}</p>
                       <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${catColor(e.category)}`}>{e.category}</span>
+                      {e.recurringEntryId && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 bg-slate-100 text-slate-500 flex items-center gap-0.5">
+                          <Repeat className="w-2.5 h-2.5" /> recorrente
+                        </span>
+                      )}
+                      {e.status === "PENDING" && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 bg-amber-100 text-amber-700">aguardando valor</span>
+                      )}
+                      {!!e.lateFeeApplied && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 bg-red-100 text-red-700 flex items-center gap-0.5">
+                          <Percent className="w-2.5 h-2.5" /> +{fmt(e.lateFeeApplied)} juros
+                        </span>
+                      )}
                     </div>
-                    <p className="text-[10px] text-slate-400 mt-0.5">{fmtDate(e.date)}{e.notes ? ` · ${e.notes}` : ""}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      {e.status === "PENDING" ? `Venc. ${fmtDate(e.dueDate || e.date)}` : fmtDate(e.date)}
+                      {e.notes ? ` · ${e.notes}` : ""}
+                    </p>
                   </div>
 
                   {/* Valor + ações — empilha em mobile */}
                   <div className="flex flex-col items-end gap-1.5 sm:flex-row sm:items-center sm:gap-2 shrink-0">
-                    <p className={`text-sm font-black tabular-nums ${e.type === "INCOME" ? "text-green-700" : "text-red-600"}`}>
-                      {e.type === "INCOME" ? "+" : "−"}{fmt(e.amount)}
-                    </p>
+                    {e.status === "PENDING" ? (
+                      <button onClick={() => openConfirm(e)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold transition-colors shadow-sm">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Preencher valor
+                      </button>
+                    ) : (
+                      <p className={`text-sm font-black tabular-nums ${e.type === "INCOME" ? "text-green-700" : "text-red-600"}`}>
+                        {e.type === "INCOME" ? "+" : "−"}{fmt(e.amount)}
+                      </p>
+                    )}
                     {/* Botões: sempre visíveis em mobile, hover em desktop */}
                     <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                       <button onClick={() => openEdit(e)} className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors">
@@ -666,6 +922,272 @@ export default function EntradasSaidasPanel({ slug, tenant }: Props) {
           <p className="text-xs text-slate-500 text-center">Esta ação não pode ser desfeita.</p>
         </div>
       </Modal>
+      </>
+      )}
+
+      {/* ── MODAL: Confirmar/preencher lançamento pendente (recorrência variável) ── */}
+      <Modal
+        isOpen={!!confirmEntry}
+        onClose={() => setConfirmEntry(null)}
+        title="Preencher Valor do Mês"
+        size="sm"
+        footer={
+          <ModalFooter>
+            <Button variant="ghost" onClick={() => setConfirmEntry(null)}>Cancelar</Button>
+            <Button variant="success" loading={confirming} onClick={handleConfirmPending} iconLeft={<CheckCircle2 className="w-4 h-4" />}>Confirmar</Button>
+          </ModalFooter>
+        }
+      >
+        <div className="space-y-4 p-1">
+          <div className="rounded-xl p-4 bg-amber-50 border border-amber-100">
+            <p className="text-sm font-bold text-slate-800">{confirmEntry?.description}</p>
+            <p className="text-xs text-slate-500 mt-1">{confirmEntry?.category} · Venc. {confirmEntry ? fmtDate(confirmEntry.dueDate || confirmEntry.date) : ""}</p>
+          </div>
+          <Input label="Valor deste mês (R$)" type="number" placeholder="0,00" value={confirmAmount} onChange={e => setConfirmAmount(e.target.value)} />
+        </div>
+      </Modal>
+
+      {/* ── MODAL: Nova / Editar Recorrência ── */}
+      <Modal
+        isOpen={showRecModal}
+        onClose={() => setShowRecModal(false)}
+        title={editRec ? "Editar Recorrência" : recType === "INCOME" ? "Nova Receita Recorrente" : "Nova Despesa Recorrente"}
+        size="sm"
+        footer={
+          <ModalFooter>
+            <Button variant="ghost" onClick={() => setShowRecModal(false)}>Cancelar</Button>
+            <Button
+              variant={recType === "INCOME" ? "success" : "danger"}
+              loading={savingRec}
+              onClick={handleSaveRec}
+              iconLeft={<Repeat className="w-4 h-4" />}
+            >
+              {editRec ? "Salvar" : "Criar Recorrência"}
+            </Button>
+          </ModalFooter>
+        }
+      >
+        <div className="space-y-4 p-1">
+          {/* Toggle Receita/Despesa */}
+          <div className="flex bg-slate-100 p-0.5 rounded-xl">
+            {(["INCOME", "EXPENSE"] as const).map(t => (
+              <button key={t} onClick={() => { setRecType(t); setRecCat(""); }}
+                className={`flex-1 py-2.5 rounded-lg text-[11px] font-black uppercase tracking-wider transition-all ${recType === t ? (t === "INCOME" ? "bg-green-500 text-white shadow-sm" : "bg-red-500 text-white shadow-sm") : "text-slate-400"}`}
+              >
+                {t === "INCOME" ? "Receita" : "Despesa"}
+              </button>
+            ))}
+          </div>
+
+          {/* Categoria */}
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-2">Categoria</p>
+            <div className="flex flex-wrap gap-1.5">
+              {recCategories.map(c => (
+                <button key={c} onClick={() => setRecCat(c)}
+                  className={`px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-all ${recCat === c ? (recType === "INCOME" ? "bg-green-500 text-white border-green-500" : "bg-red-500 text-white border-red-500") : "border-slate-200 text-slate-600 hover:border-slate-300 bg-white"}`}
+                >{c}</button>
+              ))}
+            </div>
+          </div>
+
+          <Input label="Descrição" placeholder="Ex: Conta de energia elétrica" value={recDesc} onChange={e => setRecDesc(e.target.value)} />
+
+          {/* Fixo x Variável */}
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-2">Tipo de valor</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => setRecFrequency("FIXED")}
+                className={`text-left rounded-xl border p-3 transition-all ${recFrequency === "FIXED" ? "border-[#C9A227] bg-amber-50" : "border-slate-200 bg-white hover:border-slate-300"}`}
+              >
+                <p className="text-xs font-black text-slate-800">Fixo</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">Mesmo valor todo mês, lançado automaticamente</p>
+              </button>
+              <button onClick={() => setRecFrequency("VARIABLE")}
+                className={`text-left rounded-xl border p-3 transition-all ${recFrequency === "VARIABLE" ? "border-[#C9A227] bg-amber-50" : "border-slate-200 bg-white hover:border-slate-300"}`}
+              >
+                <p className="text-xs font-black text-slate-800">Variável</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">Você preenche o valor todo mês (ex: conta de luz)</p>
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            {recFrequency === "FIXED" && (
+              <Input label="Valor fixo (R$)" type="number" placeholder="0,00" value={recAmount} onChange={e => setRecAmount(e.target.value)} />
+            )}
+            <Input label="Dia do vencimento" type="number" min={1} max={28} placeholder="Ex: 5" value={recDueDay} onChange={e => setRecDueDay(e.target.value)}
+              className={recFrequency === "VARIABLE" ? "col-span-2" : undefined}
+            />
+          </div>
+
+          <DatePicker label="Começa em" value={recStartDate} onChange={v => setRecStartDate(v || todayISO())} />
+
+          {/* Parcelas */}
+          <div className="rounded-xl border border-slate-200 p-3">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={recHasInstallments} onChange={e => setRecHasInstallments(e.target.checked)} className="w-4 h-4 rounded accent-[#C9A227]" />
+              <span className="text-xs font-bold text-slate-700">Tem número de parcelas definido</span>
+            </label>
+            {recHasInstallments && (
+              <div className="mt-3">
+                <Input label="Total de parcelas" type="number" min={1} placeholder="Ex: 12" value={recInstallments} onChange={e => setRecInstallments(e.target.value)} />
+                <p className="text-[10px] text-slate-400 mt-1">A recorrência para de gerar lançamentos automaticamente após a última parcela.</p>
+              </div>
+            )}
+          </div>
+
+          {/* Data de término opcional (independente de parcelas) */}
+          <div className="rounded-xl border border-slate-200 p-3">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={recHasEndDate} onChange={e => setRecHasEndDate(e.target.checked)} className="w-4 h-4 rounded accent-[#C9A227]" />
+              <span className="text-xs font-bold text-slate-700">Definir data final</span>
+            </label>
+            {recHasEndDate && (
+              <div className="mt-3">
+                <DatePicker label="Termina em" value={recEndDate} onChange={v => setRecEndDate(v || todayISO())} min={recStartDate} />
+              </div>
+            )}
+          </div>
+
+          {/* Juros por atraso */}
+          <div className="rounded-xl border border-slate-200 p-3">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={recLateFeeEnabled} onChange={e => setRecLateFeeEnabled(e.target.checked)} className="w-4 h-4 rounded accent-[#C9A227]" />
+              <span className="text-xs font-bold text-slate-700">Aplicar juros se atrasar o pagamento</span>
+            </label>
+            {recLateFeeEnabled && (
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <Input label="Taxa de juros (%)" type="number" step="0.01" placeholder="Ex: 1" value={recLateFeeRate} onChange={e => setRecLateFeeRate(e.target.value)} />
+                <div>
+                  <p className="text-[11px] font-bold text-slate-500 mb-1.5">Periodicidade</p>
+                  <select value={recLateFeeInterval} onChange={e => setRecLateFeeInterval(e.target.value as LateFeeInterval)}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm font-medium bg-white focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40"
+                  >
+                    <option value="DAILY">Ao dia</option>
+                    <option value="MONTHLY">Ao mês</option>
+                    <option value="YEARLY">Ao ano</option>
+                  </select>
+                </div>
+                <p className="col-span-2 text-[10px] text-slate-400">O juros é calculado sobre o valor do lançamento a partir do dia seguinte ao vencimento, e somado automaticamente.</p>
+              </div>
+            )}
+          </div>
+
+          <Input label="Observações (opcional)" placeholder="Detalhes adicionais..." value={recNotes} onChange={e => setRecNotes(e.target.value)} />
+
+          {recError && (
+            <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 rounded-xl px-3 py-2.5 text-xs font-semibold">
+              <AlertCircle className="w-4 h-4 shrink-0" />{recError}
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* ── MODAL: Excluir recorrência ── */}
+      <Modal
+        isOpen={!!deleteRec}
+        onClose={() => setDeleteRec(null)}
+        title="Excluir Recorrência"
+        size="sm"
+        footer={
+          <ModalFooter>
+            <Button variant="ghost" onClick={() => setDeleteRec(null)}>Cancelar</Button>
+            <Button variant="danger" loading={deletingRec} onClick={handleDeleteRec} iconLeft={<Trash2 className="w-4 h-4" />}>Excluir</Button>
+          </ModalFooter>
+        }
+      >
+        <div className="space-y-3 p-1">
+          <div className={`rounded-xl p-4 ${deleteRec?.type === "INCOME" ? "bg-green-50" : "bg-red-50"}`}>
+            <p className="text-sm font-bold text-slate-800">{deleteRec?.description}</p>
+            <p className="text-xs text-slate-500 mt-1">{deleteRec?.category}</p>
+          </div>
+          <p className="text-xs text-slate-500 text-center">Os lançamentos já gerados por esta recorrência permanecem no histórico. Apenas a regra de recorrência é excluída.</p>
+        </div>
+      </Modal>
     </PageWrapper>
+  );
+}
+
+// ─── Aba de Recorrências ───────────────────────────────────────────────────────
+interface RecurringEntriesTabProps {
+  recurring: RecurringEntry[];
+  loading: boolean;
+  onEdit: (r: RecurringEntry) => void;
+  onToggleActive: (r: RecurringEntry) => void;
+  onDelete: (r: RecurringEntry) => void;
+}
+
+function RecurringEntriesTab({ recurring, loading, onEdit, onToggleActive, onDelete }: RecurringEntriesTabProps) {
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="w-7 h-7 border-4 border-[#C9A227] border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (recurring.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl border border-slate-100 flex flex-col items-center justify-center py-16 text-slate-300 px-4 text-center">
+        <Repeat className="w-10 h-10 mb-3" />
+        <p className="text-sm font-medium text-slate-400">Nenhuma recorrência cadastrada</p>
+        <p className="text-xs text-slate-300 mt-1 max-w-xs">Cadastre gastos e receitas que se repetem todo mês, como água, luz, aluguel ou assinaturas de sistema.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {recurring.map(r => (
+        <div key={r.id} className={`bg-white rounded-2xl border p-4 ${r.active ? "border-slate-100" : "border-slate-100 opacity-60"}`}>
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${r.type === "INCOME" ? "bg-green-100" : "bg-red-100"}`}>
+                {r.type === "INCOME"
+                  ? <ArrowDownCircle className="w-4 h-4 text-green-600" />
+                  : <ArrowUpCircle className="w-4 h-4 text-red-600" />
+                }
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-slate-800 truncate">{r.description}</p>
+                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full inline-block ${catColor(r.category)}`}>{r.category}</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <button onClick={() => onToggleActive(r)} title={r.active ? "Pausar" : "Reativar"} className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors">
+                {r.active ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+              </button>
+              <button onClick={() => onEdit(r)} className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors">
+                <Edit2 className="w-3 h-3" />
+              </button>
+              <button onClick={() => onDelete(r)} className="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 flex items-center justify-center text-red-500 transition-colors">
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${r.frequency === "FIXED" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}`}>
+              {r.frequency === "FIXED" ? `Fixo · ${fmt(r.amount || 0)}` : "Variável"}
+            </span>
+            <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-slate-100 text-slate-500 flex items-center gap-1">
+              <CalendarDays className="w-2.5 h-2.5" /> Todo dia {r.dueDay}
+            </span>
+            {r.installmentsTotal && (
+              <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-purple-100 text-purple-700">{r.installmentsTotal}x parcelas</span>
+            )}
+            {r.lateFeeEnabled && r.lateFeeRate && (
+              <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-red-100 text-red-700 flex items-center gap-1">
+                <Percent className="w-2.5 h-2.5" /> {r.lateFeeRate}% {LATE_FEE_INTERVAL_LABELS[r.lateFeeInterval || "MONTHLY"]}
+              </span>
+            )}
+            {!r.active && (
+              <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-slate-200 text-slate-600">Pausada</span>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
