@@ -103,6 +103,13 @@ export interface NfceOrderData {
   paymentMethod: string; // CASH | PIX | CREDIT | DEBIT | VR | STONE_*
   customerName?: string;
   customerCpf?: string; // opcional — CPF do consumidor
+  emitName: string;     // razão social / nome do estabelecimento emitente
+  emitAddress: {
+    street: string;
+    number: string;
+    neighborhood: string;
+    cep: string;
+  };
 }
 
 function mapPaymentCode(method: string): { tPag: string; xPag?: string } {
@@ -196,17 +203,17 @@ export async function emitirNfce(
         // Emitente
         emit: {
           CNPJCPF: cnpjClean,
-          xNome: fiscal.ambiente === "producao" ? "EMITENTE" : "NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL",
+          xNome: fiscal.ambiente === "producao" ? order.emitName.slice(0, 60) : "NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL",
           IE: ieClean,
           CRT: parseInt(fiscal.crt, 10),
           enderEmit: {
-            xLgr: "Logradouro",
-            nro: "S/N",
-            xBairro: "Bairro",
+            xLgr: order.emitAddress.street || "Nao informado",
+            nro: order.emitAddress.number || "S/N",
+            xBairro: order.emitAddress.neighborhood || "Nao informado",
             cMun: parseInt(fiscal.cMun, 10),
             xMun: fiscal.xMun,
             UF: fiscal.uf,
-            CEP: "00000000",
+            CEP: order.emitAddress.cep.replace(/\D/g, "") || "00000000",
             cPais: 1058,
             xPais: "Brasil",
           },

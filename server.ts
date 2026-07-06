@@ -4744,6 +4744,19 @@ app.post("/api/owner/tenants/:tenantId/nfce/emit", requireAuth, async (req, res)
       unitPrice: item.price,
     }));
 
+    let emitAddress = { street: "", number: "", neighborhood: "", cep: "" };
+    try {
+      const parsed = tenant.address ? JSON.parse(tenant.address as string) : null;
+      if (parsed) {
+        emitAddress = {
+          street: parsed.street || "",
+          number: parsed.number || "",
+          neighborhood: parsed.neighborhood || "",
+          cep: parsed.cep || "",
+        };
+      }
+    } catch { /* endereço inválido — segue com campos vazios, fiscal.ts aplica fallback */ }
+
     const result = await emitirNfce(tenant.id, fiscal, {
       numero,
       serie: fiscal.serie || 1,
@@ -4752,6 +4765,8 @@ app.post("/api/owner/tenants/:tenantId/nfce/emit", requireAuth, async (req, res)
       paymentMethod: order.paymentMethod,
       customerName: order.customerName || undefined,
       customerCpf: order.customerCpf || undefined,
+      emitName: tenant.name,
+      emitAddress,
     });
 
     // Atualiza pedido com resultado
