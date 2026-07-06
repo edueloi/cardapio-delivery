@@ -930,6 +930,13 @@ const migrations = [
       CONSTRAINT wpp_message_logs_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE ON UPDATE CASCADE
     ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
   },
+  // Número dedicado para alertas internos do bot (novo pedido, estoque baixo) — separado
+  // do WhatsApp público exibido no cardápio. Se vazio, cai no tenant.whatsapp (fallback).
+  {
+    name: 'add_wpp_bot_configs_owner_alert_phone',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'wpp_bot_configs' AND COLUMN_NAME = 'owner_alert_phone'",
+    run: "ALTER TABLE wpp_bot_configs ADD COLUMN owner_alert_phone VARCHAR(191) NULL",
+  },
 ];
 
 async function run() {

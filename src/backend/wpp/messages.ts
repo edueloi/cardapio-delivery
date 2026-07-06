@@ -91,11 +91,12 @@ export async function sendOwnerOrderAlert(order: {
   scheduledTime?: string | null;
   items: Array<{ quantity: number; price: number; notes?: string | null; product?: { name?: string | null } | null; productVariant?: { name?: string | null } | null }>;
 }, tenant: { name: string; slug: string; whatsapp?: string | null }) {
-  if (!tenant.whatsapp) return;
-
   const instance = await prisma.wppInstance.findUnique({ where: { tenantId: order.tenantId } });
   const config = await prisma.wppBotConfig.findUnique({ where: { tenantId: order.tenantId } });
   if (!instance || instance.status !== "connected" || !config?.botEnabled) return;
+
+  const alertPhone = config.ownerAlertPhone || tenant.whatsapp;
+  if (!alertPhone) return;
 
   const typeLabel = order.orderType === "PICKUP" ? "🏪 Retirada" : "🛵 Entrega";
 
@@ -115,7 +116,7 @@ export async function sendOwnerOrderAlert(order: {
     `📋 *Itens:*\n${formatItems(order.items)}\n\n` +
     `💰 *Total: ${fmt(order.total)}*`;
 
-  await sendMessage(order.tenantId, tenant.whatsapp, text, 0, "OWNER_ALERT");
+  await sendMessage(order.tenantId, alertPhone, text, 0, "OWNER_ALERT");
 }
 
 // ─── Customer: status update ──────────────────────────────────────────────────
@@ -199,9 +200,11 @@ export async function sendLowStockAlert(
   tenant: { whatsapp?: string | null },
   item: { name: string; quantity: number; minStock: number; unit?: string | null }
 ) {
-  if (!tenant.whatsapp) return;
-  const { allowed } = await canSend(tenantId, "sendLowStockAlert");
+  const { allowed, config } = await canSend(tenantId, "sendLowStockAlert");
   if (!allowed) return;
+
+  const alertPhone = config?.ownerAlertPhone || tenant.whatsapp;
+  if (!alertPhone) return;
 
   const unit = item.unit || "un";
   const text =
@@ -210,5 +213,5 @@ export async function sendLowStockAlert(
     `(mínimo configurado: ${item.minStock} ${unit}).\n\n` +
     `Considere repor o quanto antes para não faltar.`;
 
-  await sendMessage(tenantId, tenant.whatsapp, text, 0, "LOW_STOCK");
+  await sendMessage(tenantId, alertPhone, text, 0, "LOW_STOCK");
 }

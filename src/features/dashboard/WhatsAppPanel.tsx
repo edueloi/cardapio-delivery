@@ -32,6 +32,7 @@ interface WppFormState {
   sendStatusUpdates: boolean;
   sendLoyaltyPoints: boolean;
   sendLowStockAlert: boolean;
+  ownerAlertPhone: string;
   isPaused: boolean;
   startTime: string;
   endTime: string;
@@ -77,6 +78,7 @@ function buildForm(tenant: Tenant, instance: WppInstance | null, config: WppBotC
     sendStatusUpdates: config?.sendStatusUpdates ?? true,
     sendLoyaltyPoints: config?.sendLoyaltyPoints ?? true,
     sendLowStockAlert: config?.sendLowStockAlert ?? false,
+    ownerAlertPhone: config?.ownerAlertPhone || "",
     isPaused: config?.isPaused || false,
     startTime: config?.startTime || "00:00",
     endTime: config?.endTime || "23:59",
@@ -289,6 +291,7 @@ export function WhatsAppManagementPanel({
           sendStatusUpdates: form.sendStatusUpdates,
           sendLoyaltyPoints: form.sendLoyaltyPoints,
           sendLowStockAlert: form.sendLowStockAlert,
+          ownerAlertPhone: form.ownerAlertPhone.trim() || null,
           isPaused: form.isPaused,
           startTime: form.startTime,
           endTime: form.endTime,
@@ -439,13 +442,22 @@ export function WhatsAppManagementPanel({
               placeholder={`${tenant.name} Bot`}
             />
             <Input
-              label="WhatsApp principal"
+              label="WhatsApp público (cardápio)"
               value={tenant.whatsapp || ""}
               disabled
               placeholder="Ainda não informado"
-              hint="Edite em Configurações → dados do estabelecimento."
+              hint="Número exibido pro cliente no cardápio. Edite em Configurações → dados do estabelecimento."
             />
           </div>
+
+          <Input
+            label="Telefone para alertas internos"
+            value={form.ownerAlertPhone}
+            onChange={(event) => setForm((current) => ({ ...current, ownerAlertPhone: event.target.value }))}
+            placeholder={tenant.whatsapp || "5511999999999"}
+            hint="Quem recebe os avisos de novo pedido e estoque baixo. Deixe em branco para usar o WhatsApp público acima."
+            wrapperClassName="mt-4"
+          />
 
 {/* Mensagem automática ocultada por enquanto conforme solicitado */}
           {/* <Textarea

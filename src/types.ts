@@ -255,6 +255,7 @@ export interface WppBotConfig {
   sendStatusUpdates: boolean;
   sendLoyaltyPoints: boolean;
   sendLowStockAlert: boolean;
+  ownerAlertPhone?: string | null; // telefone dedicado para alertas internos (novo pedido, estoque baixo) — se vazio, usa o whatsapp público do tenant
   welcomeMessage?: string | null;
   isPaused: boolean;
   startTime?: string | null;

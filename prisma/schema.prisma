@@ -505,6 +505,7 @@ model WppBotConfig {
   sendStatusUpdates Boolean @default(true) @map("send_status_updates")
   sendLoyaltyPoints Boolean @default(true) @map("send_loyalty_points") // avisa cliente quando ganha pontos de fidelidade
   sendLowStockAlert Boolean @default(false) @map("send_low_stock_alert") // avisa o dono quando item de estoque atinge o mínimo
+  ownerAlertPhone  String?  @map("owner_alert_phone") // número que recebe alertas internos (novo pedido, estoque baixo) — se vazio, cai no whatsapp público do tenant
   welcomeMessage   String?  @map("welcome_message")
   isPaused         Boolean  @default(false) @map("is_paused")
   startTime        String?  @map("start_time") // HH:mm
