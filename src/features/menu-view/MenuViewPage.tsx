@@ -676,7 +676,7 @@ export default function MenuViewPage() {
               {tenant.description && <p className="text-white/40 text-xs leading-relaxed mb-4 line-clamp-2">{tenant.description}</p>}
               <div className="flex flex-wrap gap-2">
                 <StatusPill open={storeOpen} nextInfo={nextOpenInfo} />
-                {todayHours && <InfoPill icon={<Clock className="w-3 h-3" />} text={storeOpen ? todayHours : (nextOpenInfo ?? todayHours)} />}
+                {todayHours && <InfoPill icon={<Clock className="w-3 h-3" />} text={todayHours} />}
                 <InfoPill icon={<Bike className="w-3 h-3" />} text="Delivery" />
               </div>
             </div>
@@ -766,7 +766,7 @@ export default function MenuViewPage() {
               {/* Status row */}
               <div className="flex flex-wrap justify-center gap-2 mb-5">
                 <StatusPill open={storeOpen} nextInfo={nextOpenInfo} />
-                {todayHours && <InfoPill icon={<Clock className="w-3 h-3" />} text={storeOpen ? todayHours : (nextOpenInfo ?? todayHours)} />}
+                {todayHours && <InfoPill icon={<Clock className="w-3 h-3" />} text={todayHours} />}
                 <InfoPill icon={<Bike className="w-3 h-3" />} text="Delivery" />
               </div>
 
@@ -1781,11 +1781,11 @@ export default function MenuViewPage() {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function StatusPill({ open, nextInfo }: { open: boolean; nextInfo: string | null }) {
+function StatusPill({ open }: { open: boolean; nextInfo?: string | null }) {
   return (
     <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold ${open ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${open ? "bg-green-400 animate-pulse" : "bg-red-400"}`} />
-      {open ? "Aberto agora" : (nextInfo ?? "Fechado")}
+      {open ? "Aberto agora" : "Fechado"}
     </div>
   );
 }
@@ -1908,62 +1908,32 @@ function ProductCard({ product, delay, onOpen }: { product: Product; delay: numb
       whileTap={{ scale: 0.97 }}
       className="w-full text-left group"
     >
-      <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden hover:shadow-lg hover:border-slate-200 transition-all duration-300">
-        {/* Full-width image */}
-        {hasImage && (
-          <div className="relative w-full aspect-[4/3] overflow-hidden bg-slate-50">
-            <img
-              src={product.imageUrl!}
-              className="w-full h-full object-cover group-hover:scale-107 transition-transform duration-700 ease-out"
-              alt={product.name}
-              loading="lazy"
-              style={{ transformOrigin: "center center" }}
-            />
-            <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.35) 0%, transparent 55%)" }} />
-            {/* Add button overlay */}
-            <motion.div
-              initial={false}
-              className="absolute bottom-3 right-3"
-            >
-              <div className="w-9 h-9 rounded-2xl flex items-center justify-center shadow-xl text-white" style={{ background: `linear-gradient(135deg, ${BRAND} 0%, ${BRAND_DARK} 100%)` }}>
-                <Plus className="w-4 h-4" />
-              </div>
-            </motion.div>
-            {/* Price on image */}
-            <div className="absolute bottom-3 left-3">
-              <div className="bg-black/50 backdrop-blur-md rounded-xl px-2.5 py-1">
-                <span className="text-[12px] font-black text-white">
-                  {hasVariants && <span className="font-normal opacity-60 text-[10px] mr-1">a partir</span>}
-                  {fmt(minPrice)}
-                </span>
-              </div>
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden hover:shadow-md hover:border-slate-200 transition-all duration-300">
+        <div className="p-3 flex items-center gap-3">
+          <div className="flex-1 min-w-0">
+            <h3 className="font-black text-slate-900 text-[14px] leading-snug line-clamp-1">{product.name}</h3>
+            {product.description && (
+              <p className="text-[11px] text-slate-400 mt-1 line-clamp-2 leading-relaxed">{product.description}</p>
+            )}
+            <div className="mt-2">
+              {hasVariants && <span className="text-[9px] font-bold text-slate-400 block leading-none mb-0.5">a partir de</span>}
+              <span className="text-[15px] font-black" style={{ color: BRAND }}>{fmt(minPrice)}</span>
             </div>
           </div>
-        )}
-
-        {/* Body */}
-        <div className="px-4 py-3 flex gap-3">
-          {!hasImage && (
-            <div className="w-[76px] h-[76px] rounded-2xl overflow-hidden bg-slate-50 shrink-0 flex items-center justify-center text-3xl border border-slate-100 shadow-sm">
-              🍽️
+          <div className="relative w-[104px] h-[104px] rounded-2xl overflow-hidden bg-slate-50 shrink-0 flex items-center justify-center border border-slate-100">
+            {hasImage ? (
+              <img
+                src={product.imageUrl!}
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
+                alt={product.name}
+                loading="lazy"
+              />
+            ) : (
+              <span className="text-3xl">🍽️</span>
+            )}
+            <div className="absolute bottom-1.5 right-1.5 w-7 h-7 rounded-full flex items-center justify-center text-white shadow-md" style={{ background: BRAND }}>
+              <Plus className="w-3.5 h-3.5" />
             </div>
-          )}
-          <div className="flex-1 min-w-0">
-            <h3 className="font-black text-slate-900 text-[14px] leading-snug">{product.name}</h3>
-            {product.description && (
-              <p className="text-[12px] text-slate-400 mt-1 line-clamp-2 leading-relaxed">{product.description}</p>
-            )}
-            {!hasImage && (
-              <div className="mt-2.5 flex items-center justify-between">
-                <div>
-                  {hasVariants && <span className="text-[10px] font-bold text-slate-400 block leading-none mb-0.5">a partir de</span>}
-                  <span className="text-[15px] font-black" style={{ color: BRAND }}>{fmt(minPrice)}</span>
-                </div>
-                <div className="w-9 h-9 rounded-2xl flex items-center justify-center shadow-md text-white shrink-0" style={{ background: `linear-gradient(135deg, #111 0%, #333 100%)` }}>
-                  <Plus className="w-4 h-4" />
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>

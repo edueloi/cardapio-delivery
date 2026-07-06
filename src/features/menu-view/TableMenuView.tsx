@@ -1015,13 +1015,6 @@ export default function TableMenuView() {
                         <h2 className="text-xl font-bold text-zinc-900">{selectedProduct.name}</h2>
                         <p className="text-xs text-zinc-400 font-medium leading-relaxed">{selectedProduct.description}</p>
                         <p className="text-lg font-bold text-zinc-900">{fmt(selectedProduct.price)}</p>
-                        
-                        <div className="bg-zinc-100 rounded-lg p-4 flex items-start gap-3 border border-zinc-200">
-                          <div className="w-4 h-4 rounded-full bg-zinc-400 flex items-center justify-center text-white shrink-0 mt-0.5 italic font-serif text-[10px]">i</div>
-                          <p className="text-[10px] text-zinc-500 font-medium leading-relaxed">
-                            Este restaurante não está aceitando pedidos no momento, mas você ainda pode visualizar o cardápio.
-                          </p>
-                        </div>
                       </div>
 
                       <div className="hidden lg:flex items-center justify-between pb-8 border-b border-white/5">
