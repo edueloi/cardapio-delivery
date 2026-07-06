@@ -54,6 +54,7 @@ model Tenant {
   financialEntries FinancialEntry[]
   recurringEntries RecurringEntry[]
   kitchenSessions  KitchenSession[]
+  kitchenStaff     KitchenStaff[]
   wppMessageLogs   WppMessageLog[]
   inviteTokens     InviteToken[]
 
@@ -153,17 +154,40 @@ model AuthSession {
   @@map("auth_sessions")
 }
 
-// Sessão do painel de cozinha (/cozinha/:slug) — login por senha simples da loja,
-// sem conta de usuário. Pensado para um tablet/TV fixo, por isso expira em 1 ano
-// (na prática "sempre conectado"; só sai se deslogar manualmente ou limpar o navegador).
-model KitchenSession {
-  id        String   @id @default(cuid())
-  tenantId  String   @map("tenant_id")
-  token     String   @unique
-  expiresAt DateTime @map("expires_at")
-  createdAt DateTime @default(now()) @map("created_at")
+// Funcionário com acesso ao painel de cozinha (/cozinha/:slug) — nome + senha própria,
+// cadastrado pelo dono. Convive com a senha única do tenant (kitchenPasswordHash):
+// quem souber a senha da loja entra como sessão anônima; quem tiver usuário aqui
+// entra identificado (nome aparece na tela para outros da equipe saberem quem está).
+model KitchenStaff {
+  id           String   @id @default(cuid())
+  tenantId     String   @map("tenant_id")
+  name         String
+  passwordHash String   @map("password_hash")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sessions KitchenSession[]
+
+  @@unique([tenantId, name])
+  @@map("kitchen_staff")
+}
+
+// Sessão do painel de cozinha (/cozinha/:slug) — login por senha simples da loja
+// (kitchenStaffId nulo, sessão anônima) ou por funcionário cadastrado (KitchenStaff).
+// Pensado para um tablet/TV fixo, por isso expira em 1 ano (na prática "sempre
+// conectado"; só sai se deslogar manualmente ou limpar o navegador).
+model KitchenSession {
+  id             String   @id @default(cuid())
+  tenantId       String   @map("tenant_id")
+  kitchenStaffId String?  @map("kitchen_staff_id")
+  token          String   @unique
+  expiresAt      DateTime @map("expires_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  kitchenStaff KitchenStaff? @relation(fields: [kitchenStaffId], references: [id], onDelete: Cascade)
 
   @@map("kitchen_sessions")
 }

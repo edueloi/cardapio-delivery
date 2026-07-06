@@ -937,6 +937,34 @@ const migrations = [
     check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'wpp_bot_configs' AND COLUMN_NAME = 'owner_alert_phone'",
     run: "ALTER TABLE wpp_bot_configs ADD COLUMN owner_alert_phone VARCHAR(191) NULL",
   },
+  // ── Painel de Cozinha: login individual por funcionário (nome + senha própria) ──
+  {
+    name: 'create_kitchen_staff_table',
+    check: "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'kitchen_staff'",
+    run: `CREATE TABLE kitchen_staff (
+      id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      tenant_id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      name VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      password_hash VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      active TINYINT(1) NOT NULL DEFAULT 1,
+      created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (id),
+      UNIQUE INDEX kitchen_staff_tenant_id_name_unique (tenant_id, name),
+      INDEX kitchen_staff_tenant_id_idx (tenant_id),
+      CONSTRAINT kitchen_staff_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE ON UPDATE CASCADE
+    ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+  },
+  {
+    name: 'add_kitchen_sessions_kitchen_staff_id',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'kitchen_sessions' AND COLUMN_NAME = 'kitchen_staff_id'",
+    run: "ALTER TABLE kitchen_sessions ADD COLUMN kitchen_staff_id VARCHAR(191) NULL",
+  },
+  {
+    name: 'add_kitchen_sessions_kitchen_staff_id_fkey',
+    check: "SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'kitchen_sessions' AND CONSTRAINT_NAME = 'kitchen_sessions_kitchen_staff_id_fkey'",
+    run: "ALTER TABLE kitchen_sessions ADD CONSTRAINT kitchen_sessions_kitchen_staff_id_fkey FOREIGN KEY (kitchen_staff_id) REFERENCES kitchen_staff(id) ON DELETE CASCADE ON UPDATE CASCADE",
+  },
 ];
 
 async function run() {

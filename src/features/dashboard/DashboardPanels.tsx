@@ -29,6 +29,7 @@ import {
   ArrowDownRight,
   Monitor,
   ChefHat,
+  Users,
   Trash2,
   Image as ImageIcon,
   Package,
@@ -1509,6 +1510,175 @@ function KitchenPasswordCard({ tenantId }: { tenantId: string }) {
   );
 }
 
+interface KitchenStaffMember {
+  id: string;
+  name: string;
+  active: boolean;
+  createdAt: string;
+}
+
+function KitchenStaffCard({ tenantId }: { tenantId: string }) {
+  const toast = useToast();
+  const [staff, setStaff] = useState<KitchenStaffMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editPassword, setEditPassword] = useState("");
+
+  const fetchStaff = () => {
+    apiJson<KitchenStaffMember[]>(`/api/admin/${tenantId}/kitchen/staff`)
+      .then((data) => setStaff(Array.isArray(data) ? data : []))
+      .catch(() => setStaff([]))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { fetchStaff(); }, [tenantId]);
+
+  const handleCreate = async () => {
+    if (!name.trim()) { toast.error("Informe o nome do funcionário."); return; }
+    if (password.length < 4) { toast.error("A senha deve ter pelo menos 4 caracteres."); return; }
+    setSaving(true);
+    try {
+      await apiFetch(`/api/admin/${tenantId}/kitchen/staff`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), password }),
+      });
+      setName(""); setPassword("");
+      fetchStaff();
+      toast.success("Funcionário cadastrado!");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao cadastrar funcionário.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleActive = async (member: KitchenStaffMember) => {
+    try {
+      await apiFetch(`/api/admin/${tenantId}/kitchen/staff/${member.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active: !member.active }),
+      });
+      fetchStaff();
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao atualizar funcionário.");
+    }
+  };
+
+  const handleResetPassword = async (memberId: string) => {
+    if (editPassword.length < 4) { toast.error("A senha deve ter pelo menos 4 caracteres."); return; }
+    try {
+      await apiFetch(`/api/admin/${tenantId}/kitchen/staff/${memberId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: editPassword }),
+      });
+      setEditingId(null);
+      setEditPassword("");
+      toast.success("Senha atualizada!");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao atualizar senha.");
+    }
+  };
+
+  const handleDelete = async (member: KitchenStaffMember) => {
+    if (!window.confirm(`Remover ${member.name} do acesso à cozinha?`)) return;
+    try {
+      await apiFetch(`/api/admin/${tenantId}/kitchen/staff/${member.id}`, { method: "DELETE" });
+      fetchStaff();
+      toast.success("Funcionário removido.");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao remover funcionário.");
+    }
+  };
+
+  return (
+    <ContentCard padding="lg">
+      <div className="flex items-center gap-3 mb-1">
+        <Users className="w-4 h-4 text-slate-400" />
+        <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Equipe da Cozinha</p>
+      </div>
+      <p className="text-[10px] text-slate-400 mb-6">
+        Cadastre cada pessoa que trabalha na cozinha com nome e senha próprios — assim o app mostra
+        quem está com o pedido em mãos. Continua funcionando junto com a senha única acima.
+      </p>
+
+      <div className="flex flex-col sm:flex-row gap-3 sm:items-end mb-6">
+        <div className="flex-1 space-y-1.5">
+          <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Nome</label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Ex: João"
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm font-bold focus:border-[#C9A227] outline-none transition-all"
+          />
+        </div>
+        <div className="flex-1 space-y-1.5">
+          <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Senha</label>
+          <input
+            type="text"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Mínimo 4 caracteres"
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm font-bold focus:border-[#C9A227] outline-none transition-all"
+          />
+        </div>
+        <button
+          type="button"
+          disabled={saving || !name.trim() || !password}
+          onClick={handleCreate}
+          className="bg-[#0D1B3E] hover:bg-slate-800 disabled:opacity-40 text-white px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all shrink-0"
+        >
+          {saving ? "Salvando..." : "Adicionar"}
+        </button>
+      </div>
+
+      {!loading && staff.length === 0 && (
+        <p className="text-xs text-slate-300 text-center py-4">Nenhum funcionário cadastrado ainda.</p>
+      )}
+
+      {staff.length > 0 && (
+        <div className="space-y-2">
+          {staff.map((member) => (
+            <div key={member.id} className="flex items-center gap-3 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3">
+              <div className={`w-2 h-2 rounded-full shrink-0 ${member.active ? "bg-green-500" : "bg-slate-300"}`} />
+              <span className="text-sm font-bold text-slate-700 flex-1 truncate">{member.name}</span>
+
+              {editingId === member.id ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={editPassword}
+                    onChange={(e) => setEditPassword(e.target.value)}
+                    placeholder="Nova senha"
+                    autoFocus
+                    className="bg-white border border-slate-200 rounded-lg py-1.5 px-3 text-xs font-bold w-32 outline-none focus:border-[#C9A227]"
+                  />
+                  <button onClick={() => handleResetPassword(member.id)} className="text-[10px] font-black uppercase text-green-600 hover:text-green-700">Salvar</button>
+                  <button onClick={() => { setEditingId(null); setEditPassword(""); }} className="text-[10px] font-black uppercase text-slate-400 hover:text-slate-600">Cancelar</button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 shrink-0">
+                  <button onClick={() => { setEditingId(member.id); setEditPassword(""); }} className="text-[10px] font-black uppercase text-slate-400 hover:text-slate-600">Trocar senha</button>
+                  <button onClick={() => handleToggleActive(member)} className={`text-[10px] font-black uppercase ${member.active ? "text-amber-600 hover:text-amber-700" : "text-green-600 hover:text-green-700"}`}>
+                    {member.active ? "Desativar" : "Ativar"}
+                  </button>
+                  <button onClick={() => handleDelete(member)} className="text-[10px] font-black uppercase text-red-500 hover:text-red-600">Remover</button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </ContentCard>
+  );
+}
+
 export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, refresh: () => void }) {
   const toast = useToast();
   const [activeTab, setActiveTab] = useState<"general" | "hours" | "delivery" | "payments" | "maquinhas" | "fiscal">("general");
@@ -1881,6 +2051,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
             </ContentCard>
 
             {tenant?.id && <KitchenPasswordCard tenantId={tenant.id} />}
+            {tenant?.id && <KitchenStaffCard tenantId={tenant.id} />}
 
           </motion.div>
         )}

@@ -1,15 +1,30 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
+import {
+  DndContext, DragOverlay, PointerSensor, TouchSensor, useSensor, useSensors,
+  closestCenter, useDroppable, type DragStartEvent, type DragEndEvent,
+} from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
+import { useSortable } from "@dnd-kit/sortable";
 import socket from "../lib/socket";
 import type { Order, Tenant } from "../types";
 import { dineInOrderLabel } from "../types";
-import { ChefHat, Timer, Bell, CheckCircle2, LogOut, Utensils, Lock } from "lucide-react";
+import { ChefHat, Timer, Bell, CheckCircle2, LogOut, Utensils, Lock, User, Send } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
-const KITCHEN_STATUSES = ["PENDING", "PREPARING"] as const;
+type OrderStatus = "PENDING" | "PREPARING" | "SHIPPED";
+
+const COLUMNS: { status: OrderStatus; label: string; dot: string; empty: string }[] = [
+  { status: "PENDING", label: "Recebido", dot: "bg-yellow-400", empty: "Nenhum pedido novo" },
+  { status: "PREPARING", label: "Em Preparo", dot: "bg-orange-400", empty: "Nada em preparo" },
+  { status: "SHIPPED", label: "Pronto", dot: "bg-emerald-400", empty: "Nada pronto ainda" },
+];
 
 function kitchenTokenKey(slug: string) {
   return `kitchen_token_${slug}`;
+}
+function kitchenStaffKey(slug: string) {
+  return `kitchen_staff_${slug}`;
 }
 
 function useElapsedMinutes(createdAt: string) {
@@ -30,19 +45,13 @@ function orderLabel(order: Order) {
   return "Retirada";
 }
 
-function KitchenTicket({
-  order,
-  onAdvance,
-  isReady,
-}: {
-  order: Order;
-  onAdvance: () => void;
-  isReady: boolean;
-}) {
+function KitchenTicket({ order, onAdvance }: { order: Order; onAdvance: () => void }) {
   const elapsed = useElapsedMinutes(order.createdAt);
   const kitchenItems = order.items.filter((item) => item.product?.kitchenPrint === true);
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({ id: order.id, data: { order } });
+  const nextLabel = order.status === "PENDING" ? "Marcar em preparo" : order.status === "PREPARING" ? "Marcar como pronto" : null;
 
-  const urgency = isReady
+  const urgency = order.status === "SHIPPED"
     ? "border-emerald-500/40 bg-emerald-500/5"
     : elapsed > 20
     ? "border-red-500/60 bg-red-500/10"
@@ -52,11 +61,15 @@ function KitchenTicket({
 
   return (
     <motion.div
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
       layout
       initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
+      animate={{ opacity: isDragging ? 0.3 : 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.96 }}
-      className={`rounded-3xl border-2 p-5 flex flex-col gap-4 ${urgency}`}
+      style={{ transform: transform ? CSS.Translate.toString(transform) : undefined }}
+      className={`rounded-3xl border-2 p-5 flex flex-col gap-4 cursor-grab active:cursor-grabbing touch-none select-none ${urgency}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div>
@@ -70,7 +83,7 @@ function KitchenTicket({
         </div>
         <div
           className={`flex items-center gap-1.5 text-xs font-black px-3 py-1.5 rounded-full shrink-0 ${
-            !isReady && elapsed > 15 ? "text-red-300 bg-red-500/20 animate-pulse" : "text-white/60 bg-white/10"
+            order.status !== "SHIPPED" && elapsed > 15 ? "text-red-300 bg-red-500/20 animate-pulse" : "text-white/60 bg-white/10"
           }`}
         >
           <Timer className="w-3.5 h-3.5" />
@@ -98,22 +111,74 @@ function KitchenTicket({
         )}
       </div>
 
-      <button
-        onClick={onAdvance}
-        className={`w-full py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
-          isReady
-            ? "bg-emerald-500 hover:bg-emerald-400 text-black"
-            : "bg-[#C9A227] hover:bg-[#E8B93A] text-black"
-        }`}
-      >
-        <CheckCircle2 className="w-4 h-4" />
-        {isReady ? "Enviar / Concluir" : "Marcar como Pronto"}
-      </button>
+      {nextLabel ? (
+        <button
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); onAdvance(); }}
+          className="w-full py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 bg-white/10 hover:bg-white/15 text-white"
+        >
+          <CheckCircle2 className="w-4 h-4" />
+          {nextLabel}
+        </button>
+      ) : (
+        <div className="flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest text-emerald-300/60">
+          <CheckCircle2 className="w-3.5 h-3.5" />
+          Pronto — aguardando saída
+        </div>
+      )}
+
+      <div className="flex items-center justify-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-white/20">
+        <Send className="w-2.5 h-2.5" />
+        ou arraste para outra coluna
+      </div>
     </motion.div>
   );
 }
 
-function KitchenLoginScreen({ slug, onLoggedIn }: { slug: string; onLoggedIn: (token: string) => void }) {
+function KitchenColumn({
+  status, label, dot, empty, orders, onAdvance,
+}: {
+  status: OrderStatus; label: string; dot: string; empty: string; orders: Order[]; onAdvance: (order: Order) => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: status });
+
+  return (
+    <div className="flex flex-col min-h-0">
+      <div className="px-6 py-4 flex items-center gap-2 shrink-0">
+        <span className={`w-2.5 h-2.5 rounded-full animate-pulse ${dot}`} />
+        <p className="text-xs font-black uppercase tracking-[0.2em] text-white/80">
+          {label} ({orders.length})
+        </p>
+      </div>
+      <div
+        ref={setNodeRef}
+        className={`flex-1 overflow-y-auto px-6 pb-6 custom-scrollbar rounded-2xl transition-colors ${isOver ? "bg-white/[0.03]" : ""}`}
+      >
+        {orders.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center text-center opacity-30 gap-3">
+            <Utensils className="w-12 h-12 text-white" />
+            <p className="text-sm font-black uppercase tracking-widest text-white">{empty}</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <AnimatePresence mode="popLayout">
+              {orders.map((order) => (
+                <KitchenTicket
+                  key={order.id}
+                  order={order}
+                  onAdvance={() => onAdvance(order)}
+                />
+              ))}
+            </AnimatePresence>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function KitchenLoginScreen({ slug, onLoggedIn }: { slug: string; onLoggedIn: (token: string, staffName: string | null) => void }) {
+  const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -127,11 +192,11 @@ function KitchenLoginScreen({ slug, onLoggedIn }: { slug: string; onLoggedIn: (t
       const res = await fetch(`/api/kitchen/${slug}/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ name: name.trim() || undefined, password }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || "Não foi possível entrar.");
-      onLoggedIn(data.token);
+      onLoggedIn(data.token, data.staffName ?? null);
     } catch (err: any) {
       setError(err?.message || "Não foi possível entrar.");
     } finally {
@@ -148,21 +213,36 @@ function KitchenLoginScreen({ slug, onLoggedIn }: { slug: string; onLoggedIn: (t
           </div>
           <div>
             <h1 className="text-lg font-black text-white uppercase tracking-widest">Painel de Cozinha</h1>
-            <p className="text-xs text-white/40 font-bold mt-1">Digite a senha da cozinha para entrar</p>
+            <p className="text-xs text-white/40 font-bold mt-1">Digite seu nome e senha para entrar</p>
           </div>
         </div>
-        <div className="space-y-2">
-          <label className="text-[10px] font-black uppercase text-white/40 tracking-widest ml-1">Senha</label>
-          <div className="relative">
-            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-            <input
-              autoFocus
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••"
-              className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pl-11 pr-4 text-white placeholder-white/20 focus:border-[#C9A227] outline-none text-center text-lg font-black tracking-widest"
-            />
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase text-white/40 tracking-widest ml-1">Seu nome</label>
+            <div className="relative">
+              <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+              <input
+                autoFocus
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Ex: João"
+                className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pl-11 pr-4 text-white placeholder-white/20 focus:border-[#C9A227] outline-none text-sm font-bold"
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase text-white/40 tracking-widest ml-1">Senha</label>
+            <div className="relative">
+              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••"
+                className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pl-11 pr-4 text-white placeholder-white/20 focus:border-[#C9A227] outline-none text-center text-lg font-black tracking-widest"
+              />
+            </div>
           </div>
           {error && <p className="text-xs text-red-400 font-bold text-center">{error}</p>}
         </div>
@@ -173,6 +253,9 @@ function KitchenLoginScreen({ slug, onLoggedIn }: { slug: string; onLoggedIn: (t
         >
           {loading ? "Entrando..." : "Entrar"}
         </button>
+        <p className="text-[10px] text-white/25 text-center leading-relaxed">
+          Sem usuário cadastrado? Deixe o nome em branco e use a senha geral da cozinha.
+        </p>
       </form>
     </div>
   );
@@ -181,16 +264,26 @@ function KitchenLoginScreen({ slug, onLoggedIn }: { slug: string; onLoggedIn: (t
 export default function KitchenDisplayPage() {
   const { slug } = useParams<{ slug: string }>();
   const [token, setToken] = useState<string | null>(() => (slug ? window.localStorage.getItem(kitchenTokenKey(slug)) : null));
+  const [staffName, setStaffName] = useState<string | null>(() => (slug ? window.localStorage.getItem(kitchenStaffKey(slug)) : null));
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [activeOrder, setActiveOrder] = useState<Order | null>(null);
 
-  const handleLoggedIn = (newToken: string) => {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } })
+  );
+
+  const handleLoggedIn = (newToken: string, name: string | null) => {
     if (!slug) return;
     window.localStorage.setItem(kitchenTokenKey(slug), newToken);
+    if (name) window.localStorage.setItem(kitchenStaffKey(slug), name);
+    else window.localStorage.removeItem(kitchenStaffKey(slug));
     setToken(newToken);
+    setStaffName(name);
     setAuthError(false);
   };
 
@@ -198,8 +291,10 @@ export default function KitchenDisplayPage() {
     if (slug) {
       fetch(`/api/kitchen/${slug}/logout`, { method: "POST", headers: { "X-Kitchen-Token": token || "" } }).catch(() => {});
       window.localStorage.removeItem(kitchenTokenKey(slug));
+      window.localStorage.removeItem(kitchenStaffKey(slug));
     }
     setToken(null);
+    setStaffName(null);
     setTenant(null);
   };
 
@@ -216,6 +311,10 @@ export default function KitchenDisplayPage() {
       const data = await res.json();
       setTenant(data.tenant);
       setOrders(Array.isArray(data.orders) ? data.orders : []);
+      if (data.staffName) {
+        window.localStorage.setItem(kitchenStaffKey(slug), data.staffName);
+        setStaffName(data.staffName);
+      }
       socket.emit("join-tenant", data.tenant.id);
     } catch {
       setTenant(null);
@@ -251,31 +350,47 @@ export default function KitchenDisplayPage() {
     return () => clearInterval(timer);
   }, []);
 
-  const advanceStatus = async (order: Order) => {
-    if (!slug || !token) return;
-    const nextStatus = order.status === "PENDING" ? "PREPARING" : "SHIPPED";
+  const setOrderStatus = async (order: Order, nextStatus: OrderStatus) => {
+    if (!slug || !token || order.status === nextStatus) return;
+    setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: nextStatus as Order["status"] } : o)));
     try {
       await fetch(`/api/kitchen/${slug}/orders/${order.id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", "X-Kitchen-Token": token },
         body: JSON.stringify({ status: nextStatus }),
       });
-      setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: nextStatus as Order["status"] } : o)));
     } catch (err) {
       console.error(err);
     }
   };
 
+  const handleDragStart = (event: DragStartEvent) => {
+    const order = event.active.data.current?.order as Order | undefined;
+    setActiveOrder(order ?? null);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    setActiveOrder(null);
+    const order = event.active.data.current?.order as Order | undefined;
+    const targetStatus = event.over?.id as OrderStatus | undefined;
+    if (!order || !targetStatus) return;
+    setOrderStatus(order, targetStatus);
+  };
+
   // Fila por ordem de chegada — mais antigo primeiro (FIFO)
   const kitchenOrders = useMemo(() => {
     return orders
-      .filter((o) => KITCHEN_STATUSES.includes(o.status as any))
+      .filter((o) => COLUMNS.some((c) => c.status === o.status))
       .filter((o) => o.items.some((item) => item.product?.kitchenPrint === true))
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   }, [orders, now]);
 
-  const toDo = kitchenOrders.filter((o) => o.status === "PENDING");
-  const preparing = kitchenOrders.filter((o) => o.status === "PREPARING");
+  const byStatus = (status: OrderStatus) => kitchenOrders.filter((o) => o.status === status);
+
+  const advanceOrder = (order: Order) => {
+    const nextStatus: OrderStatus = order.status === "PENDING" ? "PREPARING" : "SHIPPED";
+    setOrderStatus(order, nextStatus);
+  };
 
   if (!slug) return null;
 
@@ -318,6 +433,12 @@ export default function KitchenDisplayPage() {
           </div>
         </div>
         <div className="flex items-center gap-4">
+          {staffName && (
+            <span className="flex items-center gap-1.5 text-[11px] text-white font-black uppercase bg-white/10 px-3 py-1.5 rounded-xl">
+              <User className="w-3.5 h-3.5 text-[#C9A227]" />
+              {staffName}
+            </span>
+          )}
           <span className="flex items-center gap-1.5 text-[10px] text-white/40 font-bold uppercase">
             <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
             Ao vivo
@@ -332,60 +453,26 @@ export default function KitchenDisplayPage() {
         </div>
       </div>
 
-      {/* Columns: A Fazer / Prontos */}
-      <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-white/5">
-        {/* A Fazer */}
-        <div className="flex flex-col min-h-0">
-          <div className="px-6 py-4 flex items-center gap-2 shrink-0">
-            <span className="w-2.5 h-2.5 rounded-full bg-yellow-400 animate-pulse" />
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-yellow-400">
-              A Fazer ({toDo.length})
-            </p>
-          </div>
-          <div className="flex-1 overflow-y-auto px-6 pb-6 custom-scrollbar">
-            {toDo.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center opacity-30 gap-3">
-                <Utensils className="w-12 h-12 text-white" />
-                <p className="text-sm font-black uppercase tracking-widest text-white">Nenhum pedido novo</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                <AnimatePresence mode="popLayout">
-                  {toDo.map((order) => (
-                    <KitchenTicket key={order.id} order={order} onAdvance={() => advanceStatus(order)} isReady={false} />
-                  ))}
-                </AnimatePresence>
-              </div>
-            )}
-          </div>
+      {/* Columns: Recebido / Em Preparo / Pronto — arraste o card entre elas.
+          Em telas pequenas (celular) as colunas ficam lado a lado com scroll horizontal,
+          em vez de empilhadas, para o arrastar entre colunas continuar prático. */}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <div className="flex-1 min-h-0 flex md:grid md:grid-cols-3 overflow-x-auto md:overflow-x-visible divide-x divide-white/5 snap-x snap-mandatory md:snap-none">
+          {COLUMNS.map((col) => (
+            <div key={col.status} className="w-[88vw] sm:w-[420px] md:w-auto shrink-0 md:shrink snap-start flex flex-col min-h-0">
+              <KitchenColumn {...col} orders={byStatus(col.status)} onAdvance={advanceOrder} />
+            </div>
+          ))}
         </div>
-
-        {/* Prontos (em preparo -> avançar para enviar) */}
-        <div className="flex flex-col min-h-0">
-          <div className="px-6 py-4 flex items-center gap-2 shrink-0">
-            <span className="w-2.5 h-2.5 rounded-full bg-orange-400 animate-pulse" />
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-orange-400">
-              Em Preparo ({preparing.length})
-            </p>
-          </div>
-          <div className="flex-1 overflow-y-auto px-6 pb-6 custom-scrollbar">
-            {preparing.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center opacity-30 gap-3">
-                <ChefHat className="w-12 h-12 text-white" />
-                <p className="text-sm font-black uppercase tracking-widest text-white">Nada em preparo</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                <AnimatePresence mode="popLayout">
-                  {preparing.map((order) => (
-                    <KitchenTicket key={order.id} order={order} onAdvance={() => advanceStatus(order)} isReady={true} />
-                  ))}
-                </AnimatePresence>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+        <DragOverlay>
+          {activeOrder ? (
+            <div className="rounded-3xl border-2 border-[#C9A227] bg-[#0D1B3E] p-5 w-[280px] shadow-2xl opacity-95">
+              <span className="text-xl font-black text-white">#{activeOrder.id.slice(-4).toUpperCase()}</span>
+              <p className="text-sm font-bold text-white/60">{activeOrder.customerName}</p>
+            </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
     </div>
   );
 }
