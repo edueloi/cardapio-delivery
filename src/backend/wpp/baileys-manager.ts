@@ -823,7 +823,18 @@ export async function disconnectSession(tenantId: string): Promise<void> {
   await updateDb(tenantId, "disconnected", null, null);
 }
 
-export async function sendMessage(tenantId: string, to: string, text: string, delayMs = 0): Promise<void> {
+export type WppMessageKind =
+  | "ORDER_CREATED" | "OWNER_ALERT" | "STATUS_UPDATE" | "LOYALTY_POINTS"
+  | "LOW_STOCK" | "PREORDER" | "MANUAL_TEST" | "CONVERSATION";
+
+function logMessage(tenantId: string, toPhone: string, kind: WppMessageKind, text: string): void {
+  const preview = text.slice(0, 300);
+  prisma.wppMessageLog.create({ data: { tenantId, toPhone, kind, preview } }).catch((err: unknown) => {
+    console.warn("[Baileys] Failed to log message:", err);
+  });
+}
+
+export async function sendMessage(tenantId: string, to: string, text: string, delayMs = 0, kind: WppMessageKind = "CONVERSATION"): Promise<void> {
   const session = sessions.get(tenantId);
   if (!session?.sock || session.status !== "connected") return;
 
@@ -854,6 +865,7 @@ export async function sendMessage(tenantId: string, to: string, text: string, de
       }
 
       await session.sock.sendMessage(jid, { text });
+      logMessage(tenantId, to, kind, text);
     } catch (error) {
       console.warn("[Baileys] sendMessage error:", error);
     }

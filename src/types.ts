@@ -253,11 +253,26 @@ export interface WppBotConfig {
   autoReplyEnabled: boolean;
   sendOrderCreated: boolean;
   sendStatusUpdates: boolean;
+  sendLoyaltyPoints: boolean;
+  sendLowStockAlert: boolean;
   welcomeMessage?: string | null;
   isPaused: boolean;
   startTime?: string | null;
   endTime?: string | null;
   preorderMessage?: string | null; // mensagem customizada para encomendas; suporta {nome}, {data}, {hora}, {total}
+}
+
+export type WppMessageKind =
+  | "ORDER_CREATED" | "OWNER_ALERT" | "STATUS_UPDATE" | "LOYALTY_POINTS"
+  | "LOW_STOCK" | "PREORDER" | "MANUAL_TEST" | "CONVERSATION";
+
+export interface WppMessageLog {
+  id: string;
+  tenantId: string;
+  toPhone: string;
+  kind: WppMessageKind;
+  preview: string;
+  sentAt: string;
 }
 
 export interface WppSessionInfo {

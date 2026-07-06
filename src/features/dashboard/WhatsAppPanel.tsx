@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Bot,
   Link2,
@@ -9,10 +9,13 @@ import {
   Send,
   Smartphone,
   Unplug,
+  History,
+  Star,
+  PackageX,
 } from "lucide-react";
 import { Badge, Button, ContentCard, Input, Switch, Textarea } from "../../components";
 import { apiJson } from "../../lib/api";
-import type { Tenant, WppBotConfig, WppInstance, WppSessionInfo } from "../../types";
+import type { Tenant, WppBotConfig, WppInstance, WppSessionInfo, WppMessageLog, WppMessageKind } from "../../types";
 
 interface WppResponse {
   instance: WppInstance | null;
@@ -27,11 +30,24 @@ interface WppFormState {
   autoReplyEnabled: boolean;
   sendOrderCreated: boolean;
   sendStatusUpdates: boolean;
+  sendLoyaltyPoints: boolean;
+  sendLowStockAlert: boolean;
   isPaused: boolean;
   startTime: string;
   endTime: string;
   preorderMessage: string;
 }
+
+const MESSAGE_KIND_LABELS: Record<WppMessageKind, { label: string; emoji: string }> = {
+  ORDER_CREATED: { label: "Pedido recebido", emoji: "✅" },
+  OWNER_ALERT: { label: "Alerta pro dono", emoji: "🔔" },
+  STATUS_UPDATE: { label: "Status do pedido", emoji: "📦" },
+  LOYALTY_POINTS: { label: "Pontos de fidelidade", emoji: "⭐" },
+  LOW_STOCK: { label: "Estoque baixo", emoji: "⚠️" },
+  PREORDER: { label: "Encomenda", emoji: "🗓️" },
+  MANUAL_TEST: { label: "Teste manual", emoji: "🧪" },
+  CONVERSATION: { label: "Conversa", emoji: "💬" },
+};
 
 const STATUS_LABELS: Record<string, string> = {
   not_configured: "Não configurado",
@@ -59,6 +75,8 @@ function buildForm(tenant: Tenant, instance: WppInstance | null, config: WppBotC
     autoReplyEnabled: config?.autoReplyEnabled ?? true,
     sendOrderCreated: config?.sendOrderCreated ?? true,
     sendStatusUpdates: config?.sendStatusUpdates ?? true,
+    sendLoyaltyPoints: config?.sendLoyaltyPoints ?? true,
+    sendLowStockAlert: config?.sendLowStockAlert ?? false,
     isPaused: config?.isPaused || false,
     startTime: config?.startTime || "00:00",
     endTime: config?.endTime || "23:59",
@@ -149,6 +167,21 @@ export function WhatsAppManagementPanel({
   const [busyAction, setBusyAction] = useState<"" | "refresh" | "connect" | "disconnect" | "save" | "test">("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [logs, setLogs] = useState<WppMessageLog[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+
+  const loadLogs = async () => {
+    setLogsLoading(true);
+    try {
+      const data = await apiJson<WppMessageLog[]>(`/api/owner/tenants/${tenant.id}/wpp/logs`);
+      setLogs(data);
+    } catch { /* histórico é secundário — falha silenciosa */ }
+    finally { setLogsLoading(false); }
+  };
+
+  useEffect(() => {
+    void loadLogs();
+  }, [tenant.id]);
 
   const status = session?.status || instance?.status || "not_configured";
   const qrCode = session?.qrDataUrl || session?.qrCode || instance?.qrCode || null;
@@ -254,6 +287,8 @@ export function WhatsAppManagementPanel({
           autoReplyEnabled: form.autoReplyEnabled,
           sendOrderCreated: form.sendOrderCreated,
           sendStatusUpdates: form.sendStatusUpdates,
+          sendLoyaltyPoints: form.sendLoyaltyPoints,
+          sendLowStockAlert: form.sendLowStockAlert,
           isPaused: form.isPaused,
           startTime: form.startTime,
           endTime: form.endTime,
@@ -277,6 +312,7 @@ export function WhatsAppManagementPanel({
         }),
       });
       setSuccess("Mensagem de teste enviada.");
+      void loadLogs();
     });
   };
 
@@ -458,6 +494,24 @@ export function WhatsAppManagementPanel({
               }
             />
             <ToggleCard
+              label="Pontos de fidelidade"
+              description="Avisa o cliente quantos pontos ganhou a cada compra."
+              icon={<Star className="w-4 h-4 text-amber-500" />}
+              checked={form.sendLoyaltyPoints}
+              onCheckedChange={(checked) =>
+                setForm((current) => ({ ...current, sendLoyaltyPoints: checked }))
+              }
+            />
+            <ToggleCard
+              label="Estoque baixo"
+              description="Avisa o dono quando um item atinge o estoque mínimo."
+              icon={<PackageX className="w-4 h-4 text-red-500" />}
+              checked={form.sendLowStockAlert}
+              onCheckedChange={(checked) =>
+                setForm((current) => ({ ...current, sendLowStockAlert: checked }))
+              }
+            />
+            <ToggleCard
               label="Pausar Bot"
               description="Mantém conectado, mas desativa temporariamente todas as automações."
               checked={form.isPaused}
@@ -571,6 +625,8 @@ export function WhatsAppManagementPanel({
           </div>
         </ContentCard>
 
+        <MessageHistoryCard logs={logs} loading={logsLoading} onRefresh={() => void loadLogs()} />
+
         {(error || success) && (
           <ContentCard className={error ? "border-red-200 bg-red-50" : "border-green-200 bg-green-50"}>
             <div className={`text-sm font-bold ${error ? "text-red-700" : "text-green-700"}`}>
@@ -588,19 +644,74 @@ function ToggleCard({
   description,
   checked,
   onCheckedChange,
+  icon,
 }: {
   label: string;
   description: string;
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
+  icon?: ReactNode;
 }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 flex items-start justify-between gap-4">
       <div>
-        <div className="text-sm font-black text-slate-900">{label}</div>
+        <div className="text-sm font-black text-slate-900 flex items-center gap-1.5">
+          {icon}
+          {label}
+        </div>
         <div className="text-sm text-slate-500 mt-1">{description}</div>
       </div>
       <Switch checked={checked} onCheckedChange={onCheckedChange} />
     </div>
+  );
+}
+
+function formatLogTime(iso: string): string {
+  return new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
+function MessageHistoryCard({ logs, loading, onRefresh }: { logs: WppMessageLog[]; loading: boolean; onRefresh: () => void }) {
+  return (
+    <ContentCard>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <div className="text-[11px] font-black uppercase tracking-[0.25em] text-slate-400 mb-2">
+            Histórico
+          </div>
+          <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+            Mensagens enviadas
+          </h3>
+        </div>
+        <Button variant="outline" size="sm" loading={loading} iconLeft={<RefreshCw className="w-4 h-4" />} onClick={onRefresh}>
+          Atualizar
+        </Button>
+      </div>
+
+      {logs.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-10 text-slate-300 text-center">
+          <History className="w-9 h-9 mb-3" />
+          <p className="text-sm font-medium text-slate-400">Nenhuma mensagem enviada ainda.</p>
+        </div>
+      ) : (
+        <div className="divide-y divide-slate-100 max-h-96 overflow-y-auto">
+          {logs.map((log) => {
+            const meta = MESSAGE_KIND_LABELS[log.kind] || { label: log.kind, emoji: "💬" };
+            return (
+              <div key={log.id} className="flex items-start gap-3 py-3">
+                <span className="text-lg shrink-0">{meta.emoji}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-black text-slate-800">{meta.label}</span>
+                    <span className="text-[10px] text-slate-400">→ {log.toPhone}</span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5 truncate">{log.preview}</p>
+                </div>
+                <span className="text-[10px] text-slate-400 shrink-0 whitespace-nowrap">{formatLogTime(log.sentAt)}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </ContentCard>
   );
 }

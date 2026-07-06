@@ -13,7 +13,7 @@ function formatItems(items: Array<{ quantity: number; price: number; notes?: str
   }).join("\n");
 }
 
-async function canSend(tenantId: string, field: "sendOrderCreated" | "sendStatusUpdates"): Promise<{ allowed: boolean; config: any }> {
+async function canSend(tenantId: string, field: "sendOrderCreated" | "sendStatusUpdates" | "sendLoyaltyPoints" | "sendLowStockAlert"): Promise<{ allowed: boolean; config: any }> {
   const [instance, config] = await Promise.all([
     prisma.wppInstance.findUnique({ where: { tenantId } }),
     prisma.wppBotConfig.findUnique({ where: { tenantId } }),
@@ -60,7 +60,7 @@ export async function sendOrderCreatedMessage(order: {
       .replace(/\{data\}/g, dateStr)
       .replace(/\{hora\}/g, order.scheduledTime || "")
       .replace(/\{total\}/g, fmt(order.total));
-    await sendMessage(order.tenantId, order.customerPhone, customText);
+    await sendMessage(order.tenantId, order.customerPhone, customText, 0, "PREORDER");
     return;
   }
 
@@ -75,7 +75,7 @@ export async function sendOrderCreatedMessage(order: {
     scheduledLine + `\n\n` +
     `Acompanhe seu pedido aqui:\n${baseUrl}/${tenant.slug}`;
 
-  await sendMessage(order.tenantId, order.customerPhone, text);
+  await sendMessage(order.tenantId, order.customerPhone, text, 0, "ORDER_CREATED");
 }
 
 // ─── Owner: new order alert ───────────────────────────────────────────────────
@@ -115,7 +115,7 @@ export async function sendOwnerOrderAlert(order: {
     `📋 *Itens:*\n${formatItems(order.items)}\n\n` +
     `💰 *Total: ${fmt(order.total)}*`;
 
-  await sendMessage(order.tenantId, tenant.whatsapp, text);
+  await sendMessage(order.tenantId, tenant.whatsapp, text, 0, "OWNER_ALERT");
 }
 
 // ─── Customer: status update ──────────────────────────────────────────────────
@@ -148,7 +148,7 @@ export async function sendOrderStatusMessage(order: {
     `Olá, ${order.customerName}! ${s.detail}\n\n` +
     `Acompanhe aqui:\n${baseUrl}/${tenant.slug}`;
 
-  await sendMessage(order.tenantId, order.customerPhone, text);
+  await sendMessage(order.tenantId, order.customerPhone, text, 0, "STATUS_UPDATE");
 }
 
 // ─── Customer: loyalty points earned ──────────────────────────────────────────
@@ -164,7 +164,7 @@ export async function sendLoyaltyPointsMessage(
   pointsEarned: number,
   newBalance: number
 ) {
-  const { allowed } = await canSend(order.tenantId, "sendStatusUpdates");
+  const { allowed } = await canSend(order.tenantId, "sendLoyaltyPoints");
   if (!allowed) return;
 
   let minPointsToRedeem = 0;
@@ -189,5 +189,26 @@ export async function sendLoyaltyPointsMessage(
     redeemLine + `\n` +
     `Veja mais em:\n${baseUrl}/${tenant.slug}`;
 
-  await sendMessage(order.tenantId, order.customerPhone, text);
+  await sendMessage(order.tenantId, order.customerPhone, text, 0, "LOYALTY_POINTS");
+}
+
+// ─── Owner: low stock alert ───────────────────────────────────────────────────
+
+export async function sendLowStockAlert(
+  tenantId: string,
+  tenant: { whatsapp?: string | null },
+  item: { name: string; quantity: number; minStock: number; unit?: string | null }
+) {
+  if (!tenant.whatsapp) return;
+  const { allowed } = await canSend(tenantId, "sendLowStockAlert");
+  if (!allowed) return;
+
+  const unit = item.unit || "un";
+  const text =
+    `⚠️ *Estoque baixo!*\n\n` +
+    `*${item.name}* está com apenas *${item.quantity} ${unit}* em estoque ` +
+    `(mínimo configurado: ${item.minStock} ${unit}).\n\n` +
+    `Considere repor o quanto antes para não faltar.`;
+
+  await sendMessage(tenantId, tenant.whatsapp, text, 0, "LOW_STOCK");
 }

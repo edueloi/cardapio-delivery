@@ -37,7 +37,7 @@ import {
   restoreAllSessions,
   sendMessage,
 } from "./src/backend/wpp/baileys-manager";
-import { sendOrderCreatedMessage, sendOrderStatusMessage, sendOwnerOrderAlert, sendLoyaltyPointsMessage } from "./src/backend/wpp/messages";
+import { sendOrderCreatedMessage, sendOrderStatusMessage, sendOwnerOrderAlert, sendLoyaltyPointsMessage, sendLowStockAlert } from "./src/backend/wpp/messages";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1483,6 +1483,8 @@ app.patch("/api/owner/tenants/:tenantId/wpp/config", requireAuth, async (req, re
     autoReplyEnabled,
     sendOrderCreated,
     sendStatusUpdates,
+    sendLoyaltyPoints,
+    sendLowStockAlert,
     welcomeMessage,
     instanceName,
     isPaused,
@@ -1500,6 +1502,8 @@ app.patch("/api/owner/tenants/:tenantId/wpp/config", requireAuth, async (req, re
         autoReplyEnabled: autoReplyEnabled !== false,
         sendOrderCreated: sendOrderCreated !== false,
         sendStatusUpdates: sendStatusUpdates !== false,
+        sendLoyaltyPoints: sendLoyaltyPoints !== false,
+        sendLowStockAlert: !!sendLowStockAlert,
         welcomeMessage: welcomeMessage || null,
         isPaused: !!isPaused,
         startTime: startTime || null,
@@ -1511,6 +1515,8 @@ app.patch("/api/owner/tenants/:tenantId/wpp/config", requireAuth, async (req, re
         ...(autoReplyEnabled !== undefined && { autoReplyEnabled: !!autoReplyEnabled }),
         ...(sendOrderCreated !== undefined && { sendOrderCreated: !!sendOrderCreated }),
         ...(sendStatusUpdates !== undefined && { sendStatusUpdates: !!sendStatusUpdates }),
+        ...(sendLoyaltyPoints !== undefined && { sendLoyaltyPoints: !!sendLoyaltyPoints }),
+        ...(sendLowStockAlert !== undefined && { sendLowStockAlert: !!sendLowStockAlert }),
         ...(welcomeMessage !== undefined && { welcomeMessage: welcomeMessage || null }),
         ...(isPaused !== undefined && { isPaused: !!isPaused }),
         ...(startTime !== undefined && { startTime: startTime || null }),
@@ -1548,8 +1554,21 @@ app.post("/api/owner/tenants/:tenantId/wpp/test", requireAuth, async (req, res) 
     return res.status(400).json({ error: "WhatsApp não está conectado." });
   }
 
-  await sendMessage(tenant.id, String(phone), String(message));
+  await sendMessage(tenant.id, String(phone), String(message), 0, "MANUAL_TEST");
   res.json({ success: true });
+});
+
+app.get("/api/owner/tenants/:tenantId/wpp/logs", requireAuth, async (req, res) => {
+  const tenant = await requireTenantById(req, res, req.params.tenantId, "whatsapp");
+  if (!tenant) return;
+
+  const limit = Math.min(parseInt(String(req.query.limit || "50"), 10) || 50, 200);
+  const logs = await prisma.wppMessageLog.findMany({
+    where: { tenantId: tenant.id },
+    orderBy: { sentAt: "desc" },
+    take: limit,
+  });
+  res.json(logs);
 });
 
 app.post("/api/upload", requireAuth, upload.single("file"), (req, res) => {
@@ -1989,6 +2008,8 @@ async function updateOrderStatus(orderId: string, previousStatus: string, status
           : item.product.inventoryItemId;
 
         if (inventoryItemId) {
+          const beforeItem = await prisma.inventoryItem.findUnique({ where: { id: inventoryItemId } });
+
           const updatedItem = await prisma.inventoryItem.update({
             where: { id: inventoryItemId },
             data: {
@@ -2008,6 +2029,17 @@ async function updateOrderStatus(orderId: string, previousStatus: string, status
             id: updatedItem.id,
             quantity: updatedItem.quantity
           });
+
+          // Avisa só no momento em que cruza o mínimo (evita espamar a cada venda subsequente)
+          if (updatedItem.minStock != null && updatedItem.quantity <= updatedItem.minStock &&
+              (beforeItem?.minStock == null || beforeItem.quantity > beforeItem.minStock)) {
+            sendLowStockAlert(updatedOrder.tenantId, { whatsapp: updatedOrder.tenant.whatsapp }, {
+              name: updatedItem.name,
+              quantity: updatedItem.quantity,
+              minStock: updatedItem.minStock,
+              unit: updatedItem.unit,
+            }).catch((err: unknown) => console.warn("[WPP] Failed to send low stock alert:", err));
+          }
 
           if (updatedItem.quantity <= 0) {
             const productsToDisable = await prisma.product.findMany({
@@ -4126,13 +4158,24 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
           ? (await prisma.productVariant.findUnique({ where: { id: item.productVariantId } }))?.inventoryItemId
           : item.product?.inventoryItemId;
         if (inventoryItemId) {
-          await prisma.inventoryItem.update({
+          const beforeItem = await prisma.inventoryItem.findUnique({ where: { id: inventoryItemId } }).catch(() => null);
+          const updatedItem = await prisma.inventoryItem.update({
             where: { id: inventoryItemId },
             data: {
               quantity: { decrement: item.quantity },
               movements: { create: { type: "OUT", quantity: item.quantity, reason: "SALE", orderId: order.id } },
             },
-          }).catch(() => {}); // non-blocking
+          }).catch(() => null); // non-blocking
+
+          if (updatedItem && updatedItem.minStock != null && updatedItem.quantity <= updatedItem.minStock &&
+              (beforeItem?.minStock == null || beforeItem.quantity > beforeItem.minStock)) {
+            sendLowStockAlert(tenant.id, { whatsapp: tenant.whatsapp }, {
+              name: updatedItem.name,
+              quantity: updatedItem.quantity,
+              minStock: updatedItem.minStock,
+              unit: updatedItem.unit,
+            }).catch((err: unknown) => console.warn("[WPP] Failed to send low stock alert:", err));
+          }
         }
       }
     }
@@ -4791,13 +4834,26 @@ function toAbsoluteUrl(url: string): string {
 // (index.html transformado pelo Vite), para o link do cardápio de cada loja mostrar o
 // nome, a descrição e o logo dela em vez dos valores genéricos do sistema.
 async function resolveSeoMeta(requestPath: string): Promise<{ title: string; description: string; image: string; url: string }> {
-  const slug = requestPath.split("/").filter(Boolean)[0];
+  const segments = requestPath.split("/").filter(Boolean);
+  const slug = segments[0];
 
   let title = "Box Sys — Cardápio Digital";
   let description = "Peça agora pelo nosso cardápio digital!";
   let image = DEFAULT_OG_IMAGE;
 
-  if (slug && !SEO_EXCLUDED_SLUGS.includes(slug)) {
+  // /cond/:slug usa o segundo segmento como slug real — o primeiro é o literal "cond"
+  if (slug === "cond" && segments[1]) {
+    try {
+      const condominium = await prisma.condominium.findUnique({ where: { slug: segments[1] } });
+      if (condominium) {
+        title = `${condominium.name} | Cardápios do Condomínio`;
+        description = condominium.description || "Confira os estabelecimentos parceiros e faça seu pedido!";
+        image = condominium.logoUrl ? toAbsoluteUrl(condominium.logoUrl) : DEFAULT_OG_IMAGE;
+      }
+    } catch (e) {
+      console.error("SEO Error:", e);
+    }
+  } else if (slug && !SEO_EXCLUDED_SLUGS.includes(slug)) {
     try {
       const tenant = await prisma.tenant.findUnique({ where: { slug } });
       if (tenant) {

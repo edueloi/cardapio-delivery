@@ -904,6 +904,32 @@ const migrations = [
     check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'financial_entries' AND COLUMN_NAME = 'late_fee_applied'",
     run: "ALTER TABLE financial_entries ADD COLUMN late_fee_applied DOUBLE NULL",
   },
+  // ── Central do bot WhatsApp: toggles dedicados (fidelidade, estoque baixo) + histórico ──
+  {
+    name: 'add_wpp_bot_configs_send_loyalty_points',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'wpp_bot_configs' AND COLUMN_NAME = 'send_loyalty_points'",
+    run: "ALTER TABLE wpp_bot_configs ADD COLUMN send_loyalty_points TINYINT(1) NOT NULL DEFAULT 1",
+  },
+  {
+    name: 'add_wpp_bot_configs_send_low_stock_alert',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'wpp_bot_configs' AND COLUMN_NAME = 'send_low_stock_alert'",
+    run: "ALTER TABLE wpp_bot_configs ADD COLUMN send_low_stock_alert TINYINT(1) NOT NULL DEFAULT 0",
+  },
+  {
+    name: 'create_wpp_message_logs_table',
+    check: "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'wpp_message_logs'",
+    run: `CREATE TABLE wpp_message_logs (
+      id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      tenant_id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      to_phone VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      kind VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      preview TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      sent_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (id),
+      INDEX wpp_message_logs_tenant_id_sent_at_idx (tenant_id, sent_at),
+      CONSTRAINT wpp_message_logs_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE ON UPDATE CASCADE
+    ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+  },
 ];
 
 async function run() {

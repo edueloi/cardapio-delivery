@@ -54,6 +54,7 @@ model Tenant {
   financialEntries FinancialEntry[]
   recurringEntries RecurringEntry[]
   kitchenSessions  KitchenSession[]
+  wppMessageLogs   WppMessageLog[]
   inviteTokens     InviteToken[]
 
   @@map("tenants")
@@ -502,6 +503,8 @@ model WppBotConfig {
   autoReplyEnabled Boolean  @default(true) @map("auto_reply_enabled")
   sendOrderCreated Boolean  @default(true) @map("send_order_created")
   sendStatusUpdates Boolean @default(true) @map("send_status_updates")
+  sendLoyaltyPoints Boolean @default(true) @map("send_loyalty_points") // avisa cliente quando ganha pontos de fidelidade
+  sendLowStockAlert Boolean @default(false) @map("send_low_stock_alert") // avisa o dono quando item de estoque atinge o mínimo
   welcomeMessage   String?  @map("welcome_message")
   isPaused         Boolean  @default(false) @map("is_paused")
   startTime        String?  @map("start_time") // HH:mm
@@ -513,6 +516,21 @@ model WppBotConfig {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("wpp_bot_configs")
+}
+
+// Histórico de mensagens enviadas pelo bot — auditoria simples do que foi mandado, pra quem e quando.
+model WppMessageLog {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  toPhone   String   @map("to_phone")
+  kind      String   // ORDER_CREATED, OWNER_ALERT, STATUS_UPDATE, LOYALTY_POINTS, LOW_STOCK, PREORDER, MANUAL_TEST, CONVERSATION
+  preview   String   @db.Text // primeiras linhas da mensagem, para exibição na lista
+  sentAt    DateTime @default(now()) @map("sent_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, sentAt])
+  @@map("wpp_message_logs")
 }
 
 model Category {
