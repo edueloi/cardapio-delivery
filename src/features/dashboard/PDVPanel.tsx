@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import type { Tenant, Product, Order, PaymentConfig, PaymentMethodConfig, StoneConfig } from "../../types";
+import { dineInOrderLabel } from "../../types";
 import { apiJson } from "../../lib/api";
 import { useToast } from "../../components";
 
@@ -965,7 +966,7 @@ export default function PDVPanel({
                       <span className="text-[10px] font-black text-[#C9A227]">{fmt(comanda.total)}</span>
                     </div>
                     <div>
-                      <h4 className="text-lg font-black text-slate-800">Comanda {comanda.customerName}</h4>
+                      <h4 className="text-lg font-black text-slate-800">{dineInOrderLabel(comanda)}</h4>
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                         {comanda.items.length} itens
                       </p>
@@ -1250,7 +1251,7 @@ export default function PDVPanel({
         <AnimatePresence>
           {orderDetailsView && (() => {
             const isTable = orderDetailsView.type === "table";
-            const title = isTable ? `Mesa ${orderDetailsView.tableId}` : `Comanda ${orderDetailsView.comanda.customerName}`;
+            const title = isTable ? `Mesa ${orderDetailsView.tableId}` : dineInOrderLabel(orderDetailsView.comanda);
             const relatedOrders = isTable
               ? orders.filter((o) => o.tableId === orderDetailsView.tableId && o.status !== "CANCELLED" && o.status !== "DELIVERED")
               : [orderDetailsView.comanda];

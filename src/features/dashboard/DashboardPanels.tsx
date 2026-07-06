@@ -63,7 +63,7 @@ import {
 } from "lucide-react";
 import socket from "../../lib/socket";
 import { apiFetch, apiJson } from "../../lib/api";
-import { Order, Tenant, CashRegister, DeliveryConfig, DeliveryZone, KmRange, PaymentConfig, PaymentMethodConfig, StoneConfig, FiscalConfig, DisplayPanelConfig } from "../../types";
+import { Order, Tenant, CashRegister, DeliveryConfig, DeliveryZone, KmRange, PaymentConfig, PaymentMethodConfig, StoneConfig, FiscalConfig, DisplayPanelConfig, dineInOrderLabel } from "../../types";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   Button, 
@@ -313,7 +313,7 @@ export function OrdersList({
                             {maskPhone(order.customerPhone)}
                           </div>
                           <span className="text-[9px] font-black uppercase tracking-[0.15em] px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md border border-slate-200/50">
-                            {order.orderType === 'DELIVERY' ? 'Delivery' : order.orderType === 'DINE_IN' ? `Mesa ${order.tableId}` : 'Retirada'}
+                            {order.orderType === 'DELIVERY' ? 'Delivery' : order.orderType === 'DINE_IN' ? dineInOrderLabel(order) : 'Retirada'}
                           </span>
                         </div>
                         {order.address && (
@@ -1522,6 +1522,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
     scheduleMode: tenant?.scheduleMode ?? false,
     scheduleType: (tenant?.scheduleType ?? "CLIENT_CHOOSES") as "CLIENT_CHOOSES" | "OWNER_DEFINES",
     scheduleNotes: tenant?.scheduleNotes || "",
+    waiterNotifyOnReady: tenant?.waiterNotifyOnReady ?? true,
   });
   const [scheduleDays, setScheduleDays] = useState<any[]>(() => parseScheduleDays(tenant?.scheduleDays));
   const [addr, setAddr] = useState<AddressForm>(() => parseAddress(tenant?.address) ?? { ...EMPTY_ADDR });
@@ -1564,7 +1565,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
 
   useEffect(() => {
     if (tenant) {
-      setForm({ name: tenant.name || "", description: tenant.description || "", logoUrl: tenant.logoUrl || "", whatsapp: maskPhone(tenant.whatsapp) || "", isOpen: tenant.isOpen ?? true, orderMode: (tenant.orderMode ?? "DELIVERY_ONLY") as "DELIVERY_ONLY" | "PREORDER_ONLY" | "BOTH", scheduleMode: tenant.scheduleMode ?? false, scheduleType: (tenant.scheduleType ?? "CLIENT_CHOOSES") as "CLIENT_CHOOSES" | "OWNER_DEFINES", scheduleNotes: tenant.scheduleNotes || "" });
+      setForm({ name: tenant.name || "", description: tenant.description || "", logoUrl: tenant.logoUrl || "", whatsapp: maskPhone(tenant.whatsapp) || "", isOpen: tenant.isOpen ?? true, orderMode: (tenant.orderMode ?? "DELIVERY_ONLY") as "DELIVERY_ONLY" | "PREORDER_ONLY" | "BOTH", scheduleMode: tenant.scheduleMode ?? false, scheduleType: (tenant.scheduleType ?? "CLIENT_CHOOSES") as "CLIENT_CHOOSES" | "OWNER_DEFINES", scheduleNotes: tenant.scheduleNotes || "", waiterNotifyOnReady: tenant.waiterNotifyOnReady ?? true });
       setScheduleDays(parseScheduleDays(tenant.scheduleDays));
       setAddr(parseAddress(tenant.address) ?? { ...EMPTY_ADDR });
       try { setHours(tenant.businessHours ? JSON.parse(tenant.businessHours) : DEFAULT_HOURS); } catch { setHours(DEFAULT_HOURS); }
@@ -1729,6 +1730,13 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                     </span>
                     <Switch checked={form.isOpen} onCheckedChange={v => setForm(f => ({ ...f, isOpen: v }))} />
                   </div>
+                </div>
+                <div className="flex items-center justify-between gap-4 py-5 border-t border-zinc-100">
+                  <div>
+                    <p className="text-sm font-black text-slate-900">Avisar Garçom quando a Comanda Ficar Pronta</p>
+                    <p className="text-xs text-slate-500 mt-1">Notifica o garçom, em qualquer tela do sistema, quando a cozinha marcar a comanda da mesa como pronta para servir.</p>
+                  </div>
+                  <Switch checked={form.waiterNotifyOnReady} onCheckedChange={v => setForm(f => ({ ...f, waiterNotifyOnReady: v }))} />
                 </div>
                 {/* ── Modo de Operação (Delivery / Encomenda / Misto) ── */}
                 <div className="pt-5 border-t border-zinc-100">
@@ -5246,6 +5254,7 @@ export function TableManagement({
   };
 
   const menuUrl = `${window.location.origin}/${tenant.slug}/mesa/`;
+  const counterUrl = `${window.location.origin}/${tenant.slug}/balcao`;
 
   return (
     <ContentCard padding="none" className="overflow-hidden">
@@ -5271,20 +5280,20 @@ export function TableManagement({
             </div>
 
             <div className="aspect-square bg-white rounded-2xl flex flex-col items-center justify-center border-2 border-dashed border-amber-200 p-4">
-              <img 
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(menuUrl + 'Balcao')}`} 
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(counterUrl)}`}
                 alt="QR Balcão"
                 className="w-full h-full object-contain"
               />
             </div>
 
             <div className="flex gap-2">
-              <Button 
-                variant="primary" 
-                size="sm" 
+              <Button
+                variant="primary"
+                size="sm"
                 className="flex-1 text-[10px] bg-amber-600 border-amber-600 hover:bg-amber-700"
                 onClick={() => {
-                  const link = `https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&data=${encodeURIComponent(menuUrl + 'Balcao')}`;
+                  const link = `https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&data=${encodeURIComponent(counterUrl)}`;
                   window.open(link, '_blank');
                 }}
               >
@@ -5609,7 +5618,7 @@ function KDSTicket({ order, onComplete, actionLabel = "Concluir Pedido", highlig
             <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
               order.orderType === 'DELIVERY' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
             }`}>
-              {order.orderType === 'DELIVERY' ? 'Delivery' : order.orderType === 'DINE_IN' ? `Mesa ${order.tableId}` : 'Retirada'}
+              {order.orderType === 'DELIVERY' ? 'Delivery' : order.orderType === 'DINE_IN' ? dineInOrderLabel(order) : 'Retirada'}
             </span>
           </div>
           <p className="text-xs font-bold text-slate-400 mt-1">{order.customerName}</p>
@@ -5818,7 +5827,7 @@ export function OrderHistoryPanel({
       hideOnMobile: true,
       render: (o: Order) => (
         <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-          {o.orderType === 'DELIVERY' ? 'Delivery' : o.orderType === 'DINE_IN' ? `Mesa ${o.tableId || ''}` : 'Retirada'}
+          {o.orderType === 'DELIVERY' ? 'Delivery' : o.orderType === 'DINE_IN' ? dineInOrderLabel(o) : 'Retirada'}
         </span>
       ),
     },

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import socket from "../lib/socket";
 import type { Order, Tenant } from "../types";
+import { dineInOrderLabel } from "../types";
 import { ChefHat, Timer, Bell, CheckCircle2, LogOut, Utensils, Lock } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -24,7 +25,7 @@ function useElapsedMinutes(createdAt: string) {
 }
 
 function orderLabel(order: Order) {
-  if (order.orderType === "DINE_IN") return order.tableId ? `Mesa ${order.tableId}` : "Comanda";
+  if (order.orderType === "DINE_IN") return dineInOrderLabel(order);
   if (order.orderType === "DELIVERY") return "Delivery";
   return "Retirada";
 }

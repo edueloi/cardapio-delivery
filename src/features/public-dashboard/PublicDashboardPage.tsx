@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import socket from "../../lib/socket";
 import type { Order, Tenant } from "../../types";
+import { dineInOrderLabel } from "../../types";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   Clock, 
@@ -144,8 +145,8 @@ export default function PublicDashboardPage() {
                     
                     <div className="w-full flex justify-between items-start mb-4">
                       <span className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-500/80 px-2 py-1 bg-orange-500/10 rounded-lg">
-                        {order.orderType === 'DINE_IN' 
-                          ? (order.tableId === 'Balcao' ? 'Balcão' : (order.tableId ? `Mesa ${order.tableId}` : 'Salão')) 
+                        {order.orderType === 'DINE_IN'
+                          ? dineInOrderLabel(order)
                           : order.orderType === 'DELIVERY' ? 'Delivery' : 'Retirada'}
                       </span>
                       <span className="text-xs font-bold text-slate-500 tabular-nums">
@@ -154,7 +155,7 @@ export default function PublicDashboardPage() {
                     </div>
 
                     <span className="text-5xl font-black tracking-tighter text-white drop-shadow-sm">
-                      #{order.id.slice(-4).toUpperCase()}
+                      {order.counterTicketNumber != null ? `Nº ${String(order.counterTicketNumber).padStart(2, "0")}` : `#${order.id.slice(-4).toUpperCase()}`}
                     </span>
                     
                     <div className="mt-4 text-center">
@@ -198,12 +199,12 @@ export default function PublicDashboardPage() {
                     <div className="flex items-center gap-6 relative z-10">
                       <div className="flex flex-col">
                         <span className="text-[10px] font-black uppercase tracking-[0.2em] text-green-400 mb-2 px-2 py-1 bg-green-500/10 rounded-lg w-fit">
-                          {order.orderType === 'DINE_IN' 
-                            ? (order.tableId === 'Balcao' ? 'Balcão' : (order.tableId ? `Mesa ${order.tableId}` : 'Mesa Salão')) 
+                          {order.orderType === 'DINE_IN'
+                            ? dineInOrderLabel(order)
                             : order.orderType === 'DELIVERY' ? 'Delivery Online' : 'Pedido Balcão'}
                         </span>
                         <span className="text-7xl font-black tracking-tighter text-green-400 drop-shadow-xl">
-                          #{order.id.slice(-4).toUpperCase()}
+                          {order.counterTicketNumber != null ? `Nº ${String(order.counterTicketNumber).padStart(2, "0")}` : `#${order.id.slice(-4).toUpperCase()}`}
                         </span>
                       </div>
                       

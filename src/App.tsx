@@ -16,6 +16,7 @@ import PDVPage from "./pages/PDVPage";
 import KitchenDisplayPage from "./pages/KitchenDisplayPage";
 import SuperAdminPage from "./features/superadmin/SuperAdminPage";
 import CondominiumPage from "./features/condominium-view/CondominiumPage";
+import CounterMenuView from "./features/menu-view/CounterMenuView";
 import AdminAccessPage from "./features/auth/AdminAccessPage";
 import InviteRegisterPage from "./features/auth/InviteRegisterPage";
 import ForgotPasswordPage from "./features/auth/ForgotPasswordPage";
@@ -108,6 +109,20 @@ function AnimatedRoutes() {
                 transition={{ duration: 0.4, ease: "easeOut" }}
               >
                 <MenuView />
+              </motion.div>
+            }
+          />
+
+          <Route
+            path="/:slug/balcao"
+            element={
+              <motion.div
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+                transition={{ duration: 0.4, ease: "easeOut" }}
+              >
+                <CounterMenuView />
               </motion.div>
             }
           />

@@ -17,8 +17,10 @@ interface RegisteredTable {
 
 interface CartLine {
   product: Product;
+  variant?: { id: string; name: string; price: number };
   quantity: number;
   notes: string;
+  price: number;
 }
 
 interface LeaderboardEntry {
@@ -59,12 +61,37 @@ export default function WaiterPanel({
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+  const [showNewTable, setShowNewTable] = useState(false);
+  const [newTableLabel, setNewTableLabel] = useState("");
+  const [creatingTable, setCreatingTable] = useState(false);
+  const [newTableError, setNewTableError] = useState("");
 
-  useEffect(() => {
+  const fetchTables = () => {
     apiJson<RegisteredTable[]>(`/api/tenants/${tenant.slug}/tables`)
       .then((data) => setRegisteredTables(Array.isArray(data) ? data : []))
       .catch(() => setRegisteredTables([]));
-  }, [tenant.slug]);
+  };
+
+  useEffect(() => { fetchTables(); }, [tenant.slug]);
+
+  const handleCreateTable = async () => {
+    if (!newTableLabel.trim()) return;
+    setCreatingTable(true);
+    setNewTableError("");
+    try {
+      await apiJson(`/api/tenants/${tenant.slug}/tables`, {
+        method: "POST",
+        body: JSON.stringify({ label: newTableLabel.trim() }),
+      });
+      fetchTables();
+      setShowNewTable(false);
+      setNewTableLabel("");
+    } catch (err: any) {
+      setNewTableError(err?.message || "Erro ao criar mesa.");
+    } finally {
+      setCreatingTable(false);
+    }
+  };
 
   const activeTables = useMemo(() => {
     const map = new Map<string, ActiveTable>();
@@ -128,6 +155,13 @@ export default function WaiterPanel({
         </div>
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setShowNewTable(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest bg-[#C9A227]/10 text-[#C9A227] hover:bg-[#C9A227]/20 transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Nova mesa</span>
+          </button>
+          <button
             onClick={openLeaderboard}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-[#0D1B3E] hover:bg-slate-50 transition-colors"
           >
@@ -150,8 +184,13 @@ export default function WaiterPanel({
         {registeredTables.length === 0 ? (
           <EmptyState
             title="Nenhuma mesa cadastrada"
-            description='Peça ao proprietário para cadastrar as mesas em "Mesas e QR Code" antes de começar a atender.'
+            description="Crie a primeira mesa para começar a atender."
             icon={Utensils}
+            action={
+              <Button variant="primary" onClick={() => setShowNewTable(true)} iconLeft={<Plus className="w-4 h-4" />}>
+                Nova mesa
+              </Button>
+            }
           />
         ) : (
           <>
@@ -248,6 +287,33 @@ export default function WaiterPanel({
           )}
         </div>
       </Modal>
+
+      {/* Nova mesa */}
+      <Modal
+        isOpen={showNewTable}
+        onClose={() => { setShowNewTable(false); setNewTableError(""); setNewTableLabel(""); }}
+        title="Nova mesa"
+        size="sm"
+        footer={
+          <ModalFooter>
+            <Button variant="outline" onClick={() => setShowNewTable(false)}>Cancelar</Button>
+            <Button variant="primary" onClick={handleCreateTable} loading={creatingTable} disabled={!newTableLabel.trim()}>Criar</Button>
+          </ModalFooter>
+        }
+      >
+        <div className="p-4 sm:p-5 space-y-3">
+          {newTableError && (
+            <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-xs font-bold">{newTableError}</div>
+          )}
+          <Input
+            label="Identificação da mesa"
+            placeholder="Ex: 5, VIP, Varanda"
+            value={newTableLabel}
+            onChange={(e) => setNewTableLabel(e.target.value)}
+            autoFocus
+          />
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -279,6 +345,7 @@ function ComandaModal({
   const [customerName, setCustomerName] = useState("");
   const [customerLookup, setCustomerLookup] = useState<"idle" | "loading" | "found" | "new">("idle");
   const [closing, setClosing] = useState(false);
+  const [variantPicker, setVariantPicker] = useState<Product | null>(null);
 
   const existingCustomer = existingOrders.find((o) => o.customerId)?.customerName;
 
@@ -293,21 +360,30 @@ function ComandaModal({
     return products.filter((p) => p.available).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
   }, [tenant, selectedCategoryId, searchTerm]);
 
-  const addToCart = (product: Product) => {
+  const cartKey = (productId: string, variantId?: string) => variantId ? `${productId}::${variantId}` : productId;
+
+  const addToCart = (product: Product, variant?: { id: string; name: string; price: number }) => {
+    if (!variant && product.variants && product.variants.length > 0) {
+      setVariantPicker(product);
+      return;
+    }
     setCart((prev) => {
-      const existing = prev.find((i) => i.product.id === product.id);
-      if (existing) return prev.map((i) => (i.product.id === product.id ? { ...i, quantity: i.quantity + 1 } : i));
-      return [...prev, { product, quantity: 1, notes: "" }];
+      const key = cartKey(product.id, variant?.id);
+      const existing = prev.find((i) => cartKey(i.product.id, i.variant?.id) === key);
+      if (existing) return prev.map((i) => (cartKey(i.product.id, i.variant?.id) === key ? { ...i, quantity: i.quantity + 1 } : i));
+      return [...prev, { product, variant, quantity: 1, notes: "", price: variant?.price ?? product.price }];
     });
+    setVariantPicker(null);
   };
 
-  const updateQty = (productId: string, delta: number) => {
+  const updateQty = (productId: string, variantId: string | undefined, delta: number) => {
+    const key = cartKey(productId, variantId);
     setCart((prev) => prev
-      .map((i) => (i.product.id === productId ? { ...i, quantity: i.quantity + delta } : i))
+      .map((i) => (cartKey(i.product.id, i.variant?.id) === key ? { ...i, quantity: i.quantity + delta } : i))
       .filter((i) => i.quantity > 0));
   };
 
-  const cartTotal = cart.reduce((acc, i) => acc + i.product.price * i.quantity, 0);
+  const cartTotal = cart.reduce((acc, i) => acc + i.price * i.quantity, 0);
 
   const lookupCustomer = async () => {
     const digits = customerPhone.replace(/\D/g, "");
@@ -340,7 +416,7 @@ function ComandaModal({
           paymentMethod: "CASH",
           operatorName: operatorName || undefined,
           source: "waiter",
-          items: cart.map((i) => ({ productId: i.product.id, quantity: i.quantity, price: i.product.price, notes: i.notes || undefined })),
+          items: cart.map((i) => ({ productId: i.product.id, productVariantId: i.variant?.id, quantity: i.quantity, price: i.price, notes: i.notes || undefined })),
         }),
       });
       toast.show("Pedido lançado para a cozinha.", "success");
@@ -451,34 +527,66 @@ function ComandaModal({
           ))}
         </div>
 
-        {/* Lista de produtos */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-5 grid grid-cols-2 sm:grid-cols-3 gap-2">
-          {allProducts.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => addToCart(p)}
-              className="bg-white border border-slate-200 hover:border-[#C9A227] rounded-2xl p-3 text-left transition-all"
-            >
-              <p className="text-xs font-black text-slate-700 leading-tight mb-1">{p.name}</p>
-              <p className="text-[11px] font-bold text-[#C9A227]">{fmt(p.price)}</p>
-            </button>
-          ))}
+        {/* Lista de produtos — mesmo estilo visual do cardápio digital, compacto */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5 grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {allProducts.map((p) => {
+            const hasVariants = !!p.variants && p.variants.length > 0;
+            const minPrice = hasVariants ? Math.min(...p.variants!.map((v) => v.price)) : p.price;
+            return (
+              <button
+                key={p.id}
+                onClick={() => addToCart(p)}
+                className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden hover:shadow-md hover:border-slate-200 transition-all text-left"
+              >
+                {p.imageUrl ? (
+                  <div className="relative w-full aspect-[4/3] overflow-hidden bg-slate-50">
+                    <img src={p.imageUrl} alt={p.name} loading="lazy" className="w-full h-full object-cover" />
+                    <div className="absolute bottom-2 left-2 bg-black/50 backdrop-blur-md rounded-lg px-2 py-0.5">
+                      <span className="text-[10px] font-black text-white">
+                        {hasVariants && <span className="font-normal opacity-70 text-[9px] mr-1">a partir</span>}
+                        {fmt(minPrice)}
+                      </span>
+                    </div>
+                    <div className="absolute top-2 right-2 w-6 h-6 rounded-lg bg-[#C9A227] text-white flex items-center justify-center shadow">
+                      <Plus className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="w-full aspect-[4/3] bg-slate-50 flex items-center justify-center text-3xl">🍽️</div>
+                )}
+                <div className="px-2.5 py-2">
+                  <p className="text-[11px] font-black text-slate-800 leading-tight truncate">{p.name}</p>
+                  {!p.imageUrl && (
+                    <p className="text-[10px] font-bold text-[#C9A227] mt-0.5">
+                      {hasVariants && <span className="text-slate-400 font-normal mr-1">a partir de</span>}
+                      {fmt(minPrice)}
+                    </p>
+                  )}
+                </div>
+              </button>
+            );
+          })}
         </div>
 
         {/* Carrinho da rodada atual */}
         {cart.length > 0 && (
           <div className="border-t border-slate-100 px-4 sm:px-5 py-3 space-y-2 max-h-40 overflow-y-auto shrink-0">
-            {cart.map((item) => (
-              <div key={item.product.id} className="flex items-center gap-2">
-                <div className="flex items-center gap-1">
-                  <button onClick={() => updateQty(item.product.id, -1)} className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center"><Minus className="w-3 h-3" /></button>
-                  <span className="w-6 text-center text-xs font-black">{item.quantity}</span>
-                  <button onClick={() => updateQty(item.product.id, 1)} className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center"><Plus className="w-3 h-3" /></button>
+            {cart.map((item) => {
+              const lineKey = cartKey(item.product.id, item.variant?.id);
+              return (
+                <div key={lineKey} className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => updateQty(item.product.id, item.variant?.id, -1)} className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center"><Minus className="w-3 h-3" /></button>
+                    <span className="w-6 text-center text-xs font-black">{item.quantity}</span>
+                    <button onClick={() => updateQty(item.product.id, item.variant?.id, 1)} className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center"><Plus className="w-3 h-3" /></button>
+                  </div>
+                  <span className="flex-1 text-xs font-bold text-slate-700 truncate">
+                    {item.product.name}{item.variant ? ` — ${item.variant.name}` : ""}
+                  </span>
+                  <span className="text-xs font-black text-slate-600">{fmt(item.price * item.quantity)}</span>
                 </div>
-                <span className="flex-1 text-xs font-bold text-slate-700 truncate">{item.product.name}</span>
-                <span className="text-xs font-black text-slate-600">{fmt(item.product.price * item.quantity)}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -499,6 +607,22 @@ function ComandaModal({
           </div>
         </div>
       </div>
+
+      {/* Seleção de tamanho/variante */}
+      <Modal isOpen={!!variantPicker} onClose={() => setVariantPicker(null)} title={variantPicker?.name || "Escolha o tamanho"} size="sm">
+        <div className="p-4 sm:p-5 space-y-2">
+          {variantPicker?.variants?.map((v) => (
+            <button
+              key={v.id}
+              onClick={() => addToCart(variantPicker, { id: v.id, name: v.name, price: v.price })}
+              className="w-full flex items-center justify-between p-3 rounded-2xl border border-slate-200 hover:border-[#C9A227] transition-all text-left"
+            >
+              <span className="text-sm font-black text-slate-700">{v.name}</span>
+              <span className="text-sm font-black text-[#C9A227]">{fmt(v.price)}</span>
+            </button>
+          ))}
+        </div>
+      </Modal>
     </Modal>
   );
 }

@@ -1129,7 +1129,7 @@ app.patch("/api/owner/tenants/:tenantId", requireAuth, async (req, res) => {
   const tenant = await requireTenantById(req, res, req.params.tenantId);
   if (!tenant) return;
 
-  const { name, description, address, whatsapp, logoUrl, isOpen, scheduleMode, scheduleType, scheduleDays, scheduleNotes, orderMode, businessHours, deliveryConfig, paymentMethods, stoneConfig, fiscalConfig, displayPanelConfig } = req.body;
+  const { name, description, address, whatsapp, logoUrl, isOpen, scheduleMode, scheduleType, scheduleDays, scheduleNotes, orderMode, businessHours, deliveryConfig, paymentMethods, stoneConfig, fiscalConfig, displayPanelConfig, waiterNotifyOnReady } = req.body;
   try {
     const updated = await prisma.tenant.update({
       where: { id: tenant.id },
@@ -1140,6 +1140,7 @@ app.patch("/api/owner/tenants/:tenantId", requireAuth, async (req, res) => {
         ...(whatsapp !== undefined && { whatsapp: whatsapp || null }),
         ...(logoUrl !== undefined && { logoUrl: logoUrl || null }),
         ...(isOpen !== undefined && { isOpen: Boolean(isOpen) }),
+        ...(waiterNotifyOnReady !== undefined && { waiterNotifyOnReady: Boolean(waiterNotifyOnReady) }),
         ...(scheduleMode !== undefined && { scheduleMode: Boolean(scheduleMode) }),
         ...(scheduleType !== undefined && { scheduleType: scheduleType || "CLIENT_CHOOSES" }),
         ...(scheduleDays !== undefined && { scheduleDays: scheduleDays ? (typeof scheduleDays === "string" ? scheduleDays : JSON.stringify(scheduleDays)) : null }),
@@ -1797,11 +1798,28 @@ app.get("/api/admin/tenant/:slug", requireAuth, async (req, res) => {
 
 app.post("/api/orders", async (req, res) => {
   console.log("Incoming Order Body:", JSON.stringify(req.body, null, 2));
-  const { customerName, customerPhone, address, items, tenantId, orderType, paymentMethod, paymentDetail, tableId, scheduledDate, scheduledTime, notes } = req.body;
+  const { customerName, customerPhone, address, items, tenantId, orderType, paymentMethod, paymentDetail, tableId, scheduledDate, scheduledTime, notes, birthday } = req.body;
 
   try {
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+
+    // Pedido de balcão (QR "Balcao", sem mesa fixa): não tem tableId real — em vez disso
+    // recebe uma senha sequencial que reseta todo dia, pro cliente acompanhar sem precisar
+    // de número de mesa. É calculada aqui, no momento da criação, para evitar duplicar
+    // número em caso de pedidos simultâneos (contagem sempre feita sob o mesmo tenant/dia).
+    const isCounterOrder = tableId === "Balcao";
+    let counterTicketNumber: number | null = null;
+    if (isCounterOrder) {
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+      const lastTicket = await prisma.order.findFirst({
+        where: { tenantId, counterTicketNumber: { not: null }, createdAt: { gte: startOfDay } },
+        orderBy: { counterTicketNumber: "desc" },
+        select: { counterTicketNumber: true },
+      });
+      counterTicketNumber = (lastTicket?.counterTicketNumber ?? 0) + 1;
+    }
 
     let total = 0;
     const orderItemsData: Array<{
@@ -1841,10 +1859,11 @@ app.post("/api/orders", async (req, res) => {
     let customerId: string | undefined;
     if (customerPhone && customerName) {
       const digits = customerPhone.replace(/\D/g, "");
+      const birthdayDate = birthday ? new Date(birthday) : undefined;
       const customer = await prisma.customer.upsert({
         where: { tenantId_phone: { tenantId, phone: digits } },
-        create: { tenantId, name: customerName, phone: digits, totalSpent: total, ordersCount: 1, lastOrderAt: new Date() },
-        update: { totalSpent: { increment: total }, ordersCount: { increment: 1 }, lastOrderAt: new Date() },
+        create: { tenantId, name: customerName, phone: digits, birthday: birthdayDate, totalSpent: total, ordersCount: 1, lastOrderAt: new Date() },
+        update: { totalSpent: { increment: total }, ordersCount: { increment: 1 }, lastOrderAt: new Date(), ...(birthdayDate && { birthday: birthdayDate }) },
       });
       customerId = customer.id;
     }
@@ -1863,7 +1882,8 @@ app.post("/api/orders", async (req, res) => {
         scheduledTime: scheduledTime || null,
         total,
         tenantId,
-        tableId: tableId || null,
+        tableId: isCounterOrder ? null : (tableId || null),
+        counterTicketNumber,
         items: {
           create: orderItemsData,
         },
@@ -1915,6 +1935,24 @@ app.get("/api/orders/table/:slug/:tableId", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao buscar pedidos" });
+  }
+});
+
+// Acompanhamento de um pedido de balcão pela senha (sem mesa fixa) — o cliente guarda o
+// id do pedido recém-criado no localStorage e consulta o status daqui, já que balcão não
+// tem tableId (usa counterTicketNumber só como número de exibição, não como chave de busca).
+app.get("/api/orders/counter/:slug/:orderId", async (req, res) => {
+  const { slug, orderId } = req.params;
+  try {
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, tenant: { slug } },
+      include: { items: { include: { product: true } } },
+    });
+    if (!order) return res.status(404).json({ error: "Pedido não encontrado." });
+    res.json(order);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao buscar pedido." });
   }
 });
 
@@ -2022,6 +2060,17 @@ async function updateOrderStatus(orderId: string, previousStatus: string, status
 
     io.to(`tenant-${updatedOrder.tenantId}`).emit("order-status-updated", updatedOrder);
     await sendOrderStatusMessage(updatedOrder, updatedOrder.tenant).catch(() => undefined);
+
+    // Avisa o garçom (em qualquer tela do sistema, não só no painel de cozinha) que a
+    // comanda da mesa está pronta pra servir — configurável por loja em Configurações.
+    if (status === "SHIPPED" && previousStatus !== "SHIPPED" && updatedOrder.orderType === "DINE_IN" && (updatedOrder.tenant as any).waiterNotifyOnReady) {
+      io.to(`tenant-${updatedOrder.tenantId}`).emit("comanda-ready", {
+        orderId: updatedOrder.id,
+        tableId: updatedOrder.tableId,
+        customerName: updatedOrder.customerName,
+        operatorName: updatedOrder.operatorName,
+      });
+    }
 
     // Pedidos DINE_IN (comanda de garçom): "DELIVERED" aqui significa "prato servido",
     // não "conta paga" — o pagamento/faturamento da mesa é um pedido separado, lançado
@@ -3714,7 +3763,7 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
 
     // Fetch products and calculate totals
     const productIds = items.map((i: any) => i.productId);
-    const products = await prisma.product.findMany({ where: { id: { in: productIds } } });
+    const products = await prisma.product.findMany({ where: { id: { in: productIds } }, include: { variants: true } });
     const productMap = Object.fromEntries(products.map((p) => [p.id, p]));
 
     let subtotal = 0;
@@ -3722,9 +3771,18 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
     for (const item of items) {
       const product = productMap[item.productId];
       if (!product) return res.status(400).json({ error: `Produto ${item.productId} não encontrado.` });
-      const price = item.price ?? product.price;
+      // Preço nunca confia no valor vindo do cliente — resolve pela variante (se houver)
+      // ou pelo preço base do produto, sempre a partir do que está salvo no banco.
+      let price = product.price;
+      let productVariantId: string | null = null;
+      if (item.productVariantId) {
+        const variant = (product.variants ?? []).find((v: any) => v.id === item.productVariantId);
+        if (!variant) return res.status(400).json({ error: `Variante não encontrada para o produto ${product.name}.` });
+        price = variant.price;
+        productVariantId = variant.id;
+      }
       subtotal += price * item.quantity;
-      orderItems.push({ productId: item.productId, quantity: item.quantity, price, notes: item.notes });
+      orderItems.push({ productId: item.productId, productVariantId, quantity: item.quantity, price, notes: item.notes });
     }
 
     let discountAmount = 0;
@@ -3838,11 +3896,15 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
         });
       }
 
-      // Deduct inventory
+      // Deduct inventory — usa o estoque vinculado à variante quando o item tiver uma,
+      // senão cai no estoque do produto base (mesma regra de updateOrderStatus).
       for (const item of order.items) {
-        if (item.product?.inventoryItemId) {
+        const inventoryItemId = item.productVariantId
+          ? (await prisma.productVariant.findUnique({ where: { id: item.productVariantId } }))?.inventoryItemId
+          : item.product?.inventoryItemId;
+        if (inventoryItemId) {
           await prisma.inventoryItem.update({
-            where: { id: item.product.inventoryItemId },
+            where: { id: inventoryItemId },
             data: {
               quantity: { decrement: item.quantity },
               movements: { create: { type: "OUT", quantity: item.quantity, reason: "SALE", orderId: order.id } },
@@ -4549,7 +4611,16 @@ if (process.env.NODE_ENV !== "production") {
   });
 
   app.use(async (req, res, next) => {
-    if (req.method !== "GET" || req.path.startsWith("/api") || req.path.includes(".")) return next();
+    // Só intercepta navegação de página real — deixa passar direto pro Vite qualquer
+    // asset/módulo interno (paths virtuais como /@vite/client e /@react-refresh, ou
+    // qualquer arquivo com extensão), senão o Vite nunca consegue servir JS/CSS com o
+    // Content-Type correto e a página inteira quebra (erro de MIME type no browser).
+    if (
+      req.method !== "GET" ||
+      req.path.startsWith("/api") ||
+      req.path.startsWith("/@") ||
+      req.path.includes(".")
+    ) return next();
     try {
       const rootIndexPath = path.join(process.cwd(), "index.html");
       const rawHtml = fs.readFileSync(rootIndexPath, "utf-8");

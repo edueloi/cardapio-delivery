@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { DashboardShell } from "../../components";
+import { DashboardShell, useToast } from "../../components";
 import { apiFetch, apiJson, AuthError } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import socket from "../../lib/socket";
@@ -15,6 +15,7 @@ export default function DashboardPage() {
   const { slug, tab: tabParam, orderId } = useParams<{ slug: string; tab?: string; orderId?: string }>();
   const navigate = useNavigate();
   const { logout, account } = useAuth();
+  const toast = useToast();
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [subTab, setSubTab] = useState<DashboardOrderTabId>("pending");
@@ -149,12 +150,21 @@ export default function DashboardPage() {
       void fetchTenant();
     });
 
+    // Comanda pronta pra servir — dispara em qualquer tela do dashboard, não só na do
+    // Garçom, já que o(a) garçom pode estar em Mesas, Cardápio etc. quando a cozinha avisa.
+    socket.on("comanda-ready", ({ tableId, customerName, operatorName }) => {
+      new Audio("/notification.mp3").play().catch(() => undefined);
+      const who = tableId ? `Mesa ${tableId}` : customerName || "Comanda";
+      toast.success(`${who} está pronta para servir!${operatorName ? ` (${operatorName})` : ""}`);
+    });
+
     return () => {
       socket.off("new-order");
       socket.off("order-status-updated");
       socket.off("checkout-requested");
       socket.off("waiter-called");
       socket.off("menu-updated");
+      socket.off("comanda-ready");
     };
   }, [slug]);
 

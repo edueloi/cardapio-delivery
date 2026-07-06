@@ -801,6 +801,30 @@ const migrations = [
     check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'product_variants' AND COLUMN_NAME = 'image_url'",
     run: "ALTER TABLE product_variants ADD COLUMN image_url VARCHAR(191) NULL",
   },
+  // Suporte a variante de produto no PDV/Garçom (product_variant_id no item do pedido)
+  {
+    name: 'add_order_items_product_variant_id',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'order_items' AND COLUMN_NAME = 'product_variant_id'",
+    run: "ALTER TABLE order_items ADD COLUMN product_variant_id VARCHAR(191) NULL",
+  },
+  // Aviso ao garçom quando a cozinha marca a comanda como pronta pra servir
+  {
+    name: 'add_tenants_waiter_notify_on_ready',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenants' AND COLUMN_NAME = 'waiter_notify_on_ready'",
+    run: "ALTER TABLE tenants ADD COLUMN waiter_notify_on_ready TINYINT(1) NOT NULL DEFAULT 1",
+  },
+  // Data de aniversário do cliente — opcional, usada em promoções e cadastro rápido no balcão
+  {
+    name: 'add_customers_birthday',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'customers' AND COLUMN_NAME = 'birthday'",
+    run: "ALTER TABLE customers ADD COLUMN birthday DATE NULL",
+  },
+  // Senha sequencial diária para pedidos de balcão (sem mesa)
+  {
+    name: 'add_orders_counter_ticket_number',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'counter_ticket_number'",
+    run: "ALTER TABLE orders ADD COLUMN counter_ticket_number INT NULL",
+  },
 ];
 
 async function run() {

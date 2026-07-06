@@ -74,6 +74,21 @@ export interface PaymentConfig {
 // orderMode: DELIVERY_ONLY = só delivery imediato; PREORDER_ONLY = só encomenda; BOTH = os dois
 export type OrderMode = "DELIVERY_ONLY" | "PREORDER_ONLY" | "BOTH";
 
+// Valor sentinela usado no QR Code de "Balcão" (pedido sem mesa fixa) — pedidos criados a
+// partir dele nascem com tableId=null e ganham counterTicketNumber (senha sequencial diária).
+export const COUNTER_ORDER_TABLE_ID = "Balcao";
+
+// Rótulo exibido nos painéis (Cozinha, Pedidos, PDV, Garçom) para um pedido DINE_IN:
+// mesa numerada ("Mesa 5"), balcão com senha ("Balcão — Senha 12 — João"), ou fallback.
+export function dineInOrderLabel(order: { tableId?: string | null; counterTicketNumber?: number | null; customerName?: string }): string {
+  if (order.counterTicketNumber != null) {
+    const name = order.customerName ? ` — ${order.customerName}` : "";
+    return `Balcão — Senha ${String(order.counterTicketNumber).padStart(2, "0")}${name}`;
+  }
+  if (order.tableId) return `Mesa ${order.tableId}`;
+  return "Comanda";
+}
+
 // scheduleType: CLIENT_CHOOSES = cliente escolhe qualquer data; OWNER_DEFINES = estabelecimento define dias/horários fixos
 export interface ScheduleDay {
   weekday: number;   // 0=Dom 1=Seg ... 6=Sáb
@@ -164,6 +179,7 @@ export interface Tenant {
   wppBotConfig?: WppBotConfig | null;
   loyaltyConfig?: LoyaltyConfig | null;
   displayPanelConfig?: string | null; // JSON string: DisplayPanelConfig
+  waiterNotifyOnReady?: boolean; // avisa o garçom quando a cozinha marca a comanda como pronta pra servir
 }
 
 // Controla quais tipos de pedido aparecem no Painel TV (/:slug/display) — tela exposta pro cliente ver o status.
@@ -443,7 +459,8 @@ export interface Order {
   address?: string;
   status: 'PENDING' | 'PREPARING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED';
   orderType: 'DELIVERY' | 'PICKUP' | 'DINE_IN';
-  tableId?: string;
+  tableId?: string | null;
+  counterTicketNumber?: number | null; // senha sequencial diária — só para pedidos de balcão (sem mesa)
   paymentMethod: 'PIX' | 'CREDIT' | 'DEBIT' | 'MEAL' | 'FOOD' | 'CASH';
   paymentDetail?: string;
   scheduledDate?: string | null; // ISO date string YYYY-MM-DD
