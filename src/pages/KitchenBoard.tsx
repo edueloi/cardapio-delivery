@@ -232,9 +232,28 @@ export default function KitchenBoard({
     socket.on("order-status-updated", (updatedOrder: Order) => {
       setOrders((prev) => prev.map((o) => (o.id === updatedOrder.id ? updatedOrder : o)));
     });
+
+    // Celular/tablet suspende a conexão WebSocket quando a tela apaga ou o app vai
+    // pra segundo plano — ao voltar, o socket pode ficar "zumbi" (parece conectado
+    // mas não recebe mais eventos) até o próximo reconnect automático, que pode
+    // demorar. Isso fazia a cozinha perder pedidos até alguém dar refresh manual.
+    // Ao a aba voltar a ficar visível: força a reconexão do socket se necessário
+    // e sempre revalida os dados via fetch, que não depende do socket estar vivo.
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return;
+      if (!socket.connected) socket.connect();
+      fetchData();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", handleVisibilityChange);
+    window.addEventListener("online", handleVisibilityChange);
+
     return () => {
       socket.off("new-order");
       socket.off("order-status-updated");
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleVisibilityChange);
+      window.removeEventListener("online", handleVisibilityChange);
     };
   }, [apiBase, token]);
 
