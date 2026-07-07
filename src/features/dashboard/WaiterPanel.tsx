@@ -6,6 +6,7 @@ import {
 import type { Tenant, Product, Order } from "../../types";
 import { apiJson } from "../../lib/api";
 import { Modal, ModalFooter, Button, Input, useToast, EmptyState } from "../../components";
+import socket from "../../lib/socket";
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
@@ -346,6 +347,7 @@ function ComandaModal({
   const [customerLookup, setCustomerLookup] = useState<"idle" | "loading" | "found" | "new">("idle");
   const [closing, setClosing] = useState(false);
   const [variantPicker, setVariantPicker] = useState<Product | null>(null);
+  const [editingNotesKey, setEditingNotesKey] = useState<string | null>(null);
 
   const existingCustomer = existingOrders.find((o) => o.customerId)?.customerName;
 
@@ -381,6 +383,11 @@ function ComandaModal({
     setCart((prev) => prev
       .map((i) => (cartKey(i.product.id, i.variant?.id) === key ? { ...i, quantity: i.quantity + delta } : i))
       .filter((i) => i.quantity > 0));
+  };
+
+  const updateNotes = (productId: string, variantId: string | undefined, notes: string) => {
+    const key = cartKey(productId, variantId);
+    setCart((prev) => prev.map((i) => (cartKey(i.product.id, i.variant?.id) === key ? { ...i, notes } : i)));
   };
 
   const cartTotal = cart.reduce((acc, i) => acc + i.price * i.quantity, 0);
@@ -437,7 +444,11 @@ function ComandaModal({
       await Promise.all(openOrders.map((o) =>
         apiJson(`/api/orders/${o.id}/status`, { method: "PATCH", body: JSON.stringify({ status: "DELIVERED" }) })
       ));
-      toast.show(`Mesa ${tableId} liberada. O caixa fecha o pagamento.`, "success");
+      // Avisa o caixa/PDV (badge de solicitação em Mesas/Comandas) que essa mesa está
+      // pronta pra fechar a conta — mesmo evento que já existe quando o próprio cliente
+      // pede a conta pelo cardápio da mesa.
+      socket.emit("request-checkout", { tenantId: tenant.id, tableId, customerName: existingCustomer || "" });
+      toast.show(`Mesa ${tableId} enviada para o caixa fechar.`, "success");
       onChanged();
       onClose();
     } catch (err: any) {
@@ -570,20 +581,40 @@ function ComandaModal({
 
         {/* Carrinho da rodada atual */}
         {cart.length > 0 && (
-          <div className="border-t border-slate-100 px-4 sm:px-5 py-3 space-y-2 max-h-40 overflow-y-auto shrink-0">
+          <div className="border-t border-slate-100 px-4 sm:px-5 py-3 space-y-2 max-h-52 overflow-y-auto shrink-0">
             {cart.map((item) => {
               const lineKey = cartKey(item.product.id, item.variant?.id);
               return (
-                <div key={lineKey} className="flex items-center gap-2">
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => updateQty(item.product.id, item.variant?.id, -1)} className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center"><Minus className="w-3 h-3" /></button>
-                    <span className="w-6 text-center text-xs font-black">{item.quantity}</span>
-                    <button onClick={() => updateQty(item.product.id, item.variant?.id, 1)} className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center"><Plus className="w-3 h-3" /></button>
+                <div key={lineKey} className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => updateQty(item.product.id, item.variant?.id, -1)} className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center"><Minus className="w-3 h-3" /></button>
+                      <span className="w-6 text-center text-xs font-black">{item.quantity}</span>
+                      <button onClick={() => updateQty(item.product.id, item.variant?.id, 1)} className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center"><Plus className="w-3 h-3" /></button>
+                    </div>
+                    <span className="flex-1 text-xs font-bold text-slate-700 truncate">
+                      {item.product.name}{item.variant ? ` — ${item.variant.name}` : ""}
+                    </span>
+                    <span className="text-xs font-black text-slate-600">{fmt(item.price * item.quantity)}</span>
                   </div>
-                  <span className="flex-1 text-xs font-bold text-slate-700 truncate">
-                    {item.product.name}{item.variant ? ` — ${item.variant.name}` : ""}
-                  </span>
-                  <span className="text-xs font-black text-slate-600">{fmt(item.price * item.quantity)}</span>
+                  {editingNotesKey === lineKey ? (
+                    <input
+                      autoFocus
+                      type="text"
+                      value={item.notes}
+                      onChange={(e) => updateNotes(item.product.id, item.variant?.id, e.target.value)}
+                      onBlur={() => setEditingNotesKey(null)}
+                      placeholder="Observação (ex: sem cebola)"
+                      className="w-full ml-8 bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2.5 text-[11px] text-slate-700 placeholder-slate-300 focus:border-[#C9A227] outline-none"
+                    />
+                  ) : (
+                    <button
+                      onClick={() => setEditingNotesKey(lineKey)}
+                      className="ml-8 flex items-center gap-1 text-[10px] text-slate-400 hover:text-slate-600 transition-colors"
+                    >
+                      {item.notes ? <span className="italic text-slate-500">{item.notes}</span> : <span>+ Adicionar observação</span>}
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -599,7 +630,7 @@ function ComandaModal({
           )}
           <div className="grid grid-cols-2 gap-2">
             <Button variant="outline" onClick={handleMarkServed} loading={closing} iconLeft={<CheckCircle2 className="w-4 h-4" />}>
-              Mesa servida
+              Fechar Mesa
             </Button>
             <Button variant="primary" onClick={handleLaunch} loading={submitting} disabled={cart.length === 0} iconLeft={<ChefHat className="w-4 h-4" />}>
               Enviar p/ cozinha

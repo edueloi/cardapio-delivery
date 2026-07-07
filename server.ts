@@ -4292,13 +4292,18 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
       discount,
       discountType,
       notes,
-      operatorName,
       customerCpf,
       cardBrand,
       installments,
       serviceChargeIncluded,
       source,
     } = req.body;
+
+    // O placar do garçom (leaderboard) só conta pedidos com operatorName preenchido —
+    // sem esse fallback, um membro sem "nome de exibição" configurado (membership.name)
+    // ficava fora da contagem mesmo lançando pedidos normalmente.
+    const account = currentAccount(req);
+    const operatorName = req.body.operatorName || (req as AuthenticatedRequest).membership?.name || account?.name || undefined;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "Nenhum item no pedido." });
@@ -4503,7 +4508,12 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
     // etc) — "order:new" nunca foi ouvido em lugar nenhum, então pedidos lançados por
     // essa rota (PDV e comanda de garçom) nunca apareciam em tempo real na cozinha,
     // só depois de um refresh manual que buscava via HTTP.
-    io.to(`tenant-${tenant.id}`).emit("new-order", order);
+    // Só emite quando o pedido de fato precisa de atenção da cozinha (nasce PENDING,
+    // ex: comanda do garçom). Uma venda de balcão ou fechamento de conta via "Pagar"
+    // já nasce DELIVERED (paga na hora) e não deve virar alerta de "novo pedido".
+    if (order.status !== "DELIVERED") {
+      io.to(`tenant-${tenant.id}`).emit("new-order", order);
+    }
     res.json(order);
   } catch (error) {
     console.error(error);
