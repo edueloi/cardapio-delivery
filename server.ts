@@ -2009,10 +2009,15 @@ async function updateOrderStatus(orderId: string, previousStatus: string, status
 
   if (shouldDeductInventory) {
       for (const item of updatedOrder.items) {
+        // Produto pode ter sido excluído do cardápio depois que o pedido foi feito —
+        // sem produto não há o que debitar do estoque, mas isso não pode quebrar a
+        // confirmação de entrega do pedido.
+        if (!item.productVariantId && !item.product) continue;
+
         // Deduct direct inventory link
         let inventoryItemId = item.productVariantId
           ? (await prisma.productVariant.findUnique({ where: { id: item.productVariantId } }))?.inventoryItemId
-          : item.product.inventoryItemId;
+          : item.product?.inventoryItemId;
 
         if (inventoryItemId) {
           const beforeItem = await prisma.inventoryItem.findUnique({ where: { id: inventoryItemId } });
@@ -2061,7 +2066,7 @@ async function updateOrderStatus(orderId: string, previousStatus: string, status
         }
 
         // Deduct production recipe ingredients when product is linked to a recipe
-        const productRecipeId = (item.product as any).recipeId;
+        const productRecipeId = (item.product as any)?.recipeId;
         if (productRecipeId) {
           const recipeRaw = await prisma.productionRecipe.findUnique({
             where: { id: productRecipeId },
@@ -3067,7 +3072,9 @@ app.get("/api/tenants/:slug/finance-summary", requireAuth, async (req, res) => {
 });
 
 app.get("/api/tenants/:slug/cash/current", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug, "finance");
+  // Abrir/fechar/consultar o caixa físico é operação do dia-a-dia do PDV, não do módulo
+  // financeiro — quem só tem acesso ao PDV precisa poder abrir caixa pra começar a vender.
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, ["finance", "pos"]);
   if (!tenant) return;
 
   try {
@@ -3101,7 +3108,7 @@ app.get("/api/tenants/:slug/cash/current", requireAuth, async (req, res) => {
 });
 
 app.post("/api/tenants/:slug/cash/open", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug, "finance");
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, ["finance", "pos"]);
   if (!tenant) return;
 
   try {
@@ -3136,7 +3143,7 @@ app.post("/api/tenants/:slug/cash/open", requireAuth, async (req, res) => {
 });
 
 app.post("/api/tenants/:slug/cash/close", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(req, res, req.params.slug, "finance");
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, ["finance", "pos"]);
   if (!tenant) return;
 
   try {

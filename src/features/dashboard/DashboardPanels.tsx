@@ -325,7 +325,11 @@ export function OrdersList({
                         )}
                         <div className="flex items-center justify-between pt-2 border-t border-slate-100">
                           <span className="ds-label">Método de Pagamento</span>
-                          <PaymentBadge method={order.paymentMethod.toLowerCase() as any} size="sm" />
+                          {order.orderType === "DINE_IN" ? (
+                            <span className="text-[10px] font-bold text-slate-400 italic">A definir no fechamento</span>
+                          ) : (
+                            <PaymentBadge method={order.paymentMethod.toLowerCase() as any} size="sm" />
+                          )}
                         </div>
                       </div>
 
