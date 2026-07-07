@@ -6,7 +6,7 @@ import {
   ChevronRight, ChevronDown, ArrowLeft,
   Utensils, Tag, User, Phone, Percent,
   Printer, Hash, AlertCircle, Smartphone, Lock, ExternalLink, Download, Zap,
-  MoreHorizontal, DoorOpen, DoorClosed, Maximize2,
+  MoreHorizontal, DoorOpen, DoorClosed, Maximize2, Split,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import type { Tenant, Product, Order, PaymentConfig, PaymentMethodConfig, StoneConfig } from "../../types";
@@ -14,6 +14,7 @@ import { dineInOrderLabel } from "../../types";
 import { apiJson } from "../../lib/api";
 import { useToast } from "../../components";
 import { downloadReceiptPdf, printReceiptPdf } from "../../lib/receipt";
+import socket from "../../lib/socket";
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
@@ -76,6 +77,8 @@ export default function PDVPanel({
 }: PDVPanelProps) {
   const toast = useToast();
   const isWaiterMode = mode === "waiter";
+  // Tela cheia do PDV externo (/pdv/:slug) — só existe onOpenFullscreen quando embutido no dashboard
+  const isExternalFullscreen = !onOpenFullscreen && !isWaiterMode;
   const [activeTab, setActiveTab] = useState<"products" | "tables" | "comandas">(isWaiterMode ? "tables" : "products");
   // Em telas menores que lg, o carrinho vira um painel deslizante aberto sob demanda
   // (por um botão flutuante), em vez de ficar sempre empilhado ocupando a tela.
@@ -89,6 +92,8 @@ export default function PDVPanel({
   const [comandaNumber, setComandaNumber] = useState("");
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   const [selectedComandaId, setSelectedComandaId] = useState<string | null>(null);
+  // true quando veio do fluxo "Fechar Conta" — só pagar, sem opção de lançar mais itens
+  const [isClosingAccount, setIsClosingAccount] = useState(false);
   const [registeredTables, setRegisteredTables] = useState<Array<{ id: string; label: string }>>([]);
 
   // Modal de detalhes da mesa/comanda — mostrado antes de ir pro carrinho, ao clicar "Abrir"
@@ -104,6 +109,11 @@ export default function PDVPanel({
   const [cardBrand, setCardBrand] = useState<string>("");
   const [amountReceived, setAmountReceived] = useState<string>("");
   const [installments, setInstallments] = useState<number>(1);
+
+  // Split de pagamento — mais de uma forma na mesma venda (ex: parte dinheiro, parte cartão).
+  // Cada entrada consome um pedaço do total; o restante é o que ainda falta pagar.
+  const [paymentSplits, setPaymentSplits] = useState<Array<{ id: string; method: "CASH" | "DEBIT" | "CREDIT" | "PIX" | "VR"; amount: number; cardBrand?: string }>>([]);
+  const [isSplitMode, setIsSplitMode] = useState(false);
 
   // Stone terminal flow
   const [stonePaymentType, setStonePaymentType] = useState<"credit" | "debit" | "pix">("credit");
@@ -143,6 +153,15 @@ export default function PDVPanel({
   useEffect(() => {
     if (!isWaiterMode) void fetchCurrentCash();
     else setCashLoading(false);
+  }, [fetchCurrentCash, isWaiterMode]);
+
+  // Outro operador pode abrir/fechar o caixa em outra aba/dispositivo enquanto esta tela já
+  // está aberta — sem isso, ficava presa mostrando "Caixa Fechado" (ou vice-versa) até um F5.
+  useEffect(() => {
+    if (isWaiterMode) return;
+    const handler = () => void fetchCurrentCash();
+    socket.on("cash-status-changed", handler);
+    return () => { socket.off("cash-status-changed", handler); };
   }, [fetchCurrentCash, isWaiterMode]);
 
   const handleOpenCash = async () => {
@@ -339,6 +358,9 @@ export default function PDVPanel({
   const finalTotal = (feeInfo.passToCustomer ? total + feeInfo.amount : total) + serviceChargeAmount;
   const change = paymentMethod === "CASH" ? Math.max(0, digitsToNumber(amountReceived) - finalTotal) : 0;
 
+  const splitAllocated = paymentSplits.reduce((acc, s) => acc + s.amount, 0);
+  const splitRemaining = Math.max(0, Math.round((finalTotal - splitAllocated) * 100) / 100);
+
   const addToCart = useCallback((product: Product) => {
     setCart((prev) => {
       const existing = prev.find((i) => i.product.id === product.id);
@@ -370,6 +392,7 @@ export default function PDVPanel({
     setCart([]);
     setSelectedTableId(null);
     setSelectedComandaId(null);
+    setIsClosingAccount(false);
     setCustomerName("");
     setCustomerPhone("");
     setCustomerCpf("");
@@ -382,7 +405,28 @@ export default function PDVPanel({
     setNfceStatus("idle");
     setNfceMessage("");
     setShowCartDrawer(false);
+    setPaymentSplits([]);
+    setIsSplitMode(false);
     if (stonePollRef.current) clearInterval(stonePollRef.current);
+  };
+
+  // Adiciona a forma de pagamento atualmente selecionada como uma parcela do split,
+  // usando o valor restante como sugestão (some 100% do que falta por padrão).
+  const handleAddPaymentSplit = () => {
+    if (paymentMethod === "STONE" || splitRemaining <= 0) return;
+    setPaymentSplits((prev) => [
+      ...prev,
+      { id: `${Date.now()}-${prev.length}`, method: paymentMethod, amount: splitRemaining, cardBrand: cardBrand || undefined },
+    ]);
+    setCardBrand("");
+  };
+
+  const handleRemovePaymentSplit = (id: string) => {
+    setPaymentSplits((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  const handleUpdateSplitAmount = (id: string, amount: number) => {
+    setPaymentSplits((prev) => prev.map((s) => (s.id === id ? { ...s, amount: Math.max(0, amount) } : s)));
   };
 
   // Cleanup stone polling on unmount
@@ -455,6 +499,7 @@ export default function PDVPanel({
     setSelectedTableId(tableId);
     setOrderDetailsView(null);
     setActiveTab("products");
+    setIsClosingAccount(false);
   };
 
   const handleLoadComanda = (comanda: Order) => {
@@ -467,12 +512,14 @@ export default function PDVPanel({
     setComandaNumber(comanda.customerName || "");
     setOrderDetailsView(null);
     setActiveTab("products");
+    setIsClosingAccount(false);
   };
 
   // Vai direto pro pagamento de uma mesa/comanda já aberta, sem passar por "Adicionar mais itens"
   const handleGoToCheckoutFromDetails = (view: NonNullable<typeof orderDetailsView>) => {
     if (view.type === "table") handleLoadTable(view.tableId);
     else handleLoadComanda(view.comanda);
+    setIsClosingAccount(true);
     setShowCheckout(true);
   };
 
@@ -507,9 +554,11 @@ export default function PDVPanel({
 
   const handleCheckout = async () => {
     if (cart.length === 0 || !currentCash) return;
+    if (isSplitMode && (paymentSplits.length === 0 || splitRemaining > 0)) return;
     setIsProcessing(true);
 
     const isStone = paymentMethod === "STONE";
+    const useSplit = isSplitMode && paymentSplits.length > 0;
 
     const orderData = {
       customerName: customerName || (selectedTableId ? `Mesa ${selectedTableId}` : "Venda PDV"),
@@ -517,13 +566,15 @@ export default function PDVPanel({
       customerCpf: customerCpf.replace(/\D/g, "").length === 11 ? customerCpf.replace(/\D/g, "") : undefined,
       orderType: selectedTableId ? "DINE_IN" : "TAKEAWAY",
       tableId: selectedTableId || undefined,
-      paymentMethod: isStone ? `STONE_${stonePaymentType.toUpperCase()}` : paymentMethod,
-      paymentMetadata: {
-        amountReceived: paymentMethod === "CASH" ? digitsToNumber(amountReceived) : finalTotal,
-        change,
-        cardBrand,
-        installments: paymentMethod === "CREDIT" ? installments : 1,
-      },
+      paymentMethod: useSplit ? "SPLIT" : isStone ? `STONE_${stonePaymentType.toUpperCase()}` : paymentMethod,
+      paymentMetadata: useSplit
+        ? { splits: paymentSplits.map(({ id, ...s }) => s) }
+        : {
+            amountReceived: paymentMethod === "CASH" ? digitsToNumber(amountReceived) : finalTotal,
+            change,
+            cardBrand,
+            installments: paymentMethod === "CREDIT" ? installments : 1,
+          },
       discount: discountValue ? parseFloat(discountValue) : 0,
       discountType,
       cardBrand: cardBrand || undefined,
@@ -617,7 +668,7 @@ export default function PDVPanel({
       notes: i.notes || undefined,
     }));
     const orderSubtotal = items.reduce((acc: number, i: any) => acc + i.price * i.quantity, 0);
-    let paymentDetail: { amountReceived?: number; change?: number } = {};
+    let paymentDetail: { amountReceived?: number; change?: number; splits?: Array<{ method: string; amount: number; cardBrand?: string }> } = {};
     try { paymentDetail = order.paymentDetail ? JSON.parse(order.paymentDetail) : {}; } catch {}
     return {
       tenantName: tenant.name,
@@ -636,6 +687,7 @@ export default function PDVPanel({
       paymentMethod: order.paymentMethod,
       amountReceived: order.paymentMethod === "CASH" ? paymentDetail.amountReceived : undefined,
       change: order.paymentMethod === "CASH" ? paymentDetail.change : undefined,
+      paymentSplits: order.paymentMethod === "SPLIT" ? paymentDetail.splits : undefined,
     };
   };
 
@@ -812,22 +864,50 @@ export default function PDVPanel({
                   </button>
                 )}
               </div>
-              <div className="relative sm:w-56 shrink-0">
-                <select
-                  value={selectedCategoryId ?? "all"}
-                  onChange={(e) => setSelectedCategoryId(e.target.value === "all" ? null : e.target.value)}
-                  className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-xl py-2.5 pl-4 pr-9 text-sm font-bold text-slate-700 focus:border-[#C9A227] focus:bg-white outline-none transition-all cursor-pointer"
-                >
-                  <option value="all">Todos ({tenant.categories?.reduce((s, c) => s + c.products.length, 0) ?? 0})</option>
-                  {tenant.categories?.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name} ({cat.products.length})
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-              </div>
+              {!isExternalFullscreen && (
+                <div className="relative sm:w-56 shrink-0">
+                  <select
+                    value={selectedCategoryId ?? "all"}
+                    onChange={(e) => setSelectedCategoryId(e.target.value === "all" ? null : e.target.value)}
+                    className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-xl py-2.5 pl-4 pr-9 text-sm font-bold text-slate-700 focus:border-[#C9A227] focus:bg-white outline-none transition-all cursor-pointer"
+                  >
+                    <option value="all">Todos ({tenant.categories?.reduce((s, c) => s + c.products.length, 0) ?? 0})</option>
+                    {tenant.categories?.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name} ({cat.products.length})
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                </div>
+              )}
             </div>
+
+            <div className="flex-1 min-h-0 flex overflow-hidden">
+              {/* Coluna de categorias — só no PDV externo em tela cheia, como no mockup de referência */}
+              {isExternalFullscreen && (
+                <div className="w-40 shrink-0 border-r border-slate-100 bg-slate-50/60 overflow-y-auto custom-scrollbar p-2 space-y-1">
+                  <button
+                    onClick={() => setSelectedCategoryId(null)}
+                    className={`w-full text-left px-3 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wide transition-colors ${
+                      selectedCategoryId === null ? "bg-[#0D1B3E] text-white" : "text-slate-500 hover:bg-white"
+                    }`}
+                  >
+                    Todas ({tenant.categories?.reduce((s, c) => s + c.products.length, 0) ?? 0})
+                  </button>
+                  {tenant.categories?.map((cat) => (
+                    <button
+                      key={cat.id}
+                      onClick={() => setSelectedCategoryId(cat.id)}
+                      className={`w-full text-left px-3 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wide transition-colors truncate ${
+                        selectedCategoryId === cat.id ? "bg-[#0D1B3E] text-white" : "text-slate-500 hover:bg-white"
+                      }`}
+                    >
+                      {cat.name} ({cat.products.length})
+                    </button>
+                  ))}
+                </div>
+              )}
 
             {/* Product grid */}
             <div
@@ -917,6 +997,7 @@ export default function PDVPanel({
                   })}
                 </div>
               )}
+            </div>
             </div>
           </>
         )}
@@ -1205,7 +1286,7 @@ export default function PDVPanel({
         </div>
 
         {/* Cart items */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-2 custom-scrollbar">
           {cart.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center space-y-4 opacity-20">
               <div className="w-16 h-16 rounded-full border-2 border-dashed border-white flex items-center justify-center">
@@ -1247,7 +1328,7 @@ export default function PDVPanel({
         </div>
 
         {/* Footer */}
-        <div className="p-4 bg-black/20 border-t border-white/5 space-y-3">
+        <div className="p-4 bg-black/20 border-t border-white/5 space-y-3 shrink-0">
           {/* Discount row */}
           <div className="flex items-center gap-2">
             <div className="flex bg-white/5 rounded-xl overflow-hidden border border-white/10">
@@ -1301,24 +1382,26 @@ export default function PDVPanel({
           </div>
 
           {/* Actions */}
-          <div className={isWaiterMode ? "grid grid-cols-1" : "grid grid-cols-2 gap-3"}>
-            <button
-              disabled={cart.length === 0 || isProcessing}
-              onClick={() => {
-                if (selectedTableId || selectedComandaId) void handleLaunchOrder();
-                else setShowComandaModal(true);
-              }}
-              className={`${isWaiterMode ? "bg-[#C9A227] hover:bg-[#E8B93A] text-black shadow-xl shadow-[#C9A227]/20" : "bg-white/5 hover:bg-white/10 text-white"} disabled:opacity-30 font-black py-3 rounded-2xl transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-[10px]`}
-            >
-              {isProcessing ? (
-                <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <>
-                  Lançar Pedido
-                  <Package className="w-4 h-4" />
-                </>
-              )}
-            </button>
+          <div className={isWaiterMode || isClosingAccount ? "grid grid-cols-1" : "grid grid-cols-2 gap-3"}>
+            {!isClosingAccount && (
+              <button
+                disabled={cart.length === 0 || isProcessing}
+                onClick={() => {
+                  if (selectedTableId || selectedComandaId) void handleLaunchOrder();
+                  else setShowComandaModal(true);
+                }}
+                className={`${isWaiterMode ? "bg-[#C9A227] hover:bg-[#E8B93A] text-black shadow-xl shadow-[#C9A227]/20" : "bg-white/5 hover:bg-white/10 text-white"} disabled:opacity-30 font-black py-3 rounded-2xl transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-[10px]`}
+              >
+                {isProcessing ? (
+                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <>
+                    Lançar Pedido
+                    <Package className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+            )}
             {!isWaiterMode && (
               <button
                 disabled={cart.length === 0 || !currentCash}
@@ -1722,7 +1805,69 @@ export default function PDVPanel({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   {/* Payment methods */}
                   <div className="space-y-2.5">
-                    <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Forma de Pagamento</p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Forma de Pagamento</p>
+                      {paymentMethod !== "STONE" && (
+                        <button
+                          onClick={() => {
+                            setIsSplitMode((v) => !v);
+                            if (isSplitMode) setPaymentSplits([]);
+                          }}
+                          className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wide transition-colors ${
+                            isSplitMode ? "bg-[#C9A227] text-black" : "bg-white/5 text-white/40 hover:bg-white/10"
+                          }`}
+                        >
+                          <Split className="w-3 h-3" />
+                          Dividir Pagamento
+                        </button>
+                      )}
+                    </div>
+
+                    {isSplitMode && (
+                      <div className="space-y-1.5 bg-white/[0.03] border border-white/10 rounded-xl p-2.5">
+                        {paymentSplits.length === 0 ? (
+                          <p className="text-[10px] text-white/30 text-center py-2">Escolha a forma abaixo e clique em "Adicionar Forma".</p>
+                        ) : (
+                          paymentSplits.map((split) => {
+                            const label = PAYMENT_METHODS.find((m) => m.id === split.method)?.label || split.method;
+                            return (
+                              <div key={split.id} className="flex items-center gap-2 bg-white/5 rounded-lg px-2.5 py-2">
+                                <span className="text-[10px] font-black text-white flex-1 truncate">
+                                  {label}{split.cardBrand ? ` · ${split.cardBrand}` : ""}
+                                </span>
+                                <div className="relative w-24">
+                                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] text-white/30">R$</span>
+                                  <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    value={formatCurrencyDigits(numberToDigits(split.amount))}
+                                    onChange={(e) => handleUpdateSplitAmount(split.id, digitsToNumber(maskCurrencyDigits(e.target.value.replace(/\D/g, ""))))}
+                                    className="w-full bg-black/20 border border-white/10 rounded-md py-1 pl-6 pr-1.5 text-[10px] font-black text-white text-right outline-none focus:border-[#C9A227]"
+                                  />
+                                </div>
+                                <button onClick={() => handleRemovePaymentSplit(split.id)} className="text-white/20 hover:text-red-400 transition-colors shrink-0">
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            );
+                          })
+                        )}
+                        <div className="flex items-center justify-between pt-1.5 border-t border-white/10">
+                          <span className="text-[9px] font-black uppercase text-white/40">Falta pagar</span>
+                          <span className={`text-xs font-black tabular-nums ${splitRemaining > 0 ? "text-[#C9A227]" : "text-emerald-400"}`}>{fmt(splitRemaining)}</span>
+                        </div>
+                        {splitRemaining > 0 && (
+                          <button
+                            onClick={handleAddPaymentSplit}
+                            className="w-full flex items-center justify-center gap-1.5 bg-white/10 hover:bg-white/15 text-white py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition-colors"
+                          >
+                            <Plus className="w-3 h-3" />
+                            Adicionar {PAYMENT_METHODS.find((m) => m.id === paymentMethod)?.label} ({fmt(splitRemaining)})
+                          </button>
+                        )}
+                      </div>
+                    )}
+
                     <div className="space-y-1.5">
                       {PAYMENT_METHODS.map((method) => {
                         const Icon = method.icon;
@@ -1981,13 +2126,16 @@ export default function PDVPanel({
                     <button
                       disabled={
                         isProcessing ||
-                        (paymentMethod === "CASH" && amountReceived !== "" && digitsToNumber(amountReceived) < total)
+                        (isSplitMode && (paymentSplits.length === 0 || splitRemaining > 0)) ||
+                        (!isSplitMode && paymentMethod === "CASH" && amountReceived !== "" && digitsToNumber(amountReceived) < total)
                       }
                       onClick={handleCheckout}
                       className="w-full bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-3.5 rounded-xl transition-all shadow-lg shadow-[#C9A227]/25 flex items-center justify-center gap-2.5 uppercase tracking-widest text-xs"
                     >
                       {isProcessing ? (
                         <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                      ) : isSplitMode && splitRemaining > 0 ? (
+                        <>Falta {fmt(splitRemaining)}</>
                       ) : (
                         <>
                           {paymentMethod === "STONE" ? "Enviar para Maquininha" : "Finalizar Venda"}

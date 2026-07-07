@@ -243,6 +243,7 @@ export default function OverviewPanel({ tenant, slug, orders, setActiveTab, setS
     CASH: "Dinheiro",
     MEAL: "Vale Ref.",
     FOOD: "Vale Alim.",
+    SPLIT: "Dividido",
   };
 
   const PAY_COLORS: Record<string, string> = {
@@ -252,6 +253,7 @@ export default function OverviewPanel({ tenant, slug, orders, setActiveTab, setS
     CASH: "#f59e0b",
     MEAL: "#ec4899",
     FOOD: "#f97316",
+    SPLIT: "#8b5cf6",
   };
 
   const wppOk =

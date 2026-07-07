@@ -3124,6 +3124,10 @@ app.post("/api/tenants/:slug/cash/open", requireAuth, async (req, res) => {
       },
     });
 
+    // Avisa outras telas de PDV já abertas (outro operador, outra aba) que o caixa mudou de
+    // estado, pra não ficarem presas mostrando "Caixa Fechado" até um F5 manual.
+    io.to(`tenant-${tenant.id}`).emit("cash-status-changed", { status: "OPEN" });
+
     res.json(openCash);
   } catch (error) {
     console.error(error);
@@ -3167,6 +3171,8 @@ app.post("/api/tenants/:slug/cash/close", requireAuth, async (req, res) => {
         notes: req.body.notes,
       },
     });
+
+    io.to(`tenant-${tenant.id}`).emit("cash-status-changed", { status: "CLOSED" });
 
     res.json(closedCash);
   } catch (error) {
@@ -4333,27 +4339,51 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
     }
     const serviceFeeAmount = subtotal * (serviceFeePercent / 100);
 
-    // Taxa de maquininha — recalculada no servidor a partir da config salva do tenant (nunca confia no valor vindo do cliente)
+    // Taxa de maquininha — recalculada no servidor a partir da config salva do tenant (nunca confia no valor vindo do cliente).
+    // Quando o pagamento é dividido (SPLIT), soma a taxa de cada parcela proporcionalmente ao seu valor.
     let feePercent = 0;
     let feePassedToCustomer = false;
+    let feeAmount = 0;
+    const computeFeeForMethod = (pm: any, method: string, brand: string | undefined, installmentsCount: number) => {
+      if (method === "PIX") {
+        const cfg = pm?.pix;
+        return { percent: cfg?.brandFees?.["PIX"]?.installmentFees?.["1"] ?? 0, passToCustomer: !!cfg?.passFeeToCustomer };
+      }
+      if ((method === "CREDIT" || method === "DEBIT") && brand) {
+        const methodKey = method === "CREDIT" ? "credit" : "debit";
+        const cfg = pm?.[methodKey];
+        const installmentKey = method === "CREDIT" ? String(installmentsCount || 1) : "1";
+        return { percent: cfg?.brandFees?.[brand]?.installmentFees?.[installmentKey] ?? 0, passToCustomer: !!cfg?.passFeeToCustomer };
+      }
+      return { percent: 0, passToCustomer: false };
+    };
     if (tenant.paymentMethods) {
       try {
         const pm = JSON.parse(tenant.paymentMethods as string);
-        if (paymentMethod === "PIX") {
-          const cfg = pm?.pix;
-          feePercent = cfg?.brandFees?.["PIX"]?.installmentFees?.["1"] ?? 0;
-          feePassedToCustomer = !!cfg?.passFeeToCustomer;
-        } else if ((paymentMethod === "CREDIT" || paymentMethod === "DEBIT") && cardBrand) {
-          const methodKey = paymentMethod === "CREDIT" ? "credit" : "debit";
-          const cfg = pm?.[methodKey];
-          const installmentKey = paymentMethod === "CREDIT" ? String(installments || 1) : "1";
-          feePercent = cfg?.brandFees?.[cardBrand]?.installmentFees?.[installmentKey] ?? 0;
-          feePassedToCustomer = !!cfg?.passFeeToCustomer;
+        if (paymentMethod === "SPLIT" && Array.isArray(paymentMetadata?.splits)) {
+          for (const split of paymentMetadata.splits) {
+            const { percent, passToCustomer } = computeFeeForMethod(pm, split.method, split.cardBrand, 1);
+            if (passToCustomer && percent > 0) feeAmount += Number(split.amount || 0) * (percent / 100);
+          }
+          feePassedToCustomer = feeAmount > 0;
+        } else {
+          const { percent, passToCustomer } = computeFeeForMethod(pm, paymentMethod, cardBrand, installments);
+          feePercent = percent;
+          feePassedToCustomer = passToCustomer;
+          feeAmount = totalBeforeFee * (feePercent / 100);
         }
       } catch {}
     }
-    const feeAmount = totalBeforeFee * (feePercent / 100);
     const total = (feePassedToCustomer ? totalBeforeFee + feeAmount : totalBeforeFee) + serviceFeeAmount;
+
+    // Split de pagamento: a soma das parcelas precisa cobrir o total (com folga de 1 centavo por arredondamento).
+    if (paymentMethod === "SPLIT") {
+      const splits = Array.isArray(paymentMetadata?.splits) ? paymentMetadata.splits : [];
+      const splitSum = splits.reduce((acc: number, s: any) => acc + Number(s.amount || 0), 0);
+      if (splits.length === 0 || Math.abs(splitSum - total) > 0.01) {
+        return res.status(400).json({ error: "A soma das formas de pagamento não confere com o total da venda." });
+      }
+    }
 
     // Upsert customer if phone provided. Para comanda de garçom, o vínculo com o cliente
     // (totalSpent/ordersCount/pontos) só é gravado quando o pedido for entregue — senão

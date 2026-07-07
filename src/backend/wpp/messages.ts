@@ -251,7 +251,7 @@ export async function sendReceiptPdfMessage(order: {
     }));
     const subtotal = items.reduce((acc, i) => acc + i.price * i.quantity, 0);
 
-    let paymentDetail: { amountReceived?: number; change?: number } = {};
+    let paymentDetail: { amountReceived?: number; change?: number; splits?: Array<{ method: string; amount: number; cardBrand?: string }> } = {};
     try { paymentDetail = order.paymentDetail ? JSON.parse(order.paymentDetail) : {}; } catch {}
 
     const doc = buildReceiptPdf({
@@ -271,6 +271,7 @@ export async function sendReceiptPdfMessage(order: {
       paymentMethod: order.paymentMethod || undefined,
       amountReceived: order.paymentMethod === "CASH" ? paymentDetail.amountReceived : undefined,
       change: order.paymentMethod === "CASH" ? paymentDetail.change : undefined,
+      paymentSplits: order.paymentMethod === "SPLIT" ? paymentDetail.splits : undefined,
     });
 
     const buffer = Buffer.from(doc.output("arraybuffer"));

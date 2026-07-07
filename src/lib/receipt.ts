@@ -24,6 +24,7 @@ export interface ReceiptData {
   paymentMethod?: string;
   amountReceived?: number;
   change?: number;
+  paymentSplits?: Array<{ method: string; amount: number; cardBrand?: string }>;
 }
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -44,7 +45,7 @@ const fmtMoney = (v: number) =>
   `R$ ${v.toFixed(2).replace(".", ",")}`;
 
 export function buildReceiptPdf(data: ReceiptData): jsPDF {
-  const doc = new jsPDF({ unit: "mm", format: [80, 200 + data.items.length * 8] });
+  const doc = new jsPDF({ unit: "mm", format: [80, 200 + data.items.length * 8 + (data.paymentSplits?.length || 0) * 4] });
   const width = 80;
   const margin = 5;
   let y = 8;
@@ -129,7 +130,16 @@ export function buildReceiptPdf(data: ReceiptData): jsPDF {
 
   doc.setFont("courier", "normal");
   doc.setFontSize(8);
-  if (data.paymentMethod) {
+  if (data.paymentMethod === "SPLIT" && data.paymentSplits?.length) {
+    doc.text("Pagamento (dividido):", margin, y);
+    y += 4;
+    for (const split of data.paymentSplits) {
+      const label = `${paymentLabel(split.method)}${split.cardBrand ? ` · ${split.cardBrand}` : ""}`;
+      doc.text(`  ${label}`, margin, y);
+      doc.text(fmtMoney(split.amount), width - margin, y, { align: "right" });
+      y += 4;
+    }
+  } else if (data.paymentMethod) {
     doc.text(`Pagamento: ${paymentLabel(data.paymentMethod)}`, margin, y);
     y += 4;
   }
