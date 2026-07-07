@@ -2701,13 +2701,17 @@ app.post("/api/admin/:tenantId/table/:tableId/clear", requireAuth, async (req, r
   const { tableId } = req.params;
 
   try {
+    // AWAITING_PAYMENT, não DELIVERED: essas comandas originais nunca foram cobradas —
+    // quem já fatura a venda de verdade é o pedido novo criado pelo PDV no checkout
+    // (pdv/order). Se marcássemos DELIVERED aqui, essas comandas contariam como vendas
+    // duplicadas nos relatórios, ao lado da venda real que acabou de ser lançada.
     await prisma.order.updateMany({
       where: {
         tenantId: tenant.id,
         tableId: tableId,
-        status: { notIn: ["DELIVERED", "CANCELLED"] }
+        status: { notIn: ["DELIVERED", "CANCELLED", "AWAITING_PAYMENT"] }
       },
-      data: { status: "DELIVERED" }
+      data: { status: "AWAITING_PAYMENT" }
     });
 
     io.to(`${tenant.id}-mesa-${tableId}`).emit("table-update");
@@ -3045,7 +3049,7 @@ app.get("/api/tenants/:slug/finance-summary", requireAuth, async (req, res) => {
       prisma.order.aggregate({
         where: {
           tenantId: tenant.id,
-          status: { notIn: ["CANCELLED", "PENDING"] },
+          status: "DELIVERED",
           createdAt: { gte: startOfDay },
         },
         _sum: { total: true },
@@ -3054,7 +3058,7 @@ app.get("/api/tenants/:slug/finance-summary", requireAuth, async (req, res) => {
       prisma.order.aggregate({
         where: {
           tenantId: tenant.id,
-          status: { notIn: ["CANCELLED", "PENDING"] },
+          status: "DELIVERED",
           createdAt: { gte: startOfWeek },
         },
         _sum: { total: true },
@@ -3062,7 +3066,7 @@ app.get("/api/tenants/:slug/finance-summary", requireAuth, async (req, res) => {
       prisma.order.aggregate({
         where: {
           tenantId: tenant.id,
-          status: { notIn: ["CANCELLED", "PENDING"] },
+          status: "DELIVERED",
           createdAt: { gte: startOfMonth },
         },
         _sum: { total: true },
@@ -3100,7 +3104,7 @@ app.get("/api/tenants/:slug/cash/current", requireAuth, async (req, res) => {
     const ordersSinceOpen = await prisma.order.aggregate({
       where: {
         tenantId: tenant.id,
-        status: { notIn: ["CANCELLED", "PENDING"] },
+        status: "DELIVERED",
         createdAt: { gte: currentCash.openedAt },
         paymentMethod: "CASH",
       },
@@ -3169,7 +3173,7 @@ app.post("/api/tenants/:slug/cash/close", requireAuth, async (req, res) => {
     const ordersSinceOpen = await prisma.order.aggregate({
       where: {
         tenantId: tenant.id,
-        status: { notIn: ["CANCELLED", "PENDING"] },
+        status: "DELIVERED",
         createdAt: { gte: currentCash.openedAt },
         paymentMethod: "CASH",
       },
@@ -4144,10 +4148,12 @@ app.get("/api/tenants/:slug/reports/summary", requireAuth, async (req, res) => {
     const dateFrom = from ? new Date(from) : new Date(new Date().setHours(0, 0, 0, 0));
     const dateTo = to ? new Date(to) : new Date(new Date().setHours(23, 59, 59, 999));
 
+    // Só pedidos DELIVERED contam como venda de verdade — PENDING/PREPARING/SHIPPED/
+    // AWAITING_PAYMENT ainda não foram cobrados do cliente e não podem entrar nos relatórios.
     const orders = await prisma.order.findMany({
       where: {
         tenantId: tenant.id,
-        status: { notIn: ["CANCELLED"] },
+        status: "DELIVERED",
         createdAt: { gte: dateFrom, lte: dateTo },
       },
       include: { items: { include: { product: true } } },
@@ -4222,7 +4228,7 @@ app.get("/api/tenants/:slug/reports/daily", requireAuth, async (req, res) => {
     from.setHours(0, 0, 0, 0);
 
     const orders = await prisma.order.findMany({
-      where: { tenantId: tenant.id, status: { notIn: ["CANCELLED"] }, createdAt: { gte: from } },
+      where: { tenantId: tenant.id, status: "DELIVERED", createdAt: { gte: from } },
       select: { createdAt: true, total: true },
     });
 

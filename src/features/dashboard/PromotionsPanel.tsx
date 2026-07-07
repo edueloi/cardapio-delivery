@@ -297,7 +297,7 @@ export default function PromotionsPanel({ tenant }: Props) {
                         <>
                           <ImageIcon className="w-8 h-8" />
                           <span className="text-xs font-medium">Clique para fazer upload da imagem</span>
-                          <span className="text-[10px] text-slate-300">Recomendado: 1200×500px</span>
+                          <span className="text-[10px] text-slate-300 text-center px-6">Recomendado: 1200×500px, foto do produto sem texto — o título e o preço já são escritos por cima automaticamente</span>
                         </>
                       )}
                     </div>

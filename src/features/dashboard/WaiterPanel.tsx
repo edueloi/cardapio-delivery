@@ -437,12 +437,14 @@ function ComandaModal({
   };
 
   const handleMarkServed = async () => {
-    const openOrders = existingOrders.filter((o) => o.status !== "DELIVERED" && o.status !== "CANCELLED");
+    const openOrders = existingOrders.filter((o) => o.status !== "DELIVERED" && o.status !== "CANCELLED" && o.status !== "AWAITING_PAYMENT");
     if (openOrders.length === 0) { onClose(); return; }
     setClosing(true);
     try {
+      // AWAITING_PAYMENT, não DELIVERED: a mesa foi servida mas a venda só é fechada de
+      // verdade (e entra nos relatórios) quando o PDV cobra o cliente e fatura.
       await Promise.all(openOrders.map((o) =>
-        apiJson(`/api/orders/${o.id}/status`, { method: "PATCH", body: JSON.stringify({ status: "DELIVERED" }) })
+        apiJson(`/api/orders/${o.id}/status`, { method: "PATCH", body: JSON.stringify({ status: "AWAITING_PAYMENT" }) })
       ));
       // Avisa o caixa/PDV (badge de solicitação em Mesas/Comandas) que essa mesa está
       // pronta pra fechar a conta — mesmo evento que já existe quando o próprio cliente

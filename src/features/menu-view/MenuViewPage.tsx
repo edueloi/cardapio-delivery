@@ -1197,7 +1197,10 @@ export default function MenuViewPage() {
                             style={selectedVariant?.id === v.id ? { borderColor: BRAND, background: BRAND_LIGHT } : {}}
                           >
                             <div className="flex items-center gap-3">
-                              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${selectedVariant?.id === v.id ? "border-amber-400" : "border-slate-200"}`}>
+                              {v.imageUrl && (
+                                <img src={v.imageUrl} alt={v.name} className="w-10 h-10 rounded-xl object-cover shrink-0" />
+                              )}
+                              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all shrink-0 ${selectedVariant?.id === v.id ? "border-amber-400" : "border-slate-200"}`}>
                                 {selectedVariant?.id === v.id && <div className="w-2.5 h-2.5 rounded-full" style={{ background: BRAND }} />}
                               </div>
                               <div className="text-left">

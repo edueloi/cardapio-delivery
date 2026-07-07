@@ -167,7 +167,7 @@ export default function OverviewPanel({ tenant, slug, orders, setActiveTab, setS
     const active = pending + preparing + shipped;
 
     const totalSales = todayOrders
-      .filter((o) => o.status !== "CANCELLED")
+      .filter((o) => o.status === "DELIVERED")
       .reduce((s, o) => s + o.total, 0);
     const deliveredCount = todayOrders.filter((o) => o.status === "DELIVERED").length;
     const avgTicket = deliveredCount > 0 ? totalSales / deliveredCount : 0;

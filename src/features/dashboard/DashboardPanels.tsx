@@ -270,10 +270,22 @@ export function OrdersList({
                     {order.orderType === 'DELIVERY' ? 'Despachar' : 'Marcar Pronto'}
                   </Button>
                 )}
-                {order.status === 'SHIPPED' && (
+                {order.status === 'SHIPPED' && order.orderType === 'DELIVERY' && (
                   <Button size="sm" variant="success" className="flex-1 rounded-xl" onClick={() => updateStatus(order.id, 'DELIVERED')}>
                     Confirmar Entrega
                   </Button>
+                )}
+                {/* Mesa/Balcão: nunca vira DELIVERED por aqui — só o PDV fatura a venda de
+                    verdade. Isso apenas libera a fila da cozinha e avisa o caixa. */}
+                {order.status === 'SHIPPED' && order.orderType !== 'DELIVERY' && (
+                  <Button size="sm" variant="secondary" className="flex-1 rounded-xl" onClick={() => updateStatus(order.id, 'AWAITING_PAYMENT')}>
+                    Retirado — Aguarda Caixa
+                  </Button>
+                )}
+                {order.status === 'AWAITING_PAYMENT' && (
+                  <p className="flex-1 text-center text-[10px] font-black uppercase tracking-wide text-slate-400 py-1.5">
+                    Aguardando faturar no PDV
+                  </p>
                 )}
               </div>
 
@@ -873,6 +885,67 @@ function ImageUploader({ value, onChange, label, description }: { value: string,
            )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// Miniatura de upload compacta pra foto de variante (tamanho/sabor) — mesmo endpoint
+// do ImageUploader de produto, mas sem label/descrição pra caber numa linha de formulário.
+function VariantImageUploader({ value, onChange }: { value: string, onChange: (val: string) => void }) {
+  const toast = useToast();
+  const [uploading, setUploading] = useState(false);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    if (file.size > MAX_UPLOAD_SIZE_MB * 1024 * 1024) {
+      toast.error(`Imagem muito grande (máx. ${MAX_UPLOAD_SIZE_MB}MB). Escolha um arquivo menor.`);
+      return;
+    }
+
+    setUploading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await apiFetch('/api/upload', { method: 'POST', body: formData });
+      if (!res.ok) {
+        if (res.status === 413) throw new Error(`Imagem muito grande (máx. ${MAX_UPLOAD_SIZE_MB}MB).`);
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Erro ao enviar imagem.");
+      }
+      const data = await res.json();
+      if (data.url) onChange(data.url);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Erro ao enviar imagem");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="relative w-11 h-11 rounded-lg bg-slate-100 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden group shrink-0">
+      {uploading ? (
+        <div className="w-3.5 h-3.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      ) : value ? (
+        <>
+          <img src={value} className="w-full h-full object-cover" alt="Preview" />
+          <div
+            onClick={() => onChange("")}
+            className="absolute inset-0 bg-red-600/80 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </div>
+        </>
+      ) : (
+        <label className="cursor-pointer flex items-center justify-center w-full h-full hover:bg-slate-50 transition-colors">
+          <ImageIcon className="w-4 h-4 text-slate-300" />
+          <input type="file" className="hidden" accept="image/*" onChange={handleFileChange} />
+        </label>
+      )}
     </div>
   );
 }
@@ -3438,7 +3511,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
     scheduleRuleEndTime: "",
     scheduleRuleStartDate: "",
     scheduleRuleEndDate: "",
-    variants: [] as { _key: string, name: string, price: string, description: string, inventoryItemId: string }[],
+    variants: [] as { _key: string, name: string, price: string, description: string, inventoryItemId: string, imageUrl: string }[],
     extras: [] as { id: string, label: string, price: string }[],
     // Fiscal NFC-e
     ncm: "", cfop: "5102", csosn: "400", unitCom: "UN", origem: 0, aliqIcms: 0,
@@ -3542,7 +3615,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
       scheduleRuleEndTime,
       scheduleRuleStartDate,
       scheduleRuleEndDate,
-      variants: prod.variants?.map((v: any) => ({ _key: v.id || crypto.randomUUID(), name: v.name, price: String(v.price), description: v.description || "", inventoryItemId: v.inventoryItemId || "" })) || [],
+      variants: prod.variants?.map((v: any) => ({ _key: v.id || crypto.randomUUID(), name: v.name, price: String(v.price), description: v.description || "", inventoryItemId: v.inventoryItemId || "", imageUrl: v.imageUrl || "" })) || [],
       extras: parsedExtras,
       ncm: prod.ncm || "", cfop: prod.cfop || "5102", csosn: prod.csosn || "400",
       unitCom: prod.unitCom || "UN", origem: prod.origem ?? 0, aliqIcms: prod.aliqIcms ?? 0,
@@ -3733,7 +3806,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
     });
   };
 
-  const addVariantField = () => setProdForm(prev => ({ ...prev, variants: [...prev.variants, { _key: crypto.randomUUID(), name: "", price: "", description: "", inventoryItemId: "" }] }));
+  const addVariantField = () => setProdForm(prev => ({ ...prev, variants: [...prev.variants, { _key: crypto.randomUUID(), name: "", price: "", description: "", inventoryItemId: "", imageUrl: "" }] }));
   const removeVariantField = (i: number) => setProdForm(prev => ({ ...prev, variants: prev.variants.filter((_, idx) => idx !== i) }));
   const updateVariantField = (i: number, field: string, value: string) => setProdForm(prev => ({ ...prev, variants: prev.variants.map((v, idx) => idx === i ? { ...v, [field]: value } : v) }));
 
@@ -4266,16 +4339,22 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
               <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">Tamanhos / Variantes</span>
               <button onClick={addVariantField} className="text-xs font-black text-[#C9A227] hover:underline">+ Adicionar</button>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-3">
               {prodForm.variants.map((v, idx) => (
-                <div key={v._key} className="flex gap-2 items-center">
-                  <input placeholder="Nome (ex: 500ml)" value={v.name} onChange={e => updateVariantField(idx, 'name', e.target.value)}
-                    className="flex-1 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 min-w-0" />
-                  <input placeholder="R$" value={v.price} onChange={e => updateVariantField(idx, 'price', e.target.value)}
-                    className="w-20 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400" />
-                  <button onClick={() => removeVariantField(idx)} className="p-2 text-slate-300 hover:text-red-500 shrink-0">
-                    <X className="w-4 h-4" />
-                  </button>
+                <div key={v._key} className="flex gap-2 items-start bg-zinc-50/60 border border-zinc-100 rounded-xl p-2">
+                  <VariantImageUploader
+                    value={v.imageUrl}
+                    onChange={(val) => updateVariantField(idx, 'imageUrl', val)}
+                  />
+                  <div className="flex-1 min-w-0 flex gap-2 items-center">
+                    <input placeholder="Nome (ex: 500ml)" value={v.name} onChange={e => updateVariantField(idx, 'name', e.target.value)}
+                      className="flex-1 bg-white border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 min-w-0" />
+                    <input placeholder="R$" value={v.price} onChange={e => updateVariantField(idx, 'price', e.target.value)}
+                      className="w-20 bg-white border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                    <button onClick={() => removeVariantField(idx)} className="p-2 text-slate-300 hover:text-red-500 shrink-0">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

@@ -212,6 +212,18 @@ export default function CounterMenuView() {
     }
   };
 
+  const openPromotionProduct = (promo: any) => {
+    if (!promo.product) return;
+    const found = tenant?.categories?.flatMap(c => c.products).find(p => p.id === promo.product.id);
+    if (found) {
+      setSelectedProduct(found);
+      setSelectedVariant(found.variants && found.variants.length > 0 ? found.variants[0] : null);
+      setSelectedExtras([]);
+      setQty(1);
+      setNotes("");
+    }
+  };
+
   const handleOrder = async () => {
     if (cart.length === 0) return;
     setIsOrdering(true);
@@ -606,7 +618,8 @@ export default function CounterMenuView() {
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: -40 }}
                       transition={{ duration: 0.5 }}
-                      className="absolute inset-0"
+                      onClick={() => openPromotionProduct(promotions[promoIndex])}
+                      className={`absolute inset-0 ${promotions[promoIndex].product ? 'cursor-pointer' : ''}`}
                     >
                       {promotions[promoIndex].imageUrl ? (
                         <img src={promotions[promoIndex].imageUrl} className="w-full h-full object-cover" alt={promotions[promoIndex].title} />
@@ -634,7 +647,7 @@ export default function CounterMenuView() {
                       {promotions.length > 1 && (
                         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
                           {promotions.map((_: any, i: number) => (
-                            <button key={i} onClick={() => setPromoIndex(i)}
+                            <button key={i} onClick={(e) => { e.stopPropagation(); setPromoIndex(i); }}
                               className={`w-2 h-2 rounded-full transition-all ${i === promoIndex ? 'bg-amber-500 w-6' : 'bg-white/30'}`}
                             />
                           ))}
@@ -655,7 +668,8 @@ export default function CounterMenuView() {
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: -30 }}
                       transition={{ duration: 0.4 }}
-                      className="absolute inset-0"
+                      onClick={() => openPromotionProduct(promotions[promoIndex])}
+                      className={`absolute inset-0 ${promotions[promoIndex].product ? 'cursor-pointer' : ''}`}
                     >
                       {promotions[promoIndex].imageUrl ? (
                         <img src={promotions[promoIndex].imageUrl} className="w-full h-full object-cover" alt={promotions[promoIndex].title} />
@@ -675,7 +689,7 @@ export default function CounterMenuView() {
                       {promotions.length > 1 && (
                         <div className="absolute top-3 right-3 flex gap-1.5">
                           {promotions.map((_: any, i: number) => (
-                            <button key={i} onClick={() => setPromoIndex(i)} className={`w-1.5 h-1.5 rounded-full transition-all ${i === promoIndex ? 'bg-amber-500 w-4' : 'bg-white/40'}`} />
+                            <button key={i} onClick={(e) => { e.stopPropagation(); setPromoIndex(i); }} className={`w-1.5 h-1.5 rounded-full transition-all ${i === promoIndex ? 'bg-amber-500 w-4' : 'bg-white/40'}`} />
                           ))}
                         </div>
                       )}
