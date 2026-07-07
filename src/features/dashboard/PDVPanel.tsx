@@ -5,7 +5,8 @@ import {
   CheckCircle2, Receipt, Package,
   ChevronRight, ChevronDown, ArrowLeft,
   Utensils, Tag, User, Phone, Percent,
-  Printer, StickyNote, Hash, AlertCircle, Smartphone, Lock, ExternalLink, Download,
+  Printer, StickyNote, Hash, AlertCircle, Smartphone, Lock, ExternalLink, Download, Zap,
+  MoreHorizontal, DoorOpen, DoorClosed, Maximize2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import type { Tenant, Product, Order, PaymentConfig, PaymentMethodConfig, StoneConfig } from "../../types";
@@ -183,6 +184,11 @@ export default function PDVPanel({
   // Item notes editor
   const [editingItemNotes, setEditingItemNotes] = useState<string | null>(null);
 
+  // Barra de atalhos: F6 desfaz o último item, F7 consulta preço sem adicionar ao carrinho, F8 abre mais opções
+  const [showPriceCheckModal, setShowPriceCheckModal] = useState(false);
+  const [priceCheckTerm, setPriceCheckTerm] = useState("");
+  const [showMoreOptionsMenu, setShowMoreOptionsMenu] = useState(false);
+
   // Success flash
   const [showSuccess, setShowSuccess] = useState(false);
   const [nfceStatus, setNfceStatus] = useState<"idle" | "loading" | "authorized" | "rejected">("idle");
@@ -284,6 +290,17 @@ export default function PDVPanel({
     return products.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
   }, [tenant, selectedCategoryId, searchTerm]);
 
+  // Consulta de preço (F7) — busca em todos os produtos, independente da categoria selecionada no PDV
+  const priceCheckResults = useMemo(() => {
+    if (!priceCheckTerm.trim()) return [];
+    const allProducts = tenant.categories?.flatMap((cat) => cat.products) ?? [];
+    const term = priceCheckTerm.toLowerCase();
+    return allProducts
+      .filter((p) => p.name.toLowerCase().includes(term) || p.description?.toLowerCase().includes(term))
+      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
+      .slice(0, 20);
+  }, [tenant, priceCheckTerm]);
+
   const subtotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
 
   const discountAmount = useMemo(() => {
@@ -335,6 +352,11 @@ export default function PDVPanel({
   const removeFromCart = (productId: string) =>
     setCart((prev) => prev.filter((i) => i.product.id !== productId));
 
+  // F6 — desfaz o último item lançado no carrinho (a linha inteira, não uma unidade)
+  const handleUndoLastItem = () => {
+    setCart((prev) => prev.slice(0, -1));
+  };
+
   const updateQuantity = (productId: string, delta: number) =>
     setCart((prev) =>
       prev.map((i) =>
@@ -373,7 +395,8 @@ export default function PDVPanel({
       .catch(() => setRegisteredTables([]));
   }, [tenant.slug]);
 
-  // Atalhos de teclado: F2 pagar, F4 desconto, Esc fecha o modal/checkout aberto.
+  // Atalhos de teclado: F2 pagar, F4 desconto, F6 desfaz último item, F7 consulta preço,
+  // F8 mais opções, Esc fecha o modal/checkout aberto.
   // Ignorados quando o foco está em campo de texto (exceto Esc), para não atrapalhar digitação.
   useEffect(() => {
     if (isWaiterMode) return;
@@ -387,6 +410,8 @@ export default function PDVPanel({
         else if (orderDetailsView) setOrderDetailsView(null);
         else if (showOpenCashModal) setShowOpenCashModal(false);
         else if (showCloseCashModal) setShowCloseCashModal(false);
+        else if (showPriceCheckModal) setShowPriceCheckModal(false);
+        else if (showMoreOptionsMenu) setShowMoreOptionsMenu(false);
         return;
       }
 
@@ -398,11 +423,20 @@ export default function PDVPanel({
       } else if (e.key === "F4") {
         e.preventDefault();
         if (!showCheckout) discountInputRef.current?.focus();
+      } else if (e.key === "F6") {
+        e.preventDefault();
+        if (!showCheckout && cart.length > 0) handleUndoLastItem();
+      } else if (e.key === "F7") {
+        e.preventDefault();
+        if (!showCheckout) setShowPriceCheckModal(true);
+      } else if (e.key === "F8") {
+        e.preventDefault();
+        if (!showCheckout) setShowMoreOptionsMenu((v) => !v);
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [isWaiterMode, cart.length, currentCash, showCheckout, showComandaModal, orderDetailsView, showOpenCashModal, showCloseCashModal]);
+  }, [isWaiterMode, cart.length, currentCash, showCheckout, showComandaModal, orderDetailsView, showOpenCashModal, showCloseCashModal, showPriceCheckModal, showMoreOptionsMenu]);
 
   const handleLoadTable = (tableId: string) => {
     const tableOrders = orders.filter(
@@ -802,58 +836,66 @@ export default function PDVPanel({
                   <p className="text-sm font-black uppercase tracking-widest text-slate-500">Nenhum produto encontrado</p>
                 </div>
               ) : (
-                <div className="flex flex-col gap-2 lg:grid lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6 lg:gap-2.5">
+                <div className="flex flex-col gap-2 lg:grid lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 lg:gap-3.5">
                   {filteredProducts.map((product) => {
                     const inCart = cart.find((i) => i.product.id === product.id);
                     return (
                       <button
                         key={product.id}
                         onClick={() => addToCart(product)}
-                        className={`group text-left rounded-xl overflow-hidden transition-all duration-200 relative flex items-center gap-3 p-2 lg:flex-col lg:p-0 lg:items-stretch lg:gap-0 ${
+                        className={`group text-left rounded-xl lg:rounded-2xl overflow-hidden transition-all duration-200 relative flex items-center gap-3 p-2 lg:flex-col lg:p-0 lg:items-stretch lg:gap-0 ${
                           inCart
                             ? "ring-2 ring-[#C9A227] shadow-md shadow-[#C9A227]/15 bg-white"
-                            : "ring-1 ring-slate-200 bg-white hover:ring-[#C9A227]/50 hover:shadow-sm"
+                            : "ring-1 ring-slate-200 bg-white hover:ring-[#C9A227]/50 hover:shadow-md"
                         }`}
                       >
                         {/* Image — hidden on celular/tablet (só nome/descrição/preço); volta a aparecer em telas grandes (lg+) */}
-                        <div className="hidden lg:flex w-full aspect-square bg-gradient-to-br from-slate-50 to-slate-100 overflow-hidden relative items-center justify-center p-1.5">
+                        <div className="hidden lg:flex w-full aspect-[4/3] bg-gradient-to-br from-slate-100 to-slate-200 overflow-hidden relative items-center justify-center">
                           {product.imageUrl ? (
                             <img
                               src={product.imageUrl}
-                              className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-300 drop-shadow-sm"
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                               alt={product.name}
                             />
                           ) : (
-                            <Utensils className="w-6 h-6 text-slate-300" />
+                            <Utensils className="w-8 h-8 text-slate-300" />
                           )}
                           {/* Cart qty badge */}
                           {inCart && (
-                            <div className="absolute top-1 right-1 min-w-[20px] h-5 px-1 bg-[#C9A227] text-black text-[10px] font-black rounded-full flex items-center justify-center shadow">
+                            <div className="absolute top-2 left-2 min-w-[22px] h-[22px] px-1.5 bg-[#C9A227] text-black text-[11px] font-black rounded-full flex items-center justify-center shadow">
                               {inCart.quantity}
                             </div>
                           )}
                           {/* Stock badge */}
                           {product.inventoryItem && (
-                            <div className="absolute bottom-1 left-1 bg-black/50 backdrop-blur-sm text-white text-[8px] font-bold rounded px-1.5 py-0.5 uppercase tracking-wide">
+                            <div className="absolute bottom-2 left-2 bg-black/50 backdrop-blur-sm text-white text-[8px] font-bold rounded px-1.5 py-0.5 uppercase tracking-wide">
                               {product.inventoryItem.quantity} un
                             </div>
                           )}
+                          {/* Botão + flutuante sobre a foto */}
+                          <div className={`absolute bottom-2 right-2 w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-200 shadow-lg ${
+                            inCart
+                              ? "bg-[#C9A227] text-black"
+                              : "bg-[#0D1B3E] text-white group-hover:bg-[#C9A227] group-hover:text-black"
+                          }`}>
+                            <Plus className="w-4 h-4" strokeWidth={2.5} />
+                          </div>
                         </div>
 
                         {/* Info */}
-                        <div className="flex-1 min-w-0 flex flex-col gap-0.5 lg:px-2 lg:py-1.5 lg:border-t lg:border-slate-100">
-                          <h4 className="text-[13px] lg:text-[11px] font-bold text-slate-800 line-clamp-1 leading-snug">{product.name}</h4>
+                        <div className="flex-1 min-w-0 flex flex-col gap-0.5 lg:px-2.5 lg:py-2">
+                          <h4 className="text-[13px] lg:text-[12px] font-bold text-slate-800 line-clamp-1 leading-snug">{product.name}</h4>
                           {product.description && (
                             <p className="text-[11px] text-slate-400 line-clamp-1 leading-tight lg:hidden">{product.description}</p>
                           )}
-                          <div className="flex items-center justify-between mt-0.5">
-                            <span className="text-[14px] lg:text-[13px] font-black text-[#0D1B3E] leading-none tabular-nums">{fmt(product.price)}</span>
-                            <div className={`w-7 h-7 lg:w-6 lg:h-6 rounded-lg flex items-center justify-center transition-all duration-200 shrink-0 ${
+                          <div className="flex items-center justify-between mt-0.5 lg:mt-1">
+                            <span className="text-[14px] font-black text-[#0D1B3E] leading-none tabular-nums">{fmt(product.price)}</span>
+                            <div className={`lg:hidden w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-200 shrink-0 ${
                               inCart
                                 ? "bg-[#C9A227] text-black"
                                 : "bg-[#0D1B3E]/5 text-[#0D1B3E] group-hover:bg-[#C9A227] group-hover:text-black"
                             }`}>
-                              <Plus className="w-4 h-4 lg:w-3.5 lg:h-3.5" strokeWidth={2.5} />
+                              <Plus className="w-4 h-4" strokeWidth={2.5} />
                             </div>
                           </div>
                         </div>
@@ -1014,6 +1056,41 @@ export default function PDVPanel({
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Barra de atalhos — desktop apenas (teclado físico) */}
+        {!isWaiterMode && (
+          <div className="hidden lg:flex items-center gap-1.5 px-3 py-2 border-t border-slate-100 bg-slate-50/60 shrink-0">
+            <span className="flex items-center gap-1.5 pr-2 text-slate-400">
+              <Zap className="w-3.5 h-3.5" />
+              <span className="text-[9px] font-black uppercase tracking-widest">Atalhos</span>
+            </span>
+            <button
+              onClick={() => discountInputRef.current?.focus()}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-bold text-slate-500 hover:bg-white hover:text-[#0D1B3E] hover:shadow-sm transition-all"
+            >
+              Desconto <kbd className="text-[8px] font-black bg-slate-200 text-slate-500 rounded px-1 py-0.5">F4</kbd>
+            </button>
+            <button
+              onClick={handleUndoLastItem}
+              disabled={cart.length === 0}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-bold text-slate-500 hover:bg-white hover:text-[#0D1B3E] hover:shadow-sm transition-all disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:shadow-none"
+            >
+              Cancelar Item <kbd className="text-[8px] font-black bg-slate-200 text-slate-500 rounded px-1 py-0.5">F6</kbd>
+            </button>
+            <button
+              onClick={() => setShowPriceCheckModal(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-bold text-slate-500 hover:bg-white hover:text-[#0D1B3E] hover:shadow-sm transition-all"
+            >
+              Consultar Preço <kbd className="text-[8px] font-black bg-slate-200 text-slate-500 rounded px-1 py-0.5">F7</kbd>
+            </button>
+            <button
+              onClick={() => setShowMoreOptionsMenu((v) => !v)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-bold text-slate-500 hover:bg-white hover:text-[#0D1B3E] hover:shadow-sm transition-all"
+            >
+              Mais Opções <kbd className="text-[8px] font-black bg-slate-200 text-slate-500 rounded px-1 py-0.5">F8</kbd>
+            </button>
           </div>
         )}
       </div>
@@ -1296,6 +1373,134 @@ export default function PDVPanel({
           </div>
         </div>
       </div>
+
+      {/* ── Modal de Consulta de Preço (F7) — só consulta, não adiciona ao carrinho ── */}
+      <AnimatePresence>
+        {showPriceCheckModal && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
+            onClick={() => { setShowPriceCheckModal(false); setPriceCheckTerm(""); }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 20, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.95, y: 20, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[70vh]"
+            >
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-[#C9A227]/10 text-[#C9A227] flex items-center justify-center shrink-0">
+                    <Search className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-0.5">Atalho F7</p>
+                    <h3 className="text-lg font-black text-slate-800 leading-none">Consultar Preço</h3>
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setShowPriceCheckModal(false); setPriceCheckTerm(""); }}
+                  className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors shrink-0"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="p-4 border-b border-slate-100 shrink-0">
+                <div className="relative">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    autoFocus
+                    type="text"
+                    value={priceCheckTerm}
+                    onChange={(e) => setPriceCheckTerm(e.target.value)}
+                    placeholder="Nome do produto..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-sm font-medium text-slate-700 placeholder:text-slate-400 focus:border-[#C9A227] focus:bg-white outline-none transition-all"
+                  />
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-1.5">
+                {priceCheckTerm.trim() === "" ? (
+                  <p className="text-center text-xs text-slate-400 py-10">Digite o nome do produto para consultar o preço.</p>
+                ) : priceCheckResults.length === 0 ? (
+                  <p className="text-center text-xs text-slate-400 py-10">Nenhum produto encontrado.</p>
+                ) : (
+                  priceCheckResults.map((p) => (
+                    <div key={p.id} className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-50 transition-colors">
+                      <span className="text-sm font-bold text-slate-700 truncate">{p.name}</span>
+                      <span className="text-sm font-black text-[#0D1B3E] tabular-nums shrink-0">{fmt(p.price)}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Menu de Mais Opções (F8) ── */}
+      <AnimatePresence>
+        {showMoreOptionsMenu && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
+            onClick={() => setShowMoreOptionsMenu(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 20, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.95, y: 20, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-[2rem] w-full max-w-xs shadow-2xl overflow-hidden"
+            >
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-[#C9A227]/10 text-[#C9A227] flex items-center justify-center shrink-0">
+                    <MoreHorizontal className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-0.5">Atalho F8</p>
+                    <h3 className="text-lg font-black text-slate-800 leading-none">Mais Opções</h3>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowMoreOptionsMenu(false)}
+                  className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors shrink-0"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="p-3 space-y-1">
+                <button
+                  onClick={() => { setShowMoreOptionsMenu(false); currentCash ? setShowCloseCashModal(true) : setShowOpenCashModal(true); }}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 transition-colors text-left"
+                >
+                  {currentCash ? <DoorClosed className="w-4 h-4 text-red-500 shrink-0" /> : <DoorOpen className="w-4 h-4 text-emerald-500 shrink-0" />}
+                  <span className="text-sm font-bold text-slate-700">{currentCash ? "Fechar Caixa" : "Abrir Caixa"}</span>
+                </button>
+                {(selectedTableId || cart.length > 0) && (
+                  <button
+                    onClick={() => { setShowMoreOptionsMenu(false); clearCart(); }}
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 transition-colors text-left"
+                  >
+                    <Trash2 className="w-4 h-4 text-red-500 shrink-0" />
+                    <span className="text-sm font-bold text-slate-700">Limpar Pedido Atual</span>
+                  </button>
+                )}
+                {onOpenFullscreen && (
+                  <button
+                    onClick={() => { setShowMoreOptionsMenu(false); onOpenFullscreen(); }}
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 transition-colors text-left"
+                  >
+                    <Maximize2 className="w-4 h-4 text-slate-500 shrink-0" />
+                    <span className="text-sm font-bold text-slate-700">Tela Cheia</span>
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Modal de Detalhes da Mesa/Comanda ── */}
       <AnimatePresence>

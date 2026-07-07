@@ -1,6 +1,22 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
+/* O Preflight do Tailwind v4 zera o cursor de <button> para "default" (seguindo o
+   comportamento nativo do browser), o que faz o sistema inteiro parecer "sem cursor"
+   de mãozinha em nada clicável. Restaura o pointer em todo elemento interativo. */
+button:not(:disabled),
+[role="button"]:not(:disabled),
+a,
+select,
+summary,
+label[for] {
+  cursor: pointer;
+}
+button:disabled,
+[role="button"][aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
