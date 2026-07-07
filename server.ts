@@ -5146,9 +5146,12 @@ function toAbsoluteUrl(url: string): string {
 // do slug na URL — usado tanto no fallback de produção (dist/index.html) quanto em dev
 // (index.html transformado pelo Vite), para o link do cardápio de cada loja mostrar o
 // nome, a descrição e o logo dela em vez dos valores genéricos do sistema.
-async function resolveSeoMeta(requestPath: string): Promise<{ title: string; description: string; image: string; url: string }> {
+async function resolveSeoMeta(requestPath: string, hostname?: string): Promise<{ title: string; description: string; image: string; url: string; appleTitle: string; appleIcon: string }> {
   const segments = requestPath.split("/").filter(Boolean);
   const slug = segments[0];
+  const isKitchen = hostname === "cozinha.boxsys.com.br";
+  const appleTitle = isKitchen ? "Cozinha BoxSys" : "Box Sys";
+  const appleIcon = isKitchen ? "/images/cozinha-icon.png" : "/images/app_celular.png";
 
   let title = "Box Sys — Cardápio Digital";
   let description = "Peça agora pelo nosso cardápio digital!";
@@ -5179,22 +5182,58 @@ async function resolveSeoMeta(requestPath: string): Promise<{ title: string; des
     }
   }
 
-  return { title, description, image, url: `${SITE_BASE_URL}${requestPath}` };
+  return { title, description, image, url: `${SITE_BASE_URL}${requestPath}`, appleTitle, appleIcon };
 }
 
-function injectSeoMeta(html: string, seo: { title: string; description: string; image: string; url: string }): string {
+function injectSeoMeta(html: string, seo: { title: string; description: string; image: string; url: string; appleTitle: string; appleIcon: string }): string {
   const safeTitle = escapeHtml(seo.title);
   const safeDescription = escapeHtml(seo.description);
+  const safeAppleTitle = escapeHtml(seo.appleTitle);
   return html
     .replace(/<title>.*?<\/title>/, `<title>${safeTitle}</title>`)
     .replace(/{{TITLE}}/g, safeTitle)
     .replace(/{{DESCRIPTION}}/g, safeDescription)
     .replace(/{{IMAGE}}/g, seo.image)
+    .replace(/{{APPLE_TITLE}}/g, safeAppleTitle)
+    .replace(/{{APPLE_ICON}}/g, seo.appleIcon)
     .replace(
       /<meta property="og:image" content="[^"]*"\s*\/>/,
       `<meta property="og:image" content="${seo.image}" />\n    <meta property="og:url" content="${seo.url}" />\n    <meta property="og:site_name" content="Box Sys" />`
     );
 }
+
+// Manifest do PWA varia por subdomínio: cozinha.boxsys.com.br precisa de nome/ícone
+// próprios ("Cozinha BoxSys"), senão o atalho "Adicionar à Tela de Início" no
+// celular/iPad sai com o nome e ícone genéricos do sistema (Box Sys). Precisa vir antes
+// do express.static (que serve o manifest.webmanifest genérico gerado pelo build).
+app.get("/manifest.webmanifest", (req, res) => {
+  const isKitchen = req.hostname === "cozinha.boxsys.com.br";
+  res.set("Content-Type", "application/manifest+json").json({
+    name: isKitchen ? "Cozinha BoxSys" : "Box Sys PDV",
+    short_name: isKitchen ? "Cozinha BoxSys" : "Box Sys",
+    description: isKitchen ? "Painel de pedidos da cozinha BoxSys" : "Cardápio digital e PDV Box Sys",
+    theme_color: "#0D1B3E",
+    background_color: "#0D1B3E",
+    display: "standalone",
+    orientation: "portrait",
+    start_url: isKitchen ? "/" : "/painel",
+    scope: "/",
+    icons: [
+      {
+        src: isKitchen ? "/images/cozinha-icon.png" : "/images/app_celular.png",
+        sizes: "192x192",
+        type: "image/png",
+        purpose: "any maskable",
+      },
+      {
+        src: isKitchen ? "/images/cozinha-icon.png" : "/images/app_celular.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "any maskable",
+      },
+    ],
+  });
+});
 
 if (process.env.NODE_ENV !== "production") {
   const vite = await createViteServer({
@@ -5216,7 +5255,7 @@ if (process.env.NODE_ENV !== "production") {
     try {
       const rootIndexPath = path.join(process.cwd(), "index.html");
       const rawHtml = fs.readFileSync(rootIndexPath, "utf-8");
-      const seo = await resolveSeoMeta(req.path);
+      const seo = await resolveSeoMeta(req.path, req.hostname);
       const html = await vite.transformIndexHtml(req.originalUrl, injectSeoMeta(rawHtml, seo));
       res.status(200).set({ "Content-Type": "text/html" }).send(html);
     } catch (e) {
@@ -5234,7 +5273,7 @@ if (process.env.NODE_ENV !== "production") {
   app.use(express.static(distPath, { index: false }));
 
   app.get("*", async (req, res) => {
-    const seo = await resolveSeoMeta(req.path);
+    const seo = await resolveSeoMeta(req.path, req.hostname);
     try {
       const indexHtml = fs.readFileSync(path.join(distPath, "index.html"), "utf-8");
       res.send(injectSeoMeta(indexHtml, seo));
