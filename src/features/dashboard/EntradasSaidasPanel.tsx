@@ -141,6 +141,24 @@ const LATE_FEE_INTERVAL_LABELS: Record<LateFeeInterval, string> = {
   DAILY: "ao dia", MONTHLY: "ao mês", YEARLY: "ao ano",
 };
 
+// tenant.address é salvo como JSON estruturado ({cep, street, number, ...}), não texto livre —
+// sem isso, relatórios acabam imprimindo o JSON cru no cabeçalho.
+function formatTenantAddress(raw?: string | null): string {
+  if (!raw) return "";
+  try {
+    const addr = JSON.parse(raw);
+    const parts: string[] = [];
+    if (addr.street) parts.push(`${addr.street}${addr.number ? `, ${addr.number}` : ""}`);
+    if (addr.complement) parts.push(addr.complement);
+    if (addr.neighborhood) parts.push(addr.neighborhood);
+    if (addr.city) parts.push(`${addr.city}${addr.state ? ` - ${addr.state}` : ""}`);
+    if (addr.cep) parts.push(`CEP ${addr.cep}`);
+    return parts.join(" · ");
+  } catch {
+    return raw;
+  }
+}
+
 // ─── Exportação Excel ─────────────────────────────────────────────────────────
 function exportExcel(entries: Entry[], tenant: Tenant, dateFrom: string | null, dateTo: string | null) {
   const totalIncome  = entries.filter(e => e.type === "INCOME").reduce((s, e) => s + e.amount, 0);
@@ -248,7 +266,7 @@ function exportPDF(entries: Entry[], tenant: Tenant, dateFrom: string | null, da
       <div>
         <h1>${tenant.name || "Estabelecimento"}</h1>
         <p class="sub">Relatório de Entradas e Saídas &nbsp;·&nbsp; ${dateFrom ? fmtDate(dateFrom) : "—"} até ${dateTo ? fmtDate(dateTo) : "—"}</p>
-        ${tenant.address ? `<p class="sub" style="font-size:11px;margin-top:2px;">${tenant.address}</p>` : ""}
+        ${formatTenantAddress(tenant.address) ? `<p class="sub" style="font-size:11px;margin-top:2px;">${formatTenantAddress(tenant.address)}</p>` : ""}
       </div>
     </div>
 

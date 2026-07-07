@@ -5228,7 +5228,10 @@ if (process.env.NODE_ENV !== "production") {
   app.use(vite.middlewares);
 } else {
   const distPath = path.join(process.cwd(), "dist");
-  app.use(express.static(distPath));
+  // index: false — sem isso, o express.static serve dist/index.html direto pra qualquer
+  // requisição de diretório (inclusive "/"), pulando o app.get("*") abaixo e servindo o
+  // HTML com os placeholders {{TITLE}}/{{DESCRIPTION}}/{{IMAGE}} nunca substituídos.
+  app.use(express.static(distPath, { index: false }));
 
   app.get("*", async (req, res) => {
     const seo = await resolveSeoMeta(req.path);
