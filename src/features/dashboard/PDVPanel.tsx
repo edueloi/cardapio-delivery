@@ -5,13 +5,14 @@ import {
   CheckCircle2, Receipt, Package,
   ChevronRight, ChevronDown, ArrowLeft,
   Utensils, Tag, User, Phone, Percent,
-  Printer, StickyNote, Hash, AlertCircle, Smartphone, Lock, ExternalLink,
+  Printer, StickyNote, Hash, AlertCircle, Smartphone, Lock, ExternalLink, Download,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import type { Tenant, Product, Order, PaymentConfig, PaymentMethodConfig, StoneConfig } from "../../types";
 import { dineInOrderLabel } from "../../types";
 import { apiJson } from "../../lib/api";
 import { useToast } from "../../components";
+import { downloadReceiptPdf, printReceiptPdf } from "../../lib/receipt";
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
@@ -573,34 +574,52 @@ export default function PDVPanel({
     }
   };
 
-  const handlePrintReceipt = () => {
+  const buildReceiptData = () => {
     const order = lastOrderRef.current;
-    if (!order) return;
-    const html = `
-      <html><head><title>Cupom</title>
-      <style>body{font-family:monospace;font-size:12px;margin:20px}h2{text-align:center}table{width:100%}td{padding:2px 4px}.total{font-size:16px;font-weight:bold}.separator{border-top:1px dashed #000;margin:8px 0}</style>
-      </head><body>
-      <h2>${tenant.name}</h2>
-      <p style="text-align:center">${new Date().toLocaleString("pt-BR")}</p>
-      <div class="separator"></div>
-      ${order.items?.map((i: any) => `<table><tr><td>${i.quantity}x ${i.product?.name || ""}</td><td style="text-align:right">${fmt(i.price * i.quantity)}</td></tr>${i.notes ? `<tr><td colspan="2" style="padding-left:12px;font-style:italic;font-size:11px">Obs: ${i.notes}</td></tr>` : ""}</table>`).join("")}
-      <div class="separator"></div>
-      ${discountAmount > 0 ? `<table><tr><td>Desconto</td><td style="text-align:right">-${fmt(discountAmount)}</td></tr></table>` : ""}
-      <table><tr><td class="total">TOTAL</td><td class="total" style="text-align:right">${fmt(order.total)}</td></tr></table>
-      <p>Pagamento: ${paymentMethod}</p>
-      ${paymentMethod === "CASH" ? `<p>Recebido: ${fmt(digitsToNumber(amountReceived))}<br>Troco: ${fmt(change)}</p>` : ""}
-      <div class="separator"></div>
-      <p style="text-align:center">Obrigado pela preferência!</p>
-      </body></html>
-    `;
+    if (!order) return null;
+    const items = (order.items || []).map((i: any) => ({
+      quantity: i.quantity,
+      name: i.product?.name || "",
+      price: i.price,
+      notes: i.notes || undefined,
+    }));
+    const orderSubtotal = items.reduce((acc: number, i: any) => acc + i.price * i.quantity, 0);
+    let paymentDetail: { amountReceived?: number; change?: number } = {};
+    try { paymentDetail = order.paymentDetail ? JSON.parse(order.paymentDetail) : {}; } catch {}
+    return {
+      tenantName: tenant.name,
+      orderId: order.id,
+      createdAt: order.createdAt ? new Date(order.createdAt) : new Date(),
+      customerName: order.customerName,
+      items,
+      subtotal: orderSubtotal,
+      discountAmount: order.discount || 0,
+      feeAmount: order.feeAmount || undefined,
+      feePercent: order.feePercent || undefined,
+      feePassedToCustomer: order.feePassedToCustomer,
+      serviceFeeAmount: order.serviceFeeAmount || undefined,
+      serviceFeePercent: order.serviceFeePercent || undefined,
+      total: order.total,
+      paymentMethod: order.paymentMethod,
+      amountReceived: order.paymentMethod === "CASH" ? paymentDetail.amountReceived : undefined,
+      change: order.paymentMethod === "CASH" ? paymentDetail.change : undefined,
+    };
+  };
+
+  const handleDownloadReceipt = () => {
+    const data = buildReceiptData();
+    if (!data) return;
+    downloadReceiptPdf(data);
+  };
+
+  const handlePrintReceipt = () => {
+    const data = buildReceiptData();
+    if (!data) return;
     const desktop = (window as any).pdvDesktop;
     if (desktop?.printReceipt) {
-      desktop.printReceipt(html);
+      desktop.printReceipt(data);
     } else {
-      const win = window.open("", "_blank", "width=380,height=600");
-      if (!win) return;
-      win.document.write(html);
-      win.print();
+      printReceiptPdf(data);
     }
   };
 
@@ -615,14 +634,29 @@ export default function PDVPanel({
             initial={{ opacity: 0, y: -40 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -40 }}
-            className="fixed top-6 left-1/2 -translate-x-1/2 z-[200] flex flex-col items-center gap-2"
+            className="fixed top-6 left-1/2 -translate-x-1/2 z-[200] flex flex-col items-center gap-2 px-4 w-full max-w-sm"
           >
-            <div className="bg-green-500 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 font-black text-sm">
-              <CheckCircle2 className="w-5 h-5" />
-              Venda realizada com sucesso!
-              <button onClick={handlePrintReceipt} className="ml-2 underline text-xs font-bold opacity-80">
-                Imprimir cupom
-              </button>
+            <div className="bg-green-500 text-white px-5 py-3 rounded-2xl shadow-2xl flex flex-wrap items-center justify-center gap-2.5 font-black text-xs sm:text-sm w-full">
+              <span className="flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 shrink-0" />
+                Venda realizada!
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={handleDownloadReceipt}
+                  className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Baixar PDF
+                </button>
+                <button
+                  onClick={handlePrintReceipt}
+                  className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition-colors"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  Imprimir
+                </button>
+              </div>
             </div>
             {/* Botão NFC-e — aparece apenas se fiscal estiver habilitado */}
             {fiscalEnabled && nfceStatus === "idle" && (
