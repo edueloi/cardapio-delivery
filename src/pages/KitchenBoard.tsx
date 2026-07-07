@@ -71,47 +71,47 @@ function KitchenTicket({ order, onAdvance }: { order: Order; onAdvance: () => vo
       animate={{ opacity: isDragging ? 0.3 : 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.96 }}
       style={{ transform: transform ? CSS.Translate.toString(transform) : undefined }}
-      className={`rounded-3xl border-2 p-5 flex flex-col gap-4 cursor-grab active:cursor-grabbing touch-none select-none ${urgency}`}
+      className={`rounded-2xl border-2 p-3.5 flex flex-col gap-2.5 cursor-grab active:cursor-grabbing touch-none select-none ${urgency}`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xl font-black text-white tracking-tight">{orderShortCode(order)}</span>
-            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-white/10 text-white/70 whitespace-nowrap">
-              {orderTypeLabel(order)}
-            </span>
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-start justify-between gap-2">
+          <span className="text-base font-black text-white tracking-tight leading-tight whitespace-nowrap min-w-0">{orderShortCode(order)}</span>
+          <div
+            className={`flex items-center gap-1 text-[11px] font-black px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap ${
+              order.status !== "SHIPPED" && elapsed > 15 ? "text-red-300 bg-red-500/20 animate-pulse" : "text-white/60 bg-white/10"
+            }`}
+          >
+            <Timer className="w-3 h-3" />
+            {elapsedLabel}
           </div>
-          {order.customerName && (
-            <p className="text-sm font-bold text-white/50 mt-0.5 truncate max-w-[220px]">{order.customerName}</p>
-          )}
         </div>
-        <div
-          className={`flex items-center gap-1.5 text-xs font-black px-3 py-1.5 rounded-full shrink-0 ${
-            order.status !== "SHIPPED" && elapsed > 15 ? "text-red-300 bg-red-500/20 animate-pulse" : "text-white/60 bg-white/10"
-          }`}
-        >
-          <Timer className="w-3.5 h-3.5" />
-          {elapsedLabel}
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full bg-white/10 text-white/70 whitespace-nowrap shrink-0">
+            {orderTypeLabel(order)}
+          </span>
+          {order.customerName && (
+            <p className="text-xs font-bold text-white/50 truncate min-w-0">{order.customerName}</p>
+          )}
         </div>
       </div>
 
-      <div className="flex-1 space-y-2">
+      <div className="flex-1 space-y-1.5">
         {kitchenItems.map((item, idx) => (
-          <div key={idx} className="flex items-start gap-3 p-3 bg-black/30 rounded-2xl border border-white/5">
-            <span className="text-base font-black text-[#C9A227] min-w-[24px]">{item.quantity}x</span>
+          <div key={idx} className="flex items-start gap-2 p-2 bg-black/30 rounded-xl border border-white/5">
+            <span className="text-sm font-black text-[#C9A227] min-w-[20px]">{item.quantity}x</span>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-white leading-tight">{item.product?.name}</p>
+              <p className="text-[13px] font-bold text-white leading-tight">{item.product?.name}</p>
               {item.notes && (
-                <div className="mt-1.5 flex items-start gap-1.5 bg-amber-400/15 border border-amber-400/30 rounded-lg px-2 py-1.5">
-                  <Bell className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-300" />
-                  <span className="text-[12px] font-bold text-amber-200 leading-snug">{item.notes}</span>
+                <div className="mt-1 flex items-start gap-1.5 bg-amber-400/15 border border-amber-400/30 rounded-lg px-2 py-1">
+                  <Bell className="w-3 h-3 shrink-0 mt-0.5 text-amber-300" />
+                  <span className="text-[11px] font-bold text-amber-200 leading-snug">{item.notes}</span>
                 </div>
               )}
             </div>
           </div>
         ))}
         {kitchenItems.length === 0 && (
-          <p className="text-xs text-white/30 italic text-center py-4">Nenhum item de cozinha neste pedido</p>
+          <p className="text-xs text-white/30 italic text-center py-3">Nenhum item de cozinha neste pedido</p>
         )}
       </div>
 
@@ -119,14 +119,14 @@ function KitchenTicket({ order, onAdvance }: { order: Order; onAdvance: () => vo
         <button
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => { e.stopPropagation(); onAdvance(); }}
-          className="w-full py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 bg-white/10 hover:bg-white/15 text-white"
+          className="w-full py-2 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 bg-white/10 hover:bg-white/15 text-white"
         >
-          <CheckCircle2 className="w-4 h-4" />
+          <CheckCircle2 className="w-3.5 h-3.5" />
           {nextLabel}
         </button>
       ) : (
-        <div className="flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest text-emerald-300/60">
-          <CheckCircle2 className="w-3.5 h-3.5" />
+        <div className="flex items-center justify-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-emerald-300/60">
+          <CheckCircle2 className="w-3 h-3" />
           Pronto — aguardando saída
         </div>
       )}
@@ -159,7 +159,7 @@ function KitchenColumn({
             <p className="text-sm font-black uppercase tracking-widest text-white">{empty}</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}>
             <AnimatePresence mode="popLayout">
               {orders.map((order) => (
                 <KitchenTicket
