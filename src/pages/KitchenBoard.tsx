@@ -7,8 +7,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { useSortable } from "@dnd-kit/sortable";
 import socket from "../lib/socket";
 import type { Order, Tenant } from "../types";
-import { dineInOrderLabel } from "../types";
-import { ChefHat, Timer, Bell, CheckCircle2, LogOut, Utensils, User, Send } from "lucide-react";
+import { ChefHat, Timer, Bell, CheckCircle2, LogOut, Utensils, User } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 export type OrderStatus = "PENDING" | "PREPARING" | "SHIPPED";
@@ -31,8 +30,18 @@ function useElapsedMinutes(createdAt: string) {
   return elapsed;
 }
 
-function orderLabel(order: Order) {
-  if (order.orderType === "DINE_IN") return dineInOrderLabel(order);
+// Identificador curto do pedido: senha do balcão (mais fácil de gritar/conferir na
+// cozinha) quando existir, senão o número da mesa, senão o código curto do pedido.
+function orderShortCode(order: Order): string {
+  if (order.orderType === "DINE_IN" && order.counterTicketNumber != null) {
+    return `Senha ${String(order.counterTicketNumber).padStart(2, "0")}`;
+  }
+  if (order.orderType === "DINE_IN" && order.tableId) return `Mesa ${order.tableId}`;
+  return `#${order.id.slice(-4).toUpperCase()}`;
+}
+
+function orderTypeLabel(order: Order) {
+  if (order.orderType === "DINE_IN") return order.tableId ? "Mesa" : "Balcão";
   if (order.orderType === "DELIVERY") return "Delivery";
   return "Retirada";
 }
@@ -42,6 +51,7 @@ function KitchenTicket({ order, onAdvance }: { order: Order; onAdvance: () => vo
   const kitchenItems = order.items.filter((item) => item.product?.kitchenPrint === true);
   const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({ id: order.id, data: { order } });
   const nextLabel = order.status === "PENDING" ? "Marcar em preparo" : order.status === "PREPARING" ? "Marcar como pronto" : null;
+  const elapsedLabel = elapsed < 0 ? "agora" : `${elapsed} min`;
 
   const urgency = order.status === "SHIPPED"
     ? "border-emerald-500/40 bg-emerald-500/5"
@@ -64,14 +74,16 @@ function KitchenTicket({ order, onAdvance }: { order: Order; onAdvance: () => vo
       className={`rounded-3xl border-2 p-5 flex flex-col gap-4 cursor-grab active:cursor-grabbing touch-none select-none ${urgency}`}
     >
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-xl font-black text-white tracking-tight">#{order.id.slice(-4).toUpperCase()}</span>
-            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-white/10 text-white/70">
-              {orderLabel(order)}
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xl font-black text-white tracking-tight">{orderShortCode(order)}</span>
+            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-white/10 text-white/70 whitespace-nowrap">
+              {orderTypeLabel(order)}
             </span>
           </div>
-          <p className="text-sm font-bold text-white/60 mt-0.5 truncate max-w-[200px]">{order.customerName}</p>
+          {order.customerName && (
+            <p className="text-sm font-bold text-white/50 mt-0.5 truncate max-w-[220px]">{order.customerName}</p>
+          )}
         </div>
         <div
           className={`flex items-center gap-1.5 text-xs font-black px-3 py-1.5 rounded-full shrink-0 ${
@@ -79,7 +91,7 @@ function KitchenTicket({ order, onAdvance }: { order: Order; onAdvance: () => vo
           }`}
         >
           <Timer className="w-3.5 h-3.5" />
-          {elapsed} min
+          {elapsedLabel}
         </div>
       </div>
 
@@ -90,9 +102,9 @@ function KitchenTicket({ order, onAdvance }: { order: Order; onAdvance: () => vo
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-white leading-tight">{item.product?.name}</p>
               {item.notes && (
-                <div className="mt-1 flex items-start gap-1.5 text-[11px] font-black text-amber-300 uppercase tracking-tight italic">
-                  <Bell className="w-3 h-3 shrink-0 mt-0.5" />
-                  <span>{item.notes}</span>
+                <div className="mt-1.5 flex items-start gap-1.5 bg-amber-400/15 border border-amber-400/30 rounded-lg px-2 py-1.5">
+                  <Bell className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-300" />
+                  <span className="text-[12px] font-bold text-amber-200 leading-snug">{item.notes}</span>
                 </div>
               )}
             </div>
@@ -118,11 +130,6 @@ function KitchenTicket({ order, onAdvance }: { order: Order; onAdvance: () => vo
           Pronto — aguardando saída
         </div>
       )}
-
-      <div className="flex items-center justify-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-white/20">
-        <Send className="w-2.5 h-2.5" />
-        ou arraste para outra coluna
-      </div>
     </motion.div>
   );
 }
@@ -187,9 +194,13 @@ export default function KitchenBoard({
   const [now, setNow] = useState(Date.now());
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
 
+  // delay maior no touch dá tempo do navegador diferenciar "rolar a tela" (colunas
+  // ficam lado a lado com scroll horizontal no celular) de "segurar pra arrastar o
+  // card" — sem isso os dois gestos concorrem e o card pode ficar num estado
+  // inconsistente (visualmente sumido) se o toque for interrompido no meio.
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } })
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } })
   );
 
   const fetchData = async () => {
@@ -235,15 +246,26 @@ export default function KitchenBoard({
 
   const setOrderStatus = async (order: Order, nextStatus: OrderStatus) => {
     if (order.status === nextStatus) return;
+    const previousStatus = order.status;
     setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: nextStatus as Order["status"] } : o)));
     try {
-      await fetch(`${apiBase}/orders/${order.id}/status`, {
+      const res = await fetch(`${apiBase}/orders/${order.id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", "X-Kitchen-Token": token },
         body: JSON.stringify({ status: nextStatus }),
       });
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      const updated = await res.json();
+      // Reconcilia com a resposta real do servidor (fonte da verdade), em vez de
+      // confiar cegamente no update otimista — evita o card ficar com status
+      // divergente se dois updates concorrentes (drag + botão, ou dois toques)
+      // acontecerem quase juntos.
+      setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
     } catch (err) {
       console.error(err);
+      // Reverte o update otimista se o servidor não confirmou — sem isso o card
+      // fica "preso" num status que não existe de fato no banco.
+      setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: previousStatus } : o)));
     }
   };
 
@@ -254,10 +276,17 @@ export default function KitchenBoard({
 
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveOrder(null);
-    const order = event.active.data.current?.order as Order | undefined;
+    const draggedOrder = event.active.data.current?.order as Order | undefined;
     const targetStatus = event.over?.id as OrderStatus | undefined;
-    if (!order || !targetStatus) return;
-    setOrderStatus(order, targetStatus);
+    if (!draggedOrder || !targetStatus) return;
+    // Busca a versão mais atual do pedido no state em vez de confiar na referência
+    // capturada quando o drag começou — evita mandar um status baseado em dados
+    // stale se um evento de socket atualizou o pedido durante o gesto.
+    setOrders((prev) => {
+      const current = prev.find((o) => o.id === draggedOrder.id);
+      if (current) setOrderStatus(current, targetStatus);
+      return prev;
+    });
   };
 
   // Fila por ordem de chegada — mais antigo primeiro (FIFO)

@@ -242,11 +242,12 @@ export default function CounterMenuView() {
   };
 
   const handleNewOrder = () => {
+    // Mantém nome/telefone preenchidos — é a mesma pessoa no mesmo tablet/balcão,
+    // só o pedido anterior (senha e carrinho) que precisa ser limpo.
     localStorage.removeItem(counterStorageKey);
     localStorage.removeItem(cartStorageKey);
     setTicketOrder(null);
     setCart([]);
-    setCustomer({ name: "", phone: "", birthday: "" });
     setStep("checkin");
   };
 
