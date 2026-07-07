@@ -1907,6 +1907,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
     scheduleNotes: tenant?.scheduleNotes || "",
     waiterNotifyOnReady: tenant?.waiterNotifyOnReady ?? true,
     requireCashRegister: tenant?.requireCashRegister ?? true,
+    receiptPaperWidth: (tenant?.receiptPaperWidth ?? 80) as 58 | 80,
   });
   const [scheduleDays, setScheduleDays] = useState<any[]>(() => parseScheduleDays(tenant?.scheduleDays));
   const [addr, setAddr] = useState<AddressForm>(() => parseAddress(tenant?.address) ?? { ...EMPTY_ADDR });
@@ -1949,7 +1950,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
 
   useEffect(() => {
     if (tenant) {
-      setForm({ name: tenant.name || "", description: tenant.description || "", logoUrl: tenant.logoUrl || "", whatsapp: maskPhone(tenant.whatsapp) || "", isOpen: tenant.isOpen ?? true, orderMode: (tenant.orderMode ?? "DELIVERY_ONLY") as "DELIVERY_ONLY" | "PREORDER_ONLY" | "BOTH", scheduleMode: tenant.scheduleMode ?? false, scheduleType: (tenant.scheduleType ?? "CLIENT_CHOOSES") as "CLIENT_CHOOSES" | "OWNER_DEFINES", scheduleNotes: tenant.scheduleNotes || "", waiterNotifyOnReady: tenant.waiterNotifyOnReady ?? true, requireCashRegister: tenant.requireCashRegister ?? true });
+      setForm({ name: tenant.name || "", description: tenant.description || "", logoUrl: tenant.logoUrl || "", whatsapp: maskPhone(tenant.whatsapp) || "", isOpen: tenant.isOpen ?? true, orderMode: (tenant.orderMode ?? "DELIVERY_ONLY") as "DELIVERY_ONLY" | "PREORDER_ONLY" | "BOTH", scheduleMode: tenant.scheduleMode ?? false, scheduleType: (tenant.scheduleType ?? "CLIENT_CHOOSES") as "CLIENT_CHOOSES" | "OWNER_DEFINES", scheduleNotes: tenant.scheduleNotes || "", waiterNotifyOnReady: tenant.waiterNotifyOnReady ?? true, requireCashRegister: tenant.requireCashRegister ?? true, receiptPaperWidth: (tenant.receiptPaperWidth ?? 80) as 58 | 80 });
       setScheduleDays(parseScheduleDays(tenant.scheduleDays));
       setAddr(parseAddress(tenant.address) ?? { ...EMPTY_ADDR });
       try { setHours(tenant.businessHours ? JSON.parse(tenant.businessHours) : DEFAULT_HOURS); } catch { setHours(DEFAULT_HOURS); }
@@ -2128,6 +2129,21 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                     <p className="text-xs text-slate-500 mt-1">Se desligado, o PDV vende sem precisar abrir caixa (sem fundo, sangria/suprimento ou fechamento) — venda liberada direto.</p>
                   </div>
                   <Switch checked={form.requireCashRegister} onCheckedChange={v => setForm(f => ({ ...f, requireCashRegister: v }))} />
+                </div>
+                <div className="flex items-center justify-between gap-4 py-5 border-t border-zinc-100">
+                  <div>
+                    <p className="text-sm font-black text-slate-900">Largura da Impressora Térmica</p>
+                    <p className="text-xs text-slate-500 mt-1">Define o formato do recibo gerado no PDV (imprimir ou baixar em PDF) para caber certinho na bobina da sua impressora.</p>
+                  </div>
+                  <FilterLineSegmented
+                    value={String(form.receiptPaperWidth)}
+                    onChange={v => setForm(f => ({ ...f, receiptPaperWidth: (Number(v) === 58 ? 58 : 80) as 58 | 80 }))}
+                    options={[
+                      { value: "80", label: "80mm" },
+                      { value: "58", label: "58mm" },
+                    ]}
+                    size="sm"
+                  />
                 </div>
                 {/* ── Modo de Operação (Delivery / Encomenda / Misto) ── */}
                 <div className="pt-5 border-t border-zinc-100">

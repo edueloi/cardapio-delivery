@@ -1020,6 +1020,12 @@ const migrations = [
     check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenants' AND COLUMN_NAME = 'require_cash_register'",
     run: "ALTER TABLE tenants ADD COLUMN require_cash_register TINYINT(1) NOT NULL DEFAULT 1",
   },
+  // Largura da bobina térmica (mm) usada pra gerar o recibo do PDV — 80 ou 58.
+  {
+    name: 'add_tenants_receipt_paper_width',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenants' AND COLUMN_NAME = 'receipt_paper_width'",
+    run: "ALTER TABLE tenants ADD COLUMN receipt_paper_width INT NOT NULL DEFAULT 80",
+  },
 ];
 
 async function run() {

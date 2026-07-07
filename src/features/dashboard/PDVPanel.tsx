@@ -721,6 +721,8 @@ export default function PDVPanel({
       tenantName: tenant.name,
       tenantAddress: tenant.address || undefined,
       orderId: order.id,
+      counterTicketNumber: (order as any).counterTicketNumber ?? null,
+      paperWidthMm: (tenant.receiptPaperWidth === 58 ? 58 : 80) as 58 | 80,
       createdAt: order.createdAt ? new Date(order.createdAt) : new Date(),
       customerName: order.customerName,
       items,

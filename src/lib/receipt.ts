@@ -11,9 +11,11 @@ export interface ReceiptData {
   tenantName: string;
   tenantAddress?: string;
   orderId?: string;
+  counterTicketNumber?: number | null;
   createdAt?: Date;
   customerName?: string;
   isPreCheckout?: boolean;
+  paperWidthMm?: 58 | 80;
   items: ReceiptItem[];
   subtotal: number;
   discountAmount?: number;
@@ -63,14 +65,15 @@ function formatTenantAddress(raw?: string): string {
 }
 
 // Estima a altura necessária (mm) somando as mesmas linhas que buildReceiptPdf desenha,
-// pra não sobrar papel em branco nem cortar conteúdo. addressLines já vem quebrado pelo
-// jsPDF (splitTextToSize), então o número de linhas reais é conhecido de antemão.
-function estimateHeight(data: ReceiptData, addressLines: string[]): number {
+// pra não sobrar papel em branco nem cortar conteúdo. nameLines/addressLines já vêm
+// quebrados pelo jsPDF (splitTextToSize), então o número de linhas reais é conhecido de antemão.
+function estimateHeight(data: ReceiptData, nameLines: string[], addressLines: string[]): number {
   let y = 8;
-  y += 6; // nome da loja
+  y += nameLines.length * 5; // nome da loja (pode quebrar em mais de 1 linha)
   y += addressLines.length * 4;
   y += 4; // data
   if (data.orderId) y += 4;
+  if (data.counterTicketNumber != null) y += 6;
   if (data.customerName) y += 4;
   y += 1 + 5; // linha + espaço
   for (const item of data.items) {
@@ -98,23 +101,27 @@ function estimateHeight(data: ReceiptData, addressLines: string[]): number {
 }
 
 export function buildReceiptPdf(data: ReceiptData): jsPDF {
-  const width = 80;
-  const margin = 5;
+  const width = data.paperWidthMm === 58 ? 58 : 80;
+  const margin = width === 58 ? 3 : 5;
+  const contentWidth = width - margin * 2;
 
-  // Doc de medição: só pra quebrar o endereço em linhas antes de saber a altura final da página.
+  // Doc de medição: só pra quebrar nome/endereço em linhas antes de saber a altura final da página.
   const measureDoc = new jsPDF({ unit: "mm", format: [width, 100] });
+  measureDoc.setFont("courier", "bold");
+  measureDoc.setFontSize(width === 58 ? 10 : 12);
+  const nameLines: string[] = measureDoc.splitTextToSize(data.tenantName, contentWidth);
   measureDoc.setFont("courier", "normal");
   measureDoc.setFontSize(8);
   const addressText = formatTenantAddress(data.tenantAddress);
-  const addressLines: string[] = addressText ? measureDoc.splitTextToSize(addressText, width - margin * 2) : [];
+  const addressLines: string[] = addressText ? measureDoc.splitTextToSize(addressText, contentWidth) : [];
 
-  const doc = new jsPDF({ unit: "mm", format: [width, estimateHeight(data, addressLines)] });
+  const doc = new jsPDF({ unit: "mm", format: [width, estimateHeight(data, nameLines, addressLines)] });
   let y = 8;
 
   doc.setFont("courier", "bold");
-  doc.setFontSize(12);
-  doc.text(data.tenantName, width / 2, y, { align: "center" });
-  y += 6;
+  doc.setFontSize(width === 58 ? 10 : 12);
+  doc.text(nameLines, width / 2, y, { align: "center" });
+  y += nameLines.length * 5;
 
   doc.setFont("courier", "normal");
   doc.setFontSize(8);
@@ -130,6 +137,14 @@ export function buildReceiptPdf(data: ReceiptData): jsPDF {
     doc.text(`Pedido #${data.orderId.slice(-8).toUpperCase()}`, width / 2, y, { align: "center" });
     y += 4;
   }
+  if (data.counterTicketNumber != null) {
+    doc.setFont("courier", "bold");
+    doc.setFontSize(width === 58 ? 12 : 14);
+    doc.text(`SENHA ${String(data.counterTicketNumber).padStart(2, "0")}`, width / 2, y + 2, { align: "center" });
+    y += 6;
+    doc.setFont("courier", "normal");
+    doc.setFontSize(8);
+  }
   if (data.customerName) {
     doc.text(`Cliente: ${data.customerName}`, width / 2, y, { align: "center" });
     y += 4;
@@ -144,7 +159,7 @@ export function buildReceiptPdf(data: ReceiptData): jsPDF {
   for (const item of data.items) {
     const label = `${item.quantity}x ${item.name}`;
     const priceStr = fmtMoney(item.price * item.quantity);
-    doc.text(label, margin, y, { maxWidth: width - margin * 2 - 20 });
+    doc.text(label, margin, y, { maxWidth: contentWidth - (width === 58 ? 14 : 20) });
     doc.text(priceStr, width - margin, y, { align: "right" });
     y += 4;
     if (item.notes) {

@@ -31,6 +31,7 @@ model Tenant {
   displayPanelConfig String? @map("display_panel_config") @db.Text // JSON: DisplayPanelConfig (quais tipos de pedido aparecem no Painel TV)
   waiterNotifyOnReady Boolean @default(true) @map("waiter_notify_on_ready") // avisa o garçom quando a cozinha marca a comanda como pronta pra servir
   requireCashRegister Boolean @default(true) @map("require_cash_register") // se false, PDV vende sem precisar abrir/fechar caixa (sem controle de fundo/sangria/suprimento)
+  receiptPaperWidth Int @default(80) @map("receipt_paper_width") // largura da bobina térmica em mm (80 ou 58) usada no recibo do PDV
   kitchenPasswordHash String? @map("kitchen_password_hash") // senha simples do painel de cozinha (/cozinha/:slug), sem conta de usuário
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")

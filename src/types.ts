@@ -181,6 +181,7 @@ export interface Tenant {
   displayPanelConfig?: string | null; // JSON string: DisplayPanelConfig
   waiterNotifyOnReady?: boolean; // avisa o garçom quando a cozinha marca a comanda como pronta pra servir
   requireCashRegister?: boolean; // se false, PDV vende sem precisar abrir/fechar caixa
+  receiptPaperWidth?: 58 | 80; // largura da bobina térmica (mm) usada no recibo do PDV
 }
 
 // Controla quais tipos de pedido aparecem no Painel TV (/:slug/display) — tela exposta pro cliente ver o status.

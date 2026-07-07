@@ -1130,7 +1130,7 @@ app.patch("/api/owner/tenants/:tenantId", requireAuth, async (req, res) => {
   const tenant = await requireTenantById(req, res, req.params.tenantId);
   if (!tenant) return;
 
-  const { name, description, address, whatsapp, logoUrl, isOpen, scheduleMode, scheduleType, scheduleDays, scheduleNotes, orderMode, businessHours, deliveryConfig, paymentMethods, stoneConfig, fiscalConfig, displayPanelConfig, waiterNotifyOnReady, requireCashRegister } = req.body;
+  const { name, description, address, whatsapp, logoUrl, isOpen, scheduleMode, scheduleType, scheduleDays, scheduleNotes, orderMode, businessHours, deliveryConfig, paymentMethods, stoneConfig, fiscalConfig, displayPanelConfig, waiterNotifyOnReady, requireCashRegister, receiptPaperWidth } = req.body;
   try {
     const updated = await prisma.tenant.update({
       where: { id: tenant.id },
@@ -1143,6 +1143,7 @@ app.patch("/api/owner/tenants/:tenantId", requireAuth, async (req, res) => {
         ...(isOpen !== undefined && { isOpen: Boolean(isOpen) }),
         ...(waiterNotifyOnReady !== undefined && { waiterNotifyOnReady: Boolean(waiterNotifyOnReady) }),
         ...(requireCashRegister !== undefined && { requireCashRegister: Boolean(requireCashRegister) }),
+        ...(receiptPaperWidth !== undefined && { receiptPaperWidth: Number(receiptPaperWidth) === 58 ? 58 : 80 }),
         ...(scheduleMode !== undefined && { scheduleMode: Boolean(scheduleMode) }),
         ...(scheduleType !== undefined && { scheduleType: scheduleType || "CLIENT_CHOOSES" }),
         ...(scheduleDays !== undefined && { scheduleDays: scheduleDays ? (typeof scheduleDays === "string" ? scheduleDays : JSON.stringify(scheduleDays)) : null }),
