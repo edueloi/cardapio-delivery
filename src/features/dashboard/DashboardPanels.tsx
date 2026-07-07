@@ -2463,26 +2463,26 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                   const allBrands = [...CARD_BRANDS_LIST.map(b => b.label), ...(payments.customBrands || [])];
 
                   return (
-                    <div 
+                    <div
                       key={method.id}
-                      className={`p-6 rounded-[2rem] border transition-all space-y-4 ${
-                        isEnabled ? 'bg-white border-[#C9A227]/30 shadow-xl shadow-[#C9A227]/5' : 'bg-slate-50 border-slate-100 opacity-60'
+                      className={`p-4 rounded-2xl border transition-all space-y-3 ${
+                        isEnabled ? 'bg-white border-[#C9A227]/30 shadow-sm' : 'bg-slate-50 border-slate-100 opacity-60'
                       }`}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
                             isEnabled ? 'bg-[#C9A227]/10 text-[#C9A227]' : 'bg-slate-200 text-slate-400'
                           }`}>
-                            <method.icon className="w-6 h-6" />
+                            <method.icon className="w-4.5 h-4.5" />
                           </div>
-                          <div>
-                            <p className="text-sm font-black text-slate-800">{method.label}</p>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{method.desc}</p>
+                          <div className="min-w-0">
+                            <p className="text-[13px] font-black text-slate-800 truncate">{method.label}</p>
+                            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest truncate">{method.desc}</p>
                           </div>
                         </div>
-                        <Switch 
-                          checked={isEnabled} 
+                        <Switch
+                          checked={isEnabled}
                           onCheckedChange={v => setPayments({
                             ...payments,
                             [method.id]: { ...(methodConfig || { label: method.label }), enabled: v }
@@ -2491,9 +2491,9 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                       </div>
 
                       {isEnabled && (
-                        <div className="pt-4 border-t border-slate-50 space-y-4">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Bandeiras Aceitas</p>
-                          <div className="flex flex-wrap gap-2">
+                        <div className="pt-3 border-t border-slate-50 space-y-3">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Bandeiras Aceitas</p>
+                          <div className="flex flex-wrap gap-1.5">
                             {allBrands.map(brand => {
                               const isSelected = acceptedBrands.includes(brand);
                               return (
@@ -3139,8 +3139,8 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
           </motion.div>
         )}
 
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 w-full max-w-4xl px-4">
-          <div className="bg-white/80 backdrop-blur-md border border-slate-200/50 p-4 rounded-[2rem] shadow-2xl flex items-center justify-between gap-4">
+        <div className="fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 w-full max-w-2xl px-4">
+          <div className="bg-white/90 backdrop-blur-md border border-slate-200/50 p-2.5 sm:p-3 rounded-2xl shadow-xl flex items-center justify-between gap-3">
             <div className="hidden sm:block pl-4">
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Status das Alterações</p>
               <p className="text-xs font-bold text-slate-800">

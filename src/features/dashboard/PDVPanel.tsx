@@ -765,69 +765,67 @@ export default function PDVPanel({
                   <p className="text-sm font-black uppercase tracking-widest text-slate-500">Nenhum produto encontrado</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
+                <div className="flex flex-col gap-2 lg:grid lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6 lg:gap-2.5">
                   {filteredProducts.map((product) => {
                     const inCart = cart.find((i) => i.product.id === product.id);
                     return (
                       <button
                         key={product.id}
                         onClick={() => addToCart(product)}
-                        className={`group flex flex-col text-left rounded-2xl overflow-hidden transition-all duration-200 relative ${
+                        className={`group text-left rounded-xl overflow-hidden transition-all duration-200 relative flex items-center gap-3 p-2 lg:flex-col lg:p-0 lg:items-stretch lg:gap-0 ${
                           inCart
-                            ? "ring-2 ring-[#C9A227] shadow-xl shadow-[#C9A227]/15 bg-white"
-                            : "ring-1 ring-slate-200 bg-white hover:ring-[#C9A227]/50 hover:shadow-lg"
+                            ? "ring-2 ring-[#C9A227] shadow-md shadow-[#C9A227]/15 bg-white"
+                            : "ring-1 ring-slate-200 bg-white hover:ring-[#C9A227]/50 hover:shadow-sm"
                         }`}
                       >
-                        {/* Image — square, object-contain so full product is visible */}
-                        <div className="w-full aspect-square bg-gradient-to-br from-slate-50 to-slate-100 overflow-hidden relative flex items-center justify-center p-3">
+                        {/* Image — hidden on celular/tablet (só nome/descrição/preço); volta a aparecer em telas grandes (lg+) */}
+                        <div className="hidden lg:flex w-full aspect-square bg-gradient-to-br from-slate-50 to-slate-100 overflow-hidden relative items-center justify-center p-1.5">
                           {product.imageUrl ? (
                             <img
                               src={product.imageUrl}
-                              className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-300 drop-shadow-md"
+                              className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-300 drop-shadow-sm"
                               alt={product.name}
                             />
                           ) : (
-                            <Utensils className="w-8 h-8 text-slate-300" />
+                            <Utensils className="w-6 h-6 text-slate-300" />
                           )}
                           {/* Cart qty badge */}
                           {inCart && (
-                            <div className="absolute top-2 right-2 min-w-[26px] h-[26px] px-1.5 bg-[#C9A227] text-black text-xs font-black rounded-full flex items-center justify-center shadow-lg">
+                            <div className="absolute top-1 right-1 min-w-[20px] h-5 px-1 bg-[#C9A227] text-black text-[10px] font-black rounded-full flex items-center justify-center shadow">
                               {inCart.quantity}
                             </div>
                           )}
                           {/* Stock badge */}
                           {product.inventoryItem && (
-                            <div className="absolute bottom-2 left-2 bg-black/50 backdrop-blur-sm text-white text-[9px] font-bold rounded-lg px-2 py-0.5 uppercase tracking-wide">
+                            <div className="absolute bottom-1 left-1 bg-black/50 backdrop-blur-sm text-white text-[8px] font-bold rounded px-1.5 py-0.5 uppercase tracking-wide">
                               {product.inventoryItem.quantity} un
-                            </div>
-                          )}
-                          {/* Add overlay on hover */}
-                          {!inCart && (
-                            <div className="absolute inset-0 bg-[#C9A227]/0 group-hover:bg-[#C9A227]/8 transition-colors duration-200 flex items-center justify-center">
-                              <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 w-10 h-10 bg-[#C9A227] rounded-full flex items-center justify-center shadow-xl">
-                                <Plus className="w-5 h-5 text-black" />
-                              </div>
                             </div>
                           )}
                         </div>
 
                         {/* Info */}
-                        <div className="px-3 py-2.5 flex flex-col gap-1 border-t border-slate-100">
-                          <h4 className="text-[13px] font-bold text-slate-800 line-clamp-1 leading-snug">{product.name}</h4>
+                        <div className="flex-1 min-w-0 flex flex-col gap-0.5 lg:px-2 lg:py-1.5 lg:border-t lg:border-slate-100">
+                          <h4 className="text-[13px] lg:text-[11px] font-bold text-slate-800 line-clamp-1 leading-snug">{product.name}</h4>
                           {product.description && (
-                            <p className="text-[10px] text-slate-400 line-clamp-1 leading-tight">{product.description}</p>
+                            <p className="text-[11px] text-slate-400 line-clamp-1 leading-tight lg:hidden">{product.description}</p>
                           )}
-                          <div className="flex items-center justify-between mt-1">
-                            <span className="text-[17px] font-black text-[#0D1B3E] leading-none tabular-nums">{fmt(product.price)}</span>
-                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-200 shrink-0 ${
+                          <div className="flex items-center justify-between mt-0.5">
+                            <span className="text-[14px] lg:text-[13px] font-black text-[#0D1B3E] leading-none tabular-nums">{fmt(product.price)}</span>
+                            <div className={`w-7 h-7 lg:w-6 lg:h-6 rounded-lg flex items-center justify-center transition-all duration-200 shrink-0 ${
                               inCart
-                                ? "bg-[#C9A227] text-black shadow-md shadow-[#C9A227]/30"
+                                ? "bg-[#C9A227] text-black"
                                 : "bg-[#0D1B3E]/5 text-[#0D1B3E] group-hover:bg-[#C9A227] group-hover:text-black"
                             }`}>
-                              <Plus className="w-4 h-4" strokeWidth={2.5} />
+                              <Plus className="w-4 h-4 lg:w-3.5 lg:h-3.5" strokeWidth={2.5} />
                             </div>
                           </div>
                         </div>
+                        {/* Badge de quantidade no carrinho — visível na linha compacta mobile/tablet */}
+                        {inCart && (
+                          <div className="lg:hidden shrink-0 min-w-[22px] h-[22px] px-1.5 bg-[#C9A227] text-black text-[11px] font-black rounded-full flex items-center justify-center">
+                            {inCart.quantity}
+                          </div>
+                        )}
                       </button>
                     );
                   })}
@@ -998,12 +996,20 @@ export default function PDVPanel({
         </button>
       )}
 
+      {/* ── Cart modal backdrop (mobile/tablet) ── */}
+      {showCartDrawer && (
+        <div
+          className="lg:hidden fixed inset-0 z-30 bg-black/50 backdrop-blur-sm"
+          onClick={() => setShowCartDrawer(false)}
+        />
+      )}
+
       {/* ── Right: Order/Cart Panel ── */}
       <div className={`${
         showCartDrawer
-          ? "fixed inset-0 z-40 lg:static lg:z-auto"
+          ? "fixed inset-x-0 bottom-0 top-4 sm:inset-8 z-40 lg:static lg:z-auto"
           : "hidden lg:flex"
-      } w-full lg:w-[380px] xl:w-[420px] flex-col bg-[#0D1B3E] rounded-none lg:rounded-[2rem] text-white overflow-hidden shadow-xl relative shrink-0`}>
+      } w-full lg:w-[380px] xl:w-[420px] flex-col bg-[#0D1B3E] rounded-t-[2rem] sm:rounded-[2rem] lg:rounded-[2rem] text-white overflow-hidden shadow-2xl relative shrink-0`}>
         {/* Header */}
         <div className="p-6 border-b border-white/5 bg-white/[0.02]">
           <div className="flex items-center justify-between mb-1">
