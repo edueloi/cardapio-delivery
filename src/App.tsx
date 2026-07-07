@@ -23,6 +23,16 @@ import InviteRegisterPage from "./features/auth/InviteRegisterPage";
 import ForgotPasswordPage from "./features/auth/ForgotPasswordPage";
 import ResetPasswordPage from "./features/auth/ResetPasswordPage";
 
+// Em cozinha.boxsys.com.br a raiz "/" deve cair direto na tela de login da
+// cozinha, sem precisar digitar "/cozinha" no final — mais fácil de favoritar
+// no tablet. Em qualquer outro domínio, mostra a landing page normal.
+function HomeOrKitchen() {
+  if (typeof window !== "undefined" && window.location.hostname.startsWith("cozinha.")) {
+    return <KitchenGlobalPage />;
+  }
+  return <LandingPage />;
+}
+
 function AnimatedRoutes() {
   const location = useLocation();
   const isDashboard = location.pathname.startsWith("/dashboard/");
@@ -144,7 +154,7 @@ function AnimatedRoutes() {
             }
           />
 
-          <Route path="/" element={<LandingPage />} />
+          <Route path="/" element={<HomeOrKitchen />} />
         </Routes>
       </AnimatePresence>
     </>
