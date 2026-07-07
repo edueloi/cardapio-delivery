@@ -345,7 +345,7 @@ export default function DashboardShell({
         </header>
         )}
 
-        <div className={hideHeader ? "flex-1 min-h-0 flex flex-col overflow-hidden" : "px-3 py-3 sm:p-5 md:p-7 overflow-y-auto"}>{children}</div>
+        <div className={hideHeader ? "flex-1 min-h-0 flex flex-col overflow-hidden p-2 sm:p-3" : "px-3 py-3 sm:p-5 md:p-7 overflow-y-auto"}>{children}</div>
       </main>
     </div>
   );
