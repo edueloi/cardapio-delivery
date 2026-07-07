@@ -502,6 +502,7 @@ export interface Order {
   // Taxa de serviço (opcional, ex: 10% em mesas)
   serviceFeeAmount?: number | null;
   serviceFeePercent?: number | null;
+  billed?: boolean; // true quando já existe lançamento de caixa (CashMovement) pra este pedido
 }
 
 export interface OrderItem {

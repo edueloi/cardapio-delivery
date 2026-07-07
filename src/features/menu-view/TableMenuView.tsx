@@ -27,6 +27,7 @@ export default function TableMenuView() {
   const [customer, setCustomer] = useState({ name: "", phone: "", guests: "1" });
   const [cart, setCart] = useState<any[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
   const [qty, setQty] = useState(1);
   const [notes, setNotes] = useState("");
   const [selectedExtras, setSelectedExtras] = useState<{ id: string, label: string, price: number }[]>([]);
@@ -313,12 +314,18 @@ export default function TableMenuView() {
               {/* Logo */}
               <div className="mb-12">
                 {tenant.logoUrl ? (
-                  <img src={tenant.logoUrl} className="h-12 w-auto object-contain mb-2" alt={tenant.name} />
+                  <img src={tenant.logoUrl} className="w-14 h-14 rounded-2xl object-cover shadow-xl ring-2 ring-white/10 mb-3" alt={tenant.name} />
                 ) : (
-                  <div className="text-white font-black text-xl leading-tight tracking-tight uppercase line-clamp-2">
-                    {tenant.name}
+                  <div
+                    className="w-14 h-14 rounded-2xl flex items-center justify-center text-lg font-black text-black shadow-xl mb-3"
+                    style={{ background: "linear-gradient(135deg, #C9A227, #a37d1a)" }}
+                  >
+                    {tenant.name?.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?"}
                   </div>
                 )}
+                <div className="text-white font-black text-xl leading-tight tracking-tight uppercase line-clamp-2">
+                  {tenant.name}
+                </div>
                 <p className="text-[10px] font-black text-white/20 tracking-[0.3em] mt-2 uppercase">Mesa {tableId}</p>
               </div>
 
@@ -372,10 +379,13 @@ export default function TableMenuView() {
                 {/* Logo + Mesa */}
                 <div className="flex items-center gap-3 shrink-0">
                   {tenant.logoUrl ? (
-                    <img src={tenant.logoUrl} className="w-9 h-9 rounded-xl object-cover" />
+                    <img src={tenant.logoUrl} className="w-9 h-9 rounded-xl object-cover" alt={tenant.name} />
                   ) : (
-                    <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
-                      <Utensils className="w-4 h-4 text-amber-500" />
+                    <div
+                      className="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-black text-black"
+                      style={{ background: "linear-gradient(135deg, #C9A227, #a37d1a)" }}
+                    >
+                      {tenant.name?.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?"}
                     </div>
                   )}
                   <div>
@@ -609,7 +619,7 @@ export default function TableMenuView() {
                         <motion.button
                           key={p.id}
                           whileTap={{ scale: 0.97 }}
-                          onClick={() => { setSelectedProduct(p); setSelectedExtras([]); setQty(1); setNotes(""); }}
+                          onClick={() => { setSelectedProduct(p); setSelectedVariant(p.variants && p.variants.length > 0 ? p.variants[0] : null); setSelectedExtras([]); setQty(1); setNotes(""); }}
                           className="group text-left bg-[#161d27] border border-white/[0.06] rounded-2xl overflow-hidden hover:border-amber-500/30 transition-all active:bg-[#1c2532]"
                         >
                           <div className="aspect-[4/3] overflow-hidden bg-white/5 flex items-center justify-center">
@@ -649,7 +659,7 @@ export default function TableMenuView() {
                           key={p.id}
                           whileHover={{ y: -4, scale: 1.01 }}
                           whileTap={{ scale: 0.97 }}
-                          onClick={() => { setSelectedProduct(p); setSelectedExtras([]); setQty(1); setNotes(""); }}
+                          onClick={() => { setSelectedProduct(p); setSelectedVariant(p.variants && p.variants.length > 0 ? p.variants[0] : null); setSelectedExtras([]); setQty(1); setNotes(""); }}
                           className="group flex flex-col rounded-3xl bg-[#161d27] border border-white/[0.06] hover:bg-[#1c2532] hover:border-[#C9A227]/30 transition-all cursor-pointer overflow-hidden"
                         >
                           <div className="aspect-[4/3] overflow-hidden bg-white/5 shrink-0 flex items-center justify-center">
@@ -988,6 +998,7 @@ export default function TableMenuView() {
                     <button
                       onClick={() => {
                         setSelectedProduct(null);
+                        setSelectedVariant(null);
                         setQty(1);
                         setNotes("");
                         setSelectedExtras([]);
@@ -1014,15 +1025,43 @@ export default function TableMenuView() {
                       <div className="space-y-4 lg:hidden">
                         <h2 className="text-xl font-bold text-zinc-900">{selectedProduct.name}</h2>
                         <p className="text-xs text-zinc-400 font-medium leading-relaxed">{selectedProduct.description}</p>
-                        <p className="text-lg font-bold text-zinc-900">{fmt(selectedProduct.price)}</p>
+                        <p className="text-lg font-bold text-zinc-900">{fmt(selectedVariant ? selectedVariant.price : selectedProduct.price)}</p>
                       </div>
 
                       <div className="hidden lg:flex items-center justify-between pb-8 border-b border-white/5">
                         <div>
                           <p className="text-[10px] font-black text-white/20 uppercase tracking-[0.3em] mb-1">Preço Unitário</p>
-                          <p className="text-4xl font-black text-amber-500 tracking-tighter">{fmt(selectedProduct.price)}</p>
+                          <p className="text-4xl font-black text-amber-500 tracking-tighter">{fmt(selectedVariant ? selectedVariant.price : selectedProduct.price)}</p>
                         </div>
                       </div>
+
+                      {/* Variants */}
+                      {selectedProduct.variants && selectedProduct.variants.length > 0 && (
+                        <div className="space-y-3">
+                          <p className="text-sm font-bold text-zinc-900 lg:text-white/30 lg:uppercase lg:tracking-widest">Escolha o tamanho</p>
+                          <div className="space-y-2">
+                            {selectedProduct.variants.map((v) => (
+                              <button
+                                key={v.id}
+                                onClick={() => setSelectedVariant(v)}
+                                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all ${
+                                  selectedVariant?.id === v.id
+                                    ? 'border-amber-500 bg-amber-50 lg:bg-amber-500/10'
+                                    : 'border-zinc-100 bg-zinc-50 lg:border-white/10 lg:bg-white/5'
+                                }`}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${selectedVariant?.id === v.id ? 'border-amber-500' : 'border-zinc-300 lg:border-white/20'}`}>
+                                    {selectedVariant?.id === v.id && <div className="w-2 h-2 rounded-full bg-amber-500" />}
+                                  </div>
+                                  <span className="text-sm font-bold text-zinc-900 lg:text-white">{v.name}</span>
+                                </div>
+                                <span className="text-sm font-bold text-zinc-700 lg:text-white/70">{fmt(v.price)}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
                       {/* Customization (Light Style for Mobile) */}
                       <div className="space-y-6">
@@ -1101,14 +1140,18 @@ export default function TableMenuView() {
                             : '';
                           const extrasPrice = selectedExtras.reduce((s, e) => s + e.price, 0);
                           const fullNotes = [extrasLabel, notes].filter(Boolean).join(' | ');
+                          const basePrice = selectedVariant ? selectedVariant.price : selectedProduct.price;
+                          const displayName = selectedVariant ? `${selectedProduct.name} — ${selectedVariant.name}` : selectedProduct.name;
                           setCart([...cart, {
                             productId: selectedProduct.id,
-                            name: selectedProduct.name,
-                            price: selectedProduct.price + extrasPrice,
+                            variantId: selectedVariant?.id,
+                            name: displayName,
+                            price: basePrice + extrasPrice,
                             quantity: qty,
                             notes: fullNotes
                           }]);
                           setSelectedProduct(null);
+                          setSelectedVariant(null);
                           setQty(1);
                           setNotes("");
                           setSelectedExtras([]);
@@ -1119,7 +1162,7 @@ export default function TableMenuView() {
                           <ShoppingBag className="w-5 h-5" />
                           <span>Adicionar</span>
                         </div>
-                        <span className="text-base font-black">{fmt((selectedProduct.price + selectedExtras.reduce((s, e) => s + e.price, 0)) * qty)}</span>
+                        <span className="text-base font-black">{fmt(((selectedVariant ? selectedVariant.price : selectedProduct.price) + selectedExtras.reduce((s, e) => s + e.price, 0)) * qty)}</span>
                       </button>
                     </div>
                   </div>

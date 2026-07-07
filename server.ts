@@ -2173,7 +2173,17 @@ app.get("/api/admin/:tenantId/orders", requireAuth, async (req, res) => {
       orderBy: { createdAt: "desc" },
     });
 
-    res.json(orders);
+    // Pedidos de Delivery entregues (fora do PDV) ainda não têm venda lançada no caixa —
+    // marca `billed` a partir da existência de um CashMovement vinculado, pro PDV saber
+    // quais precisam ser faturados manualmente.
+    const billedMovements = await prisma.cashMovement.findMany({
+      where: { tenantId: tenant.id, orderId: { not: null } },
+      select: { orderId: true },
+    });
+    const billedOrderIds = new Set(billedMovements.map((m) => m.orderId));
+    const ordersWithBilled = orders.map((o) => ({ ...o, billed: billedOrderIds.has(o.id) }));
+
+    res.json(ordersWithBilled);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to fetch orders" });
@@ -4518,6 +4528,62 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Falha ao criar pedido PDV." });
+  }
+});
+
+// Fatura no caixa um pedido de Delivery que já foi marcado como entregue (fora do PDV,
+// pelo Painel de Pedidos) mas ainda não teve a venda lançada — o motoboy saiu, entregou,
+// e só agora o cliente paga em dinheiro/cartão/pix na porta. Registra o CashMovement e
+// grava a forma de pagamento no pedido, sem duplicar o pedido nem re-debitar estoque
+// (isso já aconteceu quando o status avançou para PREPARING/DELIVERED).
+app.post("/api/tenants/:slug/pdv/bill-order/:orderId", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "pos");
+  if (!tenant) return;
+
+  try {
+    const { paymentMethod, paymentMetadata, cardBrand, installments } = req.body;
+    const account = currentAccount(req);
+    const operatorName = req.body.operatorName || (req as AuthenticatedRequest).membership?.name || account?.name || undefined;
+
+    const order = await prisma.order.findFirst({ where: { id: req.params.orderId, tenantId: tenant.id } });
+    if (!order) return res.status(404).json({ error: "Pedido não encontrado." });
+    if (order.orderType !== "DELIVERY") return res.status(400).json({ error: "Este pedido não é de Delivery." });
+
+    const alreadyBilled = await prisma.cashMovement.findFirst({ where: { tenantId: tenant.id, orderId: order.id } });
+    if (alreadyBilled) return res.status(400).json({ error: "Este pedido já foi faturado." });
+
+    const currentCash = await prisma.cashRegister.findFirst({
+      where: { tenantId: tenant.id, status: "OPEN" },
+      orderBy: { openedAt: "desc" },
+    });
+    if (!currentCash) return res.status(400).json({ error: "Abra o caixa antes de faturar o pedido." });
+
+    const updatedOrder = await prisma.order.update({
+      where: { id: order.id },
+      data: {
+        paymentMethod: paymentMethod || "CASH",
+        paymentDetail: paymentMetadata ? JSON.stringify({ ...paymentMetadata, cardBrand, installments }) : order.paymentDetail,
+      },
+    });
+
+    const pmType = `PAYMENT_${paymentMethod || "CASH"}`;
+    await prisma.cashMovement.create({
+      data: {
+        cashRegisterId: currentCash.id,
+        tenantId: tenant.id,
+        type: pmType,
+        amount: order.total,
+        description: `Delivery #${order.id.slice(-6).toUpperCase()}`,
+        orderId: order.id,
+        operatorName: operatorName || null,
+      },
+    });
+
+    io.to(`tenant-${tenant.id}`).emit("order-status-updated", updatedOrder);
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao faturar pedido." });
   }
 });
 

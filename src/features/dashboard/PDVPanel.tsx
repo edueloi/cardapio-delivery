@@ -6,7 +6,7 @@ import {
   ChevronRight, ChevronDown, ArrowLeft,
   Utensils, Tag, User, Phone, Percent,
   Printer, Hash, AlertCircle, Smartphone, Lock, ExternalLink, Download, Zap,
-  MoreHorizontal, DoorOpen, DoorClosed, Maximize2, Minimize2, Split,
+  MoreHorizontal, DoorOpen, DoorClosed, Maximize2, Minimize2, Split, Truck,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import type { Tenant, Product, Order, PaymentConfig, PaymentMethodConfig, StoneConfig } from "../../types";
@@ -96,7 +96,7 @@ export default function PDVPanel({
     }
   };
 
-  const [activeTab, setActiveTab] = useState<"products" | "tables" | "comandas">(isWaiterMode ? "tables" : "products");
+  const [activeTab, setActiveTab] = useState<"products" | "tables" | "comandas" | "delivery">(isWaiterMode ? "tables" : "products");
   // Em telas menores que lg, o carrinho vira um painel deslizante aberto sob demanda
   // (por um botão flutuante), em vez de ficar sempre empilhado ocupando a tela.
   const [showCartDrawer, setShowCartDrawer] = useState(false);
@@ -115,6 +115,12 @@ export default function PDVPanel({
 
   // Modal de detalhes da mesa/comanda — mostrado antes de ir pro carrinho, ao clicar "Abrir"
   const [orderDetailsView, setOrderDetailsView] = useState<{ type: "table"; tableId: string } | { type: "comanda"; comanda: Order } | null>(null);
+
+  // Faturamento de pedidos de Delivery — chegam prontos/entregues pelo Painel de Pedidos
+  // (fora do PDV) mas o pagamento (dinheiro/cartão na entrega) ainda não foi lançado no caixa.
+  const [billingOrder, setBillingOrder] = useState<Order | null>(null);
+  const [billingPaymentMethod, setBillingPaymentMethod] = useState<"CASH" | "CREDIT" | "DEBIT" | "PIX" | "VR">("CASH");
+  const [isBilling, setIsBilling] = useState(false);
 
   // Customer
   const [customerName, setCustomerName] = useState("");
@@ -302,8 +308,7 @@ export default function PDVPanel({
   const CARD_BRANDS = useMemo(() => {
     const key = PAYMENT_CONFIG_KEY_MAP[paymentMethod];
     const cfg = key ? (paymentConfig[key] as any) : null;
-    if (cfg?.acceptedBrands?.length) return cfg.acceptedBrands as string[];
-    return ["Visa", "Mastercard", "Elo", "American Express", "Hipercard", "VR", "Sodexo", "Ticket", "Alelo"];
+    return (cfg?.acceptedBrands?.length ? cfg.acceptedBrands : []) as string[];
   }, [paymentConfig, paymentMethod]);
 
   const filteredProducts = useMemo(() => {
@@ -336,6 +341,13 @@ export default function PDVPanel({
 
   const activeComandas = useMemo(
     () => orders.filter((o) => o.orderType === "DINE_IN" && !["DELIVERED", "CANCELLED"].includes(o.status) && !o.tableId),
+    [orders]
+  );
+
+  // Delivery entregue mas ainda sem venda lançada no caixa (pagamento na entrega,
+  // fora do fluxo do PDV) — precisa ser faturado manualmente aqui.
+  const pendingDeliveryOrders = useMemo(
+    () => orders.filter((o) => o.orderType === "DELIVERY" && o.status === "DELIVERED" && !o.billed),
     [orders]
   );
 
@@ -449,6 +461,9 @@ export default function PDVPanel({
   // Cleanup stone polling on unmount
   useEffect(() => () => { if (stonePollRef.current) clearInterval(stonePollRef.current); }, []);
 
+  // Guarda a versão mais recente de handleCheckout (declarado abaixo) para o atalho F2 do checkout.
+  const handleCheckoutRef = useRef<() => void>(() => {});
+
   useEffect(() => {
     apiJson(`/api/tenants/${tenant.slug}/tables`)
       .then((data) => setRegisteredTables(Array.isArray(data) ? data as Array<{ id: string; label: string }> : []))
@@ -479,7 +494,11 @@ export default function PDVPanel({
 
       if (e.key === "F2") {
         e.preventDefault();
-        if (cart.length > 0 && currentCash && !showCheckout) setShowCheckout(true);
+        if (showCheckout) {
+          handleCheckoutRef.current?.();
+        } else if (cart.length > 0 && currentCash) {
+          setShowCheckout(true);
+        }
       } else if (e.key === "F4") {
         e.preventDefault();
         if (!showCheckout) discountInputRef.current?.focus();
@@ -635,6 +654,15 @@ export default function PDVPanel({
     }
   };
 
+  useEffect(() => {
+    handleCheckoutRef.current = () => {
+      if (isProcessing) return;
+      if (isSplitMode && (paymentSplits.length === 0 || splitRemaining > 0)) return;
+      if (paymentMethod === "CASH" && amountReceived !== "" && digitsToNumber(amountReceived) < total) return;
+      void handleCheckout();
+    };
+  }, [handleCheckout, isProcessing, isSplitMode, paymentSplits, splitRemaining, paymentMethod, amountReceived, total]);
+
   const handleStonePay = async (pendingOrderId: string) => {
     setStoneStatus("sending");
     try {
@@ -689,6 +717,7 @@ export default function PDVPanel({
     try { paymentDetail = order.paymentDetail ? JSON.parse(order.paymentDetail) : {}; } catch {}
     return {
       tenantName: tenant.name,
+      tenantAddress: tenant.address || undefined,
       orderId: order.id,
       createdAt: order.createdAt ? new Date(order.createdAt) : new Date(),
       customerName: order.customerName,
@@ -717,6 +746,38 @@ export default function PDVPanel({
   const handlePrintReceipt = () => {
     const data = buildReceiptData();
     if (!data) return;
+    const desktop = (window as any).pdvDesktop;
+    if (desktop?.printReceipt) {
+      desktop.printReceipt(data);
+    } else {
+      printReceiptPdf(data);
+    }
+  };
+
+  // Imprime o pedido ANTES de finalizar a venda, pro cliente conferir os itens
+  // e valores (sem dados de pagamento, que ainda não existem nesse momento).
+  const handlePrintPreCheckout = () => {
+    if (cart.length === 0) return;
+    const data = {
+      tenantName: tenant.name,
+      tenantAddress: tenant.address || undefined,
+      isPreCheckout: true,
+      customerName: customerName || (selectedTableId ? `Mesa ${selectedTableId}` : undefined),
+      items: cart.map((item) => ({
+        quantity: item.quantity,
+        name: item.product.name,
+        price: item.price,
+        notes: item.notes || undefined,
+      })),
+      subtotal,
+      discountAmount: discountAmount || undefined,
+      feeAmount: feeInfo.passToCustomer ? feeInfo.amount : undefined,
+      feePercent: feeInfo.passToCustomer ? feeInfo.percent : undefined,
+      feePassedToCustomer: feeInfo.passToCustomer,
+      serviceFeeAmount: serviceChargeAmount || undefined,
+      serviceFeePercent: serviceChargeChecked ? serviceChargeConfig?.percent : undefined,
+      total: finalTotal,
+    };
     const desktop = (window as any).pdvDesktop;
     if (desktop?.printReceipt) {
       desktop.printReceipt(data);
@@ -846,7 +907,7 @@ export default function PDVPanel({
 
         {/* Tabs */}
         <div className="flex bg-white border-b border-slate-100 px-3 gap-1 pt-2">
-          {(["products", "tables", "comandas"] as const).map((tab) => (
+          {(isWaiterMode ? (["products", "tables", "comandas"] as const) : (["products", "tables", "comandas", "delivery"] as const)).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -856,7 +917,7 @@ export default function PDVPanel({
                   : "border-transparent text-slate-400 hover:text-slate-600 hover:border-slate-200"
               }`}
             >
-              {tab === "products" ? "Produtos" : tab === "tables" ? "Mesas" : "Comandas"}
+              {tab === "products" ? "Produtos" : tab === "tables" ? "Mesas" : tab === "comandas" ? "Comandas" : "Delivery"}
               {tab === "tables" && checkoutRequests.length > 0 && (
                 <span className="absolute -top-1 right-1/4 w-4 h-4 bg-red-500 text-white text-[9px] flex items-center justify-center rounded-full">
                   {checkoutRequests.length}
@@ -865,6 +926,11 @@ export default function PDVPanel({
               {tab === "comandas" && activeComandas.length > 0 && (
                 <span className="absolute -top-1 right-1/4 w-4 h-4 bg-[#C9A227] text-black text-[9px] font-black flex items-center justify-center rounded-full">
                   {activeComandas.length}
+                </span>
+              )}
+              {tab === "delivery" && pendingDeliveryOrders.length > 0 && (
+                <span className="absolute -top-1 right-1/4 w-4 h-4 bg-red-500 text-white text-[9px] font-black flex items-center justify-center rounded-full">
+                  {pendingDeliveryOrders.length}
                 </span>
               )}
             </button>
@@ -1168,6 +1234,43 @@ export default function PDVPanel({
           </div>
         )}
 
+        {/* Delivery Tab — pedidos entregues fora do PDV, aguardando faturar */}
+        {activeTab === "delivery" && (
+          <div className="flex-1 overflow-y-auto p-6 custom-scrollbar bg-slate-50">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-xs font-black uppercase tracking-widest text-slate-400">Delivery Aguardando Faturar</h4>
+            </div>
+            <div
+              className="grid gap-2.5"
+              style={{ gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))" }}
+            >
+              {pendingDeliveryOrders.map((order) => (
+                <button
+                  key={order.id}
+                  onClick={() => { setBillingOrder(order); setBillingPaymentMethod("CASH"); }}
+                  className="bg-white p-3 rounded-xl border border-slate-100 hover:border-[#C9A227] hover:shadow-sm transition-all text-left flex items-center gap-2.5"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-600 flex items-center justify-center shrink-0">
+                    <Truck className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h4 className="text-xs font-black text-slate-800 truncate">{order.customerName}</h4>
+                    <p className="text-[10px] font-bold text-slate-400">
+                      {order.items.length} {order.items.length === 1 ? "item" : "itens"} · Entregue
+                    </p>
+                  </div>
+                  <span className="text-xs font-black text-[#C9A227] shrink-0">{fmt(order.total)}</span>
+                </button>
+              ))}
+              {pendingDeliveryOrders.length === 0 && (
+                <div className="col-span-full py-20 text-center opacity-30">
+                  <p className="text-sm font-black uppercase tracking-widest">Nenhum delivery aguardando faturar</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Barra de atalhos — desktop apenas (teclado físico) */}
         {!isWaiterMode && (
           <div className="hidden lg:flex items-center gap-1.5 px-3 py-2 border-t border-slate-100 bg-slate-50/60 shrink-0">
@@ -1230,7 +1333,7 @@ export default function PDVPanel({
       {/* ── Right: Order/Cart Panel ── */}
       <div className={`${
         showCartDrawer
-          ? "fixed inset-x-0 bottom-0 top-4 sm:inset-x-6 sm:inset-y-6 lg:static lg:inset-auto z-40 lg:z-auto"
+          ? "fixed flex inset-x-0 bottom-0 top-4 sm:inset-x-6 sm:inset-y-6 lg:static lg:inset-auto z-40 lg:z-auto"
           : "hidden lg:flex"
       } w-full sm:w-auto lg:w-[380px] xl:w-[420px] flex-col bg-[#0D1B3E] rounded-t-[2rem] sm:rounded-[2rem] lg:rounded-[2rem] text-white overflow-hidden shadow-2xl relative shrink-0`}>
         {/* Header */}
@@ -1747,41 +1850,126 @@ export default function PDVPanel({
         )}
       </AnimatePresence>
 
+      {/* ── Faturar Delivery Modal ── */}
+      <AnimatePresence>
+        {billingOrder && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }}
+              className="bg-white rounded-[2.5rem] p-8 w-full max-w-sm space-y-6 shadow-2xl"
+            >
+              <div className="text-center space-y-2">
+                <div className="w-16 h-16 rounded-2xl bg-blue-500/10 text-blue-600 flex items-center justify-center mx-auto mb-4">
+                  <Truck className="w-8 h-8" />
+                </div>
+                <h3 className="text-xl font-black text-slate-800 uppercase tracking-widest">Faturar Delivery</h3>
+                <p className="text-xs text-slate-400 font-bold uppercase">{billingOrder.customerName} · {fmt(billingOrder.total)}</p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-1">
+                  Como foi pago?
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { id: "CASH", label: "Dinheiro" },
+                    { id: "CREDIT", label: "Crédito" },
+                    { id: "DEBIT", label: "Débito" },
+                    { id: "PIX", label: "Pix" },
+                  ] as const).map((opt) => (
+                    <button
+                      key={opt.id}
+                      onClick={() => setBillingPaymentMethod(opt.id)}
+                      className={`py-3 rounded-xl text-xs font-black uppercase tracking-widest border-2 transition-all ${
+                        billingPaymentMethod === opt.id
+                          ? "border-[#C9A227] bg-[#C9A227]/10 text-[#0D1B3E]"
+                          : "border-slate-100 bg-slate-50 text-slate-400"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setBillingOrder(null)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-500 font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  disabled={isBilling}
+                  onClick={async () => {
+                    if (!billingOrder) return;
+                    setIsBilling(true);
+                    try {
+                      await apiJson(`/api/tenants/${tenant.slug}/pdv/bill-order/${billingOrder.id}`, {
+                        method: "POST",
+                        body: JSON.stringify({ paymentMethod: billingPaymentMethod, operatorName: operatorName || undefined }),
+                      });
+                      setBillingOrder(null);
+                      onOrderCreated?.();
+                    } catch (err) {
+                      console.error(err);
+                    } finally {
+                      setIsBilling(false);
+                    }
+                  }}
+                  className="bg-[#0D1B3E] hover:bg-slate-800 text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest transition-all disabled:opacity-50"
+                >
+                  {isBilling ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto" />
+                  ) : "Confirmar e Faturar"}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* ── Checkout Modal ── */}
       <AnimatePresence>
         {showCheckout && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-center justify-center sm:p-4"
+            className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-6"
           >
             <motion.div
-              initial={{ scale: 0.95, y: 20, opacity: 0 }}
-              animate={{ scale: 1, y: 0, opacity: 1 }}
-              exit={{ scale: 0.95, y: 20, opacity: 0 }}
-              className="bg-[#0D1B3E] w-full h-full sm:h-auto sm:max-w-5xl rounded-none sm:rounded-[2rem] shadow-2xl border-0 sm:border border-white/5 overflow-hidden flex flex-col md:flex-row sm:max-h-[90vh] relative"
+              initial={{ scale: 0.97, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.97, opacity: 0 }}
+              className="bg-[#0D1B3E] w-full h-full sm:w-[90vw] sm:h-[85vh] max-w-6xl rounded-[1.5rem] shadow-2xl border border-white/5 overflow-hidden flex flex-col relative"
             >
-              {/* Botão fechar — sempre visível, no canto do modal. Em mobile/tablet volta pro
-                  carrinho aberto em vez de fechar tudo, mantendo a pessoa no fluxo do pedido. */}
-              <button
-                onClick={() => { setShowCheckout(false); setShowCartDrawer(true); }}
-                title="Fechar"
-                className="absolute top-5 right-5 z-10 w-9 h-9 rounded-full bg-white/5 hover:bg-white/15 text-white/50 hover:text-white flex items-center justify-center transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-
-              {/* Left: Summary */}
-              <div className="w-full md:w-72 bg-black/20 p-6 flex flex-col border-r border-white/5 overflow-y-auto shrink-0">
+              {/* Header — título e botão cancelar sempre visíveis, fora da área de conteúdo,
+                  pra nunca competir por espaço com "Dividir Pagamento" ou outros controles. */}
+              <div className="flex items-center justify-between px-5 py-3 border-b border-white/5 shrink-0">
+                <span className="text-[10px] font-black uppercase text-white/30 tracking-[0.2em]">Pagamento</span>
                 <button
                   onClick={() => { setShowCheckout(false); setShowCartDrawer(true); }}
-                  className="flex items-center gap-2 text-white/40 hover:text-white transition-colors mb-5 group"
+                  title="Cancelar pagamento e voltar ao carrinho"
+                  className="flex items-center gap-1.5 pl-3 pr-3.5 py-1.5 rounded-full bg-red-500/15 hover:bg-red-500/25 border border-red-500/20 text-red-300 hover:text-red-200 transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span className="text-[10px] font-black uppercase tracking-widest">Cancelar</span>
+                </button>
+              </div>
+
+              <div className="flex-1 flex flex-col md:flex-row min-h-0">
+              {/* Left: Summary */}
+              <div className="w-full md:w-64 bg-black/20 p-4 flex flex-col border-r border-white/5 overflow-y-auto custom-scrollbar shrink-0">
+                <button
+                  onClick={() => { setShowCheckout(false); setShowCartDrawer(true); }}
+                  className="flex items-center gap-2 text-white/40 hover:text-white transition-colors mb-3 group"
                 >
                   <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">Cancelar</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest">Voltar ao Carrinho</span>
                 </button>
 
                 <p className="text-[10px] font-black uppercase text-white/40 tracking-[0.2em] mb-1">Resumo</p>
-                <h3 className="text-lg font-black text-white mb-4 truncate">
+                <h3 className="text-base font-black text-white mb-3 truncate">
                   {selectedTableId ? `Mesa ${selectedTableId}` : customerName || "Venda Balcão"}
                 </h3>
 
@@ -1831,14 +2019,22 @@ export default function PDVPanel({
                     <span className="text-2xl font-black text-white tabular-nums">{fmt(finalTotal)}</span>
                   </div>
                 </div>
+
+                <button
+                  onClick={handlePrintPreCheckout}
+                  className="mt-3 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/50 hover:text-white transition-colors text-[10px] font-black uppercase tracking-wide"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  Imprimir Pedido
+                </button>
               </div>
 
               {/* Right: Payment */}
               <div className="flex-1 flex flex-col min-h-0 min-w-0">
-              <div className="overflow-y-auto min-h-0 p-6 pt-14">
-                <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-6">
-                  {/* Payment methods */}
-                  <div className="space-y-2.5">
+              <div className="overflow-y-auto min-h-0 p-4 sm:p-5 custom-scrollbar">
+                <div className="space-y-3">
+                  {/* Payment methods — faixa horizontal compacta no topo */}
+                  <div className="space-y-1.5">
                     <div className="flex items-center justify-between gap-2 flex-wrap">
                       <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Forma de Pagamento</p>
                       {paymentMethod !== "STONE" && (
@@ -1891,95 +2087,116 @@ export default function PDVPanel({
                           <span className={`text-xs font-black tabular-nums ${splitRemaining > 0 ? "text-[#C9A227]" : "text-emerald-400"}`}>{fmt(splitRemaining)}</span>
                         </div>
                         {splitRemaining > 0 && (
-                          <button
-                            onClick={handleAddPaymentSplit}
-                            className="w-full flex items-center justify-center gap-1.5 bg-white/10 hover:bg-white/15 text-white py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition-colors"
-                          >
-                            <Plus className="w-3 h-3" />
-                            Adicionar {PAYMENT_METHODS.find((m) => m.id === paymentMethod)?.label} ({fmt(splitRemaining)})
-                          </button>
+                          <>
+                            <p className="text-[9px] font-black uppercase text-white/30 pt-1">Escolha a forma pra adicionar</p>
+                            <div className="grid grid-cols-4 gap-1.5">
+                              {PAYMENT_METHODS.filter((m) => m.id !== "STONE").map((method) => {
+                                const Icon = method.icon;
+                                const active = paymentMethod === method.id;
+                                return (
+                                  <button
+                                    key={method.id}
+                                    onClick={() => setPaymentMethod(method.id as any)}
+                                    className={`flex flex-col items-center gap-0.5 py-2 rounded-lg border transition-all ${
+                                      active
+                                        ? "bg-[#C9A227] border-[#C9A227]"
+                                        : "bg-white/5 border-white/10 hover:bg-white/10"
+                                    }`}
+                                  >
+                                    <Icon className={`w-3.5 h-3.5 ${active ? "text-black" : "text-white/60"}`} />
+                                    <span className={`text-[8px] font-black uppercase ${active ? "text-black" : "text-white/60"}`}>{method.label}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <button
+                              onClick={handleAddPaymentSplit}
+                              className="w-full flex items-center justify-center gap-1.5 bg-white/10 hover:bg-white/15 text-white py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition-colors"
+                            >
+                              <Plus className="w-3 h-3" />
+                              Adicionar {PAYMENT_METHODS.find((m) => m.id === paymentMethod)?.label} ({fmt(splitRemaining)})
+                            </button>
+                          </>
                         )}
                       </div>
                     )}
 
-                    <div className="space-y-1.5">
-                      {PAYMENT_METHODS.map((method) => {
-                        const Icon = method.icon;
-                        return (
-                          <button
-                            key={method.id}
-                            onClick={() => {
-                              setPaymentMethod(method.id as any);
-                              if (method.id !== "CASH") setAmountReceived("");
-                              if (method.id === "CASH") setCardBrand("");
-                            }}
-                            className={`flex items-center gap-3 p-2.5 rounded-xl border w-full transition-all ${
-                              paymentMethod === method.id
-                                ? "bg-[#C9A227] border-[#C9A227] shadow-lg shadow-[#C9A227]/20"
-                                : "bg-white/5 border-white/10 hover:bg-white/10"
-                            }`}
-                          >
-                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${paymentMethod === method.id ? "bg-white/20" : "bg-white/5"}`}>
-                              <Icon className="w-3.5 h-3.5 text-white" />
-                            </div>
-                            <div className="flex-1 text-left">
-                              <p className="text-[10px] font-black uppercase tracking-widest text-white">{method.label}</p>
-                              <p className="text-[9px] text-white/40 font-bold">{method.desc}</p>
-                            </div>
-                            {paymentMethod === method.id && <CheckCircle2 className="w-3.5 h-3.5 text-white shrink-0" />}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    {!isSplitMode && (
+                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-1.5">
+                        {PAYMENT_METHODS.map((method) => {
+                          const Icon = method.icon;
+                          const active = paymentMethod === method.id;
+                          return (
+                            <button
+                              key={method.id}
+                              onClick={() => {
+                                setPaymentMethod(method.id as any);
+                                if (method.id !== "CASH") setAmountReceived("");
+                                if (method.id === "CASH") setCardBrand("");
+                              }}
+                              className={`flex flex-col items-center justify-center gap-1 py-2.5 rounded-xl border transition-all ${
+                                active
+                                  ? "bg-[#C9A227] border-[#C9A227] shadow-lg shadow-[#C9A227]/20"
+                                  : "bg-white/5 border-white/10 hover:bg-white/10"
+                              }`}
+                            >
+                              <Icon className={`w-4 h-4 ${active ? "text-black" : "text-white/70"}`} />
+                              <span className={`text-[9px] font-black uppercase tracking-wide leading-none ${active ? "text-black" : "text-white/70"}`}>
+                                {method.label}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
 
-                  {/* Context panel */}
-                  <div className="space-y-2.5">
+                  {/* Context panel — some fora do modo split: cada parcela ali já trata valor
+                      e bandeira, então troco/parcelamento/PIX do método "solo" não se aplicam. */}
+                  {!isSplitMode && (
+                  <div className="space-y-1.5">
                     {paymentMethod === "CASH" && (
-                      <>
-                        <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Troco</p>
-                        <div className="bg-white/5 rounded-2xl p-4 border border-white/10 space-y-3">
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-black uppercase text-[#C9A227] tracking-widest ml-1">Valor Recebido</label>
-                            <div className="relative">
-                              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-black text-white/30">R$</span>
-                              <input
-                                type="text"
-                                inputMode="numeric"
-                                autoFocus
-                                value={formatCurrencyDigits(amountReceived)}
-                                onChange={(e) => setAmountReceived(maskCurrencyDigits(e.target.value))}
-                                placeholder="0,00"
-                                className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-base font-black text-white focus:border-[#C9A227] outline-none text-center [appearance:textfield]"
-                              />
-                            </div>
-                          </div>
-                          <div className="flex gap-1.5">
-                            {[total, Math.ceil(total / 10) * 10, Math.ceil(total / 50) * 50].filter((v, i, arr) => arr.indexOf(v) === i).slice(0, 3).map((v) => (
-                              <button
-                                key={v}
-                                type="button"
-                                onClick={() => setAmountReceived(numberToDigits(v))}
-                                className="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg py-1.5 text-[10px] font-black text-white/70 transition-colors"
-                              >
-                                {fmt(v)}
-                              </button>
-                            ))}
-                          </div>
-                          <div className="flex items-center justify-between pt-2 border-t border-white/10">
-                            <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Troco</p>
-                            <p className={`text-xl font-black tabular-nums ${change > 0 ? "text-green-400" : "text-white/20"}`}>
-                              {fmt(change)}
-                            </p>
+                      <div className="bg-white/5 rounded-2xl p-3 border border-white/10 space-y-2.5">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase text-[#C9A227] tracking-widest ml-1">Valor Recebido</label>
+                          <div className="relative">
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-black text-white/30">R$</span>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              autoFocus
+                              value={formatCurrencyDigits(amountReceived)}
+                              onChange={(e) => setAmountReceived(maskCurrencyDigits(e.target.value))}
+                              placeholder="0,00"
+                              className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-10 pr-4 text-base font-black text-white focus:border-[#C9A227] outline-none text-center [appearance:textfield]"
+                            />
                           </div>
                         </div>
-                      </>
+                        <div className="flex gap-1.5">
+                          {[total, Math.ceil(total / 10) * 10, Math.ceil(total / 50) * 50].filter((v, i, arr) => arr.indexOf(v) === i).slice(0, 3).map((v) => (
+                            <button
+                              key={v}
+                              type="button"
+                              onClick={() => setAmountReceived(numberToDigits(v))}
+                              className="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg py-1.5 text-[10px] font-black text-white/70 transition-colors"
+                            >
+                              {fmt(v)}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex items-center justify-between pt-2 border-t border-white/10">
+                          <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Troco</p>
+                          <p className={`text-xl font-black tabular-nums ${change > 0 ? "text-green-400" : "text-white/20"}`}>
+                            {fmt(change)}
+                          </p>
+                        </div>
+                      </div>
                     )}
 
                     {paymentMethod === "CREDIT" && (
-                      <>
+                      <div className="bg-white/5 rounded-2xl p-3 border border-white/10 space-y-2.5">
                         <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Parcelamento</p>
-                        <div className="grid grid-cols-3 gap-2 mb-3">
+                        <div className="grid grid-cols-3 gap-1.5">
                           {[1, 2, 3, 4, 5, 6].map((n) => (
                             <button
                               key={n}
@@ -1992,29 +2209,33 @@ export default function PDVPanel({
                             </button>
                           ))}
                         </div>
-                        <p className="text-[10px] font-black uppercase text-white/40 tracking-widest mb-2">Bandeira</p>
-                        <div className="grid grid-cols-2 gap-2">
-                          {CARD_BRANDS.map((brand) => (
-                            <button
-                              key={brand}
-                              onClick={() => setCardBrand(brand)}
-                              className={`p-2 rounded-xl border text-[10px] font-black uppercase transition-all ${
-                                cardBrand === brand
-                                  ? "bg-white text-[#0D1B3E] border-white"
-                                  : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
-                              }`}
-                            >
-                              {brand}
-                            </button>
-                          ))}
-                        </div>
-                      </>
+                        {CARD_BRANDS.length > 0 && (
+                          <>
+                            <p className="text-[10px] font-black uppercase text-white/40 tracking-widest pt-1">Bandeira</p>
+                            <div className="grid grid-cols-2 gap-1.5">
+                              {CARD_BRANDS.map((brand) => (
+                                <button
+                                  key={brand}
+                                  onClick={() => setCardBrand(brand)}
+                                  className={`p-2 rounded-xl border text-[10px] font-black uppercase transition-all ${
+                                    cardBrand === brand
+                                      ? "bg-white text-[#0D1B3E] border-white"
+                                      : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
+                                  }`}
+                                >
+                                  {brand}
+                                </button>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </div>
                     )}
 
-                    {paymentMethod === "DEBIT" && (
-                      <>
-                        <p className="text-[10px] font-black uppercase text-white/40 tracking-widest mb-2">Bandeira</p>
-                        <div className="grid grid-cols-2 gap-2">
+                    {paymentMethod === "DEBIT" && CARD_BRANDS.length > 0 && (
+                      <div className="bg-white/5 rounded-2xl p-3 border border-white/10 space-y-2.5">
+                        <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Bandeira</p>
+                        <div className="grid grid-cols-2 gap-1.5">
                           {CARD_BRANDS.map((brand) => (
                             <button
                               key={brand}
@@ -2029,13 +2250,13 @@ export default function PDVPanel({
                             </button>
                           ))}
                         </div>
-                      </>
+                      </div>
                     )}
 
-                    {paymentMethod === "VR" && (
-                      <>
-                        <p className="text-[10px] font-black uppercase text-white/40 tracking-widest mb-2">Bandeira VR</p>
-                        <div className="grid grid-cols-2 gap-2">
+                    {paymentMethod === "VR" && CARD_BRANDS.length > 0 && (
+                      <div className="bg-white/5 rounded-2xl p-3 border border-white/10 space-y-2.5">
+                        <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Bandeira VR</p>
+                        <div className="grid grid-cols-2 gap-1.5">
                           {CARD_BRANDS.map((brand) => (
                             <button
                               key={brand}
@@ -2050,17 +2271,17 @@ export default function PDVPanel({
                             </button>
                           ))}
                         </div>
-                      </>
+                      </div>
                     )}
 
                     {paymentMethod === "PIX" && (
-                      <div className="h-full flex flex-col items-center justify-center text-center space-y-4 bg-white/5 rounded-[1.5rem] border border-white/10 p-8">
-                        <div className="w-16 h-16 bg-[#C9A227]/10 rounded-full flex items-center justify-center animate-pulse">
-                          <QrCode className="w-8 h-8 text-[#C9A227]" />
+                      <div className="flex flex-col items-center justify-center text-center gap-2.5 bg-white/5 rounded-2xl border border-white/10 p-5">
+                        <div className="w-12 h-12 bg-[#C9A227]/10 rounded-full flex items-center justify-center animate-pulse">
+                          <QrCode className="w-6 h-6 text-[#C9A227]" />
                         </div>
                         <div>
                           <p className="text-sm font-black uppercase tracking-widest text-white">PIX</p>
-                          <p className="text-[10px] text-white/40 max-w-[160px] mx-auto mt-1">
+                          <p className="text-[10px] text-white/40 max-w-[200px] mx-auto mt-1">
                             Confirme o recebimento antes de finalizar.
                           </p>
                         </div>
@@ -2151,12 +2372,23 @@ export default function PDVPanel({
                       </div>
                     )}
                   </div>
+                  )}
                 </div>
               </div>
 
                 {/* Finalize button — sempre visível, fora da área rolável */}
                 {paymentMethod !== "STONE" || stoneStatus === "idle" ? (
-                  <div className="px-6 py-4 border-t border-white/5 shrink-0 bg-black/20">
+                  <div className="px-4 sm:px-6 py-3 border-t border-white/5 shrink-0 bg-black/20 space-y-2">
+                    {!isWaiterMode && (
+                      <div className="flex items-center justify-center gap-4 text-[9px] font-bold text-white/30">
+                        <span className="flex items-center gap-1.5">
+                          <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-white/50 font-black">F2</kbd> Finalizar venda
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-white/50 font-black">ESC</kbd> Cancelar
+                        </span>
+                      </div>
+                    )}
                     <button
                       disabled={
                         isProcessing ||
@@ -2164,7 +2396,7 @@ export default function PDVPanel({
                         (!isSplitMode && paymentMethod === "CASH" && amountReceived !== "" && digitsToNumber(amountReceived) < total)
                       }
                       onClick={handleCheckout}
-                      className="w-full bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-3.5 rounded-xl transition-all shadow-lg shadow-[#C9A227]/25 flex items-center justify-center gap-2.5 uppercase tracking-widest text-xs"
+                      className="w-full bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-3 rounded-xl transition-all shadow-lg shadow-[#C9A227]/25 flex items-center justify-center gap-2.5 uppercase tracking-widest text-xs"
                     >
                       {isProcessing ? (
                         <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
@@ -2179,6 +2411,7 @@ export default function PDVPanel({
                     </button>
                   </div>
                 ) : null}
+              </div>
               </div>
             </motion.div>
           </motion.div>

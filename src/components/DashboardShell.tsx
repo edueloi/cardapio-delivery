@@ -75,7 +75,7 @@ export default function DashboardShell({
   return (
     <div className={cn(
       "bg-[#F4F6FA] flex flex-col xl:flex-row font-sans relative",
-      hideHeader ? "h-screen overflow-hidden" : "min-h-screen"
+      hideHeader ? "h-screen h-[100dvh] overflow-hidden" : "min-h-screen"
     )}>
 
       {/* ══ MOBILE TOPBAR ══ */}
