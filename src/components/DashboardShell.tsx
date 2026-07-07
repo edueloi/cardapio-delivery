@@ -73,7 +73,10 @@ export default function DashboardShell({
   }, [isCollapsed]);
 
   return (
-    <div className="min-h-screen bg-[#F4F6FA] flex flex-col xl:flex-row font-sans relative">
+    <div className={cn(
+      "bg-[#F4F6FA] flex flex-col xl:flex-row font-sans relative",
+      hideHeader ? "h-screen overflow-hidden" : "min-h-screen"
+    )}>
 
       {/* ══ MOBILE TOPBAR ══ */}
       <div className="xl:hidden sticky top-0 z-40 bg-[#0A1628] border-b border-white/[0.07]">
@@ -297,7 +300,7 @@ export default function DashboardShell({
       </AnimatePresence>
 
       {/* ══ CONTEÚDO PRINCIPAL ══ */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
+      <main className={cn("flex-1 flex flex-col min-w-0 overflow-x-hidden", hideHeader && "min-h-0")}>
 
         {/* ══ DESKTOP TOPBAR ══ */}
         {!hideHeader && (
