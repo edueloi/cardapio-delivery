@@ -55,6 +55,7 @@ model Tenant {
   recurringEntries RecurringEntry[]
   kitchenSessions  KitchenSession[]
   kitchenStaff     KitchenStaff[]
+  kitchenAccessRequests KitchenAccessRequest[]
   wppMessageLogs   WppMessageLog[]
   inviteTokens     InviteToken[]
 
@@ -154,14 +155,18 @@ model AuthSession {
   @@map("auth_sessions")
 }
 
-// Funcionário com acesso ao painel de cozinha (/cozinha/:slug) — nome + senha própria,
-// cadastrado pelo dono. Convive com a senha única do tenant (kitchenPasswordHash):
-// quem souber a senha da loja entra como sessão anônima; quem tiver usuário aqui
-// entra identificado (nome aparece na tela para outros da equipe saberem quem está).
+// Funcionário com acesso ao painel de cozinha — nome + usuário + senha próprios,
+// cadastrado pelo dono (direto ou aprovando um KitchenAccessRequest). Convive com a
+// senha única do tenant (kitchenPasswordHash): quem souber a senha da loja entra
+// como sessão anônima; quem tiver usuário aqui entra identificado (nome aparece na
+// tela para outros da equipe saberem quem está). username é único no sistema
+// inteiro (não só por loja) — é ele que permite logar em cozinha.boxsys.com.br
+// sem informar o slug da loja na URL.
 model KitchenStaff {
   id           String   @id @default(cuid())
   tenantId     String   @map("tenant_id")
   name         String
+  username     String   @unique
   passwordHash String   @map("password_hash")
   active       Boolean  @default(true)
   createdAt    DateTime @default(now()) @map("created_at")
@@ -172,6 +177,27 @@ model KitchenStaff {
 
   @@unique([tenantId, name])
   @@map("kitchen_staff")
+}
+
+// Pedido de acesso à cozinha feito pelo próprio funcionário em cozinha.boxsys.com.br,
+// antes de ter usuário — informa nome, usuário desejado, a loja onde trabalha (por
+// nome/slug digitado) e um contato. Fica pendente até o dono aprovar (definindo a
+// senha) ou rejeitar pelo painel admin (aba Equipe da Cozinha).
+model KitchenAccessRequest {
+  id          String    @id @default(cuid())
+  name        String
+  username    String
+  storeQuery  String    @map("store_query") // texto digitado pelo funcionário para identificar a loja
+  contact     String?
+  tenantId    String?   @map("tenant_id")   // preenchido se a busca encontrou uma loja com esse nome/slug
+  status      String    @default("PENDING") @map("status") // PENDING, APPROVED, REJECTED
+  createdAt   DateTime  @default(now()) @map("created_at")
+  resolvedAt  DateTime? @map("resolved_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status])
+  @@map("kitchen_access_requests")
 }
 
 // Sessão do painel de cozinha (/cozinha/:slug) — login por senha simples da loja

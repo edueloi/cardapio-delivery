@@ -965,6 +965,41 @@ const migrations = [
     check: "SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'kitchen_sessions' AND CONSTRAINT_NAME = 'kitchen_sessions_kitchen_staff_id_fkey'",
     run: "ALTER TABLE kitchen_sessions ADD CONSTRAINT kitchen_sessions_kitchen_staff_id_fkey FOREIGN KEY (kitchen_staff_id) REFERENCES kitchen_staff(id) ON DELETE CASCADE ON UPDATE CASCADE",
   },
+  // ── Login da cozinha sem informar o slug (cozinha.boxsys.com.br): usuário único no
+  // sistema inteiro por KitchenStaff, e solicitação de acesso para quem ainda não tem conta ──
+  {
+    name: 'add_kitchen_staff_username',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'kitchen_staff' AND COLUMN_NAME = 'username'",
+    run: "ALTER TABLE kitchen_staff ADD COLUMN username VARCHAR(191) NULL",
+  },
+  {
+    name: 'backfill_kitchen_staff_username',
+    check: "SELECT id FROM kitchen_staff WHERE username IS NOT NULL LIMIT 1",
+    run: "UPDATE kitchen_staff SET username = CONCAT('staff_', id) WHERE username IS NULL",
+  },
+  {
+    name: 'add_kitchen_staff_username_unique',
+    check: "SELECT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'kitchen_staff' AND INDEX_NAME = 'kitchen_staff_username_key'",
+    run: "ALTER TABLE kitchen_staff ADD UNIQUE INDEX kitchen_staff_username_key (username)",
+  },
+  {
+    name: 'create_kitchen_access_requests_table',
+    check: "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'kitchen_access_requests'",
+    run: `CREATE TABLE kitchen_access_requests (
+      id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      name VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      username VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      store_query VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      contact VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
+      tenant_id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
+      status VARCHAR(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'PENDING',
+      created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      resolved_at DATETIME(3) NULL,
+      PRIMARY KEY (id),
+      INDEX kitchen_access_requests_tenant_id_status_idx (tenant_id, status),
+      CONSTRAINT kitchen_access_requests_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL ON UPDATE CASCADE
+    ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+  },
 ];
 
 async function run() {

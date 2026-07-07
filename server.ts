@@ -2295,7 +2295,10 @@ app.post("/api/tenants/:slug/ifood/webhook", async (req, res) => {
 // sem precisar de conta de staff. A sessão dura 1 ano (fica "sempre conectado").
 const KITCHEN_SESSION_TTL_DAYS = 365;
 
-async function requireKitchenAuth(req: express.Request, res: express.Response, slug: string) {
+// Resolve a sessão só pelo token, sem exigir slug — usado tanto pelas rotas
+// /api/kitchen/:slug/* (que ainda conferem o slug bate) quanto pelas rotas
+// /api/kitchen/global/* (cozinha.boxsys.com.br, sem slug na URL).
+async function requireKitchenAuthByToken(req: express.Request, res: express.Response) {
   const token = (req.headers["x-kitchen-token"] as string) || "";
   if (!token) {
     res.status(401).json({ error: "Sessão da cozinha expirada." });
@@ -2303,7 +2306,7 @@ async function requireKitchenAuth(req: express.Request, res: express.Response, s
   }
 
   const session = await prisma.kitchenSession.findUnique({ where: { token }, include: { tenant: true, kitchenStaff: true } });
-  if (!session || session.tenant.slug !== slug) {
+  if (!session) {
     res.status(401).json({ error: "Sessão da cozinha expirada." });
     return null;
   }
@@ -2315,6 +2318,116 @@ async function requireKitchenAuth(req: express.Request, res: express.Response, s
 
   return { tenant: session.tenant, staffName: session.kitchenStaff?.name ?? null };
 }
+
+async function requireKitchenAuth(req: express.Request, res: express.Response, slug: string) {
+  const auth = await requireKitchenAuthByToken(req, res);
+  if (!auth) return null;
+  if (auth.tenant.slug !== slug) {
+    res.status(401).json({ error: "Sessão da cozinha expirada." });
+    return null;
+  }
+  return auth;
+}
+
+// ── Rotas globais (sem slug na URL) — usadas em cozinha.boxsys.com.br ────────
+// IMPORTANTE: precisam vir ANTES das rotas /api/kitchen/:slug/* abaixo, senão o
+// Express casa "global" como se fosse um :slug (mesmo número de segmentos de URL)
+// e essas rotas nunca são alcançadas.
+
+// Login por username, único no sistema inteiro — resolve a loja automaticamente
+// a partir do funcionário logado. Quem ainda não tem usuário cadastrado precisa
+// passar por /api/kitchen/global/request-access.
+app.post("/api/kitchen/global/login", async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(401).json({ error: "Usuário ou senha incorretos." });
+
+  const staff = await prisma.kitchenStaff.findFirst({
+    where: { username: String(username).trim(), active: true },
+    include: { tenant: true },
+  });
+  if (!staff || !verifyPassword(String(password), staff.passwordHash)) {
+    return res.status(401).json({ error: "Usuário ou senha incorretos." });
+  }
+
+  const token = randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + KITCHEN_SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
+  await prisma.kitchenSession.create({ data: { tenantId: staff.tenantId, kitchenStaffId: staff.id, token, expiresAt } });
+
+  res.json({ token, staffName: staff.name, storeSlug: staff.tenant.slug });
+});
+
+// Pedido de acesso feito pelo próprio funcionário, sem estar logado — fica pendente
+// até o dono da loja (encontrada por nome/slug digitado) aprovar ou rejeitar.
+app.post("/api/kitchen/global/request-access", async (req, res) => {
+  const name = String(req.body?.name || "").trim();
+  const username = String(req.body?.username || "").trim();
+  const storeQuery = String(req.body?.storeQuery || "").trim();
+  const contact = req.body?.contact ? String(req.body.contact).trim() : null;
+
+  if (!name || !username || !storeQuery) {
+    return res.status(400).json({ error: "Preencha nome, usuário e o nome da loja." });
+  }
+
+  const existingUsername = await prisma.kitchenStaff.findUnique({ where: { username } });
+  if (existingUsername) {
+    return res.status(409).json({ error: "Esse usuário já está em uso. Escolha outro." });
+  }
+
+  const normalizedQuery = storeQuery.toLowerCase().replace(/\s+/g, "-");
+  const tenant = await prisma.tenant.findFirst({
+    where: { OR: [{ slug: normalizedQuery }, { name: { contains: storeQuery } }] },
+  });
+
+  const request = await prisma.kitchenAccessRequest.create({
+    data: { name, username, storeQuery, contact, tenantId: tenant?.id ?? null },
+  });
+
+  res.json({ id: request.id, matchedStore: tenant?.name ?? null });
+});
+
+app.post("/api/kitchen/global/logout", async (req, res) => {
+  const token = (req.headers["x-kitchen-token"] as string) || "";
+  if (token) await prisma.kitchenSession.deleteMany({ where: { token } }).catch(() => {});
+  res.json({ ok: true });
+});
+
+app.get("/api/kitchen/global/data", async (req, res) => {
+  const auth = await requireKitchenAuthByToken(req, res);
+  if (!auth) return;
+  const { tenant, staffName } = auth;
+
+  try {
+    const orders = await prisma.order.findMany({
+      where: { tenantId: tenant.id },
+      include: { items: { include: { product: true } } },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    });
+    res.json({ tenant, orders, staffName });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao buscar dados da cozinha." });
+  }
+});
+
+app.patch("/api/kitchen/global/orders/:id/status", async (req, res) => {
+  const auth = await requireKitchenAuthByToken(req, res);
+  if (!auth) return;
+  const { tenant } = auth;
+
+  const order = await prisma.order.findFirst({ where: { id: req.params.id, tenantId: tenant.id } });
+  if (!order) return res.status(404).json({ error: "Pedido não encontrado." });
+
+  try {
+    const updatedOrder = await updateOrderStatus(order.id, order.status, req.body.status);
+    res.json(updatedOrder);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to update order status" });
+  }
+});
+
+// ── Rotas por slug (/cozinha/:slug) ──────────────────────────────────────────
 
 // Login por funcionário cadastrado (nome + senha própria) — identifica quem está no tablet.
 app.post("/api/kitchen/:slug/login", async (req, res) => {
@@ -2428,10 +2541,57 @@ app.get("/api/admin/:tenantId/kitchen/staff", requireAuth, async (req, res) => {
 
   const staff = await prisma.kitchenStaff.findMany({
     where: { tenantId: tenant.id },
-    select: { id: true, name: true, active: true, createdAt: true },
+    select: { id: true, name: true, username: true, active: true, createdAt: true },
     orderBy: { createdAt: "asc" },
   });
   res.json(staff);
+});
+
+// ── Solicitações de acesso feitas em cozinha.boxsys.com.br, pendentes de aprovação ──
+app.get("/api/admin/:tenantId/kitchen/access-requests", requireAuth, async (req, res) => {
+  const tenant = await requireTenantById(req, res, req.params.tenantId, "kds");
+  if (!tenant) return;
+
+  const requests = await prisma.kitchenAccessRequest.findMany({
+    where: { tenantId: tenant.id, status: "PENDING" },
+    orderBy: { createdAt: "asc" },
+  });
+  res.json(requests);
+});
+
+app.post("/api/admin/:tenantId/kitchen/access-requests/:id/approve", requireAuth, async (req, res) => {
+  const tenant = await requireTenantById(req, res, req.params.tenantId, "kds");
+  if (!tenant) return;
+
+  const password = String(req.body?.password || "");
+  if (password.length < 4) return res.status(400).json({ error: "A senha deve ter pelo menos 4 caracteres." });
+
+  const request = await prisma.kitchenAccessRequest.findFirst({ where: { id: req.params.id, tenantId: tenant.id, status: "PENDING" } });
+  if (!request) return res.status(404).json({ error: "Solicitação não encontrada." });
+
+  try {
+    const staff = await prisma.kitchenStaff.create({
+      data: { tenantId: tenant.id, name: request.name, username: request.username, passwordHash: hashPassword(password) },
+      select: { id: true, name: true, username: true, active: true, createdAt: true },
+    });
+    await prisma.kitchenAccessRequest.update({ where: { id: request.id }, data: { status: "APPROVED", resolvedAt: new Date() } });
+    res.json(staff);
+  } catch (error: any) {
+    if (error.code === "P2002") return res.status(409).json({ error: "Esse usuário já está em uso por outra pessoa." });
+    console.error(error);
+    res.status(500).json({ error: "Falha ao aprovar solicitação." });
+  }
+});
+
+app.post("/api/admin/:tenantId/kitchen/access-requests/:id/reject", requireAuth, async (req, res) => {
+  const tenant = await requireTenantById(req, res, req.params.tenantId, "kds");
+  if (!tenant) return;
+
+  const request = await prisma.kitchenAccessRequest.findFirst({ where: { id: req.params.id, tenantId: tenant.id, status: "PENDING" } });
+  if (!request) return res.status(404).json({ error: "Solicitação não encontrada." });
+
+  await prisma.kitchenAccessRequest.update({ where: { id: request.id }, data: { status: "REJECTED", resolvedAt: new Date() } });
+  res.json({ success: true });
 });
 
 app.post("/api/admin/:tenantId/kitchen/staff", requireAuth, async (req, res) => {
@@ -2439,18 +2599,24 @@ app.post("/api/admin/:tenantId/kitchen/staff", requireAuth, async (req, res) => 
   if (!tenant) return;
 
   const name = String(req.body?.name || "").trim();
+  const username = String(req.body?.username || "").trim();
   const password = String(req.body?.password || "");
   if (!name) return res.status(400).json({ error: "Informe o nome do funcionário." });
+  if (!username) return res.status(400).json({ error: "Informe um usuário para o funcionário logar em cozinha.boxsys.com.br." });
   if (password.length < 4) return res.status(400).json({ error: "A senha deve ter pelo menos 4 caracteres." });
 
   try {
     const staff = await prisma.kitchenStaff.create({
-      data: { tenantId: tenant.id, name, passwordHash: hashPassword(password) },
-      select: { id: true, name: true, active: true, createdAt: true },
+      data: { tenantId: tenant.id, name, username, passwordHash: hashPassword(password) },
+      select: { id: true, name: true, username: true, active: true, createdAt: true },
     });
     res.json(staff);
   } catch (error: any) {
-    if (error.code === "P2002") return res.status(409).json({ error: "Já existe um funcionário com esse nome." });
+    if (error.code === "P2002") {
+      const target = Array.isArray(error.meta?.target) ? error.meta.target.join(",") : "";
+      if (target.includes("username")) return res.status(409).json({ error: "Esse usuário já está em uso por outra pessoa." });
+      return res.status(409).json({ error: "Já existe um funcionário com esse nome." });
+    }
     console.error(error);
     res.status(500).json({ error: "Falha ao cadastrar funcionário." });
   }

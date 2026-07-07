@@ -14,6 +14,7 @@ import LandingPage from "./pages/LandingPage";
 import PublicDashboard from "./features/public-dashboard";
 import PDVPage from "./pages/PDVPage";
 import KitchenDisplayPage from "./pages/KitchenDisplayPage";
+import KitchenGlobalPage from "./pages/KitchenGlobalPage";
 import SuperAdminPage from "./features/superadmin/SuperAdminPage";
 import CondominiumPage from "./features/condominium-view/CondominiumPage";
 import CounterMenuView from "./features/menu-view/CounterMenuView";
@@ -98,6 +99,8 @@ function AnimatedRoutes() {
 
           {/* Login próprio (senha da cozinha) — não usa o AuthGuard do dashboard */}
           <Route path="/cozinha/:slug" element={<KitchenDisplayPage />} />
+          {/* cozinha.boxsys.com.br: login global por usuário próprio, sem slug na URL */}
+          <Route path="/cozinha" element={<KitchenGlobalPage />} />
 
           <Route
             path="/:slug/mesa/:tableId"

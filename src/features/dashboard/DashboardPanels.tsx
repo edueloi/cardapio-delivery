@@ -1513,8 +1513,111 @@ function KitchenPasswordCard({ tenantId }: { tenantId: string }) {
 interface KitchenStaffMember {
   id: string;
   name: string;
+  username: string;
   active: boolean;
   createdAt: string;
+}
+
+interface KitchenAccessRequestItem {
+  id: string;
+  name: string;
+  username: string;
+  storeQuery: string;
+  contact: string | null;
+  createdAt: string;
+}
+
+function KitchenAccessRequestsCard({ tenantId, onApproved }: { tenantId: string; onApproved: () => void }) {
+  const toast = useToast();
+  const [requests, setRequests] = useState<KitchenAccessRequestItem[]>([]);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [approvePassword, setApprovePassword] = useState("");
+
+  const fetchRequests = () => {
+    apiJson<KitchenAccessRequestItem[]>(`/api/admin/${tenantId}/kitchen/access-requests`)
+      .then((data) => setRequests(Array.isArray(data) ? data : []))
+      .catch(() => setRequests([]));
+  };
+
+  useEffect(() => { fetchRequests(); }, [tenantId]);
+
+  const handleApprove = async (requestId: string) => {
+    if (approvePassword.length < 4) { toast.error("A senha deve ter pelo menos 4 caracteres."); return; }
+    try {
+      await apiFetch(`/api/admin/${tenantId}/kitchen/access-requests/${requestId}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: approvePassword }),
+      });
+      setApprovingId(null);
+      setApprovePassword("");
+      fetchRequests();
+      onApproved();
+      toast.success("Acesso aprovado!");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao aprovar solicitação.");
+    }
+  };
+
+  const handleReject = async (requestId: string) => {
+    try {
+      await apiFetch(`/api/admin/${tenantId}/kitchen/access-requests/${requestId}/reject`, { method: "POST" });
+      fetchRequests();
+      toast.success("Solicitação rejeitada.");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao rejeitar solicitação.");
+    }
+  };
+
+  if (requests.length === 0) return null;
+
+  return (
+    <ContentCard padding="lg">
+      <div className="flex items-center gap-3 mb-1">
+        <Bell className="w-4 h-4 text-amber-500" />
+        <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Solicitações de Acesso</p>
+        <span className="ml-auto text-[9px] font-black uppercase px-2 py-1 rounded-full bg-amber-100 text-amber-700">
+          {requests.length} pendente{requests.length > 1 ? "s" : ""}
+        </span>
+      </div>
+      <p className="text-[10px] text-slate-400 mb-6">
+        Pedidos de acesso feitos por funcionários direto em cozinha.boxsys.com.br. Aprove definindo uma senha,
+        ou rejeite se não reconhecer a pessoa.
+      </p>
+      <div className="space-y-2">
+        {requests.map((r) => (
+          <div key={r.id} className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-3">
+            <div className="flex items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-slate-700">{r.name} <span className="text-slate-400 font-normal">@{r.username}</span></p>
+                {r.contact && <p className="text-[10px] text-slate-400">Contato: {r.contact}</p>}
+              </div>
+              {approvingId !== r.id && (
+                <div className="flex items-center gap-3 shrink-0">
+                  <button onClick={() => { setApprovingId(r.id); setApprovePassword(""); }} className="text-[10px] font-black uppercase text-green-600 hover:text-green-700">Aprovar</button>
+                  <button onClick={() => handleReject(r.id)} className="text-[10px] font-black uppercase text-red-500 hover:text-red-600">Rejeitar</button>
+                </div>
+              )}
+            </div>
+            {approvingId === r.id && (
+              <div className="flex items-center gap-2 mt-3">
+                <input
+                  type="text"
+                  value={approvePassword}
+                  onChange={(e) => setApprovePassword(e.target.value)}
+                  placeholder="Defina a senha (mín. 4 caracteres)"
+                  autoFocus
+                  className="flex-1 bg-white border border-slate-200 rounded-lg py-1.5 px-3 text-xs font-bold outline-none focus:border-[#C9A227]"
+                />
+                <button onClick={() => handleApprove(r.id)} className="text-[10px] font-black uppercase text-green-600 hover:text-green-700 shrink-0">Confirmar</button>
+                <button onClick={() => { setApprovingId(null); setApprovePassword(""); }} className="text-[10px] font-black uppercase text-slate-400 hover:text-slate-600 shrink-0">Cancelar</button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </ContentCard>
+  );
 }
 
 function KitchenStaffCard({ tenantId }: { tenantId: string }) {
@@ -1522,6 +1625,7 @@ function KitchenStaffCard({ tenantId }: { tenantId: string }) {
   const [staff, setStaff] = useState<KitchenStaffMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -1538,15 +1642,16 @@ function KitchenStaffCard({ tenantId }: { tenantId: string }) {
 
   const handleCreate = async () => {
     if (!name.trim()) { toast.error("Informe o nome do funcionário."); return; }
+    if (!username.trim()) { toast.error("Informe um usuário (único no sistema)."); return; }
     if (password.length < 4) { toast.error("A senha deve ter pelo menos 4 caracteres."); return; }
     setSaving(true);
     try {
       await apiFetch(`/api/admin/${tenantId}/kitchen/staff`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), password }),
+        body: JSON.stringify({ name: name.trim(), username: username.trim(), password }),
       });
-      setName(""); setPassword("");
+      setName(""); setUsername(""); setPassword("");
       fetchStaff();
       toast.success("Funcionário cadastrado!");
     } catch (err: any) {
@@ -1603,8 +1708,9 @@ function KitchenStaffCard({ tenantId }: { tenantId: string }) {
         <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Equipe da Cozinha</p>
       </div>
       <p className="text-[10px] text-slate-400 mb-6">
-        Cadastre cada pessoa que trabalha na cozinha com nome e senha próprios — assim o app mostra
-        quem está com o pedido em mãos. Continua funcionando junto com a senha única acima.
+        Cadastre cada pessoa que trabalha na cozinha com nome, usuário e senha próprios — assim o app mostra
+        quem está com o pedido em mãos, e a pessoa consegue logar direto em <strong>cozinha.boxsys.com.br</strong> com
+        esse usuário (não precisa mais digitar o nome da loja). Continua funcionando junto com a senha única acima.
       </p>
 
       <div className="flex flex-col sm:flex-row gap-3 sm:items-end mb-6">
@@ -1615,6 +1721,16 @@ function KitchenStaffCard({ tenantId }: { tenantId: string }) {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Ex: João"
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm font-bold focus:border-[#C9A227] outline-none transition-all"
+          />
+        </div>
+        <div className="flex-1 space-y-1.5">
+          <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Usuário</label>
+          <input
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="Ex: joao.pizzaria"
             className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm font-bold focus:border-[#C9A227] outline-none transition-all"
           />
         </div>
@@ -1630,7 +1746,7 @@ function KitchenStaffCard({ tenantId }: { tenantId: string }) {
         </div>
         <button
           type="button"
-          disabled={saving || !name.trim() || !password}
+          disabled={saving || !name.trim() || !username.trim() || !password}
           onClick={handleCreate}
           className="bg-[#0D1B3E] hover:bg-slate-800 disabled:opacity-40 text-white px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all shrink-0"
         >
@@ -1647,7 +1763,10 @@ function KitchenStaffCard({ tenantId }: { tenantId: string }) {
           {staff.map((member) => (
             <div key={member.id} className="flex items-center gap-3 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3">
               <div className={`w-2 h-2 rounded-full shrink-0 ${member.active ? "bg-green-500" : "bg-slate-300"}`} />
-              <span className="text-sm font-bold text-slate-700 flex-1 truncate">{member.name}</span>
+              <div className="flex-1 min-w-0">
+                <span className="text-sm font-bold text-slate-700 truncate block">{member.name}</span>
+                <span className="text-[10px] text-slate-400">@{member.username}</span>
+              </div>
 
               {editingId === member.id ? (
                 <div className="flex items-center gap-2">
@@ -2051,6 +2170,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
             </ContentCard>
 
             {tenant?.id && <KitchenPasswordCard tenantId={tenant.id} />}
+            {tenant?.id && <KitchenAccessRequestsCard tenantId={tenant.id} onApproved={() => {}} />}
             {tenant?.id && <KitchenStaffCard tenantId={tenant.id} />}
 
           </motion.div>
