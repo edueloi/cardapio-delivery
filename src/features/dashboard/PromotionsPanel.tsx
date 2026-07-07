@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Plus, Trash2, Edit2, Image as ImageIcon, Star, ToggleLeft, ToggleRight, GripVertical, X, Check, ExternalLink } from "lucide-react";
 import { apiFetch, apiJson } from "../../lib/api";
-import { ConfirmModal } from "../../components";
+import { ConfirmModal, useToast } from "../../components";
 import type { Tenant, Product } from "../../types";
 
 interface Promotion {
@@ -36,6 +36,7 @@ const emptyForm = {
 };
 
 export default function PromotionsPanel({ tenant }: Props) {
+  const toast = useToast();
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -91,14 +92,26 @@ export default function PromotionsPanel({ tenant }: Props) {
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Imagem muito grande (máx. 5MB). Escolha um arquivo menor.");
+      return;
+    }
     setUploadingImage(true);
     try {
       const fd = new FormData();
       fd.append("file", file);
       const res = await apiFetch("/api/upload", { method: "POST", body: fd });
+      if (!res.ok) {
+        if (res.status === 413) throw new Error("Imagem muito grande (máx. 5MB).");
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Erro ao enviar imagem.");
+      }
       const data = await res.json();
       setForm(f => ({ ...f, imageUrl: data.url }));
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao enviar imagem");
     } finally {
       setUploadingImage(false);
     }

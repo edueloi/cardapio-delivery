@@ -4,7 +4,7 @@ import {
   Layers, ChevronDown, ChevronRight, Sparkles, Copy,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { Button, Modal, ModalFooter, Input, Switch, Badge } from "../../components";
+import { Button, Modal, ModalFooter, Input, Switch, Badge, useToast } from "../../components";
 import { apiFetch } from "../../lib/api";
 import type { Tenant, Category, ProductBundle, BundleStep } from "../../types";
 
@@ -245,6 +245,7 @@ interface Props { tenant: Tenant; }
 // ─── Main panel ──────────────────────────────────────────────────────────────
 
 export default function BundlesPanel({ tenant }: Props) {
+  const toast = useToast();
   const [bundles, setBundles] = useState<ProductBundle[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -353,12 +354,23 @@ export default function BundlesPanel({ tenant }: Props) {
   }
 
   async function uploadImage(file: File) {
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Imagem muito grande (máx. 5MB). Escolha um arquivo menor.");
+      return;
+    }
     setUploadingImg(true);
     try {
       const fd = new FormData(); fd.append("file", file);
       const r = await apiFetch("/api/upload", { method: "POST", body: fd });
+      if (!r.ok) {
+        if (r.status === 413) throw new Error("Imagem muito grande (máx. 5MB).");
+        const d = await r.json().catch(() => null);
+        throw new Error(d?.error || "Erro ao enviar imagem.");
+      }
       const d = await r.json();
       if (d.url) setForm(f => ({ ...f, imageUrl: d.url }));
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao enviar imagem");
     } finally { setUploadingImg(false); }
   }
 

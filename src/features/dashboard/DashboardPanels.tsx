@@ -84,6 +84,7 @@ import {
   ModalFooter,
   ConfirmModal,
   Input,
+  CurrencyInput,
   Select,
   Textarea,
   Switch,
@@ -783,13 +784,21 @@ export function StaffList({ tenant }: { tenant: Tenant | null }) {
 }
 
 // Componente de Upload de Imagem Reutilizável
+const MAX_UPLOAD_SIZE_MB = 5;
+
 function ImageUploader({ value, onChange, label, description }: { value: string, onChange: (val: string) => void, label: string, description?: string }) {
   const toast = useToast();
   const [uploading, setUploading] = useState(false);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = ""; // permite selecionar o mesmo arquivo de novo depois de um erro
     if (!file) return;
+
+    if (file.size > MAX_UPLOAD_SIZE_MB * 1024 * 1024) {
+      toast.error(`Imagem muito grande (máx. ${MAX_UPLOAD_SIZE_MB}MB). Escolha um arquivo menor.`);
+      return;
+    }
 
     setUploading(true);
     const formData = new FormData();
@@ -800,13 +809,18 @@ function ImageUploader({ value, onChange, label, description }: { value: string,
         method: 'POST',
         body: formData
       });
+      if (!res.ok) {
+        if (res.status === 413) throw new Error(`Imagem muito grande (máx. ${MAX_UPLOAD_SIZE_MB}MB).`);
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Erro ao enviar imagem.");
+      }
       const data = await res.json();
       if (data.url) {
         onChange(data.url);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error("Erro ao enviar imagem");
+      toast.error(err?.message || "Erro ao enviar imagem");
     } finally {
       setUploading(false);
     }
@@ -843,6 +857,9 @@ function ImageUploader({ value, onChange, label, description }: { value: string,
         <div className="flex-1 py-1">
            <p className="text-[10px] text-slate-400 font-medium italic leading-tight">
               {description || "Escolha uma imagem do seu dispositivo para carregar. Formatos aceitos: PNG, JPG, WEBP."}
+           </p>
+           <p className="text-[9px] text-slate-300 font-medium leading-tight mt-1">
+              Recomendado: imagem quadrada (ex: 500x500px), máximo {MAX_UPLOAD_SIZE_MB}MB.
            </p>
            {value && (
               <div className="mt-2 text-[9px] bg-green-50 text-green-600 font-black uppercase tracking-widest px-2 py-0.5 rounded-full w-fit flex items-center gap-1">
@@ -3931,7 +3948,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
         <div className="p-4 sm:p-5 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input label="Nome do produto" placeholder="Ex: Pastel de carne" value={prodForm.name} onChange={e => setProdForm({ ...prodForm, name: e.target.value })} />
-            <Input label="Preço base (R$)" placeholder="0,00" value={prodForm.price} onChange={e => setProdForm({ ...prodForm, price: e.target.value })} />
+            <CurrencyInput label="Preço base (R$)" value={prodForm.price} onChange={v => setProdForm({ ...prodForm, price: v })} />
           </div>
           <Input label="Descrição (opcional)" placeholder="Ingredientes, detalhes..." value={prodForm.description} onChange={e => setProdForm({ ...prodForm, description: e.target.value })} />
 
@@ -5267,8 +5284,8 @@ function InventoryItemModal({ tenant, item, categories, onClose, onSave, refresh
           <div className="rounded-xl border border-zinc-100 bg-zinc-50 p-3 space-y-3">
             <SectionHeader icon={CircleDollarSign} label="Financeiro" color="bg-emerald-500" />
             <div className="grid grid-cols-2 gap-2">
-              <Input label="Custo (R$)" size="sm" type="number" step="0.01" placeholder="0,00" value={form.purchasePrice} onChange={e => set("purchasePrice", e.target.value)} />
-              <Input label="Venda (R$)" size="sm" type="number" step="0.01" placeholder="0,00" value={form.sellingPrice} onChange={e => set("sellingPrice", e.target.value)} />
+              <CurrencyInput label="Custo (R$)" size="sm" value={form.purchasePrice} onChange={v => set("purchasePrice", v)} />
+              <CurrencyInput label="Venda (R$)" size="sm" value={form.sellingPrice} onChange={v => set("sellingPrice", v)} />
             </div>
             <div className="grid grid-cols-2 gap-2">
               <Input label="Compra" size="sm" type="date" value={form.purchaseDate} onChange={e => set("purchaseDate", e.target.value)} />

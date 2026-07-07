@@ -33,8 +33,13 @@ export default function CounterMenuView() {
   const [loading, setLoading] = useState(true);
   // "checkin" = formulário inicial | "menu" = cardápio/carrinho | "ticket" = senha exibida após pedido
   const [step, setStep] = useState<"checkin" | "menu" | "ticket">("checkin");
+  // Dentro do checkin: primeiro só o telefone. Se o cliente já existir, pula
+  // direto pro cardápio sem pedir mais nada; se não existir, pede nome+aniversário
+  // pra completar o cadastro antes de liberar o cardápio.
+  const [checkinPhase, setCheckinPhase] = useState<"phone" | "details">("phone");
   const [customer, setCustomer] = useState({ name: "", phone: "", birthday: "" });
   const [customerLookupLoading, setCustomerLookupLoading] = useState(false);
+  const [customerFound, setCustomerFound] = useState(false);
   const [cart, setCart] = useState<any[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [qty, setQty] = useState(1);
@@ -110,7 +115,8 @@ export default function CounterMenuView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cart, slug]);
 
-  // Busca cliente pelo telefone (rota pública, sem autenticação) para pré-popular o nome.
+  // Busca cliente pelo telefone (rota pública, sem autenticação). Se existir, pula
+  // direto pro cardápio; se não existir, pede nome+aniversário pra completar o cadastro.
   useEffect(() => {
     const digits = customer.phone.replace(/\D/g, "");
     if (digits.length < 10) return;
@@ -121,7 +127,12 @@ export default function CounterMenuView() {
       .then(data => {
         if (cancelled) return;
         if (data?.name) {
-          setCustomer(c => ({ ...c, name: c.name || data.name }));
+          setCustomer(c => ({ ...c, name: data.name }));
+          setCustomerFound(true);
+          setStep("menu");
+        } else {
+          setCustomerFound(false);
+          setCheckinPhase("details");
         }
       })
       .catch(() => {})
@@ -188,7 +199,14 @@ export default function CounterMenuView() {
 
   const handleCheckin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (customer.name && customer.phone) {
+    const digits = customer.phone.replace(/\D/g, "");
+    if (digits.length < 10) return;
+    // Fase telefone: a busca já roda no useEffect acima; se ainda estiver
+    // carregando ou o telefone acabou de mudar, só espera — o próprio efeito
+    // decide se pula pro cardápio (cliente existente) ou libera os campos de
+    // nome/aniversário (cliente novo). Se já estamos na fase de detalhes,
+    // confirma o cadastro e libera o cardápio.
+    if (checkinPhase === "details" && customer.name) {
       setStep("menu");
     }
   };
@@ -243,12 +261,12 @@ export default function CounterMenuView() {
 
   const handleNewOrder = () => {
     // Mantém nome/telefone preenchidos — é a mesma pessoa no mesmo tablet/balcão,
-    // só o pedido anterior (senha e carrinho) que precisa ser limpo.
+    // já identificada, então pula direto pro cardápio sem passar pelo checkin de novo.
     localStorage.removeItem(counterStorageKey);
     localStorage.removeItem(cartStorageKey);
     setTicketOrder(null);
     setCart([]);
-    setStep("checkin");
+    setStep(customer.phone ? "menu" : "checkin");
   };
 
   if (loading) return <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center"><Loader2 className="w-8 h-8 text-amber-500 animate-spin" /></div>;
@@ -296,6 +314,7 @@ export default function CounterMenuView() {
                   <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
                   <input
                     required
+                    autoFocus
                     value={customer.phone}
                     onChange={handlePhoneChange}
                     placeholder="(00) 00000-0000"
@@ -306,28 +325,37 @@ export default function CounterMenuView() {
                     <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-500/60 animate-spin" />
                   )}
                 </div>
-                <div className="relative">
-                  <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
-                  <input
-                    required
-                    value={customer.name}
-                    onChange={e => setCustomer({...customer, name: e.target.value})}
-                    placeholder="Seu Nome"
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white placeholder:text-white/20 focus:border-amber-500/50 focus:outline-none transition-all"
-                  />
-                </div>
-                <div className="relative">
-                  <Cake className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
-                  <input
-                    value={customer.birthday}
-                    onChange={e => setCustomer({...customer, birthday: e.target.value})}
-                    placeholder="Aniversário (opcional)"
-                    type="date"
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white placeholder:text-white/20 focus:border-amber-500/50 focus:outline-none transition-all [color-scheme:dark]"
-                  />
-                </div>
-                <button className="w-full bg-amber-500 hover:bg-amber-400 text-black font-black py-4 rounded-2xl transition-all shadow-xl shadow-amber-500/30 active:scale-95 uppercase tracking-widest text-xs">
-                  Ver Cardápio
+                {checkinPhase === "details" && !customerFound && (
+                  <>
+                    <p className="text-xs text-white/40 -mt-1">Não te encontramos — como podemos te chamar?</p>
+                    <div className="relative">
+                      <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
+                      <input
+                        required
+                        autoFocus
+                        value={customer.name}
+                        onChange={e => setCustomer({...customer, name: e.target.value})}
+                        placeholder="Seu Nome"
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white placeholder:text-white/20 focus:border-amber-500/50 focus:outline-none transition-all"
+                      />
+                    </div>
+                    <div className="relative">
+                      <Cake className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
+                      <input
+                        value={customer.birthday}
+                        onChange={e => setCustomer({...customer, birthday: e.target.value})}
+                        placeholder="Aniversário (opcional)"
+                        type="date"
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white placeholder:text-white/20 focus:border-amber-500/50 focus:outline-none transition-all [color-scheme:dark]"
+                      />
+                    </div>
+                  </>
+                )}
+                <button
+                  disabled={customerLookupLoading}
+                  className="w-full bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-black font-black py-4 rounded-2xl transition-all shadow-xl shadow-amber-500/30 active:scale-95 uppercase tracking-widest text-xs"
+                >
+                  {checkinPhase === "details" && !customerFound ? "Confirmar e Ver Cardápio" : "Continuar"}
                 </button>
               </form>
             </div>

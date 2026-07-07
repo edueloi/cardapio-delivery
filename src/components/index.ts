@@ -4,7 +4,7 @@ export { Modal, ModalFooter, ConfirmModal } from './Modal';
 export type { ModalProps } from './Modal';
 
 // ── Formulários ────────────────────────────────────────────────────────────
-export { Input, Textarea, Select } from './Input';
+export { Input, Textarea, Select, CurrencyInput } from './Input';
 export { Switch } from './Switch';
 export { DatePicker } from './DatePicker';
 export { Calendar } from './Calendar';

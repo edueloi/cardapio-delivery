@@ -126,6 +126,62 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
 
 Input.displayName = "Input";
 
+// ─── CurrencyInput ────────────────────────────────────────────────────────────
+// Campo de valor em reais com máscara "tipo caixa eletrônico": os dígitos
+// digitados entram sempre pela direita (centavos), then formata como 0,00.
+// `value`/`onChange` trabalham com string decimal (ex: "12.50"), igual a um
+// input number comum — só a exibição em tela é mascarada.
+interface CurrencyInputProps extends Omit<InputProps, "value" | "onChange" | "type"> {
+  value: string | number;
+  onChange: (value: string) => void;
+}
+
+function centsToDecimalString(cents: string): string {
+  const digitsOnly = cents.replace(/\D/g, "");
+  const num = Number(digitsOnly || "0") / 100;
+  return num.toFixed(2);
+}
+
+function decimalStringToDisplay(value: string | number): string {
+  const num = typeof value === "number" ? value : parseFloat(value);
+  if (!isFinite(num)) return "";
+  return num.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+export const CurrencyInput = React.forwardRef<HTMLInputElement, CurrencyInputProps>(
+  ({ value, onChange, addonLeft = "R$", ...props }, ref) => {
+    const [display, setDisplay] = React.useState(() => decimalStringToDisplay(value));
+
+    // Sincroniza quando o valor externo muda (ex: carregar produto para edição)
+    // sem sobrescrever enquanto o usuário está digitando.
+    const [focused, setFocused] = React.useState(false);
+    React.useEffect(() => {
+      if (!focused) setDisplay(decimalStringToDisplay(value));
+    }, [value, focused]);
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const decimal = centsToDecimalString(e.target.value);
+      setDisplay(decimalStringToDisplay(decimal));
+      onChange(decimal);
+    };
+
+    return (
+      <Input
+        ref={ref}
+        addonLeft={addonLeft}
+        inputMode="numeric"
+        value={display}
+        onChange={handleChange}
+        onFocus={(e) => { setFocused(true); props.onFocus?.(e); }}
+        onBlur={(e) => { setFocused(false); props.onBlur?.(e); }}
+        {...props}
+      />
+    );
+  }
+);
+
+CurrencyInput.displayName = "CurrencyInput";
+
 // ─── Textarea ─────────────────────────────────────────────────────────────────
 interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string;
