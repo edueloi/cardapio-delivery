@@ -1,0 +1,20 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0D1B3E"/>
+      <stop offset="100%" stop-color="#050a1c"/>
+    </linearGradient>
+    <linearGradient id="hat" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E8B93A"/>
+      <stop offset="100%" stop-color="#a3791a"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="220" fill="url(#bg)"/>
+  <g transform="translate(512 512)">
+    <circle r="330" fill="#C9A227" opacity="0.12"/>
+    <g transform="translate(-176 -176) scale(22)">
+      <path fill="url(#hat)" d="M12.75 3a.75.75 0 0 0-1.5 0v.816a5.501 5.501 0 0 0-4.478 5.42c-2.242.53-3.772 2.559-3.772 4.965v.049c0 .544.44.984.984.984h16.032a.984.984 0 0 0 .984-.984v-.049c0-2.406-1.53-4.435-3.772-4.965a5.501 5.501 0 0 0-4.478-5.42V3Z"/>
+      <path fill="#111826" d="M3.75 17.25a.75.75 0 0 0-.75.75v.75c0 .414.336.75.75.75h16.5a.75.75 0 0 0 .75-.75v-.75a.75.75 0 0 0-.75-.75H3.75Z"/>
+    </g>
+  </g>
+</svg>

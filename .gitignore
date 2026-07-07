@@ -11,3 +11,7 @@ coverage/
 public/downloads/*.exe
 public/downloads/*.dmg
 public/downloads/*.AppImage
+public/downloads/*.apk
+
+# Chave de assinatura do APK — nunca commitar (perder = quebra atualização do app instalado)
+android-keystore/

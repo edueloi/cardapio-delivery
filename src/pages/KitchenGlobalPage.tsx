@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChefHat, Lock, User, Store, Phone, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { ChefHat, Lock, User, Store, Phone, ArrowLeft, CheckCircle2, Download } from "lucide-react";
 import KitchenBoard from "./KitchenBoard";
 
 const TOKEN_KEY = "kitchen_global_token";
@@ -93,6 +93,14 @@ function KitchenGlobalLoginScreen({
         >
           Ainda não tenho acesso — solicitar ao admin da loja
         </button>
+        <a
+          href="/downloads/BoxSys-Cozinha.apk"
+          download
+          className="flex items-center justify-center gap-2 w-full py-3 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white text-[10px] font-black uppercase tracking-widest transition-all"
+        >
+          <Download className="w-3.5 h-3.5" />
+          Baixar app para tablet/celular (Android)
+        </a>
       </form>
     </div>
   );
