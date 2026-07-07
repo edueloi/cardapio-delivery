@@ -758,7 +758,10 @@ export default function PDVPanel({
             </div>
 
             {/* Product grid */}
-            <div className="flex-1 overflow-y-auto p-3 custom-scrollbar">
+            <div
+              className="flex-1 overflow-y-auto p-3 custom-scrollbar"
+              style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom, 0px) + 72px)" }}
+            >
               {filteredProducts.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full py-20 opacity-30">
                   <Package className="w-12 h-12 text-slate-400 mb-3" />
@@ -1117,13 +1120,19 @@ export default function PDVPanel({
                     <h4 className="text-xs font-bold truncate">{item.product.name}</h4>
                     <p className="text-[10px] font-bold text-white/40">{fmt(item.price)} un.</p>
                   </div>
-                  <div className="flex items-center gap-1.5 bg-black/20 rounded-lg px-1 py-1 shrink-0">
-                    <button onClick={() => updateQuantity(item.product.id, -1)} className="w-5 h-5 flex items-center justify-center rounded-md hover:bg-white/10 hover:text-[#C9A227] transition-colors">
-                      <Minus className="w-3 h-3" />
+                  <div className="flex items-center gap-1 bg-black/20 rounded-lg px-0.5 py-0.5 shrink-0">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); updateQuantity(item.product.id, -1); }}
+                      className="w-8 h-8 sm:w-5 sm:h-5 flex items-center justify-center rounded-md hover:bg-white/10 active:bg-white/20 hover:text-[#C9A227] transition-colors touch-manipulation"
+                    >
+                      <Minus className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
                     </button>
                     <span className="text-xs font-black w-5 text-center tabular-nums">{item.quantity}</span>
-                    <button onClick={() => updateQuantity(item.product.id, 1)} className="w-5 h-5 flex items-center justify-center rounded-md hover:bg-white/10 hover:text-[#C9A227] transition-colors">
-                      <Plus className="w-3 h-3" />
+                    <button
+                      onClick={(e) => { e.stopPropagation(); updateQuantity(item.product.id, 1); }}
+                      className="w-8 h-8 sm:w-5 sm:h-5 flex items-center justify-center rounded-md hover:bg-white/10 active:bg-white/20 hover:text-[#C9A227] transition-colors touch-manipulation"
+                    >
+                      <Plus className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
                     </button>
                   </div>
                   <span className="text-xs font-black tabular-nums text-[#C9A227] w-16 text-right shrink-0">
@@ -1242,7 +1251,7 @@ export default function PDVPanel({
               <button
                 disabled={cart.length === 0 || !currentCash}
                 title={!currentCash ? "Abra o caixa para receber pagamentos" : "Atalho: F2"}
-                onClick={() => setShowCheckout(true)}
+                onClick={() => { setShowCheckout(true); setShowCartDrawer(false); }}
                 className="relative bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-3 rounded-2xl transition-all shadow-xl shadow-[#C9A227]/20 flex items-center justify-center gap-2 uppercase tracking-widest text-[10px]"
               >
                 Pagar
@@ -1252,681 +1261,682 @@ export default function PDVPanel({
             )}
           </div>
         </div>
+      </div>
 
-        {/* ── Modal de Detalhes da Mesa/Comanda ── */}
-        <AnimatePresence>
-          {orderDetailsView && (() => {
-            const isTable = orderDetailsView.type === "table";
-            const title = isTable ? `Mesa ${orderDetailsView.tableId}` : dineInOrderLabel(orderDetailsView.comanda);
-            const relatedOrders = isTable
-              ? orders.filter((o) => o.tableId === orderDetailsView.tableId && o.status !== "CANCELLED" && o.status !== "DELIVERED")
-              : [orderDetailsView.comanda];
-            const detailItems: Array<{ key: string; name: string; quantity: number; price: number; notes: string }> = [];
-            relatedOrders.forEach((order) => {
-              order.items.forEach((item) => {
-                if (!item.product) return;
-                const existing = detailItems.find((i) => i.key === item.productId && i.notes === (item.notes || ""));
-                if (existing) existing.quantity += item.quantity;
-                else detailItems.push({ key: item.productId, name: item.product.name, quantity: item.quantity, price: item.price, notes: item.notes || "" });
-              });
+      {/* ── Modal de Detalhes da Mesa/Comanda ── */}
+      <AnimatePresence>
+      {orderDetailsView && (() => {
+          const isTable = orderDetailsView.type === "table";
+          const title = isTable ? `Mesa ${orderDetailsView.tableId}` : dineInOrderLabel(orderDetailsView.comanda);
+          const relatedOrders = isTable
+            ? orders.filter((o) => o.tableId === orderDetailsView.tableId && o.status !== "CANCELLED" && o.status !== "DELIVERED")
+            : [orderDetailsView.comanda];
+          const detailItems: Array<{ key: string; name: string; quantity: number; price: number; notes: string }> = [];
+          relatedOrders.forEach((order) => {
+            order.items.forEach((item) => {
+              if (!item.product) return;
+              const existing = detailItems.find((i) => i.key === item.productId && i.notes === (item.notes || ""));
+              if (existing) existing.quantity += item.quantity;
+              else detailItems.push({ key: item.productId, name: item.product.name, quantity: item.quantity, price: item.price, notes: item.notes || "" });
             });
-            const detailSubtotal = detailItems.reduce((acc, i) => acc + i.price * i.quantity, 0);
+          });
+          const detailSubtotal = detailItems.reduce((acc, i) => acc + i.price * i.quantity, 0);
 
-            return (
-              <motion.div
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
-              >
-                <motion.div
-                  initial={{ scale: 0.95, y: 20, opacity: 0 }}
-                  animate={{ scale: 1, y: 0, opacity: 1 }}
-                  exit={{ scale: 0.95, y: 20, opacity: 0 }}
-                  className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
-                >
-                  <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-                    <div>
-                      <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Detalhes</p>
-                      <h3 className="text-xl font-black text-slate-800">{title}</h3>
-                    </div>
-                    <button
-                      onClick={() => setOrderDetailsView(null)}
-                      className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-2">
-                    {detailItems.length === 0 ? (
-                      <p className="text-center text-xs text-slate-400 py-10">Nenhum item lançado ainda.</p>
-                    ) : (
-                      detailItems.map((item) => (
-                        <div key={item.key + item.notes} className="flex justify-between items-start text-sm border-b border-slate-50 pb-2.5">
-                          <div className="pr-3">
-                            <span className="font-bold text-slate-700">{item.quantity}x {item.name}</span>
-                            {item.notes && <p className="text-[11px] italic text-slate-400 mt-0.5">{item.notes}</p>}
-                          </div>
-                          <span className="font-black text-slate-800 whitespace-nowrap">{fmt(item.price * item.quantity)}</span>
-                        </div>
-                      ))
-                    )}
-                  </div>
-
-                  <div className="p-6 pt-4 border-t border-slate-100 bg-slate-50 space-y-4">
-                    <div className="flex justify-between items-center">
-                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total</span>
-                      <span className="text-2xl font-black text-slate-800">{fmt(detailSubtotal)}</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        onClick={() => isTable ? handleLoadTable(orderDetailsView.tableId) : handleLoadComanda(orderDetailsView.comanda)}
-                        className="bg-white border border-slate-200 hover:border-[#C9A227] text-slate-700 font-black py-3.5 rounded-2xl text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        Adicionar Itens
-                      </button>
-                      {!isWaiterMode && (
-                        <button
-                          disabled={detailItems.length === 0}
-                          onClick={() => handleGoToCheckoutFromDetails(orderDetailsView)}
-                          className="bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-3.5 rounded-2xl text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2"
-                        >
-                          Fechar Conta
-                          <ChevronRight className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
-              </motion.div>
-            );
-          })()}
-        </AnimatePresence>
-
-        {/* ── Comanda Modal ── */}
-        <AnimatePresence>
-          {showComandaModal && (
+          return (
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
             >
               <motion.div
-                initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }}
-                className="bg-white rounded-[2.5rem] p-8 w-full max-w-sm space-y-6 shadow-2xl"
-              >
-                <div className="text-center space-y-2">
-                  <div className="w-16 h-16 rounded-2xl bg-[#C9A227]/10 text-[#C9A227] flex items-center justify-center mx-auto mb-4">
-                    <Hash className="w-8 h-8" />
-                  </div>
-                  <h3 className="text-xl font-black text-slate-800 uppercase tracking-widest">Abrir Comanda</h3>
-                  <p className="text-xs text-slate-400 font-bold uppercase">Identifique o cliente ou o cartão</p>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-1">
-                    Número ou Nome
-                  </label>
-                  <input
-                    type="text"
-                    autoFocus
-                    value={comandaNumber}
-                    onChange={(e) => setComandaNumber(e.target.value)}
-                    placeholder="Ex: 05 ou João"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-6 text-xl font-black text-slate-800 focus:border-[#C9A227] outline-none text-center"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => setShowComandaModal(false)}
-                    className="bg-slate-100 hover:bg-slate-200 text-slate-500 font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest transition-all"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    disabled={!comandaNumber || isProcessing}
-                    onClick={async () => {
-                      setIsProcessing(true);
-                      try {
-                        await apiJson(`/api/tenants/${tenant.slug}/pdv/order`, {
-                          method: "POST",
-                          body: JSON.stringify({
-                            customerName: comandaNumber,
-                            customerPhone: "00000000000",
-                            orderType: "DINE_IN",
-                            paymentMethod: "CASH",
-                            operatorName: operatorName || undefined,
-                            items: cart.map((i) => ({ productId: i.product.id, quantity: i.quantity, price: i.price, notes: i.notes || undefined })),
-                            ...(isWaiterMode ? { source: "waiter" } : {}),
-                          }),
-                        });
-                        setCart([]);
-                        setComandaNumber("");
-                        setShowComandaModal(false);
-                        onOrderCreated?.();
-                      } catch (err) {
-                        console.error(err);
-                      } finally {
-                        setIsProcessing(false);
-                      }
-                    }}
-                    className="bg-[#0D1B3E] hover:bg-slate-800 text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest transition-all disabled:opacity-50"
-                  >
-                    {isProcessing ? (
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto" />
-                    ) : "Abrir / Lançar"}
-                  </button>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* ── Checkout Modal ── */}
-        <AnimatePresence>
-          {showCheckout && (
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-center justify-center p-4"
-            >
-              <motion.div
                 initial={{ scale: 0.95, y: 20, opacity: 0 }}
                 animate={{ scale: 1, y: 0, opacity: 1 }}
                 exit={{ scale: 0.95, y: 20, opacity: 0 }}
-                className="bg-[#0D1B3E] w-full max-w-3xl rounded-[2rem] shadow-2xl border border-white/5 overflow-hidden flex flex-col md:flex-row max-h-[85vh] relative"
+                className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
               >
-                {/* Botão fechar — sempre visível, no canto do modal */}
-                <button
-                  onClick={() => setShowCheckout(false)}
-                  title="Fechar"
-                  className="absolute top-5 right-5 z-10 w-9 h-9 rounded-full bg-white/5 hover:bg-white/15 text-white/50 hover:text-white flex items-center justify-center transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-
-                {/* Left: Summary */}
-                <div className="w-full md:w-72 bg-black/20 p-6 flex flex-col border-r border-white/5 overflow-y-auto shrink-0">
+                <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Detalhes</p>
+                    <h3 className="text-xl font-black text-slate-800">{title}</h3>
+                  </div>
                   <button
-                    onClick={() => setShowCheckout(false)}
-                    className="flex items-center gap-2 text-white/40 hover:text-white transition-colors mb-5 group"
+                    onClick={() => setOrderDetailsView(null)}
+                    className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors"
                   >
-                    <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-                    <span className="text-[10px] font-black uppercase tracking-widest">Cancelar</span>
+                    <X className="w-4 h-4" />
                   </button>
-
-                  <p className="text-[10px] font-black uppercase text-white/40 tracking-[0.2em] mb-1">Resumo</p>
-                  <h3 className="text-lg font-black text-white mb-4 truncate">
-                    {selectedTableId ? `Mesa ${selectedTableId}` : customerName || "Venda Balcão"}
-                  </h3>
-
-                  <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar pr-1">
-                    {cart.map((item) => (
-                      <div key={item.product.id} className="flex justify-between text-xs border-b border-white/5 pb-2">
-                        <span className="text-white/70 truncate mr-2">
-                          {item.quantity}x {item.product.name}
-                          {item.notes && <span className="text-[10px] italic text-white/30 block">{item.notes}</span>}
-                        </span>
-                        <span className="font-black text-white whitespace-nowrap">{fmt(item.price * item.quantity)}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="mt-4 pt-4 border-t border-white/10 space-y-1.5">
-                    <div className="flex justify-between text-xs text-white/40">
-                      <span>Subtotal</span><span className="tabular-nums">{fmt(subtotal)}</span>
-                    </div>
-                    {discountAmount > 0 && (
-                      <div className="flex justify-between text-xs text-green-400">
-                        <span>Desconto</span><span className="tabular-nums">-{fmt(discountAmount)}</span>
-                      </div>
-                    )}
-                    {feeInfo.amount > 0 && (
-                      <div className="flex justify-between text-xs text-amber-400">
-                        <span>Taxa maquininha ({feeInfo.percent.toFixed(2).replace(".", ",")}%){feeInfo.passToCustomer ? "" : " — absorvida"}</span>
-                        <span className="tabular-nums">{feeInfo.passToCustomer ? "+" : ""}{fmt(feeInfo.amount)}</span>
-                      </div>
-                    )}
-                    {!!serviceChargeConfig?.enabled && (
-                      <label className="flex items-center justify-between text-xs text-[#C9A227] cursor-pointer gap-2">
-                        <span className="flex items-center gap-1.5">
-                          <input
-                            type="checkbox"
-                            checked={serviceChargeChecked}
-                            onChange={(e) => setServiceChargeChecked(e.target.checked)}
-                            className="w-3.5 h-3.5 rounded accent-[#C9A227]"
-                          />
-                          Taxa de serviço ({(serviceChargeConfig.percent || 0).toFixed(0)}%)
-                        </span>
-                        <span className="tabular-nums">{serviceChargeAmount > 0 ? `+${fmt(serviceChargeAmount)}` : fmt(0)}</span>
-                      </label>
-                    )}
-                    <div className="flex justify-between pt-2 mt-1 border-t border-white/10">
-                      <span className="text-[10px] font-black uppercase text-[#C9A227] tracking-widest self-end">Total</span>
-                      <span className="text-2xl font-black text-white tabular-nums">{fmt(finalTotal)}</span>
-                    </div>
-                  </div>
                 </div>
 
-                {/* Right: Payment */}
-                <div className="flex-1 flex flex-col min-h-0 min-w-0">
-                <div className="overflow-y-auto min-h-0 p-6 pt-14">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    {/* Payment methods */}
-                    <div className="space-y-2.5">
-                      <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Forma de Pagamento</p>
-                      <div className="space-y-1.5">
-                        {PAYMENT_METHODS.map((method) => {
-                          const Icon = method.icon;
-                          return (
-                            <button
-                              key={method.id}
-                              onClick={() => {
-                                setPaymentMethod(method.id as any);
-                                if (method.id !== "CASH") setAmountReceived("");
-                                if (method.id === "CASH") setCardBrand("");
-                              }}
-                              className={`flex items-center gap-3 p-2.5 rounded-xl border w-full transition-all ${
-                                paymentMethod === method.id
-                                  ? "bg-[#C9A227] border-[#C9A227] shadow-lg shadow-[#C9A227]/20"
-                                  : "bg-white/5 border-white/10 hover:bg-white/10"
-                              }`}
-                            >
-                              <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${paymentMethod === method.id ? "bg-white/20" : "bg-white/5"}`}>
-                                <Icon className="w-3.5 h-3.5 text-white" />
-                              </div>
-                              <div className="flex-1 text-left">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-white">{method.label}</p>
-                                <p className="text-[9px] text-white/40 font-bold">{method.desc}</p>
-                              </div>
-                              {paymentMethod === method.id && <CheckCircle2 className="w-3.5 h-3.5 text-white shrink-0" />}
-                            </button>
-                          );
-                        })}
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-2">
+                  {detailItems.length === 0 ? (
+                    <p className="text-center text-xs text-slate-400 py-10">Nenhum item lançado ainda.</p>
+                  ) : (
+                    detailItems.map((item) => (
+                      <div key={item.key + item.notes} className="flex justify-between items-start text-sm border-b border-slate-50 pb-2.5">
+                        <div className="pr-3">
+                          <span className="font-bold text-slate-700">{item.quantity}x {item.name}</span>
+                          {item.notes && <p className="text-[11px] italic text-slate-400 mt-0.5">{item.notes}</p>}
+                        </div>
+                        <span className="font-black text-slate-800 whitespace-nowrap">{fmt(item.price * item.quantity)}</span>
                       </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="p-6 pt-4 border-t border-slate-100 bg-slate-50 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total</span>
+                    <span className="text-2xl font-black text-slate-800">{fmt(detailSubtotal)}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => isTable ? handleLoadTable(orderDetailsView.tableId) : handleLoadComanda(orderDetailsView.comanda)}
+                      className="bg-white border border-slate-200 hover:border-[#C9A227] text-slate-700 font-black py-3.5 rounded-2xl text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Adicionar Itens
+                    </button>
+                    {!isWaiterMode && (
+                      <button
+                        disabled={detailItems.length === 0}
+                        onClick={() => handleGoToCheckoutFromDetails(orderDetailsView)}
+                        className="bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-3.5 rounded-2xl text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                      >
+                        Fechar Conta
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          );
+        })()}
+      </AnimatePresence>
+
+      {/* ── Comanda Modal ── */}
+      <AnimatePresence>
+        {showComandaModal && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }}
+              className="bg-white rounded-[2.5rem] p-8 w-full max-w-sm space-y-6 shadow-2xl"
+            >
+              <div className="text-center space-y-2">
+                <div className="w-16 h-16 rounded-2xl bg-[#C9A227]/10 text-[#C9A227] flex items-center justify-center mx-auto mb-4">
+                  <Hash className="w-8 h-8" />
+                </div>
+                <h3 className="text-xl font-black text-slate-800 uppercase tracking-widest">Abrir Comanda</h3>
+                <p className="text-xs text-slate-400 font-bold uppercase">Identifique o cliente ou o cartão</p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-1">
+                  Número ou Nome
+                </label>
+                <input
+                  type="text"
+                  autoFocus
+                  value={comandaNumber}
+                  onChange={(e) => setComandaNumber(e.target.value)}
+                  placeholder="Ex: 05 ou João"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-6 text-xl font-black text-slate-800 focus:border-[#C9A227] outline-none text-center"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setShowComandaModal(false)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-500 font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  disabled={!comandaNumber || isProcessing}
+                  onClick={async () => {
+                    setIsProcessing(true);
+                    try {
+                      await apiJson(`/api/tenants/${tenant.slug}/pdv/order`, {
+                        method: "POST",
+                        body: JSON.stringify({
+                          customerName: comandaNumber,
+                          customerPhone: "00000000000",
+                          orderType: "DINE_IN",
+                          paymentMethod: "CASH",
+                          operatorName: operatorName || undefined,
+                          items: cart.map((i) => ({ productId: i.product.id, quantity: i.quantity, price: i.price, notes: i.notes || undefined })),
+                          ...(isWaiterMode ? { source: "waiter" } : {}),
+                        }),
+                      });
+                      setCart([]);
+                      setComandaNumber("");
+                      setShowComandaModal(false);
+                      onOrderCreated?.();
+                    } catch (err) {
+                      console.error(err);
+                    } finally {
+                      setIsProcessing(false);
+                    }
+                  }}
+                  className="bg-[#0D1B3E] hover:bg-slate-800 text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest transition-all disabled:opacity-50"
+                >
+                  {isProcessing ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto" />
+                  ) : "Abrir / Lançar"}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Checkout Modal ── */}
+      <AnimatePresence>
+        {showCheckout && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-center justify-center sm:p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 20, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.95, y: 20, opacity: 0 }}
+              className="bg-[#0D1B3E] w-full h-full sm:h-auto sm:max-w-3xl rounded-none sm:rounded-[2rem] shadow-2xl border-0 sm:border border-white/5 overflow-hidden flex flex-col md:flex-row sm:max-h-[85vh] relative"
+            >
+              {/* Botão fechar — sempre visível, no canto do modal. Em mobile/tablet volta pro
+                  carrinho aberto em vez de fechar tudo, mantendo a pessoa no fluxo do pedido. */}
+              <button
+                onClick={() => { setShowCheckout(false); setShowCartDrawer(true); }}
+                title="Fechar"
+                className="absolute top-5 right-5 z-10 w-9 h-9 rounded-full bg-white/5 hover:bg-white/15 text-white/50 hover:text-white flex items-center justify-center transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              {/* Left: Summary */}
+              <div className="w-full md:w-72 bg-black/20 p-6 flex flex-col border-r border-white/5 overflow-y-auto shrink-0">
+                <button
+                  onClick={() => { setShowCheckout(false); setShowCartDrawer(true); }}
+                  className="flex items-center gap-2 text-white/40 hover:text-white transition-colors mb-5 group"
+                >
+                  <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                  <span className="text-[10px] font-black uppercase tracking-widest">Cancelar</span>
+                </button>
+
+                <p className="text-[10px] font-black uppercase text-white/40 tracking-[0.2em] mb-1">Resumo</p>
+                <h3 className="text-lg font-black text-white mb-4 truncate">
+                  {selectedTableId ? `Mesa ${selectedTableId}` : customerName || "Venda Balcão"}
+                </h3>
+
+                <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar pr-1">
+                  {cart.map((item) => (
+                    <div key={item.product.id} className="flex justify-between text-xs border-b border-white/5 pb-2">
+                      <span className="text-white/70 truncate mr-2">
+                        {item.quantity}x {item.product.name}
+                        {item.notes && <span className="text-[10px] italic text-white/30 block">{item.notes}</span>}
+                      </span>
+                      <span className="font-black text-white whitespace-nowrap">{fmt(item.price * item.quantity)}</span>
                     </div>
+                  ))}
+                </div>
 
-                    {/* Context panel */}
-                    <div className="space-y-2.5">
-                      {paymentMethod === "CASH" && (
-                        <>
-                          <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Troco</p>
-                          <div className="bg-white/5 rounded-2xl p-4 border border-white/10 space-y-3">
-                            <div className="space-y-1">
-                              <label className="text-[10px] font-black uppercase text-[#C9A227] tracking-widest ml-1">Valor Recebido</label>
-                              <div className="relative">
-                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl font-black text-white/30">R$</span>
-                                <input
-                                  type="text"
-                                  inputMode="numeric"
-                                  autoFocus
-                                  value={formatCurrencyDigits(amountReceived)}
-                                  onChange={(e) => setAmountReceived(maskCurrencyDigits(e.target.value))}
-                                  placeholder="0,00"
-                                  className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 pl-11 pr-4 text-xl font-black text-white focus:border-[#C9A227] outline-none text-center [appearance:textfield]"
-                                />
-                              </div>
+                <div className="mt-4 pt-4 border-t border-white/10 space-y-1.5">
+                  <div className="flex justify-between text-xs text-white/40">
+                    <span>Subtotal</span><span className="tabular-nums">{fmt(subtotal)}</span>
+                  </div>
+                  {discountAmount > 0 && (
+                    <div className="flex justify-between text-xs text-green-400">
+                      <span>Desconto</span><span className="tabular-nums">-{fmt(discountAmount)}</span>
+                    </div>
+                  )}
+                  {feeInfo.amount > 0 && (
+                    <div className="flex justify-between text-xs text-amber-400">
+                      <span>Taxa maquininha ({feeInfo.percent.toFixed(2).replace(".", ",")}%){feeInfo.passToCustomer ? "" : " — absorvida"}</span>
+                      <span className="tabular-nums">{feeInfo.passToCustomer ? "+" : ""}{fmt(feeInfo.amount)}</span>
+                    </div>
+                  )}
+                  {!!serviceChargeConfig?.enabled && (
+                    <label className="flex items-center justify-between text-xs text-[#C9A227] cursor-pointer gap-2">
+                      <span className="flex items-center gap-1.5">
+                        <input
+                          type="checkbox"
+                          checked={serviceChargeChecked}
+                          onChange={(e) => setServiceChargeChecked(e.target.checked)}
+                          className="w-3.5 h-3.5 rounded accent-[#C9A227]"
+                        />
+                        Taxa de serviço ({(serviceChargeConfig.percent || 0).toFixed(0)}%)
+                      </span>
+                      <span className="tabular-nums">{serviceChargeAmount > 0 ? `+${fmt(serviceChargeAmount)}` : fmt(0)}</span>
+                    </label>
+                  )}
+                  <div className="flex justify-between pt-2 mt-1 border-t border-white/10">
+                    <span className="text-[10px] font-black uppercase text-[#C9A227] tracking-widest self-end">Total</span>
+                    <span className="text-2xl font-black text-white tabular-nums">{fmt(finalTotal)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right: Payment */}
+              <div className="flex-1 flex flex-col min-h-0 min-w-0">
+              <div className="overflow-y-auto min-h-0 p-6 pt-14">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  {/* Payment methods */}
+                  <div className="space-y-2.5">
+                    <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Forma de Pagamento</p>
+                    <div className="space-y-1.5">
+                      {PAYMENT_METHODS.map((method) => {
+                        const Icon = method.icon;
+                        return (
+                          <button
+                            key={method.id}
+                            onClick={() => {
+                              setPaymentMethod(method.id as any);
+                              if (method.id !== "CASH") setAmountReceived("");
+                              if (method.id === "CASH") setCardBrand("");
+                            }}
+                            className={`flex items-center gap-3 p-2.5 rounded-xl border w-full transition-all ${
+                              paymentMethod === method.id
+                                ? "bg-[#C9A227] border-[#C9A227] shadow-lg shadow-[#C9A227]/20"
+                                : "bg-white/5 border-white/10 hover:bg-white/10"
+                            }`}
+                          >
+                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${paymentMethod === method.id ? "bg-white/20" : "bg-white/5"}`}>
+                              <Icon className="w-3.5 h-3.5 text-white" />
                             </div>
-                            <div className="flex gap-1.5">
-                              {[total, Math.ceil(total / 10) * 10, Math.ceil(total / 50) * 50].filter((v, i, arr) => arr.indexOf(v) === i).slice(0, 3).map((v) => (
-                                <button
-                                  key={v}
-                                  type="button"
-                                  onClick={() => setAmountReceived(numberToDigits(v))}
-                                  className="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg py-1.5 text-[10px] font-black text-white/70 transition-colors"
-                                >
-                                  {fmt(v)}
-                                </button>
-                              ))}
+                            <div className="flex-1 text-left">
+                              <p className="text-[10px] font-black uppercase tracking-widest text-white">{method.label}</p>
+                              <p className="text-[9px] text-white/40 font-bold">{method.desc}</p>
                             </div>
-                            <div className="flex items-center justify-between pt-2 border-t border-white/10">
-                              <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Troco</p>
-                              <p className={`text-xl font-black tabular-nums ${change > 0 ? "text-green-400" : "text-white/20"}`}>
-                                {fmt(change)}
-                              </p>
+                            {paymentMethod === method.id && <CheckCircle2 className="w-3.5 h-3.5 text-white shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Context panel */}
+                  <div className="space-y-2.5">
+                    {paymentMethod === "CASH" && (
+                      <>
+                        <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Troco</p>
+                        <div className="bg-white/5 rounded-2xl p-4 border border-white/10 space-y-3">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black uppercase text-[#C9A227] tracking-widest ml-1">Valor Recebido</label>
+                            <div className="relative">
+                              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl font-black text-white/30">R$</span>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                autoFocus
+                                value={formatCurrencyDigits(amountReceived)}
+                                onChange={(e) => setAmountReceived(maskCurrencyDigits(e.target.value))}
+                                placeholder="0,00"
+                                className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 pl-11 pr-4 text-xl font-black text-white focus:border-[#C9A227] outline-none text-center [appearance:textfield]"
+                              />
                             </div>
                           </div>
-                        </>
-                      )}
-
-                      {paymentMethod === "CREDIT" && (
-                        <>
-                          <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Parcelamento</p>
-                          <div className="grid grid-cols-3 gap-2 mb-3">
-                            {[1, 2, 3, 4, 5, 6].map((n) => (
+                          <div className="flex gap-1.5">
+                            {[total, Math.ceil(total / 10) * 10, Math.ceil(total / 50) * 50].filter((v, i, arr) => arr.indexOf(v) === i).slice(0, 3).map((v) => (
                               <button
-                                key={n}
-                                onClick={() => setInstallments(n)}
-                                className={`py-2 rounded-xl text-[11px] font-black transition-all ${
-                                  installments === n ? "bg-[#C9A227] text-black" : "bg-white/5 border border-white/10 text-white/60 hover:bg-white/10"
-                                }`}
+                                key={v}
+                                type="button"
+                                onClick={() => setAmountReceived(numberToDigits(v))}
+                                className="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg py-1.5 text-[10px] font-black text-white/70 transition-colors"
                               >
-                                {n}x {n === 1 ? "à vista" : fmt(total / n)}
+                                {fmt(v)}
                               </button>
                             ))}
                           </div>
-                          <p className="text-[10px] font-black uppercase text-white/40 tracking-widest mb-2">Bandeira</p>
-                          <div className="grid grid-cols-2 gap-2">
-                            {CARD_BRANDS.map((brand) => (
-                              <button
-                                key={brand}
-                                onClick={() => setCardBrand(brand)}
-                                className={`p-2 rounded-xl border text-[10px] font-black uppercase transition-all ${
-                                  cardBrand === brand
-                                    ? "bg-white text-[#0D1B3E] border-white"
-                                    : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
-                                }`}
-                              >
-                                {brand}
-                              </button>
-                            ))}
-                          </div>
-                        </>
-                      )}
-
-                      {paymentMethod === "DEBIT" && (
-                        <>
-                          <p className="text-[10px] font-black uppercase text-white/40 tracking-widest mb-2">Bandeira</p>
-                          <div className="grid grid-cols-2 gap-2">
-                            {CARD_BRANDS.map((brand) => (
-                              <button
-                                key={brand}
-                                onClick={() => setCardBrand(brand)}
-                                className={`p-2 rounded-xl border text-[10px] font-black uppercase transition-all ${
-                                  cardBrand === brand
-                                    ? "bg-white text-[#0D1B3E] border-white"
-                                    : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
-                                }`}
-                              >
-                                {brand}
-                              </button>
-                            ))}
-                          </div>
-                        </>
-                      )}
-
-                      {paymentMethod === "VR" && (
-                        <>
-                          <p className="text-[10px] font-black uppercase text-white/40 tracking-widest mb-2">Bandeira VR</p>
-                          <div className="grid grid-cols-2 gap-2">
-                            {CARD_BRANDS.map((brand) => (
-                              <button
-                                key={brand}
-                                onClick={() => setCardBrand(brand)}
-                                className={`p-2 rounded-xl border text-[10px] font-black uppercase transition-all ${
-                                  cardBrand === brand
-                                    ? "bg-white text-[#0D1B3E] border-white"
-                                    : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
-                                }`}
-                              >
-                                {brand}
-                              </button>
-                            ))}
-                          </div>
-                        </>
-                      )}
-
-                      {paymentMethod === "PIX" && (
-                        <div className="h-full flex flex-col items-center justify-center text-center space-y-4 bg-white/5 rounded-[1.5rem] border border-white/10 p-8">
-                          <div className="w-16 h-16 bg-[#C9A227]/10 rounded-full flex items-center justify-center animate-pulse">
-                            <QrCode className="w-8 h-8 text-[#C9A227]" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-black uppercase tracking-widest text-white">PIX</p>
-                            <p className="text-[10px] text-white/40 max-w-[160px] mx-auto mt-1">
-                              Confirme o recebimento antes de finalizar.
+                          <div className="flex items-center justify-between pt-2 border-t border-white/10">
+                            <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Troco</p>
+                            <p className={`text-xl font-black tabular-nums ${change > 0 ? "text-green-400" : "text-white/20"}`}>
+                              {fmt(change)}
                             </p>
                           </div>
                         </div>
-                      )}
+                      </>
+                    )}
 
-                      {paymentMethod === "STONE" && (
-                        <div className="space-y-4">
-                          {stoneStatus === "idle" && (
-                            <>
-                              <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Tipo de pagamento</p>
-                              <div className="grid grid-cols-3 gap-2">
-                                {(["credit", "debit", "pix"] as const).map((t) => (
-                                  <button
-                                    key={t}
-                                    onClick={() => setStonePaymentType(t)}
-                                    className={`py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                                      stonePaymentType === t
-                                        ? "bg-[#C9A227] text-black"
-                                        : "bg-white/5 border border-white/10 text-white/60 hover:bg-white/10"
-                                    }`}
-                                  >
-                                    {t === "credit" ? "Crédito" : t === "debit" ? "Débito" : "PIX"}
-                                  </button>
-                                ))}
-                              </div>
-                              <div className="bg-white/5 rounded-2xl border border-white/10 p-4 flex items-start gap-3">
-                                <Smartphone className="w-5 h-5 text-[#C9A227] shrink-0 mt-0.5" />
-                                <p className="text-[10px] text-white/50 leading-relaxed">
-                                  O valor será enviado para a maquininha Stone. O cliente paga na maquinha e o sistema confirma automaticamente.
-                                </p>
-                              </div>
-                            </>
-                          )}
-
-                          {stoneStatus === "sending" && (
-                            <div className="flex flex-col items-center justify-center gap-4 py-8">
-                              <div className="w-12 h-12 border-2 border-[#C9A227] border-t-transparent rounded-full animate-spin" />
-                              <p className="text-[11px] font-black uppercase tracking-widest text-white/60">Enviando para maquininha...</p>
-                            </div>
-                          )}
-
-                          {stoneStatus === "waiting" && (
-                            <div className="flex flex-col items-center justify-center gap-4 py-6 text-center">
-                              <div className="w-16 h-16 bg-[#C9A227]/10 rounded-full flex items-center justify-center">
-                                <Smartphone className="w-8 h-8 text-[#C9A227] animate-pulse" />
-                              </div>
-                              <div>
-                                <p className="text-sm font-black uppercase tracking-widest text-white">Aguardando pagamento</p>
-                                <p className="text-[10px] text-white/40 mt-1">O cliente deve pagar na maquininha agora.</p>
-                              </div>
-                              <div className="flex items-center gap-2 text-[10px] text-white/30">
-                                <div className="w-1.5 h-1.5 bg-[#C9A227] rounded-full animate-pulse" />
-                                Verificando a cada 5 segundos...
-                              </div>
-                              <button
-                                onClick={() => { setStoneStatus("idle"); if (stonePollRef.current) clearInterval(stonePollRef.current); }}
-                                className="text-[10px] font-black text-red-400/60 hover:text-red-400 uppercase tracking-widest transition-colors mt-2"
-                              >
-                                Cancelar
-                              </button>
-                            </div>
-                          )}
-
-                          {stoneStatus === "paid" && (
-                            <div className="flex flex-col items-center justify-center gap-4 py-8 text-center">
-                              <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center">
-                                <CheckCircle2 className="w-8 h-8 text-green-400" />
-                              </div>
-                              <p className="text-sm font-black uppercase tracking-widest text-green-400">Pagamento confirmado!</p>
-                            </div>
-                          )}
-
-                          {stoneStatus === "failed" && (
-                            <div className="flex flex-col items-center justify-center gap-4 py-6 text-center">
-                              <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center">
-                                <AlertCircle className="w-8 h-8 text-red-400" />
-                              </div>
-                              <p className="text-sm font-black uppercase tracking-widest text-red-400">Pagamento falhou</p>
-                              <button
-                                onClick={() => setStoneStatus("idle")}
-                                className="text-[10px] font-black text-white/40 hover:text-white uppercase tracking-widest border border-white/10 px-4 py-2 rounded-xl transition-colors"
-                              >
-                                Tentar novamente
-                              </button>
-                            </div>
-                          )}
+                    {paymentMethod === "CREDIT" && (
+                      <>
+                        <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Parcelamento</p>
+                        <div className="grid grid-cols-3 gap-2 mb-3">
+                          {[1, 2, 3, 4, 5, 6].map((n) => (
+                            <button
+                              key={n}
+                              onClick={() => setInstallments(n)}
+                              className={`py-2 rounded-xl text-[11px] font-black transition-all ${
+                                installments === n ? "bg-[#C9A227] text-black" : "bg-white/5 border border-white/10 text-white/60 hover:bg-white/10"
+                              }`}
+                            >
+                              {n}x {n === 1 ? "à vista" : fmt(total / n)}
+                            </button>
+                          ))}
                         </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
+                        <p className="text-[10px] font-black uppercase text-white/40 tracking-widest mb-2">Bandeira</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {CARD_BRANDS.map((brand) => (
+                            <button
+                              key={brand}
+                              onClick={() => setCardBrand(brand)}
+                              className={`p-2 rounded-xl border text-[10px] font-black uppercase transition-all ${
+                                cardBrand === brand
+                                  ? "bg-white text-[#0D1B3E] border-white"
+                                  : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
+                              }`}
+                            >
+                              {brand}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
 
-                  {/* Finalize button — sempre visível, fora da área rolável */}
-                  {paymentMethod !== "STONE" || stoneStatus === "idle" ? (
-                    <div className="px-6 py-4 border-t border-white/5 shrink-0 bg-black/20">
-                      <button
-                        disabled={
-                          isProcessing ||
-                          (paymentMethod === "CASH" && amountReceived !== "" && digitsToNumber(amountReceived) < total)
-                        }
-                        onClick={handleCheckout}
-                        className="w-full bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-3.5 rounded-xl transition-all shadow-lg shadow-[#C9A227]/25 flex items-center justify-center gap-2.5 uppercase tracking-widest text-xs"
-                      >
-                        {isProcessing ? (
-                          <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                        ) : (
+                    {paymentMethod === "DEBIT" && (
+                      <>
+                        <p className="text-[10px] font-black uppercase text-white/40 tracking-widest mb-2">Bandeira</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {CARD_BRANDS.map((brand) => (
+                            <button
+                              key={brand}
+                              onClick={() => setCardBrand(brand)}
+                              className={`p-2 rounded-xl border text-[10px] font-black uppercase transition-all ${
+                                cardBrand === brand
+                                  ? "bg-white text-[#0D1B3E] border-white"
+                                  : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
+                              }`}
+                            >
+                              {brand}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+
+                    {paymentMethod === "VR" && (
+                      <>
+                        <p className="text-[10px] font-black uppercase text-white/40 tracking-widest mb-2">Bandeira VR</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {CARD_BRANDS.map((brand) => (
+                            <button
+                              key={brand}
+                              onClick={() => setCardBrand(brand)}
+                              className={`p-2 rounded-xl border text-[10px] font-black uppercase transition-all ${
+                                cardBrand === brand
+                                  ? "bg-white text-[#0D1B3E] border-white"
+                                  : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
+                              }`}
+                            >
+                              {brand}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+
+                    {paymentMethod === "PIX" && (
+                      <div className="h-full flex flex-col items-center justify-center text-center space-y-4 bg-white/5 rounded-[1.5rem] border border-white/10 p-8">
+                        <div className="w-16 h-16 bg-[#C9A227]/10 rounded-full flex items-center justify-center animate-pulse">
+                          <QrCode className="w-8 h-8 text-[#C9A227]" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-black uppercase tracking-widest text-white">PIX</p>
+                          <p className="text-[10px] text-white/40 max-w-[160px] mx-auto mt-1">
+                            Confirme o recebimento antes de finalizar.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {paymentMethod === "STONE" && (
+                      <div className="space-y-4">
+                        {stoneStatus === "idle" && (
                           <>
-                            {paymentMethod === "STONE" ? "Enviar para Maquininha" : "Finalizar Venda"}
-                            {paymentMethod === "STONE" ? <Smartphone className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
+                            <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Tipo de pagamento</p>
+                            <div className="grid grid-cols-3 gap-2">
+                              {(["credit", "debit", "pix"] as const).map((t) => (
+                                <button
+                                  key={t}
+                                  onClick={() => setStonePaymentType(t)}
+                                  className={`py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                                    stonePaymentType === t
+                                      ? "bg-[#C9A227] text-black"
+                                      : "bg-white/5 border border-white/10 text-white/60 hover:bg-white/10"
+                                  }`}
+                                >
+                                  {t === "credit" ? "Crédito" : t === "debit" ? "Débito" : "PIX"}
+                                </button>
+                              ))}
+                            </div>
+                            <div className="bg-white/5 rounded-2xl border border-white/10 p-4 flex items-start gap-3">
+                              <Smartphone className="w-5 h-5 text-[#C9A227] shrink-0 mt-0.5" />
+                              <p className="text-[10px] text-white/50 leading-relaxed">
+                                O valor será enviado para a maquininha Stone. O cliente paga na maquinha e o sistema confirma automaticamente.
+                              </p>
+                            </div>
                           </>
                         )}
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
 
-        {/* ── Abrir Caixa Modal ── */}
-        <AnimatePresence>
-          {showOpenCashModal && (
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-center justify-center p-4"
-            >
-              <motion.div
-                initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }}
-                className="bg-[#0D1B3E] w-full max-w-sm rounded-[1.75rem] sm:rounded-[2rem] p-5 sm:p-8 space-y-5 sm:space-y-6 shadow-2xl border border-white/5 max-h-[90vh] overflow-y-auto"
-              >
-                <div className="text-center space-y-2">
-                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto">
-                    <Banknote className="w-6 h-6 sm:w-7 sm:h-7" />
-                  </div>
-                  <h3 className="text-base sm:text-lg font-black text-white uppercase tracking-widest">Abrir Caixa</h3>
-                  <p className="text-xs text-white/40">Informe o valor em dinheiro disponível para o fundo de troco.</p>
-                </div>
-                {cashError && (
-                  <div className="bg-red-500/10 border border-red-500/20 text-red-300 text-xs font-bold rounded-xl px-4 py-2.5 text-center">
-                    {cashError}
-                  </div>
-                )}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-white/40">Fundo de Caixa</label>
-                  <div className="relative">
-                    <span className="absolute left-4 sm:left-5 top-1/2 -translate-y-1/2 text-lg sm:text-2xl font-black text-white/30">R$</span>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      autoFocus
-                      value={formatCurrencyDigits(openingBalanceInput)}
-                      onChange={(e) => setOpeningBalanceInput(maskCurrencyDigits(e.target.value))}
-                      placeholder="0,00"
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 sm:py-4 pl-11 sm:pl-14 pr-4 sm:pr-5 text-xl sm:text-2xl font-black text-white text-center focus:border-emerald-400 outline-none [appearance:textfield]"
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => { setShowOpenCashModal(false); setCashError(""); }}
-                    className="bg-white/5 hover:bg-white/10 text-white/60 font-black py-3.5 rounded-2xl text-[10px] uppercase tracking-widest transition-all"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    disabled={cashActionLoading}
-                    onClick={handleOpenCash}
-                    className="bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-black py-3.5 rounded-2xl text-[10px] uppercase tracking-widest transition-all"
-                  >
-                    {cashActionLoading ? "Abrindo..." : "Abrir Caixa"}
-                  </button>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+                        {stoneStatus === "sending" && (
+                          <div className="flex flex-col items-center justify-center gap-4 py-8">
+                            <div className="w-12 h-12 border-2 border-[#C9A227] border-t-transparent rounded-full animate-spin" />
+                            <p className="text-[11px] font-black uppercase tracking-widest text-white/60">Enviando para maquininha...</p>
+                          </div>
+                        )}
 
-        {/* ── Fechar Caixa Modal ── */}
-        <AnimatePresence>
-          {showCloseCashModal && currentCash && (
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-center justify-center p-4"
-            >
-              <motion.div
-                initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }}
-                className="bg-[#0D1B3E] w-full max-w-sm rounded-[1.75rem] sm:rounded-[2rem] p-5 sm:p-8 space-y-5 sm:space-y-6 shadow-2xl border border-white/5 max-h-[90vh] overflow-y-auto"
-              >
-                <div className="text-center space-y-2">
-                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-red-500/10 text-red-400 flex items-center justify-center mx-auto">
-                    <Lock className="w-6 h-6 sm:w-7 sm:h-7" />
+                        {stoneStatus === "waiting" && (
+                          <div className="flex flex-col items-center justify-center gap-4 py-6 text-center">
+                            <div className="w-16 h-16 bg-[#C9A227]/10 rounded-full flex items-center justify-center">
+                              <Smartphone className="w-8 h-8 text-[#C9A227] animate-pulse" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-black uppercase tracking-widest text-white">Aguardando pagamento</p>
+                              <p className="text-[10px] text-white/40 mt-1">O cliente deve pagar na maquininha agora.</p>
+                            </div>
+                            <div className="flex items-center gap-2 text-[10px] text-white/30">
+                              <div className="w-1.5 h-1.5 bg-[#C9A227] rounded-full animate-pulse" />
+                              Verificando a cada 5 segundos...
+                            </div>
+                            <button
+                              onClick={() => { setStoneStatus("idle"); if (stonePollRef.current) clearInterval(stonePollRef.current); }}
+                              className="text-[10px] font-black text-red-400/60 hover:text-red-400 uppercase tracking-widest transition-colors mt-2"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        )}
+
+                        {stoneStatus === "paid" && (
+                          <div className="flex flex-col items-center justify-center gap-4 py-8 text-center">
+                            <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center">
+                              <CheckCircle2 className="w-8 h-8 text-green-400" />
+                            </div>
+                            <p className="text-sm font-black uppercase tracking-widest text-green-400">Pagamento confirmado!</p>
+                          </div>
+                        )}
+
+                        {stoneStatus === "failed" && (
+                          <div className="flex flex-col items-center justify-center gap-4 py-6 text-center">
+                            <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center">
+                              <AlertCircle className="w-8 h-8 text-red-400" />
+                            </div>
+                            <p className="text-sm font-black uppercase tracking-widest text-red-400">Pagamento falhou</p>
+                            <button
+                              onClick={() => setStoneStatus("idle")}
+                              className="text-[10px] font-black text-white/40 hover:text-white uppercase tracking-widest border border-white/10 px-4 py-2 rounded-xl transition-colors"
+                            >
+                              Tentar novamente
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <h3 className="text-base sm:text-lg font-black text-white uppercase tracking-widest">Fechar Caixa</h3>
-                  <p className="text-xs text-white/40">Confira o dinheiro em caixa antes de confirmar o fechamento.</p>
                 </div>
-                {cashError && (
-                  <div className="bg-red-500/10 border border-red-500/20 text-red-300 text-xs font-bold rounded-xl px-4 py-2.5 text-center">
-                    {cashError}
-                  </div>
-                )}
-                <div className="bg-white/5 rounded-2xl p-4 space-y-2 border border-white/10">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-white/40">Fundo de abertura</span>
-                    <span className="font-bold text-white tabular-nums">{fmt(currentCash.openingBalance)}</span>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-white/40">Esperado em caixa</span>
-                    <span className="font-black text-emerald-400 tabular-nums">{fmt(currentCash.expectedBalance)}</span>
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-white/40">Valor Contado</label>
+              </div>
+
+                {/* Finalize button — sempre visível, fora da área rolável */}
+                {paymentMethod !== "STONE" || stoneStatus === "idle" ? (
+                  <div className="px-6 py-4 border-t border-white/5 shrink-0 bg-black/20">
                     <button
-                      type="button"
-                      onClick={() => setClosingBalanceInput(numberToDigits(currentCash.expectedBalance))}
-                      className="text-[10px] font-black uppercase text-emerald-400 hover:text-emerald-300 transition-colors"
+                      disabled={
+                        isProcessing ||
+                        (paymentMethod === "CASH" && amountReceived !== "" && digitsToNumber(amountReceived) < total)
+                      }
+                      onClick={handleCheckout}
+                      className="w-full bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-3.5 rounded-xl transition-all shadow-lg shadow-[#C9A227]/25 flex items-center justify-center gap-2.5 uppercase tracking-widest text-xs"
                     >
-                      Usar esperado
+                      {isProcessing ? (
+                        <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <>
+                          {paymentMethod === "STONE" ? "Enviar para Maquininha" : "Finalizar Venda"}
+                          {paymentMethod === "STONE" ? <Smartphone className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
+                        </>
+                      )}
                     </button>
                   </div>
-                  <div className="relative">
-                    <span className="absolute left-4 sm:left-5 top-1/2 -translate-y-1/2 text-lg sm:text-2xl font-black text-white/30">R$</span>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      autoFocus
-                      value={formatCurrencyDigits(closingBalanceInput)}
-                      onChange={(e) => setClosingBalanceInput(maskCurrencyDigits(e.target.value))}
-                      placeholder="0,00"
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 sm:py-4 pl-11 sm:pl-14 pr-4 sm:pr-5 text-xl sm:text-2xl font-black text-white text-center focus:border-red-400 outline-none [appearance:textfield]"
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => { setShowCloseCashModal(false); setCashError(""); }}
-                    className="bg-white/5 hover:bg-white/10 text-white/60 font-black py-3.5 rounded-2xl text-[10px] uppercase tracking-widest transition-all"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    disabled={cashActionLoading}
-                    onClick={handleCloseCash}
-                    className="bg-red-500 hover:bg-red-400 disabled:opacity-50 text-white font-black py-3.5 rounded-2xl text-[10px] uppercase tracking-widest transition-all"
-                  >
-                    {cashActionLoading ? "Fechando..." : "Confirmar Fechamento"}
-                  </button>
-                </div>
-              </motion.div>
+                ) : null}
+              </div>
             </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Abrir Caixa Modal ── */}
+      <AnimatePresence>
+        {showOpenCashModal && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }}
+              className="bg-[#0D1B3E] w-full max-w-sm rounded-[1.75rem] sm:rounded-[2rem] p-5 sm:p-8 space-y-5 sm:space-y-6 shadow-2xl border border-white/5 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="text-center space-y-2">
+                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto">
+                  <Banknote className="w-6 h-6 sm:w-7 sm:h-7" />
+                </div>
+                <h3 className="text-base sm:text-lg font-black text-white uppercase tracking-widest">Abrir Caixa</h3>
+                <p className="text-xs text-white/40">Informe o valor em dinheiro disponível para o fundo de troco.</p>
+              </div>
+              {cashError && (
+                <div className="bg-red-500/10 border border-red-500/20 text-red-300 text-xs font-bold rounded-xl px-4 py-2.5 text-center">
+                  {cashError}
+                </div>
+              )}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-widest text-white/40">Fundo de Caixa</label>
+                <div className="relative">
+                  <span className="absolute left-4 sm:left-5 top-1/2 -translate-y-1/2 text-lg sm:text-2xl font-black text-white/30">R$</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    autoFocus
+                    value={formatCurrencyDigits(openingBalanceInput)}
+                    onChange={(e) => setOpeningBalanceInput(maskCurrencyDigits(e.target.value))}
+                    placeholder="0,00"
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 sm:py-4 pl-11 sm:pl-14 pr-4 sm:pr-5 text-xl sm:text-2xl font-black text-white text-center focus:border-emerald-400 outline-none [appearance:textfield]"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => { setShowOpenCashModal(false); setCashError(""); }}
+                  className="bg-white/5 hover:bg-white/10 text-white/60 font-black py-3.5 rounded-2xl text-[10px] uppercase tracking-widest transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  disabled={cashActionLoading}
+                  onClick={handleOpenCash}
+                  className="bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-black py-3.5 rounded-2xl text-[10px] uppercase tracking-widest transition-all"
+                >
+                  {cashActionLoading ? "Abrindo..." : "Abrir Caixa"}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Fechar Caixa Modal ── */}
+      <AnimatePresence>
+        {showCloseCashModal && currentCash && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }}
+              className="bg-[#0D1B3E] w-full max-w-sm rounded-[1.75rem] sm:rounded-[2rem] p-5 sm:p-8 space-y-5 sm:space-y-6 shadow-2xl border border-white/5 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="text-center space-y-2">
+                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-red-500/10 text-red-400 flex items-center justify-center mx-auto">
+                  <Lock className="w-6 h-6 sm:w-7 sm:h-7" />
+                </div>
+                <h3 className="text-base sm:text-lg font-black text-white uppercase tracking-widest">Fechar Caixa</h3>
+                <p className="text-xs text-white/40">Confira o dinheiro em caixa antes de confirmar o fechamento.</p>
+              </div>
+              {cashError && (
+                <div className="bg-red-500/10 border border-red-500/20 text-red-300 text-xs font-bold rounded-xl px-4 py-2.5 text-center">
+                  {cashError}
+                </div>
+              )}
+              <div className="bg-white/5 rounded-2xl p-4 space-y-2 border border-white/10">
+                <div className="flex justify-between text-xs">
+                  <span className="text-white/40">Fundo de abertura</span>
+                  <span className="font-bold text-white tabular-nums">{fmt(currentCash.openingBalance)}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-white/40">Esperado em caixa</span>
+                  <span className="font-black text-emerald-400 tabular-nums">{fmt(currentCash.expectedBalance)}</span>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-white/40">Valor Contado</label>
+                  <button
+                    type="button"
+                    onClick={() => setClosingBalanceInput(numberToDigits(currentCash.expectedBalance))}
+                    className="text-[10px] font-black uppercase text-emerald-400 hover:text-emerald-300 transition-colors"
+                  >
+                    Usar esperado
+                  </button>
+                </div>
+                <div className="relative">
+                  <span className="absolute left-4 sm:left-5 top-1/2 -translate-y-1/2 text-lg sm:text-2xl font-black text-white/30">R$</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    autoFocus
+                    value={formatCurrencyDigits(closingBalanceInput)}
+                    onChange={(e) => setClosingBalanceInput(maskCurrencyDigits(e.target.value))}
+                    placeholder="0,00"
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 sm:py-4 pl-11 sm:pl-14 pr-4 sm:pr-5 text-xl sm:text-2xl font-black text-white text-center focus:border-red-400 outline-none [appearance:textfield]"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => { setShowCloseCashModal(false); setCashError(""); }}
+                  className="bg-white/5 hover:bg-white/10 text-white/60 font-black py-3.5 rounded-2xl text-[10px] uppercase tracking-widest transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  disabled={cashActionLoading}
+                  onClick={handleCloseCash}
+                  className="bg-red-500 hover:bg-red-400 disabled:opacity-50 text-white font-black py-3.5 rounded-2xl text-[10px] uppercase tracking-widest transition-all"
+                >
+                  {cashActionLoading ? "Fechando..." : "Confirmar Fechamento"}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
