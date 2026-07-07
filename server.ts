@@ -2156,6 +2156,39 @@ app.patch("/api/orders/:id/status", requireAuth, async (req, res) => {
   }
 });
 
+// Cancela um pedido já concluído no Histórico. Não apaga o registro (preserva rastreabilidade
+// e não quebra o fechamento de caixa de dias já encerrados) — só muda pra CANCELLED, que já
+// é filtrado fora de todo relatório/receita. Restrito ao proprietário e exige confirmar a
+// própria senha de novo, pra evitar que qualquer operador cancele uma venda por engano.
+app.post("/api/orders/:id/cancel", requireAuth, async (req, res) => {
+  const tenantOrder = await requireTenantFromOrder(req, res, req.params.id);
+  if (!tenantOrder) return;
+
+  const membership = (req as AuthenticatedRequest).membership;
+  if (!membership || membership.role !== "OWNER") {
+    return res.status(403).json({ error: "Apenas o proprietário pode cancelar um pedido do histórico." });
+  }
+
+  const { password } = req.body;
+  const account = currentAccount(req);
+  const fullAccount = account ? await prisma.account.findUnique({ where: { id: account.id } }) : null;
+  if (!fullAccount || !password || !verifyPassword(String(password), fullAccount.passwordHash)) {
+    return res.status(401).json({ error: "Senha incorreta." });
+  }
+
+  const { order } = tenantOrder;
+  if (order.status === "CANCELLED") return res.status(400).json({ error: "Pedido já está cancelado." });
+
+  try {
+    const updatedOrder = await prisma.order.update({ where: { id: order.id }, data: { status: "CANCELLED" } });
+    io.to(`tenant-${order.tenantId}`).emit("order-status-updated", updatedOrder);
+    res.json(updatedOrder);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao cancelar pedido." });
+  }
+});
+
 app.get("/api/admin/:tenantId/orders", requireAuth, async (req, res) => {
   const tenant = await requireTenantById(req, res, req.params.tenantId);
   if (!tenant) return;

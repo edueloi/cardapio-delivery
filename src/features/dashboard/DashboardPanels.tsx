@@ -6100,11 +6100,47 @@ const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Se
 
 export function OrderHistoryPanel({
   orders,
-  slug
+  slug,
+  isOwner,
+  onOrderChanged,
 }: {
   orders: Order[];
   slug: string;
+  isOwner?: boolean;
+  onOrderChanged?: () => void;
 }) {
+  const toast = useToast();
+  const [detailsOrder, setDetailsOrder] = useState<Order | null>(null);
+  const [cancelOrder, setCancelOrder] = useState<Order | null>(null);
+  const [cancelPassword, setCancelPassword] = useState("");
+  const [isCancelling, setIsCancelling] = useState(false);
+
+  const handleCancelOrder = async () => {
+    if (!cancelOrder || !cancelPassword) return;
+    setIsCancelling(true);
+    try {
+      await apiFetch(`/api/orders/${cancelOrder.id}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: cancelPassword }),
+      }).then(async (res) => {
+        if (!res.ok) {
+          const data = await res.json().catch(() => null);
+          throw new Error(data?.error || "Falha ao cancelar pedido.");
+        }
+      });
+      toast.success("Pedido cancelado.");
+      setCancelOrder(null);
+      setCancelPassword("");
+      setDetailsOrder(null);
+      onOrderChanged?.();
+    } catch (err: any) {
+      toast.error(err?.message || "Falha ao cancelar pedido.");
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   const prefs = loadHistoryPrefs(slug);
 
   const [searchTerm, setSearchTerm] = useState<string>(prefs?.searchTerm ?? "");
@@ -6247,12 +6283,12 @@ export function OrderHistoryPanel({
     {
       header: '',
       render: (o: Order) => (
-        <Link
-          to={`/dashboard/${slug}/historico/${o.id}`}
+        <button
+          onClick={() => setDetailsOrder(o)}
           className="p-2 text-slate-300 hover:text-amber-500 transition-colors inline-block"
         >
           <Eye className="w-4 h-4" />
-        </Link>
+        </button>
       ),
     },
   ], [slug]);
@@ -6407,6 +6443,107 @@ export function OrderHistoryPanel({
           onPageSizeChange: setPageSize,
         }}
       />
+
+      {/* Detalhes do pedido */}
+      <Modal
+        isOpen={!!detailsOrder}
+        onClose={() => setDetailsOrder(null)}
+        title={detailsOrder ? `Pedido #${detailsOrder.id.slice(-6).toUpperCase()}` : ""}
+        size="md"
+      >
+        {detailsOrder && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-slate-500">
+                {new Date(detailsOrder.createdAt).toLocaleString('pt-BR')}
+              </span>
+              <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
+                detailsOrder.status === 'DELIVERED' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+              }`}>
+                {detailsOrder.status === 'DELIVERED' ? 'Concluído' : 'Cancelado'}
+              </span>
+            </div>
+
+            <div className="space-y-1">
+              <p className="text-sm font-black text-slate-800">{detailsOrder.customerName}</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                {detailsOrder.orderType === 'DELIVERY' ? 'Delivery' : detailsOrder.orderType === 'DINE_IN' ? dineInOrderLabel(detailsOrder) : 'Retirada'}
+              </p>
+            </div>
+
+            <div className="border border-slate-100 rounded-2xl divide-y divide-slate-100">
+              {detailsOrder.items.map((item) => (
+                <div key={item.id} className="flex items-center justify-between px-4 py-2.5 text-xs">
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-700 truncate">{item.quantity}x {item.product?.name || "Produto"}</p>
+                    {item.notes && <p className="text-[10px] text-slate-400 italic truncate">{item.notes}</p>}
+                  </div>
+                  <span className="font-black text-slate-800 shrink-0 ml-2">{fmt(item.price * item.quantity)}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between px-1">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Pagamento</span>
+                <PaymentBadge method={detailsOrder.paymentMethod.toLowerCase() as any} size="sm" />
+              </div>
+              <span className="text-base font-black text-slate-800">{fmt(detailsOrder.total)}</span>
+            </div>
+
+            {isOwner && detailsOrder.status !== 'CANCELLED' && (
+              <button
+                onClick={() => { setCancelOrder(detailsOrder); setCancelPassword(""); }}
+                className="w-full py-3 rounded-2xl border border-red-200 text-red-600 text-xs font-black uppercase tracking-widest hover:bg-red-50 transition-colors"
+              >
+                Cancelar Pedido
+              </button>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      {/* Cancelar pedido — exige senha do proprietário */}
+      <Modal
+        isOpen={!!cancelOrder}
+        onClose={() => { setCancelOrder(null); setCancelPassword(""); }}
+        title="Cancelar Pedido"
+        size="sm"
+      >
+        {cancelOrder && (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600">
+              Confirme sua senha para cancelar o pedido <strong>#{cancelOrder.id.slice(-6).toUpperCase()}</strong> ({fmt(cancelOrder.total)}). O pedido não é apagado, apenas marcado como cancelado e sai dos relatórios.
+            </p>
+            <input
+              type="password"
+              autoFocus
+              value={cancelPassword}
+              onChange={(e) => setCancelPassword(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleCancelOrder(); }}
+              placeholder="Sua senha"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 focus:border-red-400 outline-none"
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => { setCancelOrder(null); setCancelPassword(""); }}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-500 font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all"
+              >
+                Voltar
+              </button>
+              <button
+                disabled={!cancelPassword || isCancelling}
+                onClick={handleCancelOrder}
+                className="bg-red-500 hover:bg-red-600 text-white font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all disabled:opacity-50"
+              >
+                {isCancelling ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto" />
+                ) : "Confirmar Cancelamento"}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

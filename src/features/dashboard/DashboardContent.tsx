@@ -148,6 +148,8 @@ export default function DashboardContent({
           <OrderHistoryPanel
             orders={orders}
             slug={slug}
+            isOwner={membership?.role === "OWNER"}
+            onOrderChanged={refreshTenant}
           />
         </PageWrapper>
       )}
