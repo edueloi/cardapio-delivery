@@ -135,12 +135,26 @@ export function StatusBadge({ status, size = "sm", dot = true, className }: Stat
 }
 
 // ─── PaymentBadge – wrapper para formas de pagamento ─────────────────────────
-type PaymentMethod = "cash" | "card" | "pix" | "mixed" | "transfer" | "voucher" | "meal" | "food";
+// Aceita tanto os valores reais gravados em Order.paymentMethod (cash, credit, debit,
+// pix, vr, split, stone_credit/debit/pix — sempre em lowercase aqui) quanto os rótulos
+// genéricos legados (card, mixed, transfer, voucher, meal, food), pra nunca cair num
+// método desconhecido e sumir o badge da tela.
+type PaymentMethod =
+  | "cash" | "credit" | "debit" | "pix" | "vr" | "split"
+  | "stone_credit" | "stone_debit" | "stone_pix"
+  | "card" | "mixed" | "transfer" | "voucher" | "meal" | "food";
 
 const paymentConfig: Record<PaymentMethod, { label: string; color: BadgeColor }> = {
-  cash:     { label: "Dinheiro", color: "success" },
+  cash:         { label: "Dinheiro",  color: "success" },
+  credit:       { label: "Crédito",   color: "info" },
+  debit:        { label: "Débito",    color: "info" },
+  pix:          { label: "Pix",       color: "purple" },
+  vr:           { label: "Vale Ref.", color: "orange" },
+  split:        { label: "Dividido",  color: "purple" },
+  stone_credit: { label: "Crédito (Maquininha)", color: "info" },
+  stone_debit:  { label: "Débito (Maquininha)",  color: "info" },
+  stone_pix:    { label: "Pix (Maquininha)",     color: "purple" },
   card:     { label: "Cartão",   color: "info" },
-  pix:      { label: "Pix",      color: "purple" },
   mixed:    { label: "Misto",    color: "purple" },
   transfer: { label: "Transf.",  color: "default" },
   voucher:  { label: "Voucher",  color: "orange" },
@@ -149,14 +163,14 @@ const paymentConfig: Record<PaymentMethod, { label: string; color: BadgeColor }>
 };
 
 interface PaymentBadgeProps {
-  method: PaymentMethod;
+  method: PaymentMethod | string;
   size?: "sm" | "md";
   className?: string;
 }
 
 export function PaymentBadge({ method, size = "sm", className }: PaymentBadgeProps) {
-  const cfg = paymentConfig[method];
-  if (!cfg) return null;
+  const cfg = paymentConfig[method as PaymentMethod];
+  if (!cfg) return <span className="text-[10px] text-slate-400 font-bold uppercase">{method || "—"}</span>;
   return (
     <Badge color={cfg.color} size={size} dot className={className}>
       {cfg.label}

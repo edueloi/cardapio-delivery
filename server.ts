@@ -3207,6 +3207,8 @@ async function attachOrderDetails<T extends { orderId?: string | null }>(movemen
     const order = m.orderId ? orderMap.get(m.orderId) : null;
     if (!order) return { ...m, order: null };
     const grossTotal = order.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    let paymentDetail: { cardBrand?: string; installments?: number; splits?: Array<{ method: string; amount: number; cardBrand?: string }> } = {};
+    try { paymentDetail = order.paymentDetail ? JSON.parse(order.paymentDetail) : {}; } catch {}
     return {
       ...m,
       order: {
@@ -3220,6 +3222,10 @@ async function attachOrderDetails<T extends { orderId?: string | null }>(movemen
         serviceFeeAmount: order.serviceFeeAmount || 0,
         serviceFeePercent: order.serviceFeePercent,
         total: order.total,
+        paymentMethod: order.paymentMethod,
+        cardBrand: paymentDetail.cardBrand || null,
+        installments: paymentDetail.installments || null,
+        paymentSplits: paymentDetail.splits || null,
         items: order.items.map((item) => ({
           productName: item.product?.name || "Produto removido",
           quantity: item.quantity,

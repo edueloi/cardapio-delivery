@@ -1230,9 +1230,9 @@ export default function PDVPanel({
       {/* ── Right: Order/Cart Panel ── */}
       <div className={`${
         showCartDrawer
-          ? "fixed inset-x-0 bottom-0 top-4 sm:inset-8 z-40 lg:static lg:z-auto"
+          ? "fixed inset-x-0 bottom-0 top-4 sm:inset-x-6 sm:inset-y-6 lg:static lg:inset-auto z-40 lg:z-auto"
           : "hidden lg:flex"
-      } w-full lg:w-[380px] xl:w-[420px] flex-col bg-[#0D1B3E] rounded-t-[2rem] sm:rounded-[2rem] lg:rounded-[2rem] text-white overflow-hidden shadow-2xl relative shrink-0`}>
+      } w-full sm:w-auto lg:w-[380px] xl:w-[420px] flex-col bg-[#0D1B3E] rounded-t-[2rem] sm:rounded-[2rem] lg:rounded-[2rem] text-white overflow-hidden shadow-2xl relative shrink-0`}>
         {/* Header */}
         <div className="p-6 border-b border-white/5 bg-white/[0.02]">
           <div className="flex items-center justify-between mb-1">
