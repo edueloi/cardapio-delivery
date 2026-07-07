@@ -254,6 +254,7 @@ export interface WppBotConfig {
   sendOrderCreated: boolean;
   sendStatusUpdates: boolean;
   sendLoyaltyPoints: boolean;
+  sendReceiptPdf: boolean; // envia o recibo em PDF ao cliente quando o pedido é entregue
   sendLowStockAlert: boolean;
   ownerAlertPhone?: string | null; // telefone dedicado para alertas internos (novo pedido, estoque baixo) — se vazio, usa o whatsapp público do tenant
   welcomeMessage?: string | null;
@@ -265,7 +266,7 @@ export interface WppBotConfig {
 
 export type WppMessageKind =
   | "ORDER_CREATED" | "OWNER_ALERT" | "STATUS_UPDATE" | "LOYALTY_POINTS"
-  | "LOW_STOCK" | "PREORDER" | "MANUAL_TEST" | "CONVERSATION";
+  | "LOW_STOCK" | "PREORDER" | "MANUAL_TEST" | "CONVERSATION" | "RECEIPT_PDF";
 
 export interface WppMessageLog {
   id: string;

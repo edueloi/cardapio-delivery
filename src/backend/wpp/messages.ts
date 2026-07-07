@@ -1,5 +1,6 @@
 import { prisma } from "../../lib/prisma";
-import { sendMessage } from "./baileys-manager";
+import { sendMessage, sendDocumentMessage } from "./baileys-manager";
+import { buildReceiptPdf } from "../../lib/receipt";
 
 function fmt(value: number): string {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value || 0);
@@ -13,7 +14,7 @@ function formatItems(items: Array<{ quantity: number; price: number; notes?: str
   }).join("\n");
 }
 
-async function canSend(tenantId: string, field: "sendOrderCreated" | "sendStatusUpdates" | "sendLoyaltyPoints" | "sendLowStockAlert"): Promise<{ allowed: boolean; config: any }> {
+async function canSend(tenantId: string, field: "sendOrderCreated" | "sendStatusUpdates" | "sendLoyaltyPoints" | "sendLowStockAlert" | "sendReceiptPdf"): Promise<{ allowed: boolean; config: any }> {
   const [instance, config] = await Promise.all([
     prisma.wppInstance.findUnique({ where: { tenantId } }),
     prisma.wppBotConfig.findUnique({ where: { tenantId } }),
@@ -214,4 +215,70 @@ export async function sendLowStockAlert(
     `Considere repor o quanto antes para não faltar.`;
 
   await sendMessage(tenantId, alertPhone, text, 0, "LOW_STOCK");
+}
+
+// ─── Customer: receipt PDF on delivery ────────────────────────────────────────
+
+export async function sendReceiptPdfMessage(order: {
+  id: string;
+  tenantId: string;
+  customerPhone: string;
+  customerName: string;
+  createdAt: Date;
+  discount?: number | null;
+  feeAmount?: number | null;
+  feePercent?: number | null;
+  feePassedToCustomer?: boolean | null;
+  serviceFeeAmount?: number | null;
+  serviceFeePercent?: number | null;
+  total: number;
+  paymentMethod?: string | null;
+  paymentDetail?: string | null;
+  items: Array<{ quantity: number; price: number; notes?: string | null; product?: { name?: string | null } | null; productVariant?: { name?: string | null } | null }>;
+}, tenant: { name: string; slug: string }) {
+  const { allowed } = await canSend(order.tenantId, "sendReceiptPdf");
+  if (!allowed) return;
+  if (!order.customerPhone) return;
+
+  try {
+    const items = order.items.map((item) => ({
+      quantity: item.quantity,
+      name: item.productVariant?.name
+        ? `${item.product?.name || "Item"} (${item.productVariant.name})`
+        : (item.product?.name || "Item"),
+      price: item.price,
+      notes: item.notes || undefined,
+    }));
+    const subtotal = items.reduce((acc, i) => acc + i.price * i.quantity, 0);
+
+    let paymentDetail: { amountReceived?: number; change?: number } = {};
+    try { paymentDetail = order.paymentDetail ? JSON.parse(order.paymentDetail) : {}; } catch {}
+
+    const doc = buildReceiptPdf({
+      tenantName: tenant.name,
+      orderId: order.id,
+      createdAt: order.createdAt,
+      customerName: order.customerName,
+      items,
+      subtotal,
+      discountAmount: order.discount || 0,
+      feeAmount: order.feeAmount || 0,
+      feePercent: order.feePercent || 0,
+      feePassedToCustomer: !!order.feePassedToCustomer,
+      serviceFeeAmount: order.serviceFeeAmount || 0,
+      serviceFeePercent: order.serviceFeePercent || 0,
+      total: order.total,
+      paymentMethod: order.paymentMethod || undefined,
+      amountReceived: order.paymentMethod === "CASH" ? paymentDetail.amountReceived : undefined,
+      change: order.paymentMethod === "CASH" ? paymentDetail.change : undefined,
+    });
+
+    const buffer = Buffer.from(doc.output("arraybuffer"));
+    const fileName = `recibo-${order.id.slice(-8).toUpperCase()}.pdf`;
+    const caption = `🧾 *Recibo do seu pedido em ${tenant.name}*\n\nObrigado pela preferência!`;
+
+    await sendDocumentMessage(order.tenantId, order.customerPhone, buffer, fileName, caption, "RECEIPT_PDF");
+  } catch (error) {
+    console.warn("[WPP] Failed to build/send receipt PDF:", error);
+  }
 }

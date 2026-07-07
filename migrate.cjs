@@ -1000,6 +1000,11 @@ const migrations = [
       CONSTRAINT kitchen_access_requests_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL ON UPDATE CASCADE
     ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
   },
+  {
+    name: 'add_wpp_bot_configs_send_receipt_pdf',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'wpp_bot_configs' AND COLUMN_NAME = 'send_receipt_pdf'",
+    run: "ALTER TABLE wpp_bot_configs ADD COLUMN send_receipt_pdf TINYINT(1) NOT NULL DEFAULT 1",
+  },
 ];
 
 async function run() {

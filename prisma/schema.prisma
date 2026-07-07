@@ -554,6 +554,7 @@ model WppBotConfig {
   sendOrderCreated Boolean  @default(true) @map("send_order_created")
   sendStatusUpdates Boolean @default(true) @map("send_status_updates")
   sendLoyaltyPoints Boolean @default(true) @map("send_loyalty_points") // avisa cliente quando ganha pontos de fidelidade
+  sendReceiptPdf   Boolean  @default(true) @map("send_receipt_pdf") // envia o recibo em PDF ao cliente quando o pedido é entregue
   sendLowStockAlert Boolean @default(false) @map("send_low_stock_alert") // avisa o dono quando item de estoque atinge o mínimo
   ownerAlertPhone  String?  @map("owner_alert_phone") // número que recebe alertas internos (novo pedido, estoque baixo) — se vazio, cai no whatsapp público do tenant
   welcomeMessage   String?  @map("welcome_message")
@@ -574,7 +575,7 @@ model WppMessageLog {
   id        String   @id @default(cuid())
   tenantId  String   @map("tenant_id")
   toPhone   String   @map("to_phone")
-  kind      String   // ORDER_CREATED, OWNER_ALERT, STATUS_UPDATE, LOYALTY_POINTS, LOW_STOCK, PREORDER, MANUAL_TEST, CONVERSATION
+  kind      String   // ORDER_CREATED, OWNER_ALERT, STATUS_UPDATE, LOYALTY_POINTS, LOW_STOCK, PREORDER, MANUAL_TEST, CONVERSATION, RECEIPT_PDF
   preview   String   @db.Text // primeiras linhas da mensagem, para exibição na lista
   sentAt    DateTime @default(now()) @map("sent_at")
 

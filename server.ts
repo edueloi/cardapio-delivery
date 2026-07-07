@@ -37,7 +37,7 @@ import {
   restoreAllSessions,
   sendMessage,
 } from "./src/backend/wpp/baileys-manager";
-import { sendOrderCreatedMessage, sendOrderStatusMessage, sendOwnerOrderAlert, sendLoyaltyPointsMessage, sendLowStockAlert } from "./src/backend/wpp/messages";
+import { sendOrderCreatedMessage, sendOrderStatusMessage, sendOwnerOrderAlert, sendLoyaltyPointsMessage, sendLowStockAlert, sendReceiptPdfMessage } from "./src/backend/wpp/messages";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1484,6 +1484,7 @@ app.patch("/api/owner/tenants/:tenantId/wpp/config", requireAuth, async (req, re
     sendOrderCreated,
     sendStatusUpdates,
     sendLoyaltyPoints,
+    sendReceiptPdf,
     sendLowStockAlert,
     ownerAlertPhone,
     welcomeMessage,
@@ -1504,6 +1505,7 @@ app.patch("/api/owner/tenants/:tenantId/wpp/config", requireAuth, async (req, re
         sendOrderCreated: sendOrderCreated !== false,
         sendStatusUpdates: sendStatusUpdates !== false,
         sendLoyaltyPoints: sendLoyaltyPoints !== false,
+        sendReceiptPdf: sendReceiptPdf !== false,
         sendLowStockAlert: !!sendLowStockAlert,
         ownerAlertPhone: ownerAlertPhone || null,
         welcomeMessage: welcomeMessage || null,
@@ -1518,6 +1520,7 @@ app.patch("/api/owner/tenants/:tenantId/wpp/config", requireAuth, async (req, re
         ...(sendOrderCreated !== undefined && { sendOrderCreated: !!sendOrderCreated }),
         ...(sendStatusUpdates !== undefined && { sendStatusUpdates: !!sendStatusUpdates }),
         ...(sendLoyaltyPoints !== undefined && { sendLoyaltyPoints: !!sendLoyaltyPoints }),
+        ...(sendReceiptPdf !== undefined && { sendReceiptPdf: !!sendReceiptPdf }),
         ...(sendLowStockAlert !== undefined && { sendLowStockAlert: !!sendLowStockAlert }),
         ...(ownerAlertPhone !== undefined && { ownerAlertPhone: ownerAlertPhone || null }),
         ...(welcomeMessage !== undefined && { welcomeMessage: welcomeMessage || null }),
@@ -1991,6 +1994,7 @@ async function updateOrderStatus(orderId: string, previousStatus: string, status
       items: {
         include: {
           product: true,
+          productVariant: true,
         },
       },
     },
@@ -2121,6 +2125,11 @@ async function updateOrderStatus(orderId: string, previousStatus: string, status
       if (result) {
         await sendLoyaltyPointsMessage(updatedOrder, updatedOrder.tenant, result.pointsEarned, result.newBalance).catch(() => undefined);
       }
+    }
+
+    // Envia o recibo em PDF pro cliente quando o pedido é entregue (não aplica a comandas de mesa)
+    if (status === "DELIVERED" && previousStatus !== "DELIVERED" && updatedOrder.orderType !== "DINE_IN") {
+      await sendReceiptPdfMessage(updatedOrder, updatedOrder.tenant).catch(() => undefined);
     }
 
   return updatedOrder;

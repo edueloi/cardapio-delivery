@@ -30,6 +30,8 @@ interface DashboardShellProps {
   onSelectTab: (tab: string) => void;
   onLogout?: () => void;
   isSuperAdmin?: boolean;
+  /** Esconde a topbar de breadcrumb/notificações/avatar — usado em telas que precisam do espaço vertical inteiro (ex: PDV). */
+  hideHeader?: boolean;
   children: ReactNode;
 }
 
@@ -52,6 +54,7 @@ export default function DashboardShell({
   onSelectTab,
   onLogout,
   isSuperAdmin = false,
+  hideHeader = false,
   children,
 }: DashboardShellProps) {
   const tenantInitial = tenantName?.[0]?.toUpperCase() || "G";
@@ -297,6 +300,7 @@ export default function DashboardShell({
       <main className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
 
         {/* ══ DESKTOP TOPBAR ══ */}
+        {!hideHeader && (
         <header className="hidden xl:flex items-center justify-between gap-4 bg-white border-b border-slate-200/80 sticky top-0 z-30 px-6 lg:px-8 h-16 shrink-0">
 
           {/* Esquerda — breadcrumb da aba ativa */}
@@ -339,8 +343,9 @@ export default function DashboardShell({
             </div>
           </div>
         </header>
+        )}
 
-        <div className="px-3 py-3 sm:p-5 md:p-7 overflow-y-auto">{children}</div>
+        <div className={hideHeader ? "flex-1 min-h-0 flex flex-col overflow-hidden" : "px-3 py-3 sm:p-5 md:p-7 overflow-y-auto"}>{children}</div>
       </main>
     </div>
   );

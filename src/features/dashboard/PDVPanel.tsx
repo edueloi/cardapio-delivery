@@ -5,7 +5,7 @@ import {
   CheckCircle2, Receipt, Package,
   ChevronRight, ChevronDown, ArrowLeft,
   Utensils, Tag, User, Phone, Percent,
-  Printer, StickyNote, Hash, AlertCircle, Smartphone, Lock, ExternalLink, Download, Zap,
+  Printer, Hash, AlertCircle, Smartphone, Lock, ExternalLink, Download, Zap,
   MoreHorizontal, DoorOpen, DoorClosed, Maximize2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
@@ -181,9 +181,6 @@ export default function PDVPanel({
     }
   };
 
-  // Item notes editor
-  const [editingItemNotes, setEditingItemNotes] = useState<string | null>(null);
-
   // Barra de atalhos: F6 desfaz o último item, F7 consulta preço sem adicionar ao carrinho, F8 abre mais opções
   const [showPriceCheckModal, setShowPriceCheckModal] = useState(false);
   const [priceCheckTerm, setPriceCheckTerm] = useState("");
@@ -301,6 +298,11 @@ export default function PDVPanel({
       .slice(0, 20);
   }, [tenant, priceCheckTerm]);
 
+  const activeComandas = useMemo(
+    () => orders.filter((o) => o.orderType === "DINE_IN" && !["DELIVERED", "CANCELLED"].includes(o.status) && !o.tableId),
+    [orders]
+  );
+
   const subtotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
 
   const discountAmount = useMemo(() => {
@@ -363,9 +365,6 @@ export default function PDVPanel({
         i.product.id === productId ? { ...i, quantity: Math.max(1, i.quantity + delta) } : i
       )
     );
-
-  const updateItemNotes = (productId: string, notes: string) =>
-    setCart((prev) => prev.map((i) => (i.product.id === productId ? { ...i, notes } : i)));
 
   const clearCart = () => {
     setCart([]);
@@ -784,6 +783,11 @@ export default function PDVPanel({
                   {checkoutRequests.length}
                 </span>
               )}
+              {tab === "comandas" && activeComandas.length > 0 && (
+                <span className="absolute -top-1 right-1/4 w-4 h-4 bg-[#C9A227] text-black text-[9px] font-black flex items-center justify-center rounded-full">
+                  {activeComandas.length}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -836,7 +840,10 @@ export default function PDVPanel({
                   <p className="text-sm font-black uppercase tracking-widest text-slate-500">Nenhum produto encontrado</p>
                 </div>
               ) : (
-                <div className="flex flex-col gap-2 lg:grid lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 lg:gap-3.5">
+                <div
+                  className="flex flex-col gap-2 lg:grid lg:gap-2.5"
+                  style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" } as React.CSSProperties}
+                >
                   {filteredProducts.map((product) => {
                     const inCart = cart.find((i) => i.product.id === product.id);
                     return (
@@ -850,7 +857,7 @@ export default function PDVPanel({
                         }`}
                       >
                         {/* Image — hidden on celular/tablet (só nome/descrição/preço); volta a aparecer em telas grandes (lg+) */}
-                        <div className="hidden lg:flex w-full aspect-[4/3] bg-gradient-to-br from-slate-100 to-slate-200 overflow-hidden relative items-center justify-center">
+                        <div className="hidden lg:flex w-full aspect-square bg-gradient-to-br from-slate-100 to-slate-200 overflow-hidden relative items-center justify-center">
                           {product.imageUrl ? (
                             <img
                               src={product.imageUrl}
@@ -862,34 +869,34 @@ export default function PDVPanel({
                           )}
                           {/* Cart qty badge */}
                           {inCart && (
-                            <div className="absolute top-2 left-2 min-w-[22px] h-[22px] px-1.5 bg-[#C9A227] text-black text-[11px] font-black rounded-full flex items-center justify-center shadow">
+                            <div className="absolute top-1.5 left-1.5 min-w-[18px] h-[18px] px-1 bg-[#C9A227] text-black text-[10px] font-black rounded-full flex items-center justify-center shadow">
                               {inCart.quantity}
                             </div>
                           )}
                           {/* Stock badge */}
                           {product.inventoryItem && (
-                            <div className="absolute bottom-2 left-2 bg-black/50 backdrop-blur-sm text-white text-[8px] font-bold rounded px-1.5 py-0.5 uppercase tracking-wide">
+                            <div className="absolute bottom-1.5 left-1.5 bg-black/50 backdrop-blur-sm text-white text-[7px] font-bold rounded px-1 py-0.5 uppercase tracking-wide">
                               {product.inventoryItem.quantity} un
                             </div>
                           )}
                           {/* Botão + flutuante sobre a foto */}
-                          <div className={`absolute bottom-2 right-2 w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-200 shadow-lg ${
+                          <div className={`absolute bottom-1.5 right-1.5 w-6 h-6 rounded-lg flex items-center justify-center transition-all duration-200 shadow-lg ${
                             inCart
                               ? "bg-[#C9A227] text-black"
                               : "bg-[#0D1B3E] text-white group-hover:bg-[#C9A227] group-hover:text-black"
                           }`}>
-                            <Plus className="w-4 h-4" strokeWidth={2.5} />
+                            <Plus className="w-3.5 h-3.5" strokeWidth={2.5} />
                           </div>
                         </div>
 
                         {/* Info */}
-                        <div className="flex-1 min-w-0 flex flex-col gap-0.5 lg:px-2.5 lg:py-2">
-                          <h4 className="text-[13px] lg:text-[12px] font-bold text-slate-800 line-clamp-1 leading-snug">{product.name}</h4>
+                        <div className="flex-1 min-w-0 flex flex-col gap-0.5 lg:px-2 lg:py-1.5">
+                          <h4 className="text-[13px] lg:text-[11px] font-bold text-slate-800 line-clamp-1 leading-snug">{product.name}</h4>
                           {product.description && (
                             <p className="text-[11px] text-slate-400 line-clamp-1 leading-tight lg:hidden">{product.description}</p>
                           )}
-                          <div className="flex items-center justify-between mt-0.5 lg:mt-1">
-                            <span className="text-[14px] font-black text-[#0D1B3E] leading-none tabular-nums">{fmt(product.price)}</span>
+                          <div className="flex items-center justify-between mt-0.5 lg:mt-0.5">
+                            <span className="text-[14px] lg:text-[12px] font-black text-[#0D1B3E] leading-none tabular-nums">{fmt(product.price)}</span>
                             <div className={`lg:hidden w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-200 shrink-0 ${
                               inCart
                                 ? "bg-[#C9A227] text-black"
@@ -979,32 +986,27 @@ export default function PDVPanel({
               ) : activeTables.length === 0 ? null : (
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Mesas Ocupadas</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                  <div
+                    className="grid gap-2.5"
+                    style={{ gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))" }}
+                  >
                   {activeTables.map((tbl) => (
                     <button
                       key={tbl.tableId}
                       onClick={() => setOrderDetailsView({ type: "table", tableId: tbl.tableId })}
-                      className={`bg-white p-6 rounded-3xl border-2 hover:shadow-xl transition-all text-left space-y-4 group ${tbl.wantsCheckout ? 'border-red-300 hover:border-red-500' : 'border-slate-100 hover:border-[#C9A227]'}`}
+                      className={`bg-white p-3 rounded-xl border hover:shadow-sm transition-all text-left flex items-center gap-2.5 group ${tbl.wantsCheckout ? 'border-red-300 hover:border-red-500' : 'border-slate-100 hover:border-[#C9A227]'}`}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${tbl.wantsCheckout ? 'bg-red-50 text-red-500 group-hover:bg-red-500 group-hover:text-white' : 'bg-amber-50 text-amber-500 group-hover:bg-[#C9A227] group-hover:text-white'}`}>
-                          <Utensils className="w-6 h-6" />
-                        </div>
-                        {tbl.wantsCheckout && (
-                          <span className="text-[9px] font-black uppercase tracking-widest text-red-500 bg-red-50 px-2 py-1 rounded-full">Pedir Conta</span>
-                        )}
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${tbl.wantsCheckout ? 'bg-red-50 text-red-500 group-hover:bg-red-500 group-hover:text-white' : 'bg-amber-50 text-amber-500 group-hover:bg-[#C9A227] group-hover:text-white'}`}>
+                        <Utensils className="w-3.5 h-3.5" />
                       </div>
-                      <div>
-                        <h4 className="text-2xl font-black text-slate-800">Mesa {tbl.tableId}</h4>
-                        <p className="text-xs font-bold text-slate-400">{tbl.customerName}</p>
+                      <div className="min-w-0 flex-1">
+                        <h4 className="text-xs font-black text-slate-800 truncate">
+                          Mesa {tbl.tableId}
+                          {tbl.wantsCheckout && <span className="ml-1.5 text-[8px] font-black uppercase text-red-500">· Conta</span>}
+                        </h4>
+                        <p className="text-[10px] font-bold text-slate-400 truncate">{tbl.customerName}</p>
                       </div>
-                      <div className="pt-4 border-t border-slate-50 flex items-center justify-between">
-                        <span className="text-sm font-black text-slate-700">{fmt(tbl.total)}</span>
-                        <div className="flex items-center gap-1 text-[#C9A227]">
-                          <span className="text-[10px] font-black uppercase tracking-widest">Abrir</span>
-                          <ChevronRight className="w-4 h-4" />
-                        </div>
-                      </div>
+                      <span className="text-xs font-black text-slate-700 shrink-0">{fmt(tbl.total)}</span>
                     </button>
                   ))}
                   </div>
@@ -1027,30 +1029,29 @@ export default function PDVPanel({
                 Nova Comanda
               </button>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-              {orders
-                .filter((o) => o.orderType === "DINE_IN" && !["DELIVERED", "CANCELLED"].includes(o.status) && !o.tableId)
-                .map((comanda) => (
+            <div
+              className="grid gap-2.5"
+              style={{ gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))" }}
+            >
+              {activeComandas.map((comanda) => (
                   <button
                     key={comanda.id}
                     onClick={() => setOrderDetailsView({ type: "comanda", comanda })}
-                    className="bg-white p-6 rounded-3xl border border-slate-100 hover:border-[#C9A227] hover:shadow-lg transition-all text-left space-y-3"
+                    className="bg-white p-3 rounded-xl border border-slate-100 hover:border-[#C9A227] hover:shadow-sm transition-all text-left flex items-center gap-2.5"
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="w-10 h-10 rounded-xl bg-[#C9A227]/10 text-[#C9A227] flex items-center justify-center">
-                        <CreditCard className="w-5 h-5" />
-                      </div>
-                      <span className="text-[10px] font-black text-[#C9A227]">{fmt(comanda.total)}</span>
+                    <div className="w-8 h-8 rounded-lg bg-[#C9A227]/10 text-[#C9A227] flex items-center justify-center shrink-0">
+                      <CreditCard className="w-3.5 h-3.5" />
                     </div>
-                    <div>
-                      <h4 className="text-lg font-black text-slate-800">{dineInOrderLabel(comanda)}</h4>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                        {comanda.items.length} itens
+                    <div className="min-w-0 flex-1">
+                      <h4 className="text-xs font-black text-slate-800 truncate">{dineInOrderLabel(comanda)}</h4>
+                      <p className="text-[10px] font-bold text-slate-400">
+                        {comanda.items.length} {comanda.items.length === 1 ? "item" : "itens"}
                       </p>
                     </div>
+                    <span className="text-xs font-black text-[#C9A227] shrink-0">{fmt(comanda.total)}</span>
                   </button>
                 ))}
-              {orders.filter((o) => o.orderType === "DINE_IN" && !["DELIVERED", "CANCELLED"].includes(o.status) && !o.tableId).length === 0 && (
+              {activeComandas.length === 0 && (
                 <div className="col-span-full py-20 text-center opacity-30">
                   <p className="text-sm font-black uppercase tracking-widest">Nenhuma comanda aberta</p>
                 </div>
@@ -1214,72 +1215,32 @@ export default function PDVPanel({
             </div>
           ) : (
             cart.map((item) => (
-              <div key={item.product.id} className="bg-white/[0.04] border border-white/5 rounded-xl p-3 space-y-2 hover:border-white/10 transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-white/10 flex items-center justify-center">
-                    {item.product.imageUrl ? (
-                      <img
-                        src={item.product.imageUrl}
-                        className="w-full h-full object-cover"
-                        alt={item.product.name}
-                      />
-                    ) : (
-                      <Utensils className="w-4 h-4 text-white/40" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-xs font-bold truncate">{item.product.name}</h4>
-                    <p className="text-[10px] font-bold text-white/40">{fmt(item.price)} un.</p>
-                  </div>
-                  <div className="flex items-center gap-1 bg-black/20 rounded-lg px-0.5 py-0.5 shrink-0">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); updateQuantity(item.product.id, -1); }}
-                      className="w-8 h-8 sm:w-5 sm:h-5 flex items-center justify-center rounded-md hover:bg-white/10 active:bg-white/20 hover:text-[#C9A227] transition-colors touch-manipulation"
-                    >
-                      <Minus className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
-                    </button>
-                    <span className="text-xs font-black w-5 text-center tabular-nums">{item.quantity}</span>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); updateQuantity(item.product.id, 1); }}
-                      className="w-8 h-8 sm:w-5 sm:h-5 flex items-center justify-center rounded-md hover:bg-white/10 active:bg-white/20 hover:text-[#C9A227] transition-colors touch-manipulation"
-                    >
-                      <Plus className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
-                    </button>
-                  </div>
-                  <span className="text-xs font-black tabular-nums text-[#C9A227] w-16 text-right shrink-0">
-                    {fmt(item.price * item.quantity)}
-                  </span>
-                  <button onClick={() => removeFromCart(item.product.id)} className="p-1 text-white/20 hover:text-red-400 transition-colors shrink-0">
-                    <Trash2 className="w-3 h-3" />
+              <div key={item.product.id} className="bg-white/[0.04] border border-white/5 rounded-xl p-2.5 flex items-center gap-3 hover:border-white/10 transition-colors">
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-xs font-bold truncate">{item.product.name}</h4>
+                  <p className="text-[10px] font-bold text-white/40">{fmt(item.price)} un.</p>
+                </div>
+                <div className="flex items-center gap-1 bg-black/20 rounded-lg px-0.5 py-0.5 shrink-0">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); updateQuantity(item.product.id, -1); }}
+                    className="w-8 h-8 sm:w-5 sm:h-5 flex items-center justify-center rounded-md hover:bg-white/10 active:bg-white/20 hover:text-[#C9A227] transition-colors touch-manipulation"
+                  >
+                    <Minus className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
+                  </button>
+                  <span className="text-xs font-black w-5 text-center tabular-nums">{item.quantity}</span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); updateQuantity(item.product.id, 1); }}
+                    className="w-8 h-8 sm:w-5 sm:h-5 flex items-center justify-center rounded-md hover:bg-white/10 active:bg-white/20 hover:text-[#C9A227] transition-colors touch-manipulation"
+                  >
+                    <Plus className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
                   </button>
                 </div>
-
-                {/* Notes toggle */}
-                {editingItemNotes === item.product.id ? (
-                  <div className="flex gap-2">
-                    <input
-                      autoFocus
-                      type="text"
-                      placeholder="Observação (ex: sem cebola)"
-                      value={item.notes}
-                      onChange={(e) => updateItemNotes(item.product.id, e.target.value)}
-                      onBlur={() => setEditingItemNotes(null)}
-                      className="flex-1 bg-white/5 border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
-                    />
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setEditingItemNotes(item.product.id)}
-                    className="flex items-center gap-1.5 text-[10px] text-white/30 hover:text-white/60 transition-colors"
-                  >
-                    <StickyNote className="w-3 h-3" />
-                    {item.notes ? (
-                      <span className="italic text-white/50">{item.notes}</span>
-                    ) : (
-                      <span>Adicionar observação</span>
-                    )}
-                  </button>
-                )}
+                <span className="text-xs font-black tabular-nums text-[#C9A227] w-16 text-right shrink-0">
+                  {fmt(item.price * item.quantity)}
+                </span>
+                <button onClick={() => removeFromCart(item.product.id)} className="p-1 text-white/20 hover:text-red-400 transition-colors shrink-0">
+                  <Trash2 className="w-3 h-3" />
+                </button>
               </div>
             ))
           )}

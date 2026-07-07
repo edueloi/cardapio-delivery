@@ -12,6 +12,7 @@ import {
   History,
   Star,
   PackageX,
+  Receipt,
 } from "lucide-react";
 import { Badge, Button, ContentCard, Input, Switch, Textarea } from "../../components";
 import { apiJson } from "../../lib/api";
@@ -31,6 +32,7 @@ interface WppFormState {
   sendOrderCreated: boolean;
   sendStatusUpdates: boolean;
   sendLoyaltyPoints: boolean;
+  sendReceiptPdf: boolean;
   sendLowStockAlert: boolean;
   ownerAlertPhone: string;
   isPaused: boolean;
@@ -48,6 +50,7 @@ const MESSAGE_KIND_LABELS: Record<WppMessageKind, { label: string; emoji: string
   PREORDER: { label: "Encomenda", emoji: "🗓️" },
   MANUAL_TEST: { label: "Teste manual", emoji: "🧪" },
   CONVERSATION: { label: "Conversa", emoji: "💬" },
+  RECEIPT_PDF: { label: "Recibo em PDF", emoji: "🧾" },
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -77,6 +80,7 @@ function buildForm(tenant: Tenant, instance: WppInstance | null, config: WppBotC
     sendOrderCreated: config?.sendOrderCreated ?? true,
     sendStatusUpdates: config?.sendStatusUpdates ?? true,
     sendLoyaltyPoints: config?.sendLoyaltyPoints ?? true,
+    sendReceiptPdf: config?.sendReceiptPdf ?? true,
     sendLowStockAlert: config?.sendLowStockAlert ?? false,
     ownerAlertPhone: config?.ownerAlertPhone || "",
     isPaused: config?.isPaused || false,
@@ -290,6 +294,7 @@ export function WhatsAppManagementPanel({
           sendOrderCreated: form.sendOrderCreated,
           sendStatusUpdates: form.sendStatusUpdates,
           sendLoyaltyPoints: form.sendLoyaltyPoints,
+          sendReceiptPdf: form.sendReceiptPdf,
           sendLowStockAlert: form.sendLowStockAlert,
           ownerAlertPhone: form.ownerAlertPhone.trim() || null,
           isPaused: form.isPaused,
@@ -512,6 +517,15 @@ export function WhatsAppManagementPanel({
               checked={form.sendLoyaltyPoints}
               onCheckedChange={(checked) =>
                 setForm((current) => ({ ...current, sendLoyaltyPoints: checked }))
+              }
+            />
+            <ToggleCard
+              label="Recibo em PDF"
+              description="Envia o recibo da venda em PDF quando o pedido é entregue."
+              icon={<Receipt className="w-4 h-4 text-emerald-500" />}
+              checked={form.sendReceiptPdf}
+              onCheckedChange={(checked) =>
+                setForm((current) => ({ ...current, sendReceiptPdf: checked }))
               }
             />
             <ToggleCard

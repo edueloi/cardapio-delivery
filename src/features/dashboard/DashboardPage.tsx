@@ -261,6 +261,7 @@ export default function DashboardPage() {
         }}
         onLogout={logout}
         isSuperAdmin={!!(account as any)?.isSuperAdmin}
+        hideHeader={activeTab === "pos"}
       >
         <DashboardContent
           tenant={tenant}

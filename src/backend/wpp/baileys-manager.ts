@@ -825,7 +825,7 @@ export async function disconnectSession(tenantId: string): Promise<void> {
 
 export type WppMessageKind =
   | "ORDER_CREATED" | "OWNER_ALERT" | "STATUS_UPDATE" | "LOYALTY_POINTS"
-  | "LOW_STOCK" | "PREORDER" | "MANUAL_TEST" | "CONVERSATION";
+  | "LOW_STOCK" | "PREORDER" | "MANUAL_TEST" | "CONVERSATION" | "RECEIPT_PDF";
 
 function logMessage(tenantId: string, toPhone: string, kind: WppMessageKind, text: string): void {
   const preview = text.slice(0, 300);
@@ -868,6 +868,45 @@ export async function sendMessage(tenantId: string, to: string, text: string, de
       logMessage(tenantId, to, kind, text);
     } catch (error) {
       console.warn("[Baileys] sendMessage error:", error);
+    }
+  });
+  sendingLocks.set(tenantId, current);
+  current.finally(() => { if (sendingLocks.get(tenantId) === current) sendingLocks.delete(tenantId); });
+}
+
+export async function sendDocumentMessage(
+  tenantId: string,
+  to: string,
+  document: Buffer,
+  fileName: string,
+  caption: string,
+  kind: WppMessageKind = "CONVERSATION"
+): Promise<void> {
+  const session = sessions.get(tenantId);
+  if (!session?.sock || session.status !== "connected") return;
+
+  const owner = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { whatsapp: true, wppBotConfig: true } });
+  const isToOwner = owner?.whatsapp && jidMatchesPhone(to, owner.whatsapp);
+
+  if (!isToOwner && !isBotActiveNow(owner?.wppBotConfig)) {
+    console.log(`[Baileys][${tenantId}] 🤐 Bloqueando envio de documento: Bot inativo ou fora do horário.`);
+    return;
+  }
+
+  const jid = to.includes("@") ? to : phoneToJid(to);
+  const previous = sendingLocks.get(tenantId) || Promise.resolve();
+  const current = previous.then(async () => {
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 800 + Math.random() * 1000));
+      await session.sock.sendMessage(jid, {
+        document,
+        mimetype: "application/pdf",
+        fileName,
+        caption,
+      });
+      logMessage(tenantId, to, kind, caption);
+    } catch (error) {
+      console.warn("[Baileys] sendDocumentMessage error:", error);
     }
   });
   sendingLocks.set(tenantId, current);
