@@ -4499,7 +4499,11 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
       }
     }
 
-    io.to(`tenant-${tenant.id}`).emit("order:new", order);
+    // "new-order" é o nome de evento escutado em todo o app (painel de cozinha, PDV,
+    // etc) — "order:new" nunca foi ouvido em lugar nenhum, então pedidos lançados por
+    // essa rota (PDV e comanda de garçom) nunca apareciam em tempo real na cozinha,
+    // só depois de um refresh manual que buscava via HTTP.
+    io.to(`tenant-${tenant.id}`).emit("new-order", order);
     res.json(order);
   } catch (error) {
     console.error(error);
