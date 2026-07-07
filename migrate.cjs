@@ -1013,6 +1013,13 @@ const migrations = [
     check: "SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'order_items' AND CONSTRAINT_NAME = 'order_items_product_variant_id_fkey'",
     run: "ALTER TABLE order_items ADD CONSTRAINT order_items_product_variant_id_fkey FOREIGN KEY (product_variant_id) REFERENCES product_variants(id) ON DELETE SET NULL ON UPDATE CASCADE",
   },
+  // Loja pode desligar o controle de caixa (abrir/fechar, fundo, sangria/suprimento) pra
+  // quem não precisa disso no dia-a-dia — default true preserva o comportamento atual.
+  {
+    name: 'add_tenants_require_cash_register',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenants' AND COLUMN_NAME = 'require_cash_register'",
+    run: "ALTER TABLE tenants ADD COLUMN require_cash_register TINYINT(1) NOT NULL DEFAULT 1",
+  },
 ];
 
 async function run() {

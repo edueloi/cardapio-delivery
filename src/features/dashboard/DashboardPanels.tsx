@@ -1906,6 +1906,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
     scheduleType: (tenant?.scheduleType ?? "CLIENT_CHOOSES") as "CLIENT_CHOOSES" | "OWNER_DEFINES",
     scheduleNotes: tenant?.scheduleNotes || "",
     waiterNotifyOnReady: tenant?.waiterNotifyOnReady ?? true,
+    requireCashRegister: tenant?.requireCashRegister ?? true,
   });
   const [scheduleDays, setScheduleDays] = useState<any[]>(() => parseScheduleDays(tenant?.scheduleDays));
   const [addr, setAddr] = useState<AddressForm>(() => parseAddress(tenant?.address) ?? { ...EMPTY_ADDR });
@@ -1948,7 +1949,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
 
   useEffect(() => {
     if (tenant) {
-      setForm({ name: tenant.name || "", description: tenant.description || "", logoUrl: tenant.logoUrl || "", whatsapp: maskPhone(tenant.whatsapp) || "", isOpen: tenant.isOpen ?? true, orderMode: (tenant.orderMode ?? "DELIVERY_ONLY") as "DELIVERY_ONLY" | "PREORDER_ONLY" | "BOTH", scheduleMode: tenant.scheduleMode ?? false, scheduleType: (tenant.scheduleType ?? "CLIENT_CHOOSES") as "CLIENT_CHOOSES" | "OWNER_DEFINES", scheduleNotes: tenant.scheduleNotes || "", waiterNotifyOnReady: tenant.waiterNotifyOnReady ?? true });
+      setForm({ name: tenant.name || "", description: tenant.description || "", logoUrl: tenant.logoUrl || "", whatsapp: maskPhone(tenant.whatsapp) || "", isOpen: tenant.isOpen ?? true, orderMode: (tenant.orderMode ?? "DELIVERY_ONLY") as "DELIVERY_ONLY" | "PREORDER_ONLY" | "BOTH", scheduleMode: tenant.scheduleMode ?? false, scheduleType: (tenant.scheduleType ?? "CLIENT_CHOOSES") as "CLIENT_CHOOSES" | "OWNER_DEFINES", scheduleNotes: tenant.scheduleNotes || "", waiterNotifyOnReady: tenant.waiterNotifyOnReady ?? true, requireCashRegister: tenant.requireCashRegister ?? true });
       setScheduleDays(parseScheduleDays(tenant.scheduleDays));
       setAddr(parseAddress(tenant.address) ?? { ...EMPTY_ADDR });
       try { setHours(tenant.businessHours ? JSON.parse(tenant.businessHours) : DEFAULT_HOURS); } catch { setHours(DEFAULT_HOURS); }
@@ -2120,6 +2121,13 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                     <p className="text-xs text-slate-500 mt-1">Notifica o garçom, em qualquer tela do sistema, quando a cozinha marcar a comanda da mesa como pronta para servir.</p>
                   </div>
                   <Switch checked={form.waiterNotifyOnReady} onCheckedChange={v => setForm(f => ({ ...f, waiterNotifyOnReady: v }))} />
+                </div>
+                <div className="flex items-center justify-between gap-4 py-5 border-t border-zinc-100">
+                  <div>
+                    <p className="text-sm font-black text-slate-900">Exigir Abertura/Fechamento de Caixa no PDV</p>
+                    <p className="text-xs text-slate-500 mt-1">Se desligado, o PDV vende sem precisar abrir caixa (sem fundo, sangria/suprimento ou fechamento) — venda liberada direto.</p>
+                  </div>
+                  <Switch checked={form.requireCashRegister} onCheckedChange={v => setForm(f => ({ ...f, requireCashRegister: v }))} />
                 </div>
                 {/* ── Modo de Operação (Delivery / Encomenda / Misto) ── */}
                 <div className="pt-5 border-t border-zinc-100">

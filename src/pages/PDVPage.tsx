@@ -166,13 +166,6 @@ export default function PDVPage({ mode = "full" }: PDVPageProps) {
               <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
               Online
             </span>
-            <Link
-              to={`/dashboard/${slug}/pdv`}
-              className="flex items-center gap-1.5 text-[10px] font-black uppercase text-white/40 hover:text-white transition-colors bg-white/5 px-3 py-2 rounded-xl"
-            >
-              <X className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Fechar</span>
-            </Link>
           </div>
         </div>
       )}

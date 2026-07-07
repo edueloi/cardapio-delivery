@@ -152,7 +152,9 @@ export default function PDVPanel({
   // Taxa de serviço — vem pré-marcada se ativada nas configurações, mas sempre pode ser desmarcada no pagamento
   const [serviceChargeChecked, setServiceChargeChecked] = useState(true);
 
-  // Caixa (abertura/fechamento) — venda só é permitida com caixa aberto
+  // Caixa (abertura/fechamento) — por padrão venda só é permitida com caixa aberto, mas a
+  // loja pode desligar essa exigência em Configurações (venda liberada direto, sem fundo/sangria).
+  const cashRequired = tenant.requireCashRegister !== false;
   const [currentCash, setCurrentCash] = useState<{ id: string; openingBalance: number; openedAt: string; expectedBalance: number } | null>(null);
   const [cashLoading, setCashLoading] = useState(true);
   const [showOpenCashModal, setShowOpenCashModal] = useState(false);
@@ -496,7 +498,7 @@ export default function PDVPanel({
         e.preventDefault();
         if (showCheckout) {
           handleCheckoutRef.current?.();
-        } else if (cart.length > 0 && currentCash) {
+        } else if (cart.length > 0 && (!cashRequired || currentCash)) {
           setShowCheckout(true);
         }
       } else if (e.key === "F4") {
@@ -589,7 +591,7 @@ export default function PDVPanel({
   };
 
   const handleCheckout = async () => {
-    if (cart.length === 0 || !currentCash) return;
+    if (cart.length === 0 || (cashRequired && !currentCash)) return;
     if (isSplitMode && (paymentSplits.length === 0 || splitRemaining > 0)) return;
     setIsProcessing(true);
 
@@ -878,7 +880,7 @@ export default function PDVPanel({
           </div>
         )}
         {/* Cash register status bar */}
-        {!isWaiterMode && !cashLoading && (
+        {!isWaiterMode && !cashLoading && cashRequired && (
           <div className={`flex items-center justify-between gap-3 px-5 py-2.5 border-b shrink-0 ${
             currentCash ? "bg-emerald-50/60 border-emerald-100" : "bg-red-50/60 border-red-100"
           }`}>
@@ -1534,8 +1536,8 @@ export default function PDVPanel({
             )}
             {!isWaiterMode && (
               <button
-                disabled={cart.length === 0 || !currentCash}
-                title={!currentCash ? "Abra o caixa para receber pagamentos" : "Atalho: F2"}
+                disabled={cart.length === 0 || (cashRequired && !currentCash)}
+                title={cashRequired && !currentCash ? "Abra o caixa para receber pagamentos" : "Atalho: F2"}
                 onClick={() => { setShowCheckout(true); setShowCartDrawer(false); }}
                 className="relative bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-3 rounded-2xl transition-all shadow-xl shadow-[#C9A227]/20 flex items-center justify-center gap-2 uppercase tracking-widest text-[10px]"
               >
@@ -1645,13 +1647,15 @@ export default function PDVPanel({
                 </button>
               </div>
               <div className="p-3 space-y-1">
-                <button
-                  onClick={() => { setShowMoreOptionsMenu(false); currentCash ? setShowCloseCashModal(true) : setShowOpenCashModal(true); }}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 transition-colors text-left"
-                >
-                  {currentCash ? <DoorClosed className="w-4 h-4 text-red-500 shrink-0" /> : <DoorOpen className="w-4 h-4 text-emerald-500 shrink-0" />}
-                  <span className="text-sm font-bold text-slate-700">{currentCash ? "Fechar Caixa" : "Abrir Caixa"}</span>
-                </button>
+                {cashRequired && (
+                  <button
+                    onClick={() => { setShowMoreOptionsMenu(false); currentCash ? setShowCloseCashModal(true) : setShowOpenCashModal(true); }}
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 transition-colors text-left"
+                  >
+                    {currentCash ? <DoorClosed className="w-4 h-4 text-red-500 shrink-0" /> : <DoorOpen className="w-4 h-4 text-emerald-500 shrink-0" />}
+                    <span className="text-sm font-bold text-slate-700">{currentCash ? "Fechar Caixa" : "Abrir Caixa"}</span>
+                  </button>
+                )}
                 {(selectedTableId || cart.length > 0) && (
                   <button
                     onClick={() => { setShowMoreOptionsMenu(false); clearCart(); }}

@@ -180,6 +180,7 @@ export interface Tenant {
   loyaltyConfig?: LoyaltyConfig | null;
   displayPanelConfig?: string | null; // JSON string: DisplayPanelConfig
   waiterNotifyOnReady?: boolean; // avisa o garçom quando a cozinha marca a comanda como pronta pra servir
+  requireCashRegister?: boolean; // se false, PDV vende sem precisar abrir/fechar caixa
 }
 
 // Controla quais tipos de pedido aparecem no Painel TV (/:slug/display) — tela exposta pro cliente ver o status.

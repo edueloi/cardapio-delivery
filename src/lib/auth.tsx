@@ -88,6 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refresh = async () => {
     const token = getAuthToken();
     if (!token) {
+      console.warn("[auth] Nenhuma sessão salva encontrada no localStorage — login será solicitado.");
       clearAuth();
       setLoading(false);
       return;
@@ -99,7 +100,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       if (err instanceof AuthError) {
         // Token explicitly rejected by server — sign out
+        console.warn("[auth] Sessão salva foi rejeitada pelo servidor (token expirado/inválido) — deslogando.", err);
         clearAuth();
+      } else {
+        console.warn("[auth] Falha ao validar sessão (rede/servidor) — mantendo login local.", err);
       }
       // Network / server errors: keep existing account data so the user stays logged in
     } finally {
