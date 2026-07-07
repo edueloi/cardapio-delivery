@@ -1005,6 +1005,14 @@ const migrations = [
     check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'wpp_bot_configs' AND COLUMN_NAME = 'send_receipt_pdf'",
     run: "ALTER TABLE wpp_bot_configs ADD COLUMN send_receipt_pdf TINYINT(1) NOT NULL DEFAULT 1",
   },
+  // Relação formal order_items -> product_variants (a coluna já existia, mas sem FK — o
+  // Prisma Client não reconhecia productVariant como relação, quebrando qualquer include
+  // que a referenciasse, ex: ao aceitar/entregar pedidos com item de variante).
+  {
+    name: 'add_order_items_product_variant_id_fkey',
+    check: "SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'order_items' AND CONSTRAINT_NAME = 'order_items_product_variant_id_fkey'",
+    run: "ALTER TABLE order_items ADD CONSTRAINT order_items_product_variant_id_fkey FOREIGN KEY (product_variant_id) REFERENCES product_variants(id) ON DELETE SET NULL ON UPDATE CASCADE",
+  },
 ];
 
 async function run() {

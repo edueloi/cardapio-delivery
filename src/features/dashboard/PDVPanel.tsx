@@ -6,7 +6,7 @@ import {
   ChevronRight, ChevronDown, ArrowLeft,
   Utensils, Tag, User, Phone, Percent,
   Printer, Hash, AlertCircle, Smartphone, Lock, ExternalLink, Download, Zap,
-  MoreHorizontal, DoorOpen, DoorClosed, Maximize2, Split,
+  MoreHorizontal, DoorOpen, DoorClosed, Maximize2, Minimize2, Split,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import type { Tenant, Product, Order, PaymentConfig, PaymentMethodConfig, StoneConfig } from "../../types";
@@ -79,6 +79,23 @@ export default function PDVPanel({
   const isWaiterMode = mode === "waiter";
   // Tela cheia do PDV externo (/pdv/:slug) — só existe onOpenFullscreen quando embutido no dashboard
   const isExternalFullscreen = !onOpenFullscreen && !isWaiterMode;
+
+  // Tela cheia de verdade (Fullscreen API do navegador, tipo F11) — diferente de
+  // onOpenFullscreen, que abre o PDV externo numa aba/janela separada.
+  const [isBrowserFullscreen, setIsBrowserFullscreen] = useState(false);
+  useEffect(() => {
+    const handler = () => setIsBrowserFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", handler);
+    return () => document.removeEventListener("fullscreenchange", handler);
+  }, []);
+  const toggleBrowserFullscreen = () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    } else {
+      document.documentElement.requestFullscreen().catch(() => {});
+    }
+  };
+
   const [activeTab, setActiveTab] = useState<"products" | "tables" | "comandas">(isWaiterMode ? "tables" : "products");
   // Em telas menores que lg, o carrinho vira um painel deslizante aberto sob demanda
   // (por um botão flutuante), em vez de ficar sempre empilhado ocupando a tela.
@@ -777,15 +794,25 @@ export default function PDVPanel({
 
       {/* ── Left: Product Selection ── */}
       <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
-        {/* Fullscreen shortcut — só quando embutido no dashboard */}
-        {onOpenFullscreen && (
-          <div className="flex justify-end px-3 pt-2.5">
+        {/* Atalhos de tela — abrir em nova janela (só no dashboard) e fullscreen do navegador (sempre) */}
+        {!isWaiterMode && (
+          <div className="flex justify-end items-center gap-1 px-3 pt-2.5">
+            {onOpenFullscreen && (
+              <button
+                onClick={onOpenFullscreen}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-[#0D1B3E] hover:bg-slate-50 transition-colors"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                Nova Janela
+              </button>
+            )}
             <button
-              onClick={onOpenFullscreen}
+              onClick={toggleBrowserFullscreen}
+              title="Tela cheia (F11)"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-[#0D1B3E] hover:bg-slate-50 transition-colors"
             >
-              <ExternalLink className="w-3.5 h-3.5" />
-              Tela Cheia
+              {isBrowserFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+              {isBrowserFullscreen ? "Sair da Tela Cheia" : "Tela Cheia"}
             </button>
           </div>
         )}
@@ -1536,10 +1563,17 @@ export default function PDVPanel({
                     onClick={() => { setShowMoreOptionsMenu(false); onOpenFullscreen(); }}
                     className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 transition-colors text-left"
                   >
-                    <Maximize2 className="w-4 h-4 text-slate-500 shrink-0" />
-                    <span className="text-sm font-bold text-slate-700">Tela Cheia</span>
+                    <ExternalLink className="w-4 h-4 text-slate-500 shrink-0" />
+                    <span className="text-sm font-bold text-slate-700">Nova Janela</span>
                   </button>
                 )}
+                <button
+                  onClick={() => { setShowMoreOptionsMenu(false); toggleBrowserFullscreen(); }}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 transition-colors text-left"
+                >
+                  {isBrowserFullscreen ? <Minimize2 className="w-4 h-4 text-slate-500 shrink-0" /> : <Maximize2 className="w-4 h-4 text-slate-500 shrink-0" />}
+                  <span className="text-sm font-bold text-slate-700">{isBrowserFullscreen ? "Sair da Tela Cheia" : "Tela Cheia"}</span>
+                </button>
               </div>
             </motion.div>
           </motion.div>
@@ -1724,7 +1758,7 @@ export default function PDVPanel({
               initial={{ scale: 0.95, y: 20, opacity: 0 }}
               animate={{ scale: 1, y: 0, opacity: 1 }}
               exit={{ scale: 0.95, y: 20, opacity: 0 }}
-              className="bg-[#0D1B3E] w-full h-full sm:h-auto sm:max-w-3xl rounded-none sm:rounded-[2rem] shadow-2xl border-0 sm:border border-white/5 overflow-hidden flex flex-col md:flex-row sm:max-h-[85vh] relative"
+              className="bg-[#0D1B3E] w-full h-full sm:h-auto sm:max-w-5xl rounded-none sm:rounded-[2rem] shadow-2xl border-0 sm:border border-white/5 overflow-hidden flex flex-col md:flex-row sm:max-h-[90vh] relative"
             >
               {/* Botão fechar — sempre visível, no canto do modal. Em mobile/tablet volta pro
                   carrinho aberto em vez de fechar tudo, mantendo a pessoa no fluxo do pedido. */}
@@ -1802,10 +1836,10 @@ export default function PDVPanel({
               {/* Right: Payment */}
               <div className="flex-1 flex flex-col min-h-0 min-w-0">
               <div className="overflow-y-auto min-h-0 p-6 pt-14">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-6">
                   {/* Payment methods */}
                   <div className="space-y-2.5">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
                       <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Forma de Pagamento</p>
                       {paymentMethod !== "STONE" && (
                         <button
@@ -1908,7 +1942,7 @@ export default function PDVPanel({
                           <div className="space-y-1">
                             <label className="text-[10px] font-black uppercase text-[#C9A227] tracking-widest ml-1">Valor Recebido</label>
                             <div className="relative">
-                              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl font-black text-white/30">R$</span>
+                              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-black text-white/30">R$</span>
                               <input
                                 type="text"
                                 inputMode="numeric"
@@ -1916,7 +1950,7 @@ export default function PDVPanel({
                                 value={formatCurrencyDigits(amountReceived)}
                                 onChange={(e) => setAmountReceived(maskCurrencyDigits(e.target.value))}
                                 placeholder="0,00"
-                                className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 pl-11 pr-4 text-xl font-black text-white focus:border-[#C9A227] outline-none text-center [appearance:textfield]"
+                                className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-base font-black text-white focus:border-[#C9A227] outline-none text-center [appearance:textfield]"
                               />
                             </div>
                           </div>
