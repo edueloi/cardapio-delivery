@@ -1,7 +1,7 @@
 import { Download, Monitor, Globe, CheckCircle2, ArrowRight, Package2, Smartphone, Share, Plus, MoreHorizontal } from "lucide-react";
 import { PageWrapper, SectionTitle, ContentCard } from "../../components";
 
-const VERSION = "1.0.2";
+const VERSION = "1.0.3";
 
 const downloads = [
   {
