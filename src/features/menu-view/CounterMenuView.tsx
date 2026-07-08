@@ -20,13 +20,28 @@ const fmt = (n: number) =>
 
 // Tradução de status para o cliente que está acompanhando a senha do balcão.
 const STATUS_LABEL: Record<string, string> = {
-  PENDING: "Pedido recebido — aguardando confirmação",
+  AWAITING_PAYMENT: "Aguardando Pagamento",
+  PENDING: "Pedido pago — aguardando início do preparo",
   PREPARING: "Estamos preparando seu pedido",
   SHIPPED: "Pronto! Pode retirar no balcão",
   DELIVERED: "Pedido entregue",
   MERGED: "Pedido concluído no caixa",
   CANCELLED: "Pedido cancelado",
 };
+
+// Mensagem de instrução dinâmica
+function getInstructionText(status: string) {
+  if (status === "AWAITING_PAYMENT") {
+    return "Pague no caixa e acompanhe pela tela — chamaremos sua senha quando estiver pronto.";
+  }
+  if (["PENDING", "PREPARING"].includes(status)) {
+    return "Pagamento confirmado! Seu pedido já está na fila de preparo. Fique atento à sua senha.";
+  }
+  if (status === "SHIPPED") {
+    return "Seu pedido está pronto! Dirija-se ao balcão para retirar.";
+  }
+  return "";
+}
 
 export default function CounterMenuView() {
   const { slug } = useParams();
@@ -449,10 +464,11 @@ export default function CounterMenuView() {
                   </span>
                 </div>
 
-                <p className="text-white/40 text-sm leading-relaxed px-4">
-                  Pague no caixa e acompanhe pela tela — chamaremos sua senha quando estiver pronto.
+                <div className="space-y-4">
+                <p className="text-white/40 text-sm max-w-[280px] mx-auto leading-relaxed">
+                  {getInstructionText(ticketOrder.status)}
                 </p>
-              </div>
+                </div>
 
               <button
                 onClick={handleNewOrder}
