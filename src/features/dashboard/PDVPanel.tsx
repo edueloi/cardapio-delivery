@@ -118,6 +118,8 @@ export default function PDVPanel({
   const [showCheckout, setShowCheckout] = useState(false);
   const [showComandaModal, setShowComandaModal] = useState(false);
   const [comandaNumber, setComandaNumber] = useState("");
+  const [nextTicket, setNextTicket] = useState<number | null>(null);
+  const [nextTicketLoading, setNextTicketLoading] = useState(false);
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   const [selectedComandaId, setSelectedComandaId] = useState<string | null>(null);
   // true quando veio do fluxo "Fechar Conta" — só pagar, sem opção de lançar mais itens
@@ -239,6 +241,17 @@ export default function PDVPanel({
     if (!isWaiterMode) void fetchCurrentCash();
     else setCashLoading(false);
   }, [fetchCurrentCash, isWaiterMode]);
+
+  // Busca a próxima senha disponível sempre que o modal de comanda abre
+  useEffect(() => {
+    if (!showComandaModal) return;
+    setNextTicketLoading(true);
+    setNextTicket(null);
+    apiJson<{ nextTicket: number }>(`/api/tenants/${tenant.slug}/next-ticket`)
+      .then((data) => setNextTicket(data.nextTicket))
+      .catch(() => setNextTicket(null))
+      .finally(() => setNextTicketLoading(false));
+  }, [showComandaModal, tenant.slug]);
 
   // Outro operador pode abrir/fechar o caixa em outra aba/dispositivo enquanto esta tela já
   // está aberta — sem isso, ficava presa mostrando "Caixa Fechado" (ou vice-versa) até um F5.
@@ -1957,57 +1970,48 @@ export default function PDVPanel({
                 <h3 className="text-xl font-black text-slate-800 uppercase tracking-widest">Abrir Comanda</h3>
                 <p className="text-xs text-slate-400 font-bold uppercase">Identifique o cliente ou o cartão</p>
               </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-1">
-                  Número ou Nome
-                </label>
-                <input
-                  type="text"
-                  autoFocus
-                  value={comandaNumber}
-                  onChange={(e) => setComandaNumber(e.target.value)}
-                  placeholder="Ex: 05 ou João"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-6 text-xl font-black text-slate-800 focus:border-[#C9A227] outline-none text-center"
-                />
-                {/* Senhas rápidas */}
-                <div>
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 text-center">Senha rápida</p>
-                  <div className="grid grid-cols-5 gap-1.5">
-                    {Array.from({ length: 20 }, (_, i) => i + 1).map((n) => {
-                      const inUse = orders.some(
-                        (o) => !['DELIVERED','CANCELLED','MERGED'].includes(o.status) &&
-                          (o.counterTicketNumber === n || (o.customerName === String(n) && !o.tableId))
-                      );
-                      return (
-                        <button
-                          key={n}
-                          type="button"
-                          onClick={() => !inUse && setComandaNumber(String(n))}
-                          disabled={inUse}
-                          className={`py-2 rounded-xl text-sm font-black transition-all ${
-                            comandaNumber === String(n)
-                              ? 'bg-[#C9A227] text-black shadow-lg scale-105'
-                              : inUse
-                                ? 'bg-red-50 text-red-300 cursor-not-allowed line-through'
-                                : 'bg-slate-100 text-slate-600 hover:bg-[#C9A227]/20 hover:text-[#a37d1a]'
-                          }`}
-                        >
-                          {n}
-                        </button>
-                      );
-                    })}
+              <div className="space-y-4">
+                {/* Próxima senha em destaque */}
+                <div className="text-center">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Próxima senha</p>
+                  <div className="mx-auto w-28 h-28 rounded-[2rem] border-2 border-[#C9A227]/30 bg-[#C9A227]/5 flex flex-col items-center justify-center gap-0.5 shadow-lg">
+                    <span className="text-[9px] font-black text-[#C9A227]/60 uppercase tracking-[0.3em]">Nº</span>
+                    {nextTicketLoading ? (
+                      <div className="w-5 h-5 border-2 border-[#C9A227] border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <span className="text-5xl font-black text-[#C9A227] tracking-tighter tabular-nums">
+                        {nextTicket ?? "—"}
+                      </span>
+                    )}
                   </div>
+                  <p className="text-[9px] text-slate-400 mt-2">Gerada automaticamente pelo sistema</p>
+                </div>
+
+                {/* Identificação opcional */}
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-1">
+                    Nome / Identificação <span className="normal-case font-normal">(opcional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    autoFocus
+                    value={comandaNumber}
+                    onChange={(e) => setComandaNumber(e.target.value)}
+                    placeholder="Ex: João ou Mesa VIP"
+                    className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-5 text-base font-bold text-slate-800 focus:border-[#C9A227] outline-none text-center"
+                  />
+                  <p className="text-[9px] text-slate-400 mt-1 text-center">Deixe em branco para usar só a senha numérica</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <button
-                  onClick={() => setShowComandaModal(false)}
+                  onClick={() => { setShowComandaModal(false); setComandaNumber(""); }}
                   className="bg-slate-100 hover:bg-slate-200 text-slate-500 font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest transition-all"
                 >
                   Cancelar
                 </button>
                 <button
-                  disabled={!comandaNumber || isProcessing}
+                  disabled={isProcessing || nextTicketLoading}
                   onClick={async () => {
                     setIsProcessing(true);
                     try {

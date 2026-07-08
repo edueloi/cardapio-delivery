@@ -2006,6 +2006,26 @@ app.get("/api/orders/table/:slug/:tableId", async (req, res) => {
   }
 });
 
+// Retorna a próxima senha sequencial do dia (sem criar pedido) — usado pelo PDV
+// para pré-visualizar a senha antes de abrir a comanda, evitando duplicatas.
+app.get("/api/tenants/:slug/next-ticket", async (req, res) => {
+  try {
+    const tenant = await prisma.tenant.findUnique({ where: { slug: req.params.slug }, select: { id: true } });
+    if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const lastTicket = await prisma.order.findFirst({
+      where: { tenantId: tenant.id, counterTicketNumber: { not: null }, createdAt: { gte: startOfDay } },
+      orderBy: { counterTicketNumber: "desc" },
+      select: { counterTicketNumber: true },
+    });
+    res.json({ nextTicket: (lastTicket?.counterTicketNumber ?? 0) + 1 });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao buscar próxima senha." });
+  }
+});
+
 // Acompanhamento de um pedido de balcão pela senha (sem mesa fixa) — o cliente guarda o
 // id do pedido recém-criado no localStorage e consulta o status daqui, já que balcão não
 // tem tableId (usa counterTicketNumber só como número de exibição, não como chave de busca).
