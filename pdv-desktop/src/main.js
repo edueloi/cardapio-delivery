@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, Menu, globalShortcut, dialog } = require("electron");
 const path = require("path");
+const { autoUpdater } = require("electron-updater");
 const printer = require("./printer");
 const { openPrinterConfigWindow } = require("./printer-config-window");
 
@@ -76,9 +77,35 @@ function registerShortcuts() {
   });
 }
 
+// Auto-update: checa no servidor (public/downloads/pdv-updates/ no VPS) se existe uma
+// versão nova, baixa em segundo plano e instala no próximo fechamento do app — assim uma
+// mudança no app desktop (impressora, janela, atalhos) chega em todo mundo sem precisar
+// reinstalar manualmente, igual o PDV em si já atualiza sozinho por rodar do site.
+function setupAutoUpdate() {
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on("error", (err) => {
+    console.error("[updater] Error:", err);
+  });
+
+  autoUpdater.on("update-downloaded", () => {
+    // Instala na próxima vez que o app fechar — não interrompe o operador no meio de uma
+    // venda. O PDV roda o dia todo, então na prática atualiza na virada do turno/reinício.
+    console.log("[updater] Update downloaded, will install on next quit.");
+  });
+
+  autoUpdater.checkForUpdates().catch((err) => console.error("[updater] Check failed:", err));
+  // Reverifica periodicamente, já que o app fica aberto o dia inteiro num PDV.
+  setInterval(() => {
+    autoUpdater.checkForUpdates().catch((err) => console.error("[updater] Check failed:", err));
+  }, 4 * 60 * 60 * 1000);
+}
+
 app.whenReady().then(() => {
   createWindow();
   registerShortcuts();
+  setupAutoUpdate();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
