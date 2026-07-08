@@ -950,6 +950,82 @@ function VariantImageUploader({ value, onChange }: { value: string, onChange: (v
   );
 }
 
+// Configuração da impressora térmica USB/Serial — só existe (e só faz sentido) dentro do
+// app desktop Electron, que expõe window.pdvDesktop com a ponte de impressão ESC/POS
+// direta. No navegador comum essa seção simplesmente não aparece.
+function DesktopPrinterSettings() {
+  const toast = useToast();
+  const desktop = typeof window !== "undefined" ? (window as any).pdvDesktop : null;
+  const [ports, setPorts] = useState<Array<{ path: string, manufacturer: string }>>([]);
+  const [selectedPort, setSelectedPort] = useState("usb");
+  const [testing, setTesting] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!desktop) return;
+    (async () => {
+      const [config, portList] = await Promise.all([
+        desktop.printer.getConfig(),
+        desktop.printer.listSerialPorts(),
+      ]);
+      setSelectedPort(config?.interface || "usb");
+      setPorts(portList || []);
+      setLoaded(true);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (!desktop) return null;
+
+  const handlePortChange = async (value: string) => {
+    setSelectedPort(value);
+    await desktop.printer.setConfig({ interface: value });
+  };
+
+  const handleTestPrint = async () => {
+    setTesting(true);
+    try {
+      const result = await desktop.printer.testPrint();
+      if (result.ok) toast.success("Impressão de teste enviada!");
+      else toast.error(result.error || "Falha ao imprimir.");
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  return (
+    <div className="pt-5 border-t border-zinc-100">
+      <div className="flex items-center justify-between gap-4 mb-3">
+        <div>
+          <p className="text-sm font-black text-slate-900">Impressora Térmica (App Desktop)</p>
+          <p className="text-xs text-slate-500 mt-1">Imprime o recibo direto na impressora, sem abrir o diálogo de impressão do navegador.</p>
+        </div>
+      </div>
+      {loaded && (
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+          <select
+            value={selectedPort}
+            onChange={e => handlePortChange(e.target.value)}
+            className="flex-1 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400"
+          >
+            <option value="usb">USB (padrão do sistema)</option>
+            {ports.map(p => (
+              <option key={p.path} value={p.path}>{p.path}{p.manufacturer ? ` — ${p.manufacturer}` : ""}</option>
+            ))}
+          </select>
+          <button
+            onClick={handleTestPrint}
+            disabled={testing}
+            className="px-4 py-2.5 rounded-xl bg-[#0D1B3E] hover:bg-[#0D1B3E]/90 text-white text-xs font-black uppercase tracking-widest transition-colors disabled:opacity-50 shrink-0"
+          >
+            {testing ? "Imprimindo..." : "Testar Impressão"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Modal de vínculo de estoque
 function InventoryLinkField({
   inventoryItems,
@@ -2145,6 +2221,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                     size="sm"
                   />
                 </div>
+                <DesktopPrinterSettings />
                 {/* ── Modo de Operação (Delivery / Encomenda / Misto) ── */}
                 <div className="pt-5 border-t border-zinc-100">
                   <div className="mb-3">

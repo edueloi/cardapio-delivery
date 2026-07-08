@@ -15,3 +15,6 @@ public/downloads/*.apk
 
 # Chave de assinatura do APK — nunca commitar (perder = quebra atualização do app instalado)
 android-keystore/
+
+# App desktop Electron — instaladores gerados manualmente, não versionar (ficam em public/downloads/)
+pdv-desktop/dist-installer/
