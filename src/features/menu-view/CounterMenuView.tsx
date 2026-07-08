@@ -233,7 +233,9 @@ export default function CounterMenuView() {
     const container = scrollContainerRef.current;
     const el = document.getElementById(`cat-${catId}`);
     if (container && el) {
-      const top = el.offsetTop - 10;
+      const containerRect = container.getBoundingClientRect();
+      const elRect = el.getBoundingClientRect();
+      const top = elRect.top + container.scrollTop - containerRect.top - 10;
       container.scrollTo({
         top,
         behavior: "smooth"
