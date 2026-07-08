@@ -4,7 +4,7 @@ import {
   closestCenter, useDroppable, type DragStartEvent, type DragEndEvent,
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { useSortable } from "@dnd-kit/sortable";
+import { useDraggable } from "@dnd-kit/core";
 import socket from "../lib/socket";
 import type { Order, Tenant } from "../types";
 import { ChefHat, Timer, Bell, CheckCircle2, LogOut, Utensils, User } from "lucide-react";
@@ -46,10 +46,10 @@ function orderTypeLabel(order: Order) {
   return "Retirada";
 }
 
-function KitchenTicket({ order, onAdvance }: { order: Order; onAdvance: () => void }) {
+function KitchenTicket({ order, onAdvance, isOverlay }: { order: Order; onAdvance: () => void; isOverlay?: boolean }) {
   const elapsed = useElapsedMinutes(order.createdAt);
   const kitchenItems = order.items.filter((item) => item.product?.kitchenPrint === true);
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({ id: order.id, data: { order } });
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: order.id, data: { order } });
   const nextLabel = order.status === "PENDING" ? "Marcar em preparo" : order.status === "PREPARING" ? "Marcar como pronto" : null;
   const elapsedLabel = elapsed < 0 ? "agora" : `${elapsed} min`;
 
@@ -64,14 +64,14 @@ function KitchenTicket({ order, onAdvance }: { order: Order; onAdvance: () => vo
   return (
     <motion.div
       ref={setNodeRef}
-      {...attributes}
-      {...listeners}
+      {...(isOverlay ? {} : attributes)}
+      {...(isOverlay ? {} : listeners)}
       layout
       initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: isDragging ? 0.3 : 1, y: 0 }}
+      animate={{ opacity: isDragging && !isOverlay ? 0.4 : 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.96 }}
-      style={{ transform: transform ? CSS.Translate.toString(transform) : undefined }}
-      className={`rounded-2xl border-2 p-3.5 flex flex-col gap-2.5 cursor-grab active:cursor-grabbing touch-none select-none ${urgency}`}
+      style={{ transform: transform && !isOverlay ? CSS.Translate.toString(transform) : undefined }}
+      className={`rounded-2xl border-2 p-3.5 flex flex-col gap-2.5 touch-none select-none ${urgency} ${isOverlay ? "cursor-grabbing shadow-2xl scale-[1.02] border-[#C9A227] bg-[#0E1A3D]" : "cursor-grab active:cursor-grabbing"}`}
     >
       <div className="flex flex-col gap-1.5">
         <div className="flex items-start justify-between gap-2">
@@ -387,11 +387,10 @@ export default function KitchenBoard({
             </div>
           ))}
         </div>
-        <DragOverlay>
+        <DragOverlay dropAnimation={{ duration: 250, easing: "ease-out" }}>
           {activeOrder ? (
-            <div className="rounded-3xl border-2 border-[#C9A227] bg-[#0D1B3E] p-5 w-[280px] shadow-2xl opacity-95">
-              <span className="text-xl font-black text-white">#{activeOrder.id.slice(-4).toUpperCase()}</span>
-              <p className="text-sm font-bold text-white/60">{activeOrder.customerName}</p>
+            <div className="w-[300px] pointer-events-none">
+              <KitchenTicket order={activeOrder} onAdvance={() => advanceOrder(activeOrder)} isOverlay />
             </div>
           ) : null}
         </DragOverlay>
