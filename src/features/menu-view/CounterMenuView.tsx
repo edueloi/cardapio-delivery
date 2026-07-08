@@ -532,7 +532,7 @@ export default function CounterMenuView() {
             </div>
           </aside>
 
-          <div className="flex-1 flex flex-col lg:h-full lg:overflow-hidden relative bg-[#0b0f14]">
+          <div className="flex-1 flex flex-col h-full overflow-hidden relative bg-[#0b0f14]">
             {/* Mobile/Tablet Header */}
             <header className="sticky top-0 z-40 lg:hidden shrink-0 bg-[#0b0f14]/95 backdrop-blur-xl border-b border-white/[0.06]">
               {/* Row 1: Logo, Name, Phone request */}

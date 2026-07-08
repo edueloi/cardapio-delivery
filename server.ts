@@ -4431,7 +4431,9 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
     const account = currentAccount(req);
     const operatorName = req.body.operatorName || (req as AuthenticatedRequest).membership?.name || account?.name || undefined;
 
-    if (!items || !Array.isArray(items) || items.length === 0) {
+    const validatedItems = Array.isArray(items) ? items : [];
+    const isDineIn = orderType === "DINE_IN";
+    if (!isDineIn && validatedItems.length === 0) {
       return res.status(400).json({ error: "Nenhum item no pedido." });
     }
 
@@ -4443,13 +4445,13 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
     const isWaiterComanda = source === "waiter" && orderType === "DINE_IN";
 
     // Fetch products and calculate totals
-    const productIds = items.map((i: any) => i.productId);
+    const productIds = validatedItems.map((i: any) => i.productId);
     const products = await prisma.product.findMany({ where: { id: { in: productIds } }, include: { variants: true } });
     const productMap = Object.fromEntries(products.map((p) => [p.id, p]));
 
     let subtotal = 0;
     const orderItems: any[] = [];
-    for (const item of items) {
+    for (const item of validatedItems) {
       const product = productMap[item.productId];
       if (!product) return res.status(400).json({ error: `Produto ${item.productId} não encontrado.` });
       // Preço nunca confia no valor vindo do cliente — resolve pela variante (se houver)
