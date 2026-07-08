@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
 import {
   Plus, Minus, X, Send, Loader2,
@@ -225,6 +225,22 @@ export default function CounterMenuView() {
     }
   };
 
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  const scrollToCategory = (catId: string) => {
+    setSelectedCategoryId(catId);
+    setSelectedProduct(null);
+    const container = scrollContainerRef.current;
+    const el = document.getElementById(`cat-${catId}`);
+    if (container && el) {
+      const top = el.offsetTop - 10;
+      container.scrollTo({
+        top,
+        behavior: "smooth"
+      });
+    }
+  };
+
   const handleOrder = async () => {
     if (cart.length === 0) return;
     setIsOrdering(true);
@@ -287,7 +303,7 @@ export default function CounterMenuView() {
   if (!tenant) return <div className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center font-serif">Restaurante não encontrado</div>;
 
   return (
-    <div className="min-h-screen bg-[#0b0f14] text-[#f5f5f5] selection:bg-[#C9A227]/30 font-sans relative overflow-x-hidden lg:flex lg:h-screen">
+    <div className="h-screen overflow-hidden bg-[#0b0f14] text-[#f5f5f5] selection:bg-[#C9A227]/30 font-sans relative flex flex-col lg:flex-row">
 
       {/* Background Decor */}
       <div className="fixed inset-0 z-0 pointer-events-none lg:absolute">
@@ -508,52 +524,68 @@ export default function CounterMenuView() {
             </div>
           </aside>
 
-          <div className="flex-1 flex flex-col h-full overflow-hidden relative bg-white lg:bg-[#0b0f14]">
+          <div className="flex-1 flex flex-col lg:h-full lg:overflow-hidden relative bg-[#0b0f14]">
             {/* Mobile/Tablet Header */}
             <header className="sticky top-0 z-40 lg:hidden shrink-0 bg-[#0b0f14]/95 backdrop-blur-xl border-b border-white/[0.06]">
-              <div className="flex items-center justify-between px-4 py-3 gap-3">
-                {/* Logo + Balcão */}
-                <div className="flex items-center gap-3 shrink-0">
+              {/* Row 1: Logo, Name, Phone request */}
+              <div className="flex items-center justify-between px-4 pt-4 pb-2">
+                <div className="flex items-center gap-3 min-w-0">
                   {tenant.logoUrl ? (
-                    <img src={tenant.logoUrl} className="w-9 h-9 rounded-xl object-cover" alt={tenant.name} />
+                    <img src={tenant.logoUrl} className="w-10 h-10 rounded-xl object-cover ring-1 ring-white/15" alt={tenant.name} />
                   ) : (
                     <div
-                      className="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-black text-black"
+                      className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black text-black"
                       style={{ background: "linear-gradient(135deg, #C9A227, #a37d1a)" }}
                     >
                       {tenant.name?.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?"}
                     </div>
                   )}
-                  <div>
-                    <p className="text-[10px] font-black text-white/30 uppercase tracking-widest leading-none">Balcão</p>
-                    <p className="text-sm font-bold text-white leading-tight truncate max-w-[100px]">{tenant.name}</p>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                      <p className="text-[9px] font-black text-[#C9A227] uppercase tracking-widest leading-none">Balcão</p>
+                    </div>
+                    <p className="text-base font-black text-white leading-tight mt-1 truncate">{tenant.name}</p>
                   </div>
                 </div>
 
-                {/* Search */}
-                <div className="flex-1 bg-white/5 border border-white/10 rounded-xl flex items-center px-3 py-2 gap-2 focus-within:border-amber-500/40 transition-all">
-                  <Search className="w-3.5 h-3.5 text-white/30 shrink-0" />
+                <button
+                  onClick={() => setShowQR(true)}
+                  className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white hover:text-[#C9A227] active:scale-95 transition-all shrink-0"
+                >
+                  <Smartphone className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Row 2: Full-width Search */}
+              <div className="px-4 py-2">
+                <div className="w-full bg-white/5 border border-white/10 rounded-2xl flex items-center px-4 py-2.5 gap-2.5 focus-within:border-amber-500/40 transition-all">
+                  <Search className="w-4 h-4 text-white/30 shrink-0" />
                   <input
                     type="text"
-                    placeholder="Buscar..."
+                    placeholder="Buscar no cardápio..."
                     value={searchTerm}
                     onChange={e => setSearchTerm(e.target.value)}
-                    className="bg-transparent border-none outline-none text-sm w-full text-white placeholder:text-white/20"
+                    className="bg-transparent border-none outline-none text-xs w-full text-white placeholder:text-white/20"
                   />
-                  {searchTerm && <button onClick={() => setSearchTerm("")}><X className="w-3 h-3 text-white/30" /></button>}
+                  {searchTerm && (
+                    <button onClick={() => setSearchTerm("")}>
+                      <X className="w-3.5 h-3.5 text-white/30" />
+                    </button>
+                  )}
                 </div>
               </div>
 
               {/* Categories Horizontal Scroll */}
-              <div className="flex gap-2 px-4 pb-3 overflow-x-auto scrollbar-hide">
+              <div className="flex gap-2 px-4 pb-3 pt-1 overflow-x-auto scrollbar-hide">
                 {tenant.categories?.map(cat => (
                   <button
                     key={cat.id}
-                    onClick={() => { setSelectedCategoryId(cat.id); setSelectedProduct(null); }}
-                    className={`shrink-0 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all ${
+                    onClick={() => scrollToCategory(cat.id)}
+                    className={`shrink-0 px-4.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${
                       selectedCategoryId === cat.id && !selectedProduct
-                        ? 'bg-amber-500 text-black'
-                        : 'bg-white/5 text-white/50 hover:text-white hover:bg-white/10'
+                        ? 'bg-amber-500 border-amber-500 text-black shadow-lg shadow-amber-500/15'
+                        : 'bg-white/5 text-white/40 hover:text-white hover:bg-white/10 border-white/5'
                     }`}
                   >
                     {cat.name}
@@ -607,7 +639,7 @@ export default function CounterMenuView() {
               </div>
             </header>
 
-            <div className="flex-1 overflow-y-auto lg:p-12 relative custom-scrollbar pb-32 lg:pb-12 bg-[#0b0f14] lg:min-h-0">
+            <div ref={scrollContainerRef} className="flex-1 overflow-y-auto lg:p-12 relative custom-scrollbar pb-32 lg:pb-12 bg-[#0b0f14] lg:min-h-0">
 
               {/* Promotions Carousel / Fallback Banner — só na primeira categoria ou sem filtro */}
               {promotions.length > 0 && !selectedProduct && (!selectedCategoryId || selectedCategoryId === tenant.categories?.[0]?.id) && (
@@ -705,7 +737,7 @@ export default function CounterMenuView() {
                   (!selectedCategoryId || cat.id === selectedCategoryId || !isDesktop) &&
                   (!searchTerm || cat.products.some(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.description?.toLowerCase().includes(searchTerm.toLowerCase())))
                 ).map(cat => (
-                  <section key={cat.id} className={`space-y-4 lg:space-y-6 ${selectedCategoryId && selectedCategoryId !== cat.id && !searchTerm ? 'lg:hidden' : ''}`}>
+                  <section id={`cat-${cat.id}`} key={cat.id} className={`space-y-4 lg:space-y-6 ${selectedCategoryId && selectedCategoryId !== cat.id && !searchTerm ? 'lg:hidden' : ''}`}>
                     <h2 className="text-[11px] font-black text-amber-500 uppercase tracking-[0.2em] flex items-center gap-3">
                       {cat.name}
                       <div className="h-px flex-1 bg-white/[0.06]" />
