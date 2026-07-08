@@ -1,7 +1,7 @@
 {
   "name": "boxsys-pdv-desktop",
   "productName": "Box Sys PDV",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "App desktop do Box Sys PDV — carrega o painel web e adiciona impressão térmica direta (sem diálogo do navegador).",
   "main": "src/main.js",
   "author": "BoxSys",
@@ -14,7 +14,8 @@
   },
   "dependencies": {
     "electron-store": "^8.2.0",
-    "electron-updater": "^6.8.9"
+    "electron-updater": "^6.8.9",
+    "iconv-lite": "^0.7.3"
   },
   "devDependencies": {
     "electron": "^31.0.0",

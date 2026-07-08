@@ -9,6 +9,7 @@ const { promisify } = require("util");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const iconv = require("iconv-lite");
 const Store = require("electron-store");
 
 const execAsync = promisify(exec);
@@ -22,6 +23,9 @@ const ESC = "\x1b";
 const GS = "\x1d";
 const CMD = {
   init: `${ESC}@`,
+  // Página de código 860 (Português) — sem isso, a impressora usa CP437 (inglês) por
+  // padrão e qualquer acento (ã, ç, é...) sai como símbolo quebrado no papel.
+  codepagePortuguese: `${ESC}t\x02`,
   boldOn: `${ESC}E\x01`,
   boldOff: `${ESC}E\x00`,
   alignLeft: `${ESC}a0`,
@@ -106,7 +110,7 @@ function buildEscPosBuffer(data) {
   const width = config.widthMm === 58 ? 58 : 80;
   const cols = CHARS_PER_LINE[width];
 
-  let out = CMD.init;
+  let out = CMD.init + CMD.codepagePortuguese;
   out += CMD.alignCenter + CMD.boldOn;
   for (const line of wrapLine(data.tenantName || "", cols)) out += line + "\n";
   out += CMD.boldOff;
@@ -181,10 +185,15 @@ function buildEscPosBuffer(data) {
   out += "-".repeat(cols) + "\n";
   out += CMD.alignCenter;
   out += "Obrigado pela preferência!\n";
-  out += CMD.feed(3);
+  // Avanço generoso antes do corte — sem isso, a lâmina corta em cima da última linha
+  // impressa em impressoras que não avançam papel sozinhas antes do GS V (corte).
+  out += CMD.feed(5);
   out += CMD.cut;
 
-  return Buffer.from(out, "binary");
+  // CP860 (Português) preserva os bytes de controle ESC/GS (0x00-0x7F, mesmo intervalo do
+  // ASCII) e só remapeia acentos (0x80+) — por isso dá pra converter a string inteira de
+  // uma vez, sem quebrar os comandos ESC/POS misturados no meio do texto.
+  return iconv.encode(out, "cp860");
 }
 
 async function sendRawToPrinter(buffer, printerName) {
@@ -196,12 +205,68 @@ async function sendRawToPrinter(buffer, printerName) {
   fs.writeFileSync(tmpFile, buffer);
 
   try {
-    // "copy /b" manda o arquivo em modo binário direto pro spooler da impressora
-    // compartilhada localmente — funciona com qualquer impressora instalada no Windows,
-    // sem precisar de driver especial nem módulo nativo compilado.
-    const escapedPath = tmpFile.replace(/\//g, "\\");
-    const escapedPrinter = printerName.replace(/"/g, '\\"');
-    await execAsync(`copy /b "${escapedPath}" "\\\\localhost\\${escapedPrinter}"`, { shell: "cmd.exe" });
+    // "\\localhost\Nome" só funciona se a impressora estiver marcada como compartilhada
+    // no Windows — a maioria das térmicas instaladas via USB não está. Em vez disso,
+    // manda os bytes crus direto pro spooler via .NET (RawPrinterHelper com
+    // OpenPrinter/WritePrinter), que funciona com qualquer impressora local instalada,
+    // compartilhada ou não. Roda via PowerShell pra não precisar de módulo nativo.
+    const escapedPath = tmpFile.replace(/'/g, "''");
+    const escapedPrinter = printerName.replace(/'/g, "''");
+    const script = `
+$ErrorActionPreference = 'Stop'
+Add-Type -TypeDefinition @"
+using System;
+using System.IO;
+using System.Runtime.InteropServices;
+public class RawPrinterHelper {
+  [StructLayout(LayoutKind.Sequential)]
+  public struct DOCINFOA { [MarshalAs(UnmanagedType.LPStr)] public string pDocName; [MarshalAs(UnmanagedType.LPStr)] public string pOutputFile; [MarshalAs(UnmanagedType.LPStr)] public string pDataType; }
+  [DllImport("winspool.drv", EntryPoint = "OpenPrinterA", SetLastError = true, CharSet = CharSet.Ansi, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+  public static extern bool OpenPrinter(string szPrinter, out IntPtr hPrinter, IntPtr pd);
+  [DllImport("winspool.drv", EntryPoint = "ClosePrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+  public static extern bool ClosePrinter(IntPtr hPrinter);
+  [DllImport("winspool.drv", EntryPoint = "StartDocPrinterA", SetLastError = true, CharSet = CharSet.Ansi, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+  public static extern bool StartDocPrinter(IntPtr hPrinter, int level, [In] ref DOCINFOA di);
+  [DllImport("winspool.drv", EntryPoint = "EndDocPrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+  public static extern bool EndDocPrinter(IntPtr hPrinter);
+  [DllImport("winspool.drv", EntryPoint = "StartPagePrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+  public static extern bool StartPagePrinter(IntPtr hPrinter);
+  [DllImport("winspool.drv", EntryPoint = "EndPagePrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+  public static extern bool EndPagePrinter(IntPtr hPrinter);
+  [DllImport("winspool.drv", EntryPoint = "WritePrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+  public static extern bool WritePrinter(IntPtr hPrinter, IntPtr pBytes, int dwCount, out int dwWritten);
+  public static bool SendBytesToPrinter(string szPrinterName, byte[] bytes) {
+    IntPtr hPrinter; DOCINFOA di = new DOCINFOA(); bool success = false;
+    di.pDocName = "Box Sys - Recibo"; di.pDataType = "RAW";
+    if (!OpenPrinter(szPrinterName, out hPrinter, IntPtr.Zero)) return false;
+    try {
+      if (!StartDocPrinter(hPrinter, 1, ref di)) return false;
+      try {
+        if (!StartPagePrinter(hPrinter)) return false;
+        IntPtr pUnmanagedBytes = Marshal.AllocCoTaskMem(bytes.Length);
+        Marshal.Copy(bytes, 0, pUnmanagedBytes, bytes.Length);
+        int written;
+        success = WritePrinter(hPrinter, pUnmanagedBytes, bytes.Length, out written);
+        Marshal.FreeCoTaskMem(pUnmanagedBytes);
+        EndPagePrinter(hPrinter);
+      } finally { EndDocPrinter(hPrinter); }
+    } finally { ClosePrinter(hPrinter); }
+    return success;
+  }
+}
+"@
+$bytes = [System.IO.File]::ReadAllBytes('${escapedPath}')
+$ok = [RawPrinterHelper]::SendBytesToPrinter('${escapedPrinter}', $bytes)
+if (-not $ok) { throw "WritePrinter falhou (impressora offline ou nome incorreto)." }
+`.trim();
+
+    const psFile = path.join(os.tmpdir(), `boxsys-print-${Date.now()}.ps1`);
+    fs.writeFileSync(psFile, script, "utf8");
+    try {
+      await execAsync(`powershell -NoProfile -ExecutionPolicy Bypass -File "${psFile}"`, { shell: "cmd.exe" });
+    } finally {
+      fs.unlink(psFile, () => {});
+    }
   } finally {
     fs.unlink(tmpFile, () => {});
   }
