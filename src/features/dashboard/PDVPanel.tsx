@@ -886,22 +886,22 @@ export default function PDVPanel({
         )}
         {/* Cash register status bar */}
         {!isWaiterMode && !cashLoading && cashRequired && (
-          <div className={`flex items-center justify-between gap-3 px-5 py-2.5 border-b shrink-0 ${
+          <div className={`flex items-center justify-between gap-3 px-3 py-1.5 border-b shrink-0 ${
             currentCash ? "bg-emerald-50/60 border-emerald-100" : "bg-red-50/60 border-red-100"
           }`}>
-            <div className="flex items-center gap-2.5 min-w-0">
-              <span className={`w-2 h-2 rounded-full shrink-0 ${currentCash ? "bg-emerald-500 animate-pulse" : "bg-red-500"}`} />
+            <div className="flex items-center gap-2 min-w-0">
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${currentCash ? "bg-emerald-500 animate-pulse" : "bg-red-500"}`} />
               {currentCash ? (
-                <p className="text-[11px] font-black uppercase tracking-wide text-emerald-700 truncate">
+                <p className="text-[10px] font-black uppercase tracking-wide text-emerald-700 truncate">
                   Caixa aberto <span className="font-bold normal-case text-emerald-600/80">· Fundo {fmt(currentCash.openingBalance)} · Esperado {fmt(currentCash.expectedBalance)}</span>
                 </p>
               ) : (
-                <p className="text-[11px] font-black uppercase tracking-wide text-red-700">Caixa fechado — abra para começar a vender</p>
+                <p className="text-[10px] font-black uppercase tracking-wide text-red-700">Caixa fechado — abra para começar a vender</p>
               )}
             </div>
             <button
               onClick={() => currentCash ? setShowCloseCashModal(true) : setShowOpenCashModal(true)}
-              className={`shrink-0 px-3.5 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors ${
+              className={`shrink-0 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest transition-colors ${
                 currentCash
                   ? "bg-white text-red-600 border border-red-200 hover:bg-red-50"
                   : "bg-[#0D1B3E] text-white hover:bg-[#0D1B3E]/90"
@@ -913,12 +913,12 @@ export default function PDVPanel({
         )}
 
         {/* Tabs */}
-        <div className="flex bg-white border-b border-slate-100 px-3 gap-1 pt-2">
+        <div className="flex bg-white border-b border-slate-100 px-2 gap-1 pt-1">
           {(isWaiterMode ? (["products", "tables", "comandas"] as const) : (["products", "tables", "comandas", "delivery"] as const)).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`flex-1 pb-2.5 pt-1.5 text-[11px] font-black uppercase tracking-widest transition-all border-b-2 relative rounded-t-lg ${
+              className={`flex-1 pb-1.5 pt-1 text-[10px] font-black uppercase tracking-widest transition-all border-b-2 relative rounded-t-lg ${
                 activeTab === tab
                   ? "border-[#C9A227] text-[#0D1B3E]"
                   : "border-transparent text-slate-400 hover:text-slate-600 hover:border-slate-200"
@@ -948,15 +948,15 @@ export default function PDVPanel({
         {activeTab === "products" && (
           <>
             {/* Search + categories */}
-            <div className="p-3 border-b border-slate-100 bg-white flex flex-col sm:flex-row gap-2.5">
+            <div className="p-2 border-b border-slate-100 bg-white flex flex-col sm:flex-row gap-2">
               <div className="relative flex-1 min-w-0">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
                 <input
                   type="text"
                   placeholder="Buscar produto..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-sm font-medium text-slate-700 placeholder:text-slate-400 focus:border-[#C9A227] focus:bg-white outline-none transition-all"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg py-1.5 pl-8 pr-4 text-xs font-medium text-slate-700 placeholder:text-slate-400 focus:border-[#C9A227] focus:bg-white outline-none transition-all"
                 />
                 {searchTerm && (
                   <button onClick={() => setSearchTerm("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
@@ -986,10 +986,10 @@ export default function PDVPanel({
             <div className="flex-1 min-h-0 flex overflow-hidden">
               {/* Coluna de categorias — só no PDV externo em tela cheia, como no mockup de referência */}
               {isExternalFullscreen && (
-                <div className="w-40 shrink-0 border-r border-slate-100 bg-slate-50/60 overflow-y-auto custom-scrollbar p-2 space-y-1">
+                <div className="w-32 shrink-0 border-r border-slate-100 bg-slate-50/60 overflow-y-auto custom-scrollbar p-1.5 space-y-0.5">
                   <button
                     onClick={() => setSelectedCategoryId(null)}
-                    className={`w-full text-left px-3 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wide transition-colors ${
+                    className={`w-full text-left px-2.5 py-2 rounded-lg text-[10px] font-black uppercase tracking-wide transition-colors ${
                       selectedCategoryId === null ? "bg-[#0D1B3E] text-white" : "text-slate-500 hover:bg-white"
                     }`}
                   >
@@ -999,7 +999,7 @@ export default function PDVPanel({
                     <button
                       key={cat.id}
                       onClick={() => setSelectedCategoryId(cat.id)}
-                      className={`w-full text-left px-3 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wide transition-colors truncate ${
+                      className={`w-full text-left px-2.5 py-2 rounded-lg text-[10px] font-black uppercase tracking-wide transition-colors truncate ${
                         selectedCategoryId === cat.id ? "bg-[#0D1B3E] text-white" : "text-slate-500 hover:bg-white"
                       }`}
                     >
@@ -1021,8 +1021,8 @@ export default function PDVPanel({
                 </div>
               ) : (
                 <div
-                  className="flex flex-col gap-2 lg:grid lg:gap-2.5"
-                  style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" } as React.CSSProperties}
+                  className="flex flex-col gap-2 lg:grid lg:gap-2"
+                  style={{ gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))" } as React.CSSProperties}
                 >
                   {filteredProducts.map((product) => {
                     const inCart = cart.find((i) => i.product.id === product.id);
@@ -1344,41 +1344,41 @@ export default function PDVPanel({
           : "hidden lg:flex"
       } w-full sm:w-auto lg:w-[380px] xl:w-[420px] flex-col bg-[#0D1B3E] rounded-t-[2rem] sm:rounded-[2rem] lg:rounded-[2rem] text-white overflow-hidden shadow-2xl relative shrink-0`}>
         {/* Header */}
-        <div className="p-6 border-b border-white/5 bg-white/[0.02]">
+        <div className="p-3.5 border-b border-white/5 bg-white/[0.02]">
           <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowCartDrawer(false)}
-                className="lg:hidden w-9 h-9 rounded-xl bg-white/5 hover:bg-white/10 text-white/60 hover:text-white flex items-center justify-center shrink-0 transition-colors -ml-1"
+                className="lg:hidden w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white flex items-center justify-center shrink-0 transition-colors -ml-1"
                 title="Voltar para os produtos"
               >
                 <ArrowLeft className="w-4 h-4" />
               </button>
-              <div className="hidden lg:flex w-9 h-9 rounded-xl bg-[#C9A227]/15 text-[#C9A227] items-center justify-center shrink-0">
-                <ShoppingCart className="w-4 h-4" />
+              <div className="hidden lg:flex w-7 h-7 rounded-lg bg-[#C9A227]/15 text-[#C9A227] items-center justify-center shrink-0">
+                <ShoppingCart className="w-3.5 h-3.5" />
               </div>
               <div>
-                <h3 className="text-base font-black uppercase tracking-widest leading-none">
+                <h3 className="text-sm font-black uppercase tracking-widest leading-none">
                   {selectedTableId ? `Mesa ${selectedTableId}` : "Novo Pedido"}
                 </h3>
-                <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest mt-1">
+                <p className="text-white/40 text-[9px] font-bold uppercase tracking-widest mt-0.5">
                   {selectedTableId ? "Fechamento de Conta" : "Venda Rápida Balcão"}
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               {cart.length > 0 && (
-                <span className="bg-[#C9A227] text-black text-[10px] font-black rounded-full min-w-[22px] h-[22px] px-1.5 flex items-center justify-center">
+                <span className="bg-[#C9A227] text-black text-[10px] font-black rounded-full min-w-[20px] h-[20px] px-1.5 flex items-center justify-center">
                   {cart.reduce((s, i) => s + i.quantity, 0)}
                 </span>
               )}
               {(selectedTableId || cart.length > 0) && (
                 <button
                   onClick={clearCart}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-white/40 hover:text-red-400 hover:bg-red-400/10 transition-colors"
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-white/40 hover:text-red-400 hover:bg-red-400/10 transition-colors"
                 >
-                  <X className="w-3.5 h-3.5 shrink-0" />
-                  <span className="text-[10px] font-black uppercase tracking-wide whitespace-nowrap">Limpar Pedidos</span>
+                  <X className="w-3 h-3 shrink-0" />
+                  <span className="text-[9px] font-black uppercase tracking-wide whitespace-nowrap">Limpar</span>
                 </button>
               )}
             </div>
@@ -1386,25 +1386,25 @@ export default function PDVPanel({
         </div>
 
         {/* Customer info (compact) */}
-        <div className="px-6 py-3 border-b border-white/5 grid grid-cols-2 gap-2">
+        <div className="px-3.5 py-2 border-b border-white/5 grid grid-cols-2 gap-1.5">
           <div className="relative">
-            <User className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-white/30" />
+            <User className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-white/30" />
             <input
               type="text"
               placeholder="Nome do cliente"
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-8 pr-3 text-xs text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
+              className="w-full bg-white/5 border border-white/10 rounded-lg py-1.5 pl-7 pr-2.5 text-[11px] text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
             />
           </div>
           <div className="relative">
-            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-white/30" />
+            <Phone className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-white/30" />
             <input
               type="tel"
               placeholder="Telefone"
               value={customerPhone}
               onChange={(e) => setCustomerPhone(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-8 pr-3 text-xs text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
+              className="w-full bg-white/5 border border-white/10 rounded-lg py-1.5 pl-7 pr-2.5 text-[11px] text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
             />
           </div>
           {fiscalEnabled && (

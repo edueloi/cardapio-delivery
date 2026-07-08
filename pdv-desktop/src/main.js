@@ -57,6 +57,20 @@ function createWindow() {
   });
 }
 
+// Usada tanto pelo atalho Ctrl+Shift+Q quanto pelo botão flutuante injetado no preload —
+// mesmo fluxo de confirmação nos dois casos, pra ninguém fechar o PDV sem querer.
+async function confirmAndQuit() {
+  const { response } = await dialog.showMessageBox(mainWindow, {
+    type: "question",
+    buttons: ["Cancelar", "Fechar o App"],
+    defaultId: 0,
+    cancelId: 0,
+    title: "Fechar Box Sys PDV",
+    message: "Tem certeza que deseja fechar o aplicativo?",
+  });
+  if (response === 1) app.quit();
+}
+
 // Atalhos globais — necessários porque em modo kiosk (sem barra/menu) não existe outra
 // forma óbvia de acessar a configuração da impressora ou fechar o app.
 function registerShortcuts() {
@@ -64,18 +78,10 @@ function registerShortcuts() {
     openPrinterConfigWindow(mainWindow);
   });
 
-  globalShortcut.register("CommandOrControl+Shift+Q", async () => {
-    const { response } = await dialog.showMessageBox(mainWindow, {
-      type: "question",
-      buttons: ["Cancelar", "Fechar o App"],
-      defaultId: 0,
-      cancelId: 0,
-      title: "Fechar Box Sys PDV",
-      message: "Tem certeza que deseja fechar o aplicativo?",
-    });
-    if (response === 1) app.quit();
-  });
+  globalShortcut.register("CommandOrControl+Shift+Q", confirmAndQuit);
 }
+
+ipcMain.handle("app:request-quit", confirmAndQuit);
 
 // Auto-update: checa no servidor (public/downloads/pdv-updates/ no VPS) se existe uma
 // versão nova, baixa em segundo plano e instala no próximo fechamento do app — assim uma
