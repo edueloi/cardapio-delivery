@@ -24,6 +24,7 @@ const STATUS_LABEL: Record<string, string> = {
   PREPARING: "Estamos preparando seu pedido",
   SHIPPED: "Pronto! Pode retirar no balcão",
   DELIVERED: "Pedido entregue",
+  MERGED: "Pedido concluído no caixa",
   CANCELLED: "Pedido cancelado",
 };
 
@@ -404,7 +405,7 @@ export default function CounterMenuView() {
 
               <div className="space-y-3">
                 <div className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-full mx-auto w-fit ${
-                  ticketOrder.status === "SHIPPED" ? "bg-green-500/10 border border-green-500/20" :
+                  ["SHIPPED", "DELIVERED", "MERGED"].includes(ticketOrder.status) ? "bg-green-500/10 border border-green-500/20" :
                   ticketOrder.status === "CANCELLED" ? "bg-red-500/10 border border-red-500/20" :
                   "bg-white/5 border border-white/10"
                 }`}>
@@ -412,12 +413,12 @@ export default function CounterMenuView() {
                     animate={ticketOrder.status === "PENDING" || ticketOrder.status === "PREPARING" ? { scale: [1, 1.4, 1] } : {}}
                     transition={{ repeat: Infinity, duration: 1.6 }}
                     className={`w-1.5 h-1.5 rounded-full ${
-                      ticketOrder.status === "SHIPPED" ? "bg-green-400" :
+                      ["SHIPPED", "DELIVERED", "MERGED"].includes(ticketOrder.status) ? "bg-green-400" :
                       ticketOrder.status === "CANCELLED" ? "bg-red-400" : "bg-amber-400"
                     }`}
                   />
                   <span className={`text-xs font-bold ${
-                    ticketOrder.status === "SHIPPED" ? "text-green-400" :
+                    ["SHIPPED", "DELIVERED", "MERGED"].includes(ticketOrder.status) ? "text-green-400" :
                     ticketOrder.status === "CANCELLED" ? "text-red-400" : "text-amber-300"
                   }`}>
                     {STATUS_LABEL[ticketOrder.status] || ticketOrder.status}
