@@ -476,8 +476,9 @@ export default function CounterMenuView() {
                     <RotateCcw className="w-3.5 h-3.5" />
                     Fazer novo pedido
                   </button>
-                </div>
-              </div>
+                </div>{/* end space-y-4 */}
+              </div>{/* end space-y-3 */}
+            </div>{/* end w-full max-w-sm */}
           </motion.div>
         )}
       </AnimatePresence>
