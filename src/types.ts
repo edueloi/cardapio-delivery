@@ -164,6 +164,8 @@ export interface Tenant {
   whatsapp?: string;
   address?: string;
   isOpen?: boolean;
+  isDeliveryOpen?: boolean; // fechar só o delivery sem fechar o estabelecimento inteiro
+  effectiveIsOpen?: boolean; // isOpen combinado com o horário de funcionamento (calculado no servidor)
   scheduleMode?: boolean;
   scheduleType?: "CLIENT_CHOOSES" | "OWNER_DEFINES";
   scheduleDays?: string | null;  // JSON: ScheduleDay[]

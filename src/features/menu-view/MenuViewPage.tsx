@@ -318,7 +318,8 @@ export default function MenuViewPage() {
   const categoryNavRef = useRef<HTMLDivElement>(null);
   const heroRef = useRef<HTMLDivElement>(null);
 
-  const storeOpen = useMemo(() => checkIsOpen(tenant), [tenant]);
+  const storeOpen = tenant?.effectiveIsOpen ?? (tenant ? checkIsOpen(tenant) : false);
+  const deliveryOpen = tenant?.isDeliveryOpen ?? true;
   const todayHours = useMemo(() => getTodayHours(tenant?.businessHours ?? null), [tenant]);
   const nextOpenInfo = useMemo(() => getNextOpenInfo(tenant?.businessHours ?? null), [tenant]);
   const total = cart.reduce((acc, item) => {
@@ -349,6 +350,13 @@ export default function MenuViewPage() {
     });
     return () => { socket.off("order-status-updated"); };
   }, [slug]);
+
+  // Quando delivery é pausado pelo estabelecimento, redireciona automaticamente para Retirada
+  useEffect(() => {
+    if (!deliveryOpen && form.orderType === "DELIVERY") {
+      setForm(f => ({ ...f, orderType: "PICKUP" }));
+    }
+  }, [deliveryOpen]);
 
   useEffect(() => {
     const savedName = localStorage.getItem(`customer_name_${slug}`);
@@ -1411,13 +1419,21 @@ export default function MenuViewPage() {
                       )}
 
                       {(!tenant.orderMode || tenant.orderMode === "DELIVERY_ONLY" || (tenant.orderMode === "BOTH" && !form.isPreorder)) && (
-                        <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
-                          {(["DELIVERY", "PICKUP"] as const).map((type) => (
-                            <button key={type} onClick={() => setForm((f) => ({ ...f, orderType: type }))}
-                              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold transition-all ${form.orderType === type ? "bg-white text-slate-900 shadow-sm" : "text-slate-400"}`}>
-                              {type === "DELIVERY" ? <><Truck className="w-3.5 h-3.5" /> Delivery</> : <><Store className="w-3.5 h-3.5" /> Retirada</>}
-                            </button>
-                          ))}
+                        <div className="space-y-2">
+                          {!deliveryOpen && (
+                            <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 flex items-center gap-2.5">
+                              <span className="text-base shrink-0">🛵</span>
+                              <p className="text-[11px] font-bold text-orange-700">Delivery pausado no momento — disponível apenas Retirada no Balcão.</p>
+                            </div>
+                          )}
+                          <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
+                            {(["DELIVERY", "PICKUP"] as const).filter(type => type !== "DELIVERY" || deliveryOpen).map((type) => (
+                              <button key={type} onClick={() => setForm((f) => ({ ...f, orderType: type }))}
+                                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold transition-all ${form.orderType === type ? "bg-white text-slate-900 shadow-sm" : "text-slate-400"}`}>
+                                {type === "DELIVERY" ? <><Truck className="w-3.5 h-3.5" /> Delivery</> : <><Store className="w-3.5 h-3.5" /> Retirada</>}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       )}
 

@@ -1130,7 +1130,7 @@ app.patch("/api/owner/tenants/:tenantId", requireAuth, async (req, res) => {
   const tenant = await requireTenantById(req, res, req.params.tenantId);
   if (!tenant) return;
 
-  const { name, description, address, whatsapp, logoUrl, isOpen, scheduleMode, scheduleType, scheduleDays, scheduleNotes, orderMode, businessHours, deliveryConfig, paymentMethods, stoneConfig, fiscalConfig, displayPanelConfig, waiterNotifyOnReady, requireCashRegister, receiptPaperWidth } = req.body;
+  const { name, description, address, whatsapp, logoUrl, isOpen, isDeliveryOpen, scheduleMode, scheduleType, scheduleDays, scheduleNotes, orderMode, businessHours, deliveryConfig, paymentMethods, stoneConfig, fiscalConfig, displayPanelConfig, waiterNotifyOnReady, requireCashRegister, receiptPaperWidth } = req.body;
   try {
     const updated = await prisma.tenant.update({
       where: { id: tenant.id },
@@ -1141,6 +1141,7 @@ app.patch("/api/owner/tenants/:tenantId", requireAuth, async (req, res) => {
         ...(whatsapp !== undefined && { whatsapp: whatsapp || null }),
         ...(logoUrl !== undefined && { logoUrl: logoUrl || null }),
         ...(isOpen !== undefined && { isOpen: Boolean(isOpen) }),
+        ...(isDeliveryOpen !== undefined && { isDeliveryOpen: Boolean(isDeliveryOpen) }),
         ...(waiterNotifyOnReady !== undefined && { waiterNotifyOnReady: Boolean(waiterNotifyOnReady) }),
         ...(requireCashRegister !== undefined && { requireCashRegister: Boolean(requireCashRegister) }),
         ...(receiptPaperWidth !== undefined && { receiptPaperWidth: Number(receiptPaperWidth) === 58 ? 58 : 80 }),
@@ -1621,6 +1622,40 @@ function isProductActiveNow(scheduleRule: string | null): boolean {
   }
 }
 
+const BUSINESS_HOURS_DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
+
+// Checa se o horário atual cai dentro do funcionamento configurado (businessHours) —
+// sem config salva, considera sempre aberto (não força fechamento por omissão).
+function isWithinBusinessHours(businessHours: string | null): boolean {
+  if (!businessHours) return true;
+  try {
+    const hours = JSON.parse(businessHours) as Record<string, { enabled: boolean; open: string; close: string; breakEnabled?: boolean; breakStart?: string; breakEnd?: string }>;
+    const now = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+    const dayKey = BUSINESS_HOURS_DAY_KEYS[now.getDay()];
+    const today = hours[dayKey];
+    if (!today || !today.enabled) return false;
+
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    const toMinutes = (t: string) => {
+      const [h, m] = t.split(":").map(Number);
+      return h * 60 + (m || 0);
+    };
+    const openMin = toMinutes(today.open || "00:00");
+    const closeMin = toMinutes(today.close || "23:59");
+    if (nowMinutes < openMin || nowMinutes > closeMin) return false;
+
+    if (today.breakEnabled && today.breakStart && today.breakEnd) {
+      const breakStartMin = toMinutes(today.breakStart);
+      const breakEndMin = toMinutes(today.breakEnd);
+      if (nowMinutes >= breakStartMin && nowMinutes <= breakEndMin) return false;
+    }
+
+    return true;
+  } catch {
+    return true;
+  }
+}
+
 app.get("/api/tenants/:slug", async (req, res) => {
   const { slug } = req.params;
 
@@ -1658,7 +1693,12 @@ app.get("/api/tenants/:slug", async (req, res) => {
       })
     })).filter(cat => cat.products.length > 0);
 
-    res.json({ ...tenant, categories: filteredCategories });
+    // Fechamento manual ("Status do Estabelecimento") sempre tem prioridade — permite
+    // fechar antes da hora (ex: acabou insumo). Fora isso, fecha automaticamente fora do
+    // horário de funcionamento configurado, mesmo com o toggle manual em "Aberta".
+    const effectiveIsOpen = tenant.isOpen === false ? false : isWithinBusinessHours(tenant.businessHours);
+
+    res.json({ ...tenant, categories: filteredCategories, effectiveIsOpen, isDeliveryOpen: tenant.isDeliveryOpen ?? true });
   } catch (error) {
     console.error("Error fetching tenant:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -1821,6 +1861,10 @@ app.get("/api/admin/tenant/:slug", requireAuth, async (req, res) => {
       : null;
   }
 
+  if (completeTenant) {
+    (completeTenant as any).effectiveIsOpen = completeTenant.isOpen === false ? false : isWithinBusinessHours(completeTenant.businessHours);
+  }
+
   res.json(completeTenant);
 });
 
@@ -1832,22 +1876,18 @@ app.post("/api/orders", async (req, res) => {
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) return res.status(404).json({ error: "Tenant not found" });
 
-    // Pedido de balcão (QR "Balcao", sem mesa fixa): não tem tableId real — em vez disso
-    // recebe uma senha sequencial que reseta todo dia, pro cliente acompanhar sem precisar
-    // de número de mesa. É calculada aqui, no momento da criação, para evitar duplicar
-    // número em caso de pedidos simultâneos (contagem sempre feita sob o mesmo tenant/dia).
+    // Todos os pedidos recebem uma senha sequencial que reseta todo dia —
+    // assim o cliente pode acompanhar pelo número no painel de TV,
+    // independente de ser balcão, mesa ou delivery.
     const isCounterOrder = tableId === "Balcao";
-    let counterTicketNumber: number | null = null;
-    if (isCounterOrder) {
-      const startOfDay = new Date();
-      startOfDay.setHours(0, 0, 0, 0);
-      const lastTicket = await prisma.order.findFirst({
-        where: { tenantId, counterTicketNumber: { not: null }, createdAt: { gte: startOfDay } },
-        orderBy: { counterTicketNumber: "desc" },
-        select: { counterTicketNumber: true },
-      });
-      counterTicketNumber = (lastTicket?.counterTicketNumber ?? 0) + 1;
-    }
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const lastTicket = await prisma.order.findFirst({
+      where: { tenantId, counterTicketNumber: { not: null }, createdAt: { gte: startOfDay } },
+      orderBy: { counterTicketNumber: "desc" },
+      select: { counterTicketNumber: true },
+    });
+    const counterTicketNumber = (lastTicket?.counterTicketNumber ?? 0) + 1;
 
     let total = 0;
     const orderItemsData: Array<{

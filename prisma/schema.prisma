@@ -16,6 +16,7 @@ model Tenant {
   whatsapp    String?
   address     String?
   isOpen        Boolean  @default(true) @map("is_open")
+  isDeliveryOpen Boolean @default(true) @map("is_delivery_open") // fechar só o delivery sem fechar o estabelecimento inteiro
   scheduleMode  Boolean  @default(false) @map("schedule_mode")
   scheduleType  String   @default("CLIENT_CHOOSES") @map("schedule_type") // CLIENT_CHOOSES | OWNER_DEFINES
   scheduleDays  String?  @map("schedule_days") @db.Text // JSON: ScheduleDay[]

@@ -1919,6 +1919,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
     logoUrl: tenant?.logoUrl || "",
     whatsapp: maskPhone(tenant?.whatsapp) || "",
     isOpen: tenant?.isOpen ?? true,
+    isDeliveryOpen: tenant?.isDeliveryOpen ?? true,
     orderMode: (tenant?.orderMode ?? "DELIVERY_ONLY") as "DELIVERY_ONLY" | "PREORDER_ONLY" | "BOTH",
     scheduleMode: tenant?.scheduleMode ?? false,
     scheduleType: (tenant?.scheduleType ?? "CLIENT_CHOOSES") as "CLIENT_CHOOSES" | "OWNER_DEFINES",
@@ -1968,7 +1969,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
 
   useEffect(() => {
     if (tenant) {
-      setForm({ name: tenant.name || "", description: tenant.description || "", logoUrl: tenant.logoUrl || "", whatsapp: maskPhone(tenant.whatsapp) || "", isOpen: tenant.isOpen ?? true, orderMode: (tenant.orderMode ?? "DELIVERY_ONLY") as "DELIVERY_ONLY" | "PREORDER_ONLY" | "BOTH", scheduleMode: tenant.scheduleMode ?? false, scheduleType: (tenant.scheduleType ?? "CLIENT_CHOOSES") as "CLIENT_CHOOSES" | "OWNER_DEFINES", scheduleNotes: tenant.scheduleNotes || "", waiterNotifyOnReady: tenant.waiterNotifyOnReady ?? true, requireCashRegister: tenant.requireCashRegister ?? true, receiptPaperWidth: (tenant.receiptPaperWidth ?? 80) as 58 | 80 });
+      setForm({ name: tenant.name || "", description: tenant.description || "", logoUrl: tenant.logoUrl || "", whatsapp: maskPhone(tenant.whatsapp) || "", isOpen: tenant.isOpen ?? true, isDeliveryOpen: tenant.isDeliveryOpen ?? true, orderMode: (tenant.orderMode ?? "DELIVERY_ONLY") as "DELIVERY_ONLY" | "PREORDER_ONLY" | "BOTH", scheduleMode: tenant.scheduleMode ?? false, scheduleType: (tenant.scheduleType ?? "CLIENT_CHOOSES") as "CLIENT_CHOOSES" | "OWNER_DEFINES", scheduleNotes: tenant.scheduleNotes || "", waiterNotifyOnReady: tenant.waiterNotifyOnReady ?? true, requireCashRegister: tenant.requireCashRegister ?? true, receiptPaperWidth: (tenant.receiptPaperWidth ?? 80) as 58 | 80 });
       setScheduleDays(parseScheduleDays(tenant.scheduleDays));
       setAddr(parseAddress(tenant.address) ?? { ...EMPTY_ADDR });
       try { setHours(tenant.businessHours ? JSON.parse(tenant.businessHours) : DEFAULT_HOURS); } catch { setHours(DEFAULT_HOURS); }
@@ -2132,6 +2133,18 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                       {form.isOpen ? 'Aberta' : 'Fechada'}
                     </span>
                     <Switch checked={form.isOpen} onCheckedChange={v => setForm(f => ({ ...f, isOpen: v }))} />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-4 py-5 border-t border-zinc-100">
+                  <div>
+                    <p className="text-sm font-black text-slate-900">Delivery</p>
+                    <p className="text-xs text-slate-500 mt-1">Quando desligado, a opção de entrega some do cardápio digital — o cliente só consegue fazer Retirada no Balcão. Mesa e Balcão continuam funcionando normalmente.</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className={`text-[10px] font-black uppercase tracking-widest ${form.isDeliveryOpen ? 'text-green-500' : 'text-red-500'}`}>
+                      {form.isDeliveryOpen ? 'Ativo' : 'Pausado'}
+                    </span>
+                    <Switch checked={form.isDeliveryOpen} onCheckedChange={v => setForm(f => ({ ...f, isDeliveryOpen: v }))} />
                   </div>
                 </div>
                 <div className="flex items-center justify-between gap-4 py-5 border-t border-zinc-100">

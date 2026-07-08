@@ -260,7 +260,7 @@ export default function OverviewPanel({ tenant, slug, orders, setActiveTab, setS
     tenant.wppInstance?.isActive &&
     tenant.wppInstance?.status === "CONNECTED";
 
-  const isOpen = tenant.isOpen ?? true;
+  const isOpen = tenant.effectiveIsOpen ?? tenant.isOpen ?? true;
 
   // Horas do dia para label do gráfico
   const hourLabels = Array(8)
@@ -279,7 +279,11 @@ export default function OverviewPanel({ tenant, slug, orders, setActiveTab, setS
       <div className="flex flex-wrap items-center gap-2">
         <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold border ${isOpen ? "bg-green-50 text-green-700 border-green-200" : "bg-red-50 text-red-600 border-red-200"}`}>
           <span className={`w-1.5 h-1.5 rounded-full ${isOpen ? "bg-green-500 animate-pulse" : "bg-red-400"}`} />
-          {isOpen ? "Estabelecimento Aberto" : "Estabelecimento Fechado"}
+          {isOpen
+            ? "Estabelecimento Aberto"
+            : tenant.isOpen === false
+            ? "Estabelecimento Fechado (manual)"
+            : "Estabelecimento Fechado (fora do horário)"}
         </div>
         <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold border ${wppOk ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-50 text-slate-500 border-slate-200"}`}>
           <span className={`w-1.5 h-1.5 rounded-full ${wppOk ? "bg-emerald-500 animate-pulse" : "bg-slate-300"}`} />
