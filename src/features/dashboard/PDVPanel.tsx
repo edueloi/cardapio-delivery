@@ -9,7 +9,7 @@ import {
   MoreHorizontal, DoorOpen, DoorClosed, Maximize2, Minimize2, Split, Truck,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import type { Tenant, Product, Order, PaymentConfig, PaymentMethodConfig, StoneConfig } from "../../types";
+import type { Tenant, Product, Order, PaymentConfig, PaymentMethodConfig, StoneConfig, Customer } from "../../types";
 import { dineInOrderLabel } from "../../types";
 import { apiJson } from "../../lib/api";
 import { useToast } from "../../components";
@@ -128,6 +128,15 @@ export default function PDVPanel({
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerCpf, setCustomerCpf] = useState("");
+  // Cliente vinculado por busca (fidelidade) — null quando os campos acima são digitados
+  // à mão sem bater com nenhum cadastro. O vínculo em si com a venda acontece pelo telefone
+  // no backend (awardLoyaltyPoints usa upsert por tenantId_phone), isso aqui é só UX:
+  // mostra o histórico/pontos do cliente já cadastrado e evita redigitar os dados.
+  const [linkedCustomer, setLinkedCustomer] = useState<Customer | null>(null);
+  const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
+  const [customerSearchTerm, setCustomerSearchTerm] = useState("");
+  const [customerSearchResults, setCustomerSearchResults] = useState<Customer[]>([]);
+  const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
 
   // Payment
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "DEBIT" | "CREDIT" | "PIX" | "VR" | "STONE">("CASH");
@@ -165,6 +174,46 @@ export default function PDVPanel({
   const [closingBalanceInput, setClosingBalanceInput] = useState("");
   const [cashActionLoading, setCashActionLoading] = useState(false);
   const [cashError, setCashError] = useState("");
+
+  // Busca cliente cadastrado por nome, telefone ou CPF (com debounce) — usada no "Adicionar
+  // cliente" do PDV pra vincular a venda a um cadastro já existente (fidelidade) sem o
+  // operador precisar redigitar nome/telefone que o cliente já informou antes.
+  useEffect(() => {
+    if (!customerSearchOpen || customerSearchTerm.trim().length < 2) {
+      setCustomerSearchResults([]);
+      return;
+    }
+    setCustomerSearchLoading(true);
+    const handle = setTimeout(async () => {
+      try {
+        const data = await apiJson<{ customers: Customer[] }>(
+          `/api/tenants/${tenant.slug}/customers?search=${encodeURIComponent(customerSearchTerm.trim())}&limit=8`
+        );
+        setCustomerSearchResults(data.customers || []);
+      } catch {
+        setCustomerSearchResults([]);
+      } finally {
+        setCustomerSearchLoading(false);
+      }
+    }, 350);
+    return () => clearTimeout(handle);
+  }, [customerSearchOpen, customerSearchTerm, tenant.slug]);
+
+  const handleSelectCustomer = (customer: Customer) => {
+    setLinkedCustomer(customer);
+    setCustomerName(customer.name);
+    setCustomerPhone(customer.phone);
+    if (customer.cpf) setCustomerCpf(maskCpf(customer.cpf));
+    setCustomerSearchOpen(false);
+    setCustomerSearchTerm("");
+  };
+
+  const handleClearLinkedCustomer = () => {
+    setLinkedCustomer(null);
+    setCustomerName("");
+    setCustomerPhone("");
+    setCustomerCpf("");
+  };
 
   const fetchCurrentCash = useCallback(async () => {
     try {
@@ -429,6 +478,7 @@ export default function PDVPanel({
     setCustomerName("");
     setCustomerPhone("");
     setCustomerCpf("");
+    setLinkedCustomer(null);
     setDiscountValue("");
     setAmountReceived("");
     setCardBrand("");
@@ -1021,8 +1071,8 @@ export default function PDVPanel({
                 </div>
               ) : (
                 <div
-                  className="flex flex-col gap-2 lg:grid lg:gap-2"
-                  style={{ gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))" } as React.CSSProperties}
+                  className="flex flex-col gap-1.5 lg:grid lg:gap-2.5"
+                  style={{ gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))" } as React.CSSProperties}
                 >
                   {filteredProducts.map((product) => {
                     const inCart = cart.find((i) => i.product.id === product.id);
@@ -1037,7 +1087,7 @@ export default function PDVPanel({
                         }`}
                       >
                         {/* Image — hidden on celular/tablet (só nome/descrição/preço); volta a aparecer em telas grandes (lg+) */}
-                        <div className="hidden lg:flex w-full aspect-square bg-gradient-to-br from-slate-100 to-slate-200 overflow-hidden relative items-center justify-center">
+                        <div className="hidden lg:flex w-full aspect-[4/3] bg-gradient-to-br from-slate-100 to-slate-200 overflow-hidden relative items-center justify-center">
                           {product.imageUrl ? (
                             <img
                               src={product.imageUrl}
@@ -1045,38 +1095,38 @@ export default function PDVPanel({
                               alt={product.name}
                             />
                           ) : (
-                            <Utensils className="w-8 h-8 text-slate-300" />
+                            <Utensils className="w-6 h-6 text-slate-300" />
                           )}
                           {/* Cart qty badge */}
                           {inCart && (
-                            <div className="absolute top-1.5 left-1.5 min-w-[18px] h-[18px] px-1 bg-[#C9A227] text-black text-[10px] font-black rounded-full flex items-center justify-center shadow">
+                            <div className="absolute top-1 left-1 min-w-[16px] h-[16px] px-1 bg-[#C9A227] text-black text-[9px] font-black rounded-full flex items-center justify-center shadow">
                               {inCart.quantity}
                             </div>
                           )}
                           {/* Stock badge */}
                           {product.inventoryItem && (
-                            <div className="absolute bottom-1.5 left-1.5 bg-black/50 backdrop-blur-sm text-white text-[7px] font-bold rounded px-1 py-0.5 uppercase tracking-wide">
+                            <div className="absolute bottom-1 left-1 bg-black/50 backdrop-blur-sm text-white text-[7px] font-bold rounded px-1 py-0.5 uppercase tracking-wide">
                               {product.inventoryItem.quantity} un
                             </div>
                           )}
                           {/* Botão + flutuante sobre a foto */}
-                          <div className={`absolute bottom-1.5 right-1.5 w-6 h-6 rounded-lg flex items-center justify-center transition-all duration-200 shadow-lg ${
+                          <div className={`absolute bottom-1 right-1 w-5 h-5 rounded-md flex items-center justify-center transition-all duration-200 shadow-lg ${
                             inCart
                               ? "bg-[#C9A227] text-black"
                               : "bg-[#0D1B3E] text-white group-hover:bg-[#C9A227] group-hover:text-black"
                           }`}>
-                            <Plus className="w-3.5 h-3.5" strokeWidth={2.5} />
+                            <Plus className="w-3 h-3" strokeWidth={2.5} />
                           </div>
                         </div>
 
                         {/* Info */}
-                        <div className="flex-1 min-w-0 flex flex-col gap-0.5 lg:px-2 lg:py-1.5">
-                          <h4 className="text-[13px] lg:text-[11px] font-bold text-slate-800 line-clamp-1 leading-snug">{product.name}</h4>
+                        <div className="flex-1 min-w-0 flex flex-col gap-0.5 lg:px-1.5 lg:py-1">
+                          <h4 className="text-[13px] lg:text-[10.5px] font-bold text-slate-800 line-clamp-1 leading-snug">{product.name}</h4>
                           {product.description && (
                             <p className="text-[11px] text-slate-400 line-clamp-1 leading-tight lg:hidden">{product.description}</p>
                           )}
-                          <div className="flex items-center justify-between mt-0.5 lg:mt-0.5">
-                            <span className="text-[14px] lg:text-[12px] font-black text-[#0D1B3E] leading-none tabular-nums">{fmt(product.price)}</span>
+                          <div className="flex items-center justify-between mt-0.5 lg:mt-0">
+                            <span className="text-[14px] lg:text-[11px] font-black text-[#0D1B3E] leading-none tabular-nums">{fmt(product.price)}</span>
                             <div className={`lg:hidden w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-200 shrink-0 ${
                               inCart
                                 ? "bg-[#C9A227] text-black"
@@ -1386,29 +1436,42 @@ export default function PDVPanel({
         </div>
 
         {/* Customer info (compact) */}
-        <div className="px-3.5 py-2 border-b border-white/5 grid grid-cols-2 gap-1.5">
-          <div className="relative">
-            <User className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-white/30" />
-            <input
-              type="text"
-              placeholder="Nome do cliente"
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-lg py-1.5 pl-7 pr-2.5 text-[11px] text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
-            />
-          </div>
-          <div className="relative">
-            <Phone className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-white/30" />
-            <input
-              type="tel"
-              placeholder="Telefone"
-              value={customerPhone}
-              onChange={(e) => setCustomerPhone(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-lg py-1.5 pl-7 pr-2.5 text-[11px] text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
-            />
-          </div>
+        <div className="px-3.5 py-2 border-b border-white/5 relative">
+          {linkedCustomer ? (
+            <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-2.5 py-2">
+              <div className="w-7 h-7 rounded-full bg-[#C9A227]/20 text-[#C9A227] flex items-center justify-center shrink-0 text-[11px] font-black uppercase">
+                {linkedCustomer.name.charAt(0)}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-bold text-white truncate">{linkedCustomer.name}</p>
+                <p className="text-[9px] text-white/40 truncate">
+                  {linkedCustomer.phone}
+                  {tenant.loyaltyConfig?.enabled && (
+                    <span className="text-[#C9A227]"> · {linkedCustomer.loyaltyPoints} pts</span>
+                  )}
+                </p>
+              </div>
+              <button
+                onClick={handleClearLinkedCustomer}
+                className="shrink-0 w-6 h-6 rounded-md flex items-center justify-center text-white/30 hover:text-white hover:bg-white/10 transition-colors"
+                title="Remover cliente"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setCustomerSearchOpen(true)}
+              className="w-full flex items-center gap-2 bg-white/5 border border-white/10 hover:border-[#C9A227]/50 rounded-lg px-2.5 py-2 transition-colors text-left"
+            >
+              <User className="w-3.5 h-3.5 text-white/40 shrink-0" />
+              <span className="text-[11px] font-bold text-white/50 flex-1">Cliente (opcional)</span>
+              <ChevronRight className="w-3.5 h-3.5 text-white/30" />
+            </button>
+          )}
+
           {fiscalEnabled && (
-            <div className="relative col-span-2">
+            <div className="relative mt-1.5">
               <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-white/30" />
               <input
                 type="text"
@@ -1418,6 +1481,73 @@ export default function PDVPanel({
                 onChange={(e) => setCustomerCpf(maskCpf(e.target.value))}
                 className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-8 pr-3 text-xs text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
               />
+            </div>
+          )}
+
+          {/* Popover de busca/cadastro de cliente */}
+          {customerSearchOpen && (
+            <div className="absolute left-3.5 right-3.5 top-full mt-1 z-30 bg-[#111d3d] border border-white/10 rounded-xl shadow-2xl overflow-hidden">
+              <div className="p-2.5 border-b border-white/5">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30" />
+                  <input
+                    autoFocus
+                    type="text"
+                    placeholder="Buscar por nome, telefone ou CPF..."
+                    value={customerSearchTerm}
+                    onChange={(e) => setCustomerSearchTerm(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-lg py-2 pl-8 pr-3 text-xs text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
+                  />
+                </div>
+              </div>
+              <div className="max-h-52 overflow-y-auto custom-scrollbar">
+                {customerSearchLoading && (
+                  <p className="px-3 py-3 text-[10px] text-white/30 text-center">Buscando...</p>
+                )}
+                {!customerSearchLoading && customerSearchTerm.trim().length >= 2 && customerSearchResults.length === 0 && (
+                  <p className="px-3 py-3 text-[10px] text-white/30 text-center">Nenhum cliente encontrado — pode cadastrar digitando nome e telefone abaixo.</p>
+                )}
+                {customerSearchResults.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => handleSelectCustomer(c)}
+                    className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/5 transition-colors text-left"
+                  >
+                    <div className="w-6 h-6 rounded-full bg-[#C9A227]/20 text-[#C9A227] flex items-center justify-center shrink-0 text-[10px] font-black uppercase">
+                      {c.name.charAt(0)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] font-bold text-white truncate">{c.name}</p>
+                      <p className="text-[9px] text-white/40 truncate">{c.phone}</p>
+                    </div>
+                    {tenant.loyaltyConfig?.enabled && (
+                      <span className="text-[9px] font-black text-[#C9A227] shrink-0">{c.loyaltyPoints} pts</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+              <div className="p-2 border-t border-white/5 grid grid-cols-2 gap-1.5">
+                <input
+                  type="text"
+                  placeholder="Nome"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  className="bg-white/5 border border-white/10 rounded-lg py-1.5 px-2.5 text-[11px] text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
+                />
+                <input
+                  type="tel"
+                  placeholder="Telefone"
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  className="bg-white/5 border border-white/10 rounded-lg py-1.5 px-2.5 text-[11px] text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
+                />
+                <button
+                  onClick={() => setCustomerSearchOpen(false)}
+                  className="col-span-2 mt-0.5 bg-[#C9A227] hover:bg-[#E8B93A] text-black text-[10px] font-black uppercase tracking-widest py-2 rounded-lg transition-colors"
+                >
+                  {customerName || customerPhone ? "Usar estes dados" : "Fechar"}
+                </button>
+              </div>
             </div>
           )}
         </div>

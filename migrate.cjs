@@ -1026,6 +1026,13 @@ const migrations = [
     check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenants' AND COLUMN_NAME = 'receipt_paper_width'",
     run: "ALTER TABLE tenants ADD COLUMN receipt_paper_width INT NOT NULL DEFAULT 80",
   },
+  // CPF do cliente — opcional, usado pra localizar cadastro existente (fidelidade) no PDV
+  // além de nome/telefone.
+  {
+    name: 'add_customers_cpf',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'customers' AND COLUMN_NAME = 'cpf'",
+    run: "ALTER TABLE customers ADD COLUMN cpf VARCHAR(191) NULL",
+  },
 ];
 
 async function run() {

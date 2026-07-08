@@ -4098,10 +4098,13 @@ app.get("/api/tenants/:slug/customers", requireAuth, async (req, res) => {
 
     const where: any = { tenantId: tenant.id };
     if (search) {
+      const digits = search.replace(/\D/g, "");
       where.OR = [
         { name: { contains: search } },
         { phone: { contains: search } },
         { email: { contains: search } },
+        // CPF é salvo só com dígitos — busca com ou sem pontuação encontra do mesmo jeito.
+        ...(digits ? [{ cpf: { contains: digits } }] : []),
       ];
     }
 
@@ -4142,13 +4145,14 @@ app.post("/api/tenants/:slug/customers", requireAuth, async (req, res) => {
   if (!tenant) return;
 
   try {
-    const { name, phone, email, address, notes } = req.body;
+    const { name, phone, email, cpf, address, notes } = req.body;
     if (!name || !phone) return res.status(400).json({ error: "Nome e telefone são obrigatórios." });
+    const cpfDigits = cpf ? String(cpf).replace(/\D/g, "") : undefined;
 
     const customer = await prisma.customer.upsert({
       where: { tenantId_phone: { tenantId: tenant.id, phone } },
-      create: { tenantId: tenant.id, name, phone, email, address, notes },
-      update: { name, email, address, notes },
+      create: { tenantId: tenant.id, name, phone, email, cpf: cpfDigits, address, notes },
+      update: { name, email, cpf: cpfDigits, address, notes },
     });
     res.json(customer);
   } catch (error) {
@@ -4165,10 +4169,11 @@ app.patch("/api/tenants/:slug/customers/:id", requireAuth, async (req, res) => {
     const existing = await prisma.customer.findFirst({ where: { id: req.params.id, tenantId: tenant.id } });
     if (!existing) return res.status(404).json({ error: "Cliente não encontrado." });
 
-    const { name, phone, email, address, notes } = req.body;
+    const { name, phone, email, cpf, address, notes } = req.body;
+    const cpfDigits = cpf !== undefined ? (cpf ? String(cpf).replace(/\D/g, "") : null) : undefined;
     const customer = await prisma.customer.update({
       where: { id: req.params.id },
-      data: { name, phone, email, address, notes },
+      data: { name, phone, email, cpf: cpfDigits, address, notes },
     });
     res.json(customer);
   } catch (error) {

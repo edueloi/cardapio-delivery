@@ -469,6 +469,7 @@ model Customer {
   name         String
   phone        String
   email        String?
+  cpf          String?  // CPF do cliente (só dígitos) — opcional, usado pra localizar/gerar fidelidade
   birthday     DateTime? @db.Date // opcional — usado para promoções de aniversário
   address      String?  // legado — endereço único antigo, mantido por compatibilidade
   notes        String?
