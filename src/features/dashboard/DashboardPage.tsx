@@ -193,6 +193,18 @@ export default function DashboardPage() {
     }
   };
 
+  const handleClearComanda = async (orderId: string) => {
+    if (!tenant) return;
+    try {
+      await apiFetch(`/api/admin/${tenant.id}/comanda/${orderId}/clear`, {
+        method: "POST"
+      });
+      fetchOrders(tenant.id);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const filteredOrders = [...orders]
     .filter((order) => {
       if (activeTab === "live-orders") {
@@ -277,6 +289,7 @@ export default function DashboardPage() {
           activeOrderId={orderId}
           checkoutRequests={checkoutRequests}
           onClearTable={handleClearTable}
+          onClearComanda={handleClearComanda}
           waiterCalls={waiterCalls}
           onDismissWaiterCall={(ts) => setWaiterCalls(prev => prev.filter(w => w.timestamp !== ts))}
           membership={membership}

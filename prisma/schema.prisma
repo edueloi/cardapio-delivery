@@ -662,7 +662,7 @@ model Order {
   customerName String   @map("customer_name")
   customerPhone String  @map("customer_phone")
   address      String?
-  status       String   @default("PENDING") // PENDING, PREPARING, SHIPPED, AWAITING_PAYMENT (mesa/balcão fechado, aguardando faturar no PDV), DELIVERED, CANCELLED
+  status       String   @default("PENDING") // PENDING, PREPARING, SHIPPED, AWAITING_PAYMENT (mesa/balcão fechado, aguardando faturar no PDV), DELIVERED, CANCELLED, MERGED (pedido original de mesa/comanda já faturado por outro pedido no PDV — não conta como venda)
   orderType    String   @default("DELIVERY") @map("order_type")
   source          String  @default("DIRECT") @map("source") // DIRECT (PDV/cardápio/whatsapp), IFOOD, etc — origem do pedido
   externalOrderId String? @map("external_order_id") // ID do pedido no sistema de origem (ex: id do pedido no iFood)

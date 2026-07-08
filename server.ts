@@ -1948,7 +1948,7 @@ app.get("/api/orders/table/:slug/:tableId", async (req, res) => {
       where: {
         tenant: { slug },
         tableId: tableId,
-        status: { notIn: ["DELIVERED", "CANCELLED"] }
+        status: { notIn: ["DELIVERED", "CANCELLED", "MERGED"] }
       },
       include: {
         items: {
@@ -2736,17 +2736,19 @@ app.post("/api/admin/:tenantId/table/:tableId/clear", requireAuth, async (req, r
   const { tableId } = req.params;
 
   try {
-    // AWAITING_PAYMENT, não DELIVERED: essas comandas originais nunca foram cobradas —
-    // quem já fatura a venda de verdade é o pedido novo criado pelo PDV no checkout
-    // (pdv/order). Se marcássemos DELIVERED aqui, essas comandas contariam como vendas
-    // duplicadas nos relatórios, ao lado da venda real que acabou de ser lançada.
+    // MERGED, não DELIVERED: esses pedidos originais da mesa nunca foram cobrados —
+    // quem fatura a venda de verdade é o pedido novo criado pelo PDV no checkout
+    // (pdv/order), lançado logo antes desta chamada. Se marcássemos DELIVERED aqui,
+    // esses pedidos contariam como vendas duplicadas nos relatórios (cada um com seu
+    // próprio paymentMethod), ao lado da venda real. MERGED os tira das listas de
+    // "mesa ocupada" sem nunca contar como receita.
     await prisma.order.updateMany({
       where: {
         tenantId: tenant.id,
         tableId: tableId,
-        status: { notIn: ["DELIVERED", "CANCELLED", "AWAITING_PAYMENT"] }
+        status: { notIn: ["DELIVERED", "CANCELLED", "MERGED"] }
       },
-      data: { status: "AWAITING_PAYMENT" }
+      data: { status: "MERGED" }
     });
 
     io.to(`${tenant.id}-mesa-${tableId}`).emit("table-update");
@@ -2754,6 +2756,32 @@ app.post("/api/admin/:tenantId/table/:tableId/clear", requireAuth, async (req, r
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to clear table" });
+  }
+});
+
+// Fecha uma comanda (balcão/garçom sem mesa) depois que o PDV já lançou a venda de
+// verdade nesse checkout — mesma lógica do clear de mesa: vira MERGED (não conta como
+// receita), nunca DELIVERED, pra não duplicar ao lado do pedido novo faturado. Sem isso
+// a comanda ficava presa em AWAITING_PAYMENT pra sempre e podia ser cobrada de novo.
+app.post("/api/admin/:tenantId/comanda/:orderId/clear", requireAuth, async (req, res) => {
+  const tenant = await requireTenantById(req, res, req.params.tenantId, "tables");
+  if (!tenant) return;
+
+  try {
+    await prisma.order.updateMany({
+      where: {
+        id: req.params.orderId,
+        tenantId: tenant.id,
+        status: { notIn: ["DELIVERED", "CANCELLED", "MERGED"] },
+      },
+      data: { status: "MERGED" },
+    });
+
+    io.to(`tenant-${tenant.id}`).emit("menu-updated", { tenantId: tenant.id });
+    res.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to clear comanda" });
   }
 });
 

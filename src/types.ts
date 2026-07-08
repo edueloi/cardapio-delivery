@@ -476,7 +476,7 @@ export interface Order {
   customerName: string;
   customerPhone: string;
   address?: string;
-  status: 'PENDING' | 'PREPARING' | 'SHIPPED' | 'AWAITING_PAYMENT' | 'DELIVERED' | 'CANCELLED';
+  status: 'PENDING' | 'PREPARING' | 'SHIPPED' | 'AWAITING_PAYMENT' | 'DELIVERED' | 'CANCELLED' | 'MERGED';
   orderType: 'DELIVERY' | 'PICKUP' | 'DINE_IN';
   tableId?: string | null;
   counterTicketNumber?: number | null; // senha sequencial diária — só para pedidos de balcão (sem mesa)

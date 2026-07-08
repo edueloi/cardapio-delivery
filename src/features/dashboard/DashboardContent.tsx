@@ -52,6 +52,7 @@ interface DashboardContentProps {
   activeOrderId?: string;
   checkoutRequests?: Array<{ tableId: string; customerName: string; timestamp: number }>;
   onClearTable?: (tableId: string) => void;
+  onClearComanda?: (orderId: string) => void;
   waiterCalls?: Array<{ tableId: string; customerName: string; note: string; requestBill: boolean; timestamp: number }>;
   onDismissWaiterCall?: (ts: number) => void;
   membership?: MyMembership | null;
@@ -85,6 +86,7 @@ export default function DashboardContent({
   updateStatus,
   checkoutRequests,
   onClearTable,
+  onClearComanda,
   waiterCalls,
   onDismissWaiterCall,
   membership,
@@ -250,6 +252,7 @@ export default function DashboardContent({
               onOrderCreated={refreshTenant}
               checkoutRequests={checkoutRequests}
               onClearTable={onClearTable}
+              onClearComanda={onClearComanda}
               orders={orders}
               onOpenFullscreen={
                 (window as any).pdvDesktop

@@ -437,7 +437,7 @@ function ComandaModal({
   };
 
   const handleMarkServed = async () => {
-    const openOrders = existingOrders.filter((o) => o.status !== "DELIVERED" && o.status !== "CANCELLED" && o.status !== "AWAITING_PAYMENT");
+    const openOrders = existingOrders.filter((o) => o.status !== "DELIVERED" && o.status !== "CANCELLED" && o.status !== "AWAITING_PAYMENT" && o.status !== "MERGED");
     if (openOrders.length === 0) { onClose(); return; }
     setClosing(true);
     try {

@@ -44,6 +44,7 @@ interface PDVPanelProps {
   onOrderCreated?: () => void;
   checkoutRequests?: Array<{ tableId: string; customerName: string; timestamp: number }>;
   onClearTable?: (tableId: string) => void;
+  onClearComanda?: (orderId: string) => void;
   orders?: Order[];
   /** "waiter" = garçom: só lança pedidos em mesa/comanda, sem acesso a pagamento/caixa. */
   mode?: "full" | "waiter";
@@ -69,6 +70,7 @@ export default function PDVPanel({
   onOrderCreated,
   checkoutRequests = [],
   onClearTable,
+  onClearComanda,
   orders = [],
   mode = "full",
   operatorName,
@@ -342,7 +344,7 @@ export default function PDVPanel({
   }, [tenant, priceCheckTerm]);
 
   const activeComandas = useMemo(
-    () => orders.filter((o) => o.orderType === "DINE_IN" && !["DELIVERED", "CANCELLED"].includes(o.status) && !o.tableId),
+    () => orders.filter((o) => o.orderType === "DINE_IN" && !["DELIVERED", "CANCELLED", "MERGED"].includes(o.status) && !o.tableId),
     [orders]
   );
 
@@ -521,7 +523,7 @@ export default function PDVPanel({
 
   const handleLoadTable = (tableId: string) => {
     const tableOrders = orders.filter(
-      (o) => o.tableId === tableId && o.status !== "CANCELLED" && o.status !== "DELIVERED"
+      (o) => o.tableId === tableId && o.status !== "CANCELLED" && o.status !== "DELIVERED" && o.status !== "MERGED"
     );
     const items: CartItem[] = [];
     tableOrders.forEach((order) => {
@@ -642,6 +644,7 @@ export default function PDVPanel({
       }
 
       if (selectedTableId && onClearTable) await onClearTable(selectedTableId);
+      if (selectedComandaId && onClearComanda) await onClearComanda(selectedComandaId);
 
       clearCart();
       setShowCheckout(false);
@@ -1695,7 +1698,7 @@ export default function PDVPanel({
           const isTable = orderDetailsView.type === "table";
           const title = isTable ? `Mesa ${orderDetailsView.tableId}` : dineInOrderLabel(orderDetailsView.comanda);
           const relatedOrders = isTable
-            ? orders.filter((o) => o.tableId === orderDetailsView.tableId && o.status !== "CANCELLED" && o.status !== "DELIVERED")
+            ? orders.filter((o) => o.tableId === orderDetailsView.tableId && o.status !== "CANCELLED" && o.status !== "DELIVERED" && o.status !== "MERGED")
             : [orderDetailsView.comanda];
           const detailItems: Array<{ key: string; name: string; quantity: number; price: number; notes: string }> = [];
           relatedOrders.forEach((order) => {
