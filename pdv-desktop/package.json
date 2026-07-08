@@ -8,18 +8,14 @@
   "license": "UNLICENSED",
   "private": true,
   "scripts": {
-    "postinstall": "electron-rebuild -f -w serialport",
     "start": "electron .",
     "dist": "electron-builder --win",
     "dist:portable": "electron-builder --win portable"
   },
   "dependencies": {
-    "electron-store": "^8.2.0",
-    "node-thermal-printer": "^4.4.4",
-    "serialport": "^12.0.0"
+    "electron-store": "^8.2.0"
   },
   "devDependencies": {
-    "@electron/rebuild": "^4.2.0",
     "electron": "^31.0.0",
     "electron-builder": "^24.13.3"
   },

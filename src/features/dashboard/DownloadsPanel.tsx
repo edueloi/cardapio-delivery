@@ -33,19 +33,19 @@ const downloads = [
 ];
 
 const features = [
-  "PDV completo funcionando como app nativo",
+  "PDV completo funcionando como app nativo, em tela cheia (modo caixa)",
   "Acesso rápido sem abrir o navegador",
+  "Impressão do recibo direto na impressora térmica, sem diálogo do Windows",
   "Atalho na barra de tarefas e área de trabalho",
-  "Impressão de cupom fiscal nativa",
   "Notificações do sistema para novos pedidos",
-  "Funciona com qualquer resolução de monitor",
 ];
 
 const steps = [
   { n: "1", title: "Baixe o instalador", desc: "Clique em Download e aguarde o arquivo .exe ser baixado." },
   { n: "2", title: "Execute o instalador", desc: "Dê duplo clique no arquivo baixado e siga as instruções na tela." },
   { n: "3", title: "Faça login", desc: "Na primeira execução, informe seu e-mail e senha do painel web." },
-  { n: "4", title: "Pronto!", desc: "O PDV abre em tela cheia, pronto para usar." },
+  { n: "4", title: "Configure a impressora", desc: "Aperte F9 dentro do app para escolher a impressora térmica instalada no Windows e testar." },
+  { n: "5", title: "Pronto!", desc: "O PDV abre em tela cheia (Ctrl+Shift+Q para fechar o app)." },
 ];
 
 export default function DownloadsPanel() {

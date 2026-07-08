@@ -1,6 +1,7 @@
-const { app, BrowserWindow, ipcMain, Menu, session } = require("electron");
+const { app, BrowserWindow, ipcMain, Menu, globalShortcut, dialog } = require("electron");
 const path = require("path");
 const printer = require("./printer");
+const { openPrinterConfigWindow } = require("./printer-config-window");
 
 // Mesmo domínio do painel web — o app desktop é só uma janela nativa em cima do mesmo
 // sistema, sem duplicar lógica de negócio. Login, PDV, tudo vem direto do servidor real.
@@ -15,6 +16,10 @@ function createWindow() {
     minWidth: 1024,
     minHeight: 640,
     show: false,
+    // Modo caixa/totem: ocupa a tela inteira, sem barra de título nem bordas do Windows.
+    // F9 abre a configuração da impressora, Ctrl+Shift+Q fecha o app (ver registerShortcuts).
+    frame: false,
+    kiosk: true,
     autoHideMenuBar: true,
     icon: path.join(__dirname, "..", "assets", "icon.png"),
     webPreferences: {
@@ -30,7 +35,6 @@ function createWindow() {
   Menu.setApplicationMenu(null);
 
   mainWindow.once("ready-to-show", () => {
-    mainWindow.maximize();
     mainWindow.show();
   });
 
@@ -52,12 +56,37 @@ function createWindow() {
   });
 }
 
+// Atalhos globais — necessários porque em modo kiosk (sem barra/menu) não existe outra
+// forma óbvia de acessar a configuração da impressora ou fechar o app.
+function registerShortcuts() {
+  globalShortcut.register("F9", () => {
+    openPrinterConfigWindow(mainWindow);
+  });
+
+  globalShortcut.register("CommandOrControl+Shift+Q", async () => {
+    const { response } = await dialog.showMessageBox(mainWindow, {
+      type: "question",
+      buttons: ["Cancelar", "Fechar o App"],
+      defaultId: 0,
+      cancelId: 0,
+      title: "Fechar Box Sys PDV",
+      message: "Tem certeza que deseja fechar o aplicativo?",
+    });
+    if (response === 1) app.quit();
+  });
+}
+
 app.whenReady().then(() => {
   createWindow();
+  registerShortcuts();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+app.on("will-quit", () => {
+  globalShortcut.unregisterAll();
 });
 
 app.on("window-all-closed", () => {
@@ -65,30 +94,14 @@ app.on("window-all-closed", () => {
 });
 
 // ── Impressão térmica direta (ESC/POS) ──────────────────────────────────────
+// Chamada pelo preload.js quando o PDV (site) pede pra imprimir o recibo. A configuração
+// da impressora em si (F9) tem seus próprios handlers em printer-config-window.js.
 ipcMain.handle("printer:print-receipt", async (_event, data) => {
   try {
-    await printer.printReceipt(data);
+    await printer.printReceipt(data, mainWindow);
     return { ok: true };
   } catch (err) {
     console.error("[main] Print failed:", err);
     return { ok: false, error: err.message || "Falha ao imprimir." };
   }
 });
-
-ipcMain.handle("printer:test-print", async () => {
-  try {
-    await printer.testPrint();
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: err.message || "Falha ao imprimir." };
-  }
-});
-
-ipcMain.handle("printer:get-config", () => printer.getPrinterConfig());
-
-ipcMain.handle("printer:set-config", (_event, config) => {
-  printer.setPrinterConfig(config);
-  return { ok: true };
-});
-
-ipcMain.handle("printer:list-serial-ports", () => printer.listSerialPorts());

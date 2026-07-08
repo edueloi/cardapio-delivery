@@ -157,3 +157,28 @@ button:disabled,
   scrollbar-width: thin;
   scrollbar-color: rgba(255,255,255,0.07) transparent;
 }
+
+/* Scrollbar fina e discreta em toda a aplicação — sem isso, o Windows/Chrome usa a
+   barra padrão do sistema (larga, cinza, quadrada), que destoa do resto do visual. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(15, 23, 42, 0.18) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.18);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(15, 23, 42, 0.32);
+}
