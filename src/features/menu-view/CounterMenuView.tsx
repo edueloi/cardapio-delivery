@@ -327,16 +327,22 @@ export default function CounterMenuView() {
               <motion.div
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                className="mx-auto w-20 h-20 rounded-full border-2 border-amber-500/20 flex items-center justify-center"
+                className="mx-auto w-24 h-24 rounded-3xl overflow-hidden shadow-2xl flex items-center justify-center ring-2 ring-white/10"
               >
-                <Ticket className="w-8 h-8 text-amber-500" />
+                {tenant.logoUrl ? (
+                  <img src={tenant.logoUrl} className="w-full h-full object-cover" alt={tenant.name} />
+                ) : (
+                  <div
+                    className="w-full h-full flex items-center justify-center text-2xl font-black text-black"
+                    style={{ background: "linear-gradient(135deg, #C9A227, #a37d1a)" }}
+                  >
+                    {tenant.name?.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?"}
+                  </div>
+                )}
               </motion.div>
 
               <div className="space-y-2">
                 <h1 className="text-3xl font-serif text-white tracking-wide">Bem-vindo ao {tenant.name}</h1>
-                <p className="text-amber-500/60 text-sm font-medium tracking-widest uppercase">
-                  Atendimento no Balcão
-                </p>
               </div>
 
               <form onSubmit={handleCheckin} className="space-y-4">
