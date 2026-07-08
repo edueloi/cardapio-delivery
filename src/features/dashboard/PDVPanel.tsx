@@ -25,6 +25,15 @@ const maskCpf = (v: string) =>
     .replace(/(\d{3})(\d)/, "$1.$2")
     .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
 
+const maskPhone = (v: string) => {
+  const d = v.replace(/\D/g, "").slice(0, 11);
+  if (d.length <= 2) return d.length ? `(${d}` : "";
+  if (d.length <= 7) return `(${d.slice(0,2)}) ${d.slice(2)}`;
+  return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`;
+};
+
+const isPhoneComplete = (v: string) => v.replace(/\D/g, "").length === 11;
+
 // Máscara monetária estilo caixa eletrônico: digita os centavos, o valor "empurra" pra esquerda.
 // Trabalha sempre com o valor em centavos (string de dígitos) para não perder precisão.
 const maskCurrencyDigits = (digits: string) => digits.replace(/\D/g, "").replace(/^0+(?=\d)/, "").slice(0, 12);
@@ -1541,16 +1550,26 @@ export default function PDVPanel({
                   onChange={(e) => setCustomerName(e.target.value)}
                   className="bg-white/5 border border-white/10 rounded-lg py-1.5 px-2.5 text-[11px] text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
                 />
-                <input
-                  type="tel"
-                  placeholder="Telefone"
-                  value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
-                  className="bg-white/5 border border-white/10 rounded-lg py-1.5 px-2.5 text-[11px] text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
-                />
+                <div className="relative">
+                  <input
+                    type="tel"
+                    placeholder="(00) 00000-0000"
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(maskPhone(e.target.value))}
+                    className={`w-full bg-white/5 border rounded-lg py-1.5 px-2.5 text-[11px] text-white placeholder-white/20 focus:outline-none transition-colors ${
+                      customerPhone && !isPhoneComplete(customerPhone)
+                        ? "border-red-500/50 focus:border-red-500"
+                        : "border-white/10 focus:border-[#C9A227]"
+                    }`}
+                  />
+                  {customerPhone && !isPhoneComplete(customerPhone) && (
+                    <p className="text-[9px] text-red-400 mt-0.5 ml-1">Telefone incompleto</p>
+                  )}
+                </div>
                 <button
                   onClick={() => setCustomerSearchOpen(false)}
-                  className="col-span-2 mt-0.5 bg-[#C9A227] hover:bg-[#E8B93A] text-black text-[10px] font-black uppercase tracking-widest py-2 rounded-lg transition-colors"
+                  disabled={!!customerPhone && !isPhoneComplete(customerPhone)}
+                  className="col-span-2 mt-0.5 bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-40 disabled:cursor-not-allowed text-black text-[10px] font-black uppercase tracking-widest py-2 rounded-lg transition-colors"
                 >
                   {customerName || customerPhone ? "Usar estes dados" : "Fechar"}
                 </button>
@@ -1950,6 +1969,35 @@ export default function PDVPanel({
                   placeholder="Ex: 05 ou João"
                   className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-6 text-xl font-black text-slate-800 focus:border-[#C9A227] outline-none text-center"
                 />
+                {/* Senhas rápidas */}
+                <div>
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 text-center">Senha rápida</p>
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {Array.from({ length: 20 }, (_, i) => i + 1).map((n) => {
+                      const inUse = orders.some(
+                        (o) => !['DELIVERED','CANCELLED','MERGED'].includes(o.status) &&
+                          (o.counterTicketNumber === n || (o.customerName === String(n) && !o.tableId))
+                      );
+                      return (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => !inUse && setComandaNumber(String(n))}
+                          disabled={inUse}
+                          className={`py-2 rounded-xl text-sm font-black transition-all ${
+                            comandaNumber === String(n)
+                              ? 'bg-[#C9A227] text-black shadow-lg scale-105'
+                              : inUse
+                                ? 'bg-red-50 text-red-300 cursor-not-allowed line-through'
+                                : 'bg-slate-100 text-slate-600 hover:bg-[#C9A227]/20 hover:text-[#a37d1a]'
+                          }`}
+                        >
+                          {n}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <button
