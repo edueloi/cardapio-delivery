@@ -4882,9 +4882,21 @@ app.get("/api/tenants/:slug/promotions", async (req, res) => {
         AND: [{ OR: [{ endsAt: null }, { endsAt: { gte: now } }] }],
       },
       orderBy: { sortOrder: "asc" },
-      include: { product: { select: { id: true, name: true, price: true, imageUrl: true } } },
+      include: {
+        product: {
+          select: { id: true, name: true, price: true, imageUrl: true, available: true, inventoryItem: { select: { quantity: true } } },
+        },
+      },
     });
-    res.json(promotions);
+    // Promoção vinculada a um produto esgotado/indisponível não faz sentido continuar
+    // aparecendo — some junto com o produto, em vez de ficar exibida sem poder ser aberta.
+    const visible = promotions.filter((promo) => {
+      if (!promo.product) return true;
+      if (promo.product.available === false) return false;
+      if (promo.product.inventoryItem && promo.product.inventoryItem.quantity <= 0) return false;
+      return true;
+    });
+    res.json(visible);
   } catch (e) {
     res.status(500).json({ error: "Erro ao buscar promoções" });
   }
