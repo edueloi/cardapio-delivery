@@ -239,6 +239,11 @@ export function OrdersList({
                     <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md tracking-wider ${st.color}`}>
                       {st.label}
                     </span>
+                    {order.status === "PREPARING" && order.kitchenReady && (
+                      <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200 animate-pulse">
+                        Cozinha Pronta
+                      </span>
+                    )}
                     <OrderWaitTime createdAt={order.createdAt} status={order.status} />
                   </div>
                   <p className="text-[11px] text-slate-400 font-medium mt-0.5 truncate">

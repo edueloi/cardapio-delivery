@@ -483,6 +483,7 @@ export interface Order {
   orderType: 'DELIVERY' | 'PICKUP' | 'DINE_IN';
   tableId?: string | null;
   counterTicketNumber?: number | null; // senha sequencial diária — só para pedidos de balcão (sem mesa)
+  kitchenReady?: boolean;
   paymentMethod: 'PIX' | 'CREDIT' | 'DEBIT' | 'MEAL' | 'FOOD' | 'CASH';
   paymentDetail?: string;
   scheduledDate?: string | null; // ISO date string YYYY-MM-DD

@@ -670,6 +670,7 @@ model Order {
   externalOrderId String? @map("external_order_id") // ID do pedido no sistema de origem (ex: id do pedido no iFood)
   tableId      String?  @map("table_id")
   counterTicketNumber Int? @map("counter_ticket_number") // senha sequencial diária — só para pedidos de balcão (tableId nulo, orderType DINE_IN)
+  kitchenReady Boolean  @default(false) @map("kitchen_ready")
   paymentMethod String  @default("CASH") @map("payment_method")
   paymentDetail String? @map("payment_detail") @db.Text
   discount     Float?   @default(0)

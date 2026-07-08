@@ -100,11 +100,18 @@ export default function DashboardPage() {
     });
 
     socket.on("order-status-updated", (updatedOrder: Order) => {
-      setOrders((prev) =>
-        Array.isArray(prev)
-          ? prev.map((order) => (order.id === updatedOrder.id ? updatedOrder : order))
-          : [],
-      );
+      setOrders((prev) => {
+        if (!Array.isArray(prev)) return [];
+        const oldOrder = prev.find((o) => o.id === updatedOrder.id);
+        if (updatedOrder.kitchenReady && (!oldOrder || !oldOrder.kitchenReady)) {
+          new Audio("/notification.mp3").play().catch(() => undefined);
+          const who = updatedOrder.orderType === "DINE_IN"
+            ? (updatedOrder.tableId ? `Mesa ${updatedOrder.tableId}` : `Senha ${String(updatedOrder.counterTicketNumber).padStart(2, "0")}`)
+            : updatedOrder.customerName;
+          toast.success(`Cozinha preparou os itens do pedido de ${who}!`);
+        }
+        return prev.map((order) => (order.id === updatedOrder.id ? updatedOrder : order));
+      });
     });
 
     socket.on("inventory-update", ({ id, quantity }) => {

@@ -50,7 +50,7 @@ function KitchenTicket({ order, onAdvance, isOverlay }: { order: Order; onAdvanc
   const elapsed = useElapsedMinutes(order.createdAt);
   const kitchenItems = order.items.filter((item) => item.product?.kitchenPrint === true);
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: order.id, data: { order } });
-  const nextLabel = order.status === "PENDING" ? "Marcar em preparo" : order.status === "PREPARING" ? "Marcar como pronto" : null;
+  const nextLabel = order.status === "PENDING" ? "Marcar em preparo" : (order.status === "PREPARING" && !order.kitchenReady) ? "Marcar como pronto" : null;
   const elapsedLabel = elapsed < 0 ? "agora" : `${elapsed} min`;
 
   const urgency = order.status === "SHIPPED"
@@ -264,27 +264,40 @@ export default function KitchenBoard({
   }, []);
 
   const setOrderStatus = async (order: Order, nextStatus: OrderStatus) => {
-    if (order.status === nextStatus) return;
+    const isMovingToReady = nextStatus === "SHIPPED";
+    const body = isMovingToReady
+      ? { status: "PREPARING", kitchenReady: true }
+      : { status: nextStatus, kitchenReady: false };
+
     const previousStatus = order.status;
-    setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: nextStatus as Order["status"] } : o)));
+    const previousKitchenReady = order.kitchenReady;
+
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.id === order.id
+          ? { ...o, status: body.status as any, kitchenReady: body.kitchenReady }
+          : o
+      )
+    );
+
     try {
       const res = await fetch(`${apiBase}/orders/${order.id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", "X-Kitchen-Token": token },
-        body: JSON.stringify({ status: nextStatus }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error(`status ${res.status}`);
       const updated = await res.json();
-      // Reconcilia com a resposta real do servidor (fonte da verdade), em vez de
-      // confiar cegamente no update otimista — evita o card ficar com status
-      // divergente se dois updates concorrentes (drag + botão, ou dois toques)
-      // acontecerem quase juntos.
       setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
     } catch (err) {
       console.error(err);
-      // Reverte o update otimista se o servidor não confirmou — sem isso o card
-      // fica "preso" num status que não existe de fato no banco.
-      setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: previousStatus } : o)));
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === order.id
+            ? { ...o, status: previousStatus, kitchenReady: previousKitchenReady }
+            : o
+        )
+      );
     }
   };
 
@@ -311,12 +324,19 @@ export default function KitchenBoard({
   // Fila por ordem de chegada — mais antigo primeiro (FIFO)
   const kitchenOrders = useMemo(() => {
     return orders
-      .filter((o) => COLUMNS.some((c) => c.status === o.status))
+      .filter((o) => o.status === "PENDING" || o.status === "PREPARING")
       .filter((o) => o.items.some((item) => item.product?.kitchenPrint === true))
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   }, [orders, now]);
 
-  const byStatus = (status: OrderStatus) => kitchenOrders.filter((o) => o.status === status);
+  const byStatus = (status: OrderStatus) => {
+    return kitchenOrders.filter((o) => {
+      if (status === "PENDING") return o.status === "PENDING" && !o.kitchenReady;
+      if (status === "PREPARING") return o.status === "PREPARING" && !o.kitchenReady;
+      if (status === "SHIPPED") return o.status === "PREPARING" && o.kitchenReady;
+      return false;
+    });
+  };
 
   const advanceOrder = (order: Order) => {
     const nextStatus: OrderStatus = order.status === "PENDING" ? "PREPARING" : "SHIPPED";

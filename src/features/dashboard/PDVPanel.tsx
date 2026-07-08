@@ -1830,13 +1830,14 @@ export default function PDVPanel({
           const relatedOrders = isTable
             ? orders.filter((o) => o.tableId === orderDetailsView.tableId && o.status !== "CANCELLED" && o.status !== "DELIVERED" && o.status !== "MERGED")
             : [orderDetailsView.comanda];
-          const detailItems: Array<{ key: string; name: string; quantity: number; price: number; notes: string }> = [];
+          const detailItems: Array<{ key: string; variantId?: string | null; name: string; quantity: number; price: number; notes: string }> = [];
           relatedOrders.forEach((order) => {
             order.items.forEach((item) => {
               if (!item.product) return;
-              const existing = detailItems.find((i) => i.key === item.productId && i.notes === (item.notes || ""));
+              const variantName = item.productVariant ? ` (${item.productVariant.name})` : "";
+              const existing = detailItems.find((i) => i.key === item.productId && i.variantId === item.productVariantId && i.notes === (item.notes || ""));
               if (existing) existing.quantity += item.quantity;
-              else detailItems.push({ key: item.productId, name: item.product.name, quantity: item.quantity, price: item.price, notes: item.notes || "" });
+              else detailItems.push({ key: item.productId, variantId: item.productVariantId, name: item.product.name + variantName, quantity: item.quantity, price: item.price, notes: item.notes || "" });
             });
           });
           const detailSubtotal = detailItems.reduce((acc, i) => acc + i.price * i.quantity, 0);

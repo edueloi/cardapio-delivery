@@ -270,7 +270,7 @@ async function requireTenantFromInventoryItem(req: express.Request, res: express
   return { item, tenant };
 }
 
-app.use(cors());
+app.use(cors() as any);
 app.use(express.json());
 app.use("/uploads", express.static(uploadDir));
 app.use("/downloads", express.static(path.join(process.cwd(), "public", "downloads")));
@@ -1931,7 +1931,7 @@ app.post("/api/orders", async (req, res) => {
       const customer = await prisma.customer.upsert({
         where: { tenantId_phone: { tenantId, phone: digits } },
         create: { tenantId, name: customerName, phone: digits, birthday: birthdayDate, totalSpent: total, ordersCount: 1, lastOrderAt: new Date() },
-        update: { totalSpent: { increment: total }, ordersCount: { increment: 1 }, lastOrderAt: new Date(), ...(birthdayDate && { birthday: birthdayDate }) },
+        update: { name: customerName, totalSpent: { increment: total }, ordersCount: { increment: 1 }, lastOrderAt: new Date(), ...(birthdayDate && { birthday: birthdayDate }) },
       });
       customerId = customer.id;
     }
@@ -2027,10 +2027,14 @@ app.get("/api/orders/counter/:slug/:orderId", async (req, res) => {
 // Atualiza o status de um pedido e aplica os efeitos colaterais (baixa de estoque/produção,
 // notificação via socket e WhatsApp). Compartilhada entre a rota autenticada normal e o
 // painel de cozinha (que usa sua própria sessão, sem conta de usuário).
-async function updateOrderStatus(orderId: string, previousStatus: string, status: string) {
+async function updateOrderStatus(orderId: string, previousStatus: string, status: string, kitchenReady?: boolean) {
+  const forceKitchenReady = status === "SHIPPED" || status === "DELIVERED" ? true : kitchenReady;
   const updatedOrder = await prisma.order.update({
     where: { id: orderId },
-    data: { status },
+    data: {
+      status,
+      ...(forceKitchenReady !== undefined ? { kitchenReady: forceKitchenReady } : {}),
+    },
     include: {
       tenant: true,
       items: {
@@ -2187,10 +2191,10 @@ app.patch("/api/orders/:id/status", requireAuth, async (req, res) => {
   if (!tenantOrder) return;
 
   const { order } = tenantOrder;
-  const { status } = req.body;
+  const { status, kitchenReady } = req.body;
 
   try {
-    const updatedOrder = await updateOrderStatus(order.id, order.status, status);
+    const updatedOrder = await updateOrderStatus(order.id, order.status, status, kitchenReady);
     res.json(updatedOrder);
   } catch (error) {
     console.error(error);
@@ -2518,7 +2522,7 @@ app.patch("/api/kitchen/global/orders/:id/status", async (req, res) => {
   if (!order) return res.status(404).json({ error: "Pedido não encontrado." });
 
   try {
-    const updatedOrder = await updateOrderStatus(order.id, order.status, req.body.status);
+    const updatedOrder = await updateOrderStatus(order.id, order.status, req.body.status, req.body.kitchenReady);
     res.json(updatedOrder);
   } catch (error) {
     console.error(error);
@@ -2595,7 +2599,7 @@ app.patch("/api/kitchen/:slug/orders/:id/status", async (req, res) => {
   if (!order) return res.status(404).json({ error: "Pedido não encontrado." });
 
   try {
-    const updatedOrder = await updateOrderStatus(order.id, order.status, req.body.status);
+    const updatedOrder = await updateOrderStatus(order.id, order.status, req.body.status, req.body.kitchenReady);
     res.json(updatedOrder);
   } catch (error) {
     console.error(error);
@@ -4443,6 +4447,8 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
     // a comanda for fechada/faturada mais tarde. PDV completo (caixa) continua igual:
     // fatura e debita na hora, pois ali a venda já está confirmada/paga.
     const isWaiterComanda = source === "waiter" && orderType === "DINE_IN";
+    const isPDVComandaLaunch = orderType === "DINE_IN" && req.body.status === "PENDING";
+    const initialStatus = (isWaiterComanda || isPDVComandaLaunch) ? "PENDING" : "DELIVERED";
 
     // Fetch products and calculate totals
     const productIds = validatedItems.map((i: any) => i.productId);
@@ -4536,7 +4542,7 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
     // conta a "venda" antes da mesa ser fechada e duplica pontos na transição de status.
     let customerId: string | undefined;
     if (customerPhone && customerPhone !== "00000000000" && customerName) {
-      if (isWaiterComanda) {
+      if (initialStatus === "PENDING") {
         const existing = await prisma.customer.findUnique({
           where: { tenantId_phone: { tenantId: tenant.id, phone: customerPhone } },
         });
@@ -4545,7 +4551,7 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
         const customer = await prisma.customer.upsert({
           where: { tenantId_phone: { tenantId: tenant.id, phone: customerPhone } },
           create: { tenantId: tenant.id, name: customerName, phone: customerPhone, totalSpent: total, ordersCount: 1, lastOrderAt: new Date() },
-          update: { totalSpent: { increment: total }, ordersCount: { increment: 1 }, lastOrderAt: new Date() },
+          update: { name: customerName, totalSpent: { increment: total }, ordersCount: { increment: 1 }, lastOrderAt: new Date() },
         });
         customerId = customer.id;
         await awardLoyaltyPoints(tenant.loyaltyConfig as string | null, customer.id, total);
@@ -4572,17 +4578,17 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
         feePassedToCustomer,
         serviceFeeAmount: serviceFeeAmount || null,
         serviceFeePercent: serviceFeeAmount ? serviceFeePercent : null,
-        status: isWaiterComanda ? "PENDING" : "DELIVERED",
+        status: initialStatus,
         total,
         items: { create: orderItems },
       },
       include: { items: { include: { product: true } } },
     });
 
-    // Comanda do garçom ainda não é venda faturada — sem movimento de caixa e sem
-    // debitar estoque agora. Isso acontece quando o pedido avançar de status
+    // Comanda do garçom ou lançamento pendente ainda não é venda faturada — sem movimento de caixa
+    // e sem debitar estoque agora. Isso acontece quando o pedido avançar de status
     // (PREPARING debita estoque, DELIVERED fecha a venda), igual ao delivery.
-    if (!isWaiterComanda) {
+    if (initialStatus !== "PENDING") {
       // Register cash movement for the payment
       const currentCash = await prisma.cashRegister.findFirst({
         where: { tenantId: tenant.id, status: "OPEN" },

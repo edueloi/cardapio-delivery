@@ -589,7 +589,7 @@ function CheckoutDrawer({ items, tenant, primary, deliveryFee, minOrder, enabled
                     </div>
                     <div className="flex items-center gap-3 text-sm">
                       <div className="w-7 h-7 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0">
-                        <span className="text-sm">{PAY_CONFIG.find(p => p.id === form.payMethod)?.emoji}</span>
+                        <span className="text-sm">{PAY_CONFIG.find(p => p.id === form.payMethod)?.icon}</span>
                       </div>
                       <span className="font-bold text-gray-900">
                         {PAY_CONFIG.find(p => p.id === form.payMethod)?.label}
@@ -636,7 +636,7 @@ function CheckoutDrawer({ items, tenant, primary, deliveryFee, minOrder, enabled
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-500">Pagamento</span>
                     <span className="font-bold text-gray-800 text-sm">
-                      {PAY_CONFIG.find(p => p.id === form.payMethod)?.emoji}{" "}
+                      <span className="inline-block w-4 h-4 mr-1">{PAY_CONFIG.find(p => p.id === form.payMethod)?.icon}</span>
                       {PAY_CONFIG.find(p => p.id === form.payMethod)?.label}
                     </span>
                   </div>

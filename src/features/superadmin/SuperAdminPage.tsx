@@ -302,7 +302,7 @@ function CondominiumsTab() {
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
       <SectionTitle
         title="Condomínios"
-        subtitle={`${condominiums.length} condomínio${condominiums.length !== 1 ? "s" : ""} cadastrado${condominiums.length !== 1 ? "s" : ""}`}
+        description={`${condominiums.length} condomínio${condominiums.length !== 1 ? "s" : ""} cadastrado${condominiums.length !== 1 ? "s" : ""}`}
         action={<Button variant="primary" iconLeft={<Plus className="w-4 h-4" />} onClick={openCreate}>Novo condomínio</Button>}
       />
 
