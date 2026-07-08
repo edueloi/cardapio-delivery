@@ -1635,7 +1635,7 @@ app.get("/api/tenants/:slug", async (req, res) => {
               where: { available: true, pdvOnly: false },
               orderBy: { sortOrder: "asc" },
               include: {
-                variants: true,
+                variants: { include: { inventoryItem: true } },
                 inventoryItem: true
               },
             },
@@ -1783,7 +1783,7 @@ app.get("/api/admin/tenant/:slug", requireAuth, async (req, res) => {
           products: {
             orderBy: { sortOrder: "asc" },
             include: {
-              variants: true,
+              variants: { include: { inventoryItem: true } },
               inventoryItem: true,
             },
           },
@@ -2904,6 +2904,7 @@ app.post("/api/products", requireAuth, async (req, res) => {
                 price: parseFloat(variant.price),
                 description: variant.description,
                 imageUrl: variant.imageUrl || null,
+                inventoryItemId: variant.inventoryItemId || null,
               })),
             }
           : undefined,
@@ -2991,6 +2992,7 @@ app.patch("/api/products/:id", requireAuth, async (req, res) => {
                   price: parseFloat(variant.price),
                   description: variant.description,
                   imageUrl: variant.imageUrl || null,
+                  inventoryItemId: variant.inventoryItemId || null,
                 })),
               }
             : undefined,

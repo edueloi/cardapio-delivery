@@ -469,6 +469,7 @@ export interface ProductVariant {
   price: number;
   imageUrl?: string | null;
   inventoryItemId?: string | null;
+  inventoryItem?: InventoryItem | null;
 }
 
 export interface Order {

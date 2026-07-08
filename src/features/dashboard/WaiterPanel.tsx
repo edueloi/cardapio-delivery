@@ -541,7 +541,7 @@ function ComandaModal({
         </div>
 
         {/* Lista de produtos — mesmo estilo visual do cardápio digital, compacto */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-5 grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5 grid grid-cols-2 sm:grid-cols-3 gap-3 auto-rows-min">
           {allProducts.map((p) => {
             const hasVariants = !!p.variants && p.variants.length > 0;
             const minPrice = hasVariants ? Math.min(...p.variants!.map((v) => v.price)) : p.price;
@@ -549,32 +549,24 @@ function ComandaModal({
               <button
                 key={p.id}
                 onClick={() => addToCart(p)}
-                className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden hover:shadow-md hover:border-slate-200 transition-all text-left"
+                className="flex flex-col bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden hover:shadow-md hover:border-slate-200 transition-all text-left"
               >
-                {p.imageUrl ? (
-                  <div className="relative w-full aspect-[4/3] overflow-hidden bg-slate-50">
+                <div className="relative w-full aspect-[4/3] shrink-0 overflow-hidden bg-slate-100 flex items-center justify-center">
+                  {p.imageUrl ? (
                     <img src={p.imageUrl} alt={p.name} loading="lazy" className="w-full h-full object-cover" />
-                    <div className="absolute bottom-2 left-2 bg-black/50 backdrop-blur-md rounded-lg px-2 py-0.5">
-                      <span className="text-[10px] font-black text-white">
-                        {hasVariants && <span className="font-normal opacity-70 text-[9px] mr-1">a partir</span>}
-                        {fmt(minPrice)}
-                      </span>
-                    </div>
-                    <div className="absolute top-2 right-2 w-6 h-6 rounded-lg bg-[#C9A227] text-white flex items-center justify-center shadow">
-                      <Plus className="w-3.5 h-3.5" />
-                    </div>
-                  </div>
-                ) : (
-                  <div className="w-full aspect-[4/3] bg-slate-50 flex items-center justify-center text-3xl">🍽️</div>
-                )}
-                <div className="px-2.5 py-2">
-                  <p className="text-[11px] font-black text-slate-800 leading-tight truncate">{p.name}</p>
-                  {!p.imageUrl && (
-                    <p className="text-[10px] font-bold text-[#C9A227] mt-0.5">
-                      {hasVariants && <span className="text-slate-400 font-normal mr-1">a partir de</span>}
-                      {fmt(minPrice)}
-                    </p>
+                  ) : (
+                    <span className="text-3xl">🍽️</span>
                   )}
+                  <div className="absolute top-2 right-2 w-6 h-6 rounded-lg bg-[#C9A227] text-white flex items-center justify-center shadow">
+                    <Plus className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+                <div className="px-2.5 py-2 flex-1 min-w-0 min-h-[2.5rem]">
+                  <p title={p.name} className="text-[11px] font-black text-slate-800 leading-tight line-clamp-2">{p.name}</p>
+                  <p className="text-[10px] font-bold text-[#C9A227] mt-1">
+                    {hasVariants && <span className="text-slate-400 font-normal mr-1">a partir de</span>}
+                    {fmt(minPrice)}
+                  </p>
                 </div>
               </button>
             );
@@ -644,16 +636,25 @@ function ComandaModal({
       {/* Seleção de tamanho/variante */}
       <Modal isOpen={!!variantPicker} onClose={() => setVariantPicker(null)} title={variantPicker?.name || "Escolha o tamanho"} size="sm">
         <div className="p-4 sm:p-5 space-y-2">
-          {variantPicker?.variants?.map((v) => (
+          {variantPicker?.variants?.map((v) => {
+            const outOfStock = !!v.inventoryItem && v.inventoryItem.quantity <= 0;
+            return (
             <button
               key={v.id}
-              onClick={() => addToCart(variantPicker, { id: v.id, name: v.name, price: v.price })}
-              className="w-full flex items-center justify-between p-3 rounded-2xl border border-slate-200 hover:border-[#C9A227] transition-all text-left"
+              onClick={() => !outOfStock && addToCart(variantPicker, { id: v.id, name: v.name, price: v.price })}
+              disabled={outOfStock}
+              className={`w-full flex items-center justify-between p-3 rounded-2xl border transition-all text-left ${
+                outOfStock ? "border-slate-100 opacity-50 cursor-not-allowed" : "border-slate-200 hover:border-[#C9A227]"
+              }`}
             >
-              <span className="text-sm font-black text-slate-700">{v.name}</span>
+              <div>
+                <span className="text-sm font-black text-slate-700">{v.name}</span>
+                {outOfStock && <p className="text-[10px] text-red-500 font-bold">Esgotado</p>}
+              </div>
               <span className="text-sm font-black text-[#C9A227]">{fmt(v.price)}</span>
             </button>
-          ))}
+            );
+          })}
         </div>
       </Modal>
     </Modal>

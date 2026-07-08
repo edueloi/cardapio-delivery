@@ -4389,14 +4389,28 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
                     value={v.imageUrl}
                     onChange={(val) => updateVariantField(idx, 'imageUrl', val)}
                   />
-                  <div className="flex-1 min-w-0 flex gap-2 items-center">
-                    <input placeholder="Nome (ex: 500ml)" value={v.name} onChange={e => updateVariantField(idx, 'name', e.target.value)}
-                      className="flex-1 bg-white border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 min-w-0" />
-                    <input placeholder="R$" value={v.price} onChange={e => updateVariantField(idx, 'price', e.target.value)}
-                      className="w-20 bg-white border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400" />
-                    <button onClick={() => removeVariantField(idx)} className="p-2 text-slate-300 hover:text-red-500 shrink-0">
-                      <X className="w-4 h-4" />
-                    </button>
+                  <div className="flex-1 min-w-0 space-y-1.5">
+                    <div className="flex gap-2 items-center">
+                      <input placeholder="Nome (ex: 500ml)" value={v.name} onChange={e => updateVariantField(idx, 'name', e.target.value)}
+                        className="flex-1 bg-white border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 min-w-0" />
+                      <input placeholder="R$" value={v.price} onChange={e => updateVariantField(idx, 'price', e.target.value)}
+                        className="w-20 bg-white border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                      <button onClick={() => removeVariantField(idx)} className="p-2 text-slate-300 hover:text-red-500 shrink-0">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <select
+                      value={v.inventoryItemId}
+                      onChange={e => updateVariantField(idx, 'inventoryItemId', e.target.value)}
+                      className="w-full bg-white border border-zinc-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    >
+                      <option value="">Sem vínculo de estoque (opcional)</option>
+                      {inventoryItems.filter((item: any) => item.usage !== 'INTERNAL').map((item: any) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name} — {item.quantity <= 0 ? "Esgotado" : `${item.quantity} ${item.unit || 'un'}`}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
               ))}

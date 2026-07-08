@@ -1188,13 +1188,19 @@ export default function MenuViewPage() {
                     <div className="space-y-3">
                       <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Escolha o tamanho</p>
                       <div className="space-y-2">
-                        {selectedProduct.variants.map((v) => (
+                        {selectedProduct.variants.map((v) => {
+                          const outOfStock = !!v.inventoryItem && v.inventoryItem.quantity <= 0;
+                          return (
                           <motion.button
                             key={v.id}
-                            onClick={() => setSelectedVariant(v)}
-                            whileTap={{ scale: 0.98 }}
-                            className={`w-full flex items-center justify-between px-4 py-4 rounded-2xl border-2 transition-all duration-200 ${selectedVariant?.id === v.id ? "shadow-md" : "border-slate-100 bg-slate-50 hover:border-slate-200"}`}
-                            style={selectedVariant?.id === v.id ? { borderColor: BRAND, background: BRAND_LIGHT } : {}}
+                            onClick={() => !outOfStock && setSelectedVariant(v)}
+                            whileTap={outOfStock ? undefined : { scale: 0.98 }}
+                            disabled={outOfStock}
+                            className={`w-full flex items-center justify-between px-4 py-4 rounded-2xl border-2 transition-all duration-200 ${
+                              outOfStock ? "border-slate-100 bg-slate-50 opacity-50 cursor-not-allowed" :
+                              selectedVariant?.id === v.id ? "shadow-md" : "border-slate-100 bg-slate-50 hover:border-slate-200"
+                            }`}
+                            style={!outOfStock && selectedVariant?.id === v.id ? { borderColor: BRAND, background: BRAND_LIGHT } : {}}
                           >
                             <div className="flex items-center gap-3">
                               {v.imageUrl && (
@@ -1205,12 +1211,15 @@ export default function MenuViewPage() {
                               </div>
                               <div className="text-left">
                                 <span className={`text-sm font-bold ${selectedVariant?.id === v.id ? "text-amber-800" : "text-slate-700"}`}>{v.name}</span>
-                                {v.description && <p className="text-[10px] text-slate-400 mt-0.5">{v.description}</p>}
+                                {outOfStock ? (
+                                  <p className="text-[10px] text-red-500 font-bold mt-0.5">Esgotado</p>
+                                ) : v.description && <p className="text-[10px] text-slate-400 mt-0.5">{v.description}</p>}
                               </div>
                             </div>
                             <span className={`text-sm font-black ${selectedVariant?.id === v.id ? "text-amber-500" : "text-slate-800"}`}>{fmt(v.price)}</span>
                           </motion.button>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}

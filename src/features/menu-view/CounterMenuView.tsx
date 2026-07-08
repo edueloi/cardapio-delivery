@@ -940,11 +940,15 @@ export default function CounterMenuView() {
                         <div className="space-y-3">
                           <p className="text-sm font-bold text-zinc-900 lg:text-white/30 lg:uppercase lg:tracking-widest">Escolha o tamanho</p>
                           <div className="space-y-2">
-                            {selectedProduct.variants.map((v) => (
+                            {selectedProduct.variants.map((v) => {
+                              const outOfStock = !!v.inventoryItem && v.inventoryItem.quantity <= 0;
+                              return (
                               <button
                                 key={v.id}
-                                onClick={() => setSelectedVariant(v)}
+                                onClick={() => !outOfStock && setSelectedVariant(v)}
+                                disabled={outOfStock}
                                 className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all ${
+                                  outOfStock ? 'border-zinc-100 bg-zinc-50 lg:border-white/10 lg:bg-white/5 opacity-50 cursor-not-allowed' :
                                   selectedVariant?.id === v.id
                                     ? 'border-amber-500 bg-amber-50 lg:bg-amber-500/10'
                                     : 'border-zinc-100 bg-zinc-50 lg:border-white/10 lg:bg-white/5'
@@ -954,11 +958,15 @@ export default function CounterMenuView() {
                                   <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${selectedVariant?.id === v.id ? 'border-amber-500' : 'border-zinc-300 lg:border-white/20'}`}>
                                     {selectedVariant?.id === v.id && <div className="w-2 h-2 rounded-full bg-amber-500" />}
                                   </div>
-                                  <span className="text-sm font-bold text-zinc-900 lg:text-white">{v.name}</span>
+                                  <div className="text-left">
+                                    <span className="text-sm font-bold text-zinc-900 lg:text-white">{v.name}</span>
+                                    {outOfStock && <p className="text-[10px] text-red-500 font-bold">Esgotado</p>}
+                                  </div>
                                 </div>
                                 <span className="text-sm font-bold text-zinc-700 lg:text-white/70">{fmt(v.price)}</span>
                               </button>
-                            ))}
+                              );
+                            })}
                           </div>
                         </div>
                       )}
