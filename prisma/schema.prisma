@@ -540,7 +540,7 @@ model WppInstance {
   instanceName String   @map("instance_name")
   phone        String?
   status       String   @default("not_configured") // not_configured, disconnected, qr_pending, connecting, connected
-  qrCode       String?  @map("qr_code")
+  qrCode       String?  @map("qr_code") @db.Text
   isActive     Boolean  @default(false) @map("is_active")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
