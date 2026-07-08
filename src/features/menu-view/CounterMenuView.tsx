@@ -465,19 +465,19 @@ export default function CounterMenuView() {
                 </div>
 
                 <div className="space-y-4">
-                <p className="text-white/40 text-sm max-w-[280px] mx-auto leading-relaxed">
-                  {getInstructionText(ticketOrder.status)}
-                </p>
-                </div>
+                  <p className="text-white/40 text-sm max-w-[280px] mx-auto leading-relaxed">
+                    {getInstructionText(ticketOrder.status)}
+                  </p>
 
-              <button
-                onClick={handleNewOrder}
-                className="mx-auto flex items-center gap-2 text-white/30 hover:text-amber-400 transition-all text-[11px] font-bold uppercase tracking-widest"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                Fazer novo pedido
-              </button>
-            </div>
+                  <button
+                    onClick={handleNewOrder}
+                    className="mx-auto flex items-center gap-2 text-white/30 hover:text-amber-400 transition-all text-[11px] font-bold uppercase tracking-widest"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Fazer novo pedido
+                  </button>
+                </div>
+              </div>
           </motion.div>
         )}
       </AnimatePresence>
