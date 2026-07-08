@@ -655,7 +655,7 @@ export default function PublicDashboardPage() {
               fontWeight: 600,
             }}
           >
-            {tenant.name} — Sabor que encanta, atendimento que acolhe.
+            {tenant.description ? `${tenant.name} — ${tenant.description}` : `${tenant.name} — Sabor que encanta, atendimento que acolhe.`}
           </span>
         </div>
 
