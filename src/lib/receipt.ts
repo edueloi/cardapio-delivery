@@ -11,6 +11,7 @@ export interface ReceiptData {
   tenantName: string;
   tenantAddress?: string;
   orderId?: string;
+  tableId?: string | null;
   counterTicketNumber?: number | null;
   createdAt?: Date;
   customerName?: string;
@@ -73,7 +74,8 @@ function estimateHeight(data: ReceiptData, nameLines: string[], addressLines: st
   y += addressLines.length * 4;
   y += 4; // data
   if (data.orderId) y += 4;
-  if (data.counterTicketNumber != null) y += 6;
+  if (data.tableId) y += 6;
+  else if (data.counterTicketNumber != null) y += 6;
   if (data.customerName) y += 4;
   y += 1 + 5; // linha + espaço
   for (const item of data.items) {
@@ -137,7 +139,14 @@ export function buildReceiptPdf(data: ReceiptData): jsPDF {
     doc.text(`Pedido #${data.orderId.slice(-8).toUpperCase()}`, width / 2, y, { align: "center" });
     y += 4;
   }
-  if (data.counterTicketNumber != null) {
+  if (data.tableId) {
+    doc.setFont("courier", "bold");
+    doc.setFontSize(width === 58 ? 12 : 14);
+    doc.text(`MESA ${data.tableId}`, width / 2, y + 2, { align: "center" });
+    y += 6;
+    doc.setFont("courier", "normal");
+    doc.setFontSize(8);
+  } else if (data.counterTicketNumber != null) {
     doc.setFont("courier", "bold");
     doc.setFontSize(width === 58 ? 12 : 14);
     doc.text(`SENHA ${String(data.counterTicketNumber).padStart(2, "0")}`, width / 2, y + 2, { align: "center" });

@@ -770,14 +770,18 @@ export default function PDVPanel({
     const orderSubtotal = items.reduce((acc: number, i: any) => acc + i.price * i.quantity, 0);
     let paymentDetail: { amountReceived?: number; change?: number; splits?: Array<{ method: string; amount: number; cardBrand?: string }> } = {};
     try { paymentDetail = order.paymentDetail ? JSON.parse(order.paymentDetail) : {}; } catch {}
+
+    const isNumericName = order.customerName && /^\d+$/.test(order.customerName);
+
     return {
       tenantName: tenant.name,
       tenantAddress: tenant.address || undefined,
       orderId: order.id,
-      counterTicketNumber: (order as any).counterTicketNumber ?? null,
+      tableId: order.tableId,
+      counterTicketNumber: order.counterTicketNumber != null ? order.counterTicketNumber : (isNumericName && !order.tableId ? Number(order.customerName) : null),
       paperWidthMm: (tenant.receiptPaperWidth === 58 ? 58 : 80) as 58 | 80,
       createdAt: order.createdAt ? new Date(order.createdAt) : new Date(),
-      customerName: order.customerName,
+      customerName: (!isNumericName || order.tableId) ? order.customerName : undefined,
       items,
       subtotal: orderSubtotal,
       discountAmount: order.discount || 0,
@@ -815,11 +819,14 @@ export default function PDVPanel({
   // e valores (sem dados de pagamento, que ainda não existem nesse momento).
   const handlePrintPreCheckout = () => {
     if (cart.length === 0) return;
+    const isNumericName = customerName && /^\d+$/.test(customerName);
     const data = {
       tenantName: tenant.name,
       tenantAddress: tenant.address || undefined,
       isPreCheckout: true,
-      customerName: customerName || (selectedTableId ? `Mesa ${selectedTableId}` : undefined),
+      tableId: selectedTableId || undefined,
+      counterTicketNumber: (isNumericName && !selectedTableId) ? Number(customerName) : null,
+      customerName: (!isNumericName || selectedTableId) ? customerName : undefined,
       items: cart.map((item) => ({
         quantity: item.quantity,
         name: item.product.name,
