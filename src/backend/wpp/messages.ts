@@ -251,7 +251,7 @@ export async function sendReceiptPdfMessage(order: {
     }));
     const subtotal = items.reduce((acc, i) => acc + i.price * i.quantity, 0);
 
-    let paymentDetail: { amountReceived?: number; change?: number; splits?: Array<{ method: string; amount: number; cardBrand?: string }> } = {};
+    let paymentDetail: { amountReceived?: number; change?: number; splits?: Array<{ method: string; amount: number; cardBrand?: string; installments?: number }> } = {};
     try { paymentDetail = order.paymentDetail ? JSON.parse(order.paymentDetail) : {}; } catch {}
 
     const doc = buildReceiptPdf({

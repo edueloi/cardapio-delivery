@@ -6,6 +6,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useDraggable } from "@dnd-kit/core";
 import socket from "../lib/socket";
+import { playNotificationSound } from "../lib/notificationSound";
 import type { Order, Tenant } from "../types";
 import { ChefHat, Timer, Bell, CheckCircle2, LogOut, Utensils, User } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
@@ -225,13 +226,15 @@ export default function KitchenBoard({
     setLoading(true);
     fetchData();
 
-    socket.on("new-order", (newOrder: Order) => {
+    const handleNewOrder = (newOrder: Order) => {
       setOrders((prev) => [newOrder, ...prev]);
-      new Audio("/notification.mp3").play().catch(() => {});
-    });
-    socket.on("order-status-updated", (updatedOrder: Order) => {
+      playNotificationSound();
+    };
+    const handleOrderStatusUpdated = (updatedOrder: Order) => {
       setOrders((prev) => prev.map((o) => (o.id === updatedOrder.id ? updatedOrder : o)));
-    });
+    };
+    socket.on("new-order", handleNewOrder);
+    socket.on("order-status-updated", handleOrderStatusUpdated);
 
     // Celular/tablet suspende a conexão WebSocket quando a tela apaga ou o app vai
     // pra segundo plano — ao voltar, o socket pode ficar "zumbi" (parece conectado
@@ -249,8 +252,8 @@ export default function KitchenBoard({
     window.addEventListener("online", handleVisibilityChange);
 
     return () => {
-      socket.off("new-order");
-      socket.off("order-status-updated");
+      socket.off("new-order", handleNewOrder);
+      socket.off("order-status-updated", handleOrderStatusUpdated);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("focus", handleVisibilityChange);
       window.removeEventListener("online", handleVisibilityChange);

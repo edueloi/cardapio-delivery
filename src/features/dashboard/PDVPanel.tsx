@@ -40,12 +40,29 @@ const maskCurrencyDigits = (digits: string) => digits.replace(/\D/g, "").replace
 const digitsToNumber = (digits: string) => (parseInt(digits || "0", 10) || 0) / 100;
 const formatCurrencyDigits = (digits: string) => fmt(digitsToNumber(digits)).replace("R$", "").trim();
 const numberToDigits = (n: number) => String(Math.round(n * 100));
+const roundMoney = (n: number) => Math.round(n * 100) / 100;
+const splitValueByCount = (amount: number, count: number) => {
+  const totalCents = Math.round(amount * 100);
+  const baseCents = Math.floor(totalCents / count);
+  const remainderCents = totalCents % count;
+  return Array.from({ length: count }, (_unused, index) => (baseCents + (index === 0 ? remainderCents : 0)) / 100);
+};
 
 interface CartItem {
   product: Product;
   quantity: number;
   notes: string;
   price: number; // allows manual override
+}
+
+type SplitPaymentMethod = "CASH" | "DEBIT" | "CREDIT" | "PIX" | "VR";
+
+interface PaymentSplitEntry {
+  id: string;
+  method: SplitPaymentMethod;
+  amount: number;
+  cardBrand?: string;
+  installments?: number;
 }
 
 interface PDVPanelProps {
@@ -122,6 +139,7 @@ export default function PDVPanel({
   const [nextTicketLoading, setNextTicketLoading] = useState(false);
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   const [selectedComandaId, setSelectedComandaId] = useState<string | null>(null);
+  const [contextLoadMessage, setContextLoadMessage] = useState("");
   // true quando veio do fluxo "Fechar Conta" — só pagar, sem opção de lançar mais itens
   const [isClosingAccount, setIsClosingAccount] = useState(false);
   const [registeredTables, setRegisteredTables] = useState<Array<{ id: string; label: string }>>([]);
@@ -157,8 +175,10 @@ export default function PDVPanel({
 
   // Split de pagamento — mais de uma forma na mesma venda (ex: parte dinheiro, parte cartão).
   // Cada entrada consome um pedaço do total; o restante é o que ainda falta pagar.
-  const [paymentSplits, setPaymentSplits] = useState<Array<{ id: string; method: "CASH" | "DEBIT" | "CREDIT" | "PIX" | "VR"; amount: number; cardBrand?: string }>>([]);
+  const [paymentSplits, setPaymentSplits] = useState<PaymentSplitEntry[]>([]);
   const [isSplitMode, setIsSplitMode] = useState(false);
+  const [groupSplitCount, setGroupSplitCount] = useState("2");
+  const [detailActionId, setDetailActionId] = useState<string | null>(null);
 
   // Stone terminal flow
   const [stonePaymentType, setStonePaymentType] = useState<"credit" | "debit" | "pix">("credit");
@@ -386,6 +406,110 @@ export default function PDVPanel({
     return (cfg?.acceptedBrands?.length ? cfg.acceptedBrands : []) as string[];
   }, [paymentConfig, paymentMethod]);
 
+  const getBrandsForPaymentMethod = useCallback((method: SplitPaymentMethod) => {
+    const key = PAYMENT_CONFIG_KEY_MAP[method];
+    const cfg = key ? (paymentConfig[key] as any) : null;
+    return (cfg?.acceptedBrands?.length ? cfg.acceptedBrands : []) as string[];
+  }, [paymentConfig]);
+
+  const getInstallmentOptionsForMethod = useCallback((method: SplitPaymentMethod, brand?: string) => {
+    if (method !== "CREDIT") return [1];
+    const cfg = paymentConfig.credit;
+    const keys = brand
+      ? Object.keys(cfg?.brandFees?.[brand]?.installmentFees || {})
+      : Object.values(cfg?.brandFees || {}).flatMap((fee) => Object.keys(fee.installmentFees || {}));
+    const unique = [...new Set(keys.map((value) => Number(value)).filter((value) => Number.isInteger(value) && value > 0))].sort((a, b) => a - b);
+    return unique.length > 0 ? unique : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+  }, [paymentConfig]);
+
+  const getNormalizedBrandForMethod = useCallback((method: SplitPaymentMethod, brand?: string) => {
+    const brands = getBrandsForPaymentMethod(method);
+    if (brands.length === 0) return undefined;
+    return brand && brands.includes(brand) ? brand : brands[0];
+  }, [getBrandsForPaymentMethod]);
+
+  const getNormalizedInstallmentsForMethod = useCallback((method: SplitPaymentMethod, brand?: string, current?: number) => {
+    if (method !== "CREDIT") return undefined;
+    const options = getInstallmentOptionsForMethod(method, brand);
+    return options.includes(current || 0) ? current : (options[0] || 1);
+  }, [getInstallmentOptionsForMethod]);
+
+  const getFeeInfoForMethod = useCallback((
+    method: SplitPaymentMethod | "STONE",
+    brand?: string,
+    installmentsCount = 1,
+    amount = 0
+  ) => {
+    if (method === "STONE" || method === "CASH") {
+      return { percent: 0, amount: 0, passToCustomer: false, rate: 0 };
+    }
+    if (method === "PIX") {
+      const cfg = paymentConfig.pix;
+      const percent = cfg?.brandFees?.["PIX"]?.installmentFees?.["1"] ?? 0;
+      const passToCustomer = !!cfg?.passFeeToCustomer;
+      return {
+        percent,
+        amount: roundMoney(amount * (percent / 100)),
+        passToCustomer,
+        rate: passToCustomer ? percent / 100 : 0,
+      };
+    }
+
+    const configKey = method === "CREDIT" ? "credit" : method === "DEBIT" ? "debit" : "meal";
+    const cfg = paymentConfig[configKey] as PaymentMethodConfig | undefined;
+    const normalizedBrand = getNormalizedBrandForMethod(method, brand);
+    if (!cfg || !normalizedBrand) {
+      return { percent: 0, amount: 0, passToCustomer: false, rate: 0 };
+    }
+
+    const normalizedInstallments = method === "CREDIT"
+      ? getNormalizedInstallmentsForMethod(method, normalizedBrand, installmentsCount) || 1
+      : 1;
+    const installmentKey = method === "CREDIT" ? String(normalizedInstallments) : "1";
+    const percent = cfg?.brandFees?.[normalizedBrand]?.installmentFees?.[installmentKey] ?? 0;
+    const passToCustomer = !!cfg?.passFeeToCustomer;
+    return {
+      percent,
+      amount: roundMoney(amount * (percent / 100)),
+      passToCustomer,
+      rate: passToCustomer ? percent / 100 : 0,
+    };
+  }, [getNormalizedBrandForMethod, getNormalizedInstallmentsForMethod, paymentConfig]);
+
+  const normalizedCardBrand = paymentMethod === "STONE"
+    ? undefined
+    : getNormalizedBrandForMethod(paymentMethod as SplitPaymentMethod, cardBrand);
+  const creditInstallmentOptions = useMemo(
+    () => getInstallmentOptionsForMethod("CREDIT", normalizedCardBrand),
+    [getInstallmentOptionsForMethod, normalizedCardBrand]
+  );
+
+  useEffect(() => {
+    if (paymentMethod === "STONE") {
+      if (cardBrand) setCardBrand("");
+      return;
+    }
+
+    const method = paymentMethod as SplitPaymentMethod;
+    const nextBrand = getNormalizedBrandForMethod(method, cardBrand);
+    const hasBrands = getBrandsForPaymentMethod(method).length > 0;
+    if (!hasBrands && cardBrand) {
+      setCardBrand("");
+    } else if (hasBrands && nextBrand !== cardBrand) {
+      setCardBrand(nextBrand || "");
+    }
+
+    if (method !== "CREDIT") {
+      if (installments !== 1) setInstallments(1);
+      return;
+    }
+
+    const nextInstallments = getNormalizedInstallmentsForMethod(method, nextBrand, installments) || 1;
+    if (nextInstallments !== installments) {
+      setInstallments(nextInstallments);
+    }
+  }, [paymentMethod, cardBrand, installments, getBrandsForPaymentMethod, getNormalizedBrandForMethod, getNormalizedInstallmentsForMethod]);
+
   const filteredProducts = useMemo(() => {
     let products: Product[] = [];
     tenant.categories?.forEach((cat) => {
@@ -414,10 +538,31 @@ export default function PDVPanel({
       .slice(0, 20);
   }, [tenant, priceCheckTerm]);
 
-  const activeComandas = useMemo(
-    () => orders.filter((o) => o.orderType === "DINE_IN" && !["DELIVERED", "CANCELLED", "MERGED"].includes(o.status) && !o.tableId),
-    [orders]
-  );
+  const activeComandas = useMemo(() => {
+    const grouped = new Map<string, Order>();
+    orders
+      .filter((order) => order.orderType === "DINE_IN" && !["DELIVERED", "CANCELLED", "MERGED"].includes(order.status) && !order.tableId)
+      .forEach((order) => {
+        const key = order.counterTicketNumber != null ? `ticket-${order.counterTicketNumber}` : `order-${order.id}`;
+        const existing = grouped.get(key);
+        if (!existing) {
+          grouped.set(key, { ...order, items: [...order.items] });
+          return;
+        }
+        grouped.set(key, {
+          ...existing,
+          total: existing.total + order.total,
+          items: [...existing.items, ...order.items],
+          createdAt: new Date(order.createdAt) > new Date(existing.createdAt) ? existing.createdAt : order.createdAt,
+        });
+      });
+    return Array.from(grouped.values()).sort((a, b) => {
+      const ticketA = a.counterTicketNumber ?? Number.MAX_SAFE_INTEGER;
+      const ticketB = b.counterTicketNumber ?? Number.MAX_SAFE_INTEGER;
+      if (ticketA !== ticketB) return ticketA - ticketB;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+  }, [orders]);
 
   // Delivery entregue mas ainda sem venda lançada no caixa (pagamento na entrega,
   // fora do fluxo do PDV) — precisa ser faturado manualmente aqui.
@@ -426,7 +571,56 @@ export default function PDVPanel({
     [orders]
   );
 
-  const subtotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
+  const selectedComandaBaseOrder = useMemo(
+    () => selectedComandaId ? orders.find((order) => order.id === selectedComandaId) ?? null : null,
+    [orders, selectedComandaId]
+  );
+
+  const currentContextOrders = useMemo(() => {
+    if (selectedTableId) {
+      return orders.filter(
+        (order) =>
+          order.orderType === "DINE_IN" &&
+          order.tableId === selectedTableId &&
+          !["DELIVERED", "CANCELLED", "MERGED"].includes(order.status)
+      );
+    }
+    if (selectedComandaId) {
+      return orders.filter(
+        (order) =>
+          (
+            (selectedComandaBaseOrder?.counterTicketNumber != null && order.counterTicketNumber === selectedComandaBaseOrder.counterTicketNumber) ||
+            order.id === selectedComandaId
+          ) &&
+          order.orderType === "DINE_IN" &&
+          !order.tableId &&
+          !["DELIVERED", "CANCELLED", "MERGED"].includes(order.status)
+      );
+    }
+    return [];
+  }, [orders, selectedComandaBaseOrder?.counterTicketNumber, selectedComandaId, selectedTableId]);
+
+  const existingContextItems = useMemo(
+    () =>
+      currentContextOrders.flatMap((order) =>
+        order.items
+          .filter((item) => item.product)
+          .map((item) => ({
+            orderId: order.id,
+            orderLabel: dineInOrderLabel(order),
+            status: order.status,
+            ...item,
+          }))
+      ),
+    [currentContextOrders]
+  );
+
+  const existingContextSubtotal = useMemo(
+    () => existingContextItems.reduce((acc, item) => acc + item.price * item.quantity, 0),
+    [existingContextItems]
+  );
+
+  const subtotal = existingContextSubtotal + cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
 
   const discountAmount = useMemo(() => {
     const v = parseFloat(discountValue || "0");
@@ -442,28 +636,87 @@ export default function PDVPanel({
     ? subtotal * ((serviceChargeConfig.percent || 0) / 100)
     : 0;
 
-  const feeInfo = useMemo(() => {
-    if (paymentMethod === "PIX") {
-      const cfg = paymentConfig.pix;
-      const percent = cfg?.brandFees?.["PIX"]?.installmentFees?.["1"] ?? 0;
-      const passToCustomer = !!cfg?.passFeeToCustomer;
-      return { percent, amount: total * (percent / 100), passToCustomer };
-    }
-    const methodKey = paymentMethod === "CREDIT" ? "credit" : paymentMethod === "DEBIT" ? "debit" : null;
-    if (!methodKey || !cardBrand) return { percent: 0, amount: 0, passToCustomer: false };
-    const cfg = paymentConfig[methodKey] as PaymentMethodConfig | undefined;
-    const installmentKey = methodKey === "credit" ? String(installments) : "1";
-    const percent = cfg?.brandFees?.[cardBrand]?.installmentFees?.[installmentKey] ?? 0;
-    const passToCustomer = !!cfg?.passFeeToCustomer;
-    const amount = total * (percent / 100);
-    return { percent, amount, passToCustomer };
-  }, [paymentMethod, cardBrand, installments, paymentConfig, total]);
+  const feeInfo = useMemo(
+    () => getFeeInfoForMethod(paymentMethod, normalizedCardBrand, installments, total),
+    [getFeeInfoForMethod, installments, normalizedCardBrand, paymentMethod, total]
+  );
 
-  const finalTotal = (feeInfo.passToCustomer ? total + feeInfo.amount : total) + serviceChargeAmount;
+  const normalizedPaymentSplits = useMemo(
+    () =>
+      paymentSplits.map((split) => {
+        const nextBrand = getNormalizedBrandForMethod(split.method, split.cardBrand);
+        return {
+          ...split,
+          cardBrand: nextBrand,
+          installments: split.method === "CREDIT"
+            ? (getNormalizedInstallmentsForMethod(split.method, nextBrand, split.installments) || 1)
+            : undefined,
+        };
+      }),
+    [getNormalizedBrandForMethod, getNormalizedInstallmentsForMethod, paymentSplits]
+  );
+
+  const splitAllocated = normalizedPaymentSplits.reduce((acc, s) => acc + s.amount, 0);
+  const splitFeeAmount = useMemo(
+    () =>
+      roundMoney(
+        normalizedPaymentSplits.reduce(
+          (acc, split) => acc + getFeeInfoForMethod(split.method, split.cardBrand, split.installments || 1, split.amount).amount,
+          0
+        )
+      ),
+    [getFeeInfoForMethod, normalizedPaymentSplits]
+  );
+  const baseTotalWithoutSplitFee = total + serviceChargeAmount;
+  const activeSplitRate = paymentMethod === "STONE"
+    ? 0
+    : getFeeInfoForMethod(paymentMethod as SplitPaymentMethod, normalizedCardBrand, installments, 1).rate;
+  const splitDifference = roundMoney(baseTotalWithoutSplitFee + splitFeeAmount - splitAllocated);
+  const splitRemaining = isSplitMode && splitDifference > 0
+    ? roundMoney(splitDifference / Math.max(0.01, 1 - activeSplitRate))
+    : 0;
+  const splitOverpaidAmount = isSplitMode && splitDifference < 0 ? Math.abs(splitDifference) : 0;
+  const splitHasInvalidConfig = isSplitMode && normalizedPaymentSplits.some((split) => split.amount <= 0);
+  const splitCanFinalize = !isSplitMode || (
+    normalizedPaymentSplits.length > 0 &&
+    !splitHasInvalidConfig &&
+    Math.abs(splitDifference) < 0.01
+  );
+  const finalTotal = isSplitMode && normalizedPaymentSplits.length > 0
+    ? roundMoney(splitAllocated + (splitDifference > 0 ? splitRemaining : 0))
+    : roundMoney((feeInfo.passToCustomer ? total + feeInfo.amount : total) + serviceChargeAmount);
   const change = paymentMethod === "CASH" ? Math.max(0, digitsToNumber(amountReceived) - finalTotal) : 0;
+  const existingContextItemCount = existingContextItems.reduce((acc, item) => acc + item.quantity, 0);
+  const pendingCartItemCount = cart.reduce((acc, item) => acc + item.quantity, 0);
+  const checkoutItems = [
+    ...existingContextItems.map((item) => ({
+      productId: item.productId,
+      productVariantId: item.productVariantId,
+      quantity: item.quantity,
+      price: item.price,
+      notes: item.notes || undefined,
+    })),
+    ...cart.map((item) => ({
+      productId: item.product.id,
+      productVariantId: undefined,
+      quantity: item.quantity,
+      price: item.price,
+      notes: item.notes || undefined,
+    })),
+  ];
+  const selectedComandaOrder = selectedComandaBaseOrder;
+  const currentContextLabel = selectedTableId
+    ? `Mesa ${selectedTableId}`
+    : selectedComandaOrder
+    ? dineInOrderLabel(selectedComandaOrder)
+    : null;
 
-  const splitAllocated = paymentSplits.reduce((acc, s) => acc + s.amount, 0);
-  const splitRemaining = Math.max(0, Math.round((finalTotal - splitAllocated) * 100) / 100);
+  useEffect(() => {
+    if (selectedComandaId && currentContextOrders.length === 0 && cart.length === 0) {
+      setSelectedComandaId(null);
+      setContextLoadMessage("");
+    }
+  }, [selectedComandaId, currentContextOrders.length, cart.length]);
 
   const addToCart = useCallback((product: Product) => {
     setCart((prev) => {
@@ -496,6 +749,7 @@ export default function PDVPanel({
     setCart([]);
     setSelectedTableId(null);
     setSelectedComandaId(null);
+    setContextLoadMessage("");
     setIsClosingAccount(false);
     setCustomerName("");
     setCustomerPhone("");
@@ -512,6 +766,7 @@ export default function PDVPanel({
     setShowCartDrawer(false);
     setPaymentSplits([]);
     setIsSplitMode(false);
+    setGroupSplitCount("2");
     if (stonePollRef.current) clearInterval(stonePollRef.current);
   };
 
@@ -519,11 +774,19 @@ export default function PDVPanel({
   // usando o valor restante como sugestão (some 100% do que falta por padrão).
   const handleAddPaymentSplit = () => {
     if (paymentMethod === "STONE" || splitRemaining <= 0) return;
+    const method = paymentMethod as SplitPaymentMethod;
+    const nextBrand = getNormalizedBrandForMethod(method, cardBrand);
+    const nextInstallments = getNormalizedInstallmentsForMethod(method, nextBrand, installments);
     setPaymentSplits((prev) => [
       ...prev,
-      { id: `${Date.now()}-${prev.length}`, method: paymentMethod, amount: splitRemaining, cardBrand: cardBrand || undefined },
+      {
+        id: `${Date.now()}-${prev.length}`,
+        method,
+        amount: splitRemaining,
+        cardBrand: nextBrand,
+        installments: method === "CREDIT" ? nextInstallments : undefined,
+      },
     ]);
-    setCardBrand("");
   };
 
   const handleRemovePaymentSplit = (id: string) => {
@@ -532,6 +795,83 @@ export default function PDVPanel({
 
   const handleUpdateSplitAmount = (id: string, amount: number) => {
     setPaymentSplits((prev) => prev.map((s) => (s.id === id ? { ...s, amount: Math.max(0, amount) } : s)));
+  };
+
+  const handleUpdateSplitMethod = (id: string, method: SplitPaymentMethod) => {
+    setPaymentSplits((prev) =>
+      prev.map((split) =>
+        split.id === id
+          ? (() => {
+              const nextBrand = getNormalizedBrandForMethod(method, split.cardBrand);
+              return {
+                ...split,
+                method,
+                cardBrand: nextBrand,
+                installments: method === "CREDIT"
+                  ? (getNormalizedInstallmentsForMethod(method, nextBrand, split.installments) || 1)
+                  : undefined,
+              };
+            })()
+          : split
+      )
+    );
+  };
+
+  const handleUpdateSplitCardBrand = (id: string, nextBrand: string) => {
+    setPaymentSplits((prev) =>
+      prev.map((split) =>
+        split.id === id
+          ? {
+              ...split,
+              cardBrand: nextBrand || undefined,
+              installments: split.method === "CREDIT"
+                ? (getNormalizedInstallmentsForMethod(split.method, nextBrand || undefined, split.installments) || 1)
+                : undefined,
+            }
+          : split
+      )
+    );
+  };
+
+  const handleUpdateSplitInstallments = (id: string, nextInstallments: number) => {
+    setPaymentSplits((prev) =>
+      prev.map((split) => (
+        split.id === id
+          ? { ...split, installments: split.method === "CREDIT" ? nextInstallments : undefined }
+          : split
+      ))
+    );
+  };
+
+  const handleGenerateGroupSplit = () => {
+    const count = Number(groupSplitCount);
+    if (!Number.isInteger(count) || count < 2) {
+      toast.warning("Informe pelo menos 2 pessoas para dividir.");
+      return;
+    }
+    if (paymentMethod === "STONE") {
+      toast.warning("A divisão por grupo não está disponível para maquininha Stone.");
+      return;
+    }
+
+    const method = paymentMethod as SplitPaymentMethod;
+    const nextBrand = getNormalizedBrandForMethod(method, cardBrand);
+    const nextInstallments = getNormalizedInstallmentsForMethod(method, nextBrand, installments) || 1;
+    const rate = getFeeInfoForMethod(method, nextBrand, nextInstallments, 1).rate;
+    const projectedTotal = roundMoney(baseTotalWithoutSplitFee / Math.max(0.01, 1 - rate));
+    const splitAmounts = splitValueByCount(projectedTotal, count);
+
+    setPaymentSplits(
+      Array.from({ length: count }, (_unused, index) => ({
+        id: `group-${Date.now()}-${index}`,
+        method,
+        amount: splitAmounts[index],
+        cardBrand: nextBrand,
+        installments: method === "CREDIT" ? nextInstallments : undefined,
+      }))
+    );
+    setIsSplitMode(true);
+    toast.success(`Divisão gerada para ${count} pessoas.`);
   };
 
   // Cleanup stone polling on unmount
@@ -572,7 +912,7 @@ export default function PDVPanel({
         e.preventDefault();
         if (showCheckout) {
           handleCheckoutRef.current?.();
-        } else if (cart.length > 0 && (!cashRequired || currentCash)) {
+        } else if (checkoutItems.length > 0 && (!cashRequired || currentCash)) {
           setShowCheckout(true);
         }
       } else if (e.key === "F4") {
@@ -591,40 +931,31 @@ export default function PDVPanel({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [isWaiterMode, cart.length, currentCash, showCheckout, showComandaModal, orderDetailsView, showOpenCashModal, showCloseCashModal, showPriceCheckModal, showMoreOptionsMenu]);
+  }, [isWaiterMode, checkoutItems.length, cart.length, currentCash, showCheckout, showComandaModal, orderDetailsView, showOpenCashModal, showCloseCashModal, showPriceCheckModal, showMoreOptionsMenu]);
 
   const handleLoadTable = (tableId: string) => {
-    const tableOrders = orders.filter(
-      (o) => o.tableId === tableId && o.status !== "CANCELLED" && o.status !== "DELIVERED" && o.status !== "MERGED"
-    );
-    const items: CartItem[] = [];
-    tableOrders.forEach((order) => {
-      order.items.forEach((item) => {
-        if (item.product) {
-          const existing = items.find((i) => i.product.id === item.productId);
-          if (existing) { existing.quantity += item.quantity; }
-          else { items.push({ product: item.product, quantity: item.quantity, notes: item.notes || "", price: item.price }); }
-        }
-      });
-    });
-    setCart(items);
+    setCart([]);
     setSelectedTableId(tableId);
+    setSelectedComandaId(null);
+    setContextLoadMessage(`Mesa ${tableId} aberta no PDV. Os itens já lançados ficam separados dos novos itens.`);
     setOrderDetailsView(null);
     setActiveTab("products");
     setIsClosingAccount(false);
+    setShowCartDrawer(false);
+    toast.success(`Mesa ${tableId} aberta no PDV.`);
   };
 
   const handleLoadComanda = (comanda: Order) => {
-    setCart(
-      comanda.items
-        .filter((i) => i.product)
-        .map((i) => ({ product: i.product!, quantity: i.quantity, notes: i.notes || "", price: i.price }))
-    );
+    setCart([]);
+    setSelectedTableId(comanda.tableId || null);
     setSelectedComandaId(comanda.id);
     setComandaNumber(comanda.customerName || "");
+    setContextLoadMessage(`${dineInOrderLabel(comanda)} aberta no PDV. O que já foi lançado aparece separado do que será adicionado agora.`);
     setOrderDetailsView(null);
     setActiveTab("products");
     setIsClosingAccount(false);
+    setShowCartDrawer(false);
+    toast.success(`${dineInOrderLabel(comanda)} aberta no PDV.`);
   };
 
   // Vai direto pro pagamento de uma mesa/comanda já aberta, sem passar por "Adicionar mais itens"
@@ -633,6 +964,49 @@ export default function PDVPanel({
     else handleLoadComanda(view.comanda);
     setIsClosingAccount(true);
     setShowCheckout(true);
+  };
+
+  const handleCreateComanda = async () => {
+    if (nextTicketLoading) return;
+    setIsProcessing(true);
+    try {
+      const createdOrder = await apiJson<Order>(`/api/tenants/${tenant.slug}/pdv/order`, {
+        method: "POST",
+        body: JSON.stringify({
+          customerName: comandaNumber.trim() || undefined,
+          customerPhone: "00000000000",
+          orderType: "DINE_IN",
+          counterTicketNumber: nextTicket || undefined,
+          status: cart.length > 0 ? "PENDING" : "AWAITING_PAYMENT",
+          paymentMethod: "CASH",
+          operatorName: operatorName || undefined,
+          items: cart.map((i) => ({
+            productId: i.product.id,
+            quantity: i.quantity,
+            price: i.price,
+            notes: i.notes || undefined,
+          })),
+          ...(isWaiterMode ? { source: "waiter" } : {}),
+        }),
+      });
+
+      setCart([]);
+      setComandaNumber("");
+      setShowComandaModal(false);
+      onOrderCreated?.();
+
+      if (createdOrder?.id) {
+        handleLoadComanda(createdOrder);
+        setActiveTab("products");
+      } else {
+        toast.success("Comanda criada.");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao criar comanda.");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   // Lança o pedido em uma mesa/comanda já aberta, sem cobrar — usado pelo modo garçom
@@ -644,58 +1018,68 @@ export default function PDVPanel({
       await apiJson(`/api/tenants/${tenant.slug}/pdv/order`, {
         method: "POST",
         body: JSON.stringify({
-          customerName: customerName || (selectedTableId ? `Mesa ${selectedTableId}` : "Comanda"),
+          customerName: customerName || currentContextLabel || "Comanda",
           customerPhone: customerPhone || "00000000000",
           orderType: "DINE_IN",
           tableId: selectedTableId || undefined,
+          counterTicketNumber: selectedComandaOrder?.counterTicketNumber || undefined,
+          status: "PENDING",
           paymentMethod: "CASH",
           operatorName: operatorName || undefined,
           items: cart.map((item) => ({ productId: item.product.id, quantity: item.quantity, price: item.price, notes: item.notes || undefined })),
           ...(isWaiterMode ? { source: "waiter" } : {}),
         }),
       });
-      clearCart();
+      setCart([]);
+      setDiscountValue("");
+      setAmountReceived("");
+      setPaymentSplits([]);
+      setIsSplitMode(false);
+      setGroupSplitCount("2");
       onOrderCreated?.();
-      setActiveTab("tables");
+      setContextLoadMessage(`${currentContextLabel || "Comanda"} atualizada. Os novos itens já foram lançados.`);
+      toast.success("Itens adicionados à comanda.");
     } catch (err) {
       console.error(err);
+      toast.error("Erro ao lançar itens.");
     } finally {
       setIsProcessing(false);
     }
   };
 
   const handleCheckout = async () => {
-    if (cart.length === 0 || (cashRequired && !currentCash)) return;
-    if (isSplitMode && (paymentSplits.length === 0 || splitRemaining > 0)) return;
+    if (checkoutItems.length === 0 || (cashRequired && !currentCash)) return;
+    if (isSplitMode && !splitCanFinalize) return;
     setIsProcessing(true);
 
     const isStone = paymentMethod === "STONE";
     const useSplit = isSplitMode && paymentSplits.length > 0;
 
     const orderData = {
-      customerName: customerName || (selectedTableId ? `Mesa ${selectedTableId}` : "Venda PDV"),
+      customerName: customerName || currentContextLabel || "Venda PDV",
       customerPhone: customerPhone || "00000000000",
       customerCpf: customerCpf.replace(/\D/g, "").length === 11 ? customerCpf.replace(/\D/g, "") : undefined,
-      orderType: selectedTableId ? "DINE_IN" : "TAKEAWAY",
+      orderType: selectedTableId || selectedComandaId ? "DINE_IN" : "TAKEAWAY",
       tableId: selectedTableId || undefined,
       paymentMethod: useSplit ? "SPLIT" : isStone ? `STONE_${stonePaymentType.toUpperCase()}` : paymentMethod,
       paymentMetadata: useSplit
-        ? { splits: paymentSplits.map(({ id, ...s }) => s) }
+        ? { splits: normalizedPaymentSplits.map(({ id, ...s }) => s) }
         : {
             amountReceived: paymentMethod === "CASH" ? digitsToNumber(amountReceived) : finalTotal,
             change,
-            cardBrand,
+            cardBrand: normalizedCardBrand,
             installments: paymentMethod === "CREDIT" ? installments : 1,
           },
       discount: discountValue ? parseFloat(discountValue) : 0,
       discountType,
-      cardBrand: cardBrand || undefined,
+      cardBrand: normalizedCardBrand,
       installments: paymentMethod === "CREDIT" ? installments : 1,
       serviceChargeIncluded: serviceChargeChecked && !!serviceChargeConfig?.enabled,
       // Stone orders start as PENDING until terminal confirms
       status: isStone ? "PENDING" : undefined,
-      items: cart.map((item) => ({
-        productId: item.product.id,
+      items: checkoutItems.map((item) => ({
+        productId: item.productId,
+        productVariantId: item.productVariantId,
         quantity: item.quantity,
         price: item.price,
         notes: item.notes || undefined,
@@ -716,7 +1100,11 @@ export default function PDVPanel({
       }
 
       if (selectedTableId && onClearTable) await onClearTable(selectedTableId);
-      if (selectedComandaId && onClearComanda) await onClearComanda(selectedComandaId);
+      if (selectedComandaId && onClearComanda) {
+        for (const order of currentContextOrders) {
+          await onClearComanda(order.id);
+        }
+      }
 
       clearCart();
       setShowCheckout(false);
@@ -731,21 +1119,56 @@ export default function PDVPanel({
     }
   };
 
+  const handleUpdateOpenOrderItemQuantity = async (orderId: string, orderItemId: string, nextQuantity: number) => {
+    setDetailActionId(orderItemId);
+    try {
+      await apiJson(`/api/tenants/${tenant.slug}/pdv/orders/${orderId}/items/${orderItemId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ quantity: nextQuantity }),
+      });
+      if (nextQuantity === 0) toast.success("Item removido da comanda.");
+      else toast.success("Quantidade atualizada.");
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao atualizar item.");
+    } finally {
+      setDetailActionId(null);
+    }
+  };
+
+  const handleCancelOpenOrder = async (orderId: string) => {
+    setDetailActionId(`cancel-${orderId}`);
+    try {
+      await apiJson(`/api/tenants/${tenant.slug}/pdv/orders/${orderId}/cancel-open`, {
+        method: "POST",
+      });
+      if (selectedComandaId === orderId) {
+        setSelectedComandaId(null);
+        setContextLoadMessage("");
+      }
+      setOrderDetailsView((current) => current && current.type === "comanda" && current.comanda.id === orderId ? null : current);
+      toast.success("Pedido cancelado e estoque ajustado.");
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao cancelar pedido.");
+    } finally {
+      setDetailActionId(null);
+    }
+  };
+
   useEffect(() => {
     handleCheckoutRef.current = () => {
       if (isProcessing) return;
-      if (isSplitMode && (paymentSplits.length === 0 || splitRemaining > 0)) return;
-      if (paymentMethod === "CASH" && amountReceived !== "" && digitsToNumber(amountReceived) < total) return;
+      if (isSplitMode && !splitCanFinalize) return;
+      if (paymentMethod === "CASH" && amountReceived !== "" && digitsToNumber(amountReceived) < finalTotal) return;
       void handleCheckout();
     };
-  }, [handleCheckout, isProcessing, isSplitMode, paymentSplits, splitRemaining, paymentMethod, amountReceived, total]);
+  }, [handleCheckout, isProcessing, isSplitMode, splitCanFinalize, paymentMethod, amountReceived, finalTotal]);
 
   const handleStonePay = async (pendingOrderId: string) => {
     setStoneStatus("sending");
     try {
       const result = await apiJson(`/api/tenants/${tenant.slug}/stone/charge`, {
         method: "POST",
-        body: JSON.stringify({ orderId: pendingOrderId, amount: total, paymentType: stonePaymentType }),
+        body: JSON.stringify({ orderId: pendingOrderId, amount: finalTotal, paymentType: stonePaymentType }),
       }) as { chargeId: string; status: string };
       setStoneChargeId(result.chargeId);
       setStoneStatus("waiting");
@@ -790,7 +1213,7 @@ export default function PDVPanel({
       notes: i.notes || undefined,
     }));
     const orderSubtotal = items.reduce((acc: number, i: any) => acc + i.price * i.quantity, 0);
-    let paymentDetail: { amountReceived?: number; change?: number; splits?: Array<{ method: string; amount: number; cardBrand?: string }> } = {};
+    let paymentDetail: { amountReceived?: number; change?: number; splits?: Array<{ method: string; amount: number; cardBrand?: string; installments?: number }> } = {};
     try { paymentDetail = order.paymentDetail ? JSON.parse(order.paymentDetail) : {}; } catch {}
 
     const isNumericName = order.customerName && /^\d+$/.test(order.customerName);
@@ -840,18 +1263,24 @@ export default function PDVPanel({
   // Imprime o pedido ANTES de finalizar a venda, pro cliente conferir os itens
   // e valores (sem dados de pagamento, que ainda não existem nesse momento).
   const handlePrintPreCheckout = () => {
-    if (cart.length === 0) return;
-    const isNumericName = customerName && /^\d+$/.test(customerName);
+    if (checkoutItems.length === 0) return;
+    const receiptCustomerName = customerName || currentContextLabel || "";
+    const isNumericName = receiptCustomerName && /^\d+$/.test(receiptCustomerName);
     const data = {
       tenantName: tenant.name,
       tenantAddress: tenant.address || undefined,
       isPreCheckout: true,
       tableId: selectedTableId || undefined,
-      counterTicketNumber: (isNumericName && !selectedTableId) ? Number(customerName) : null,
-      customerName: (!isNumericName || selectedTableId) ? customerName : undefined,
-      items: cart.map((item) => ({
+      counterTicketNumber: (isNumericName && !selectedTableId) ? Number(receiptCustomerName) : null,
+      customerName: (!isNumericName || selectedTableId) ? receiptCustomerName : undefined,
+      items: [...existingContextItems, ...cart.map((item) => ({
         quantity: item.quantity,
-        name: item.product.name,
+        product: item.product,
+        price: item.price,
+        notes: item.notes,
+      }))].map((item) => ({
+        quantity: item.quantity,
+        name: item.product?.name || "",
         price: item.price,
         notes: item.notes || undefined,
       })),
@@ -872,7 +1301,7 @@ export default function PDVPanel({
     }
   };
 
-  const cartItemCount = cart.reduce((s, i) => s + i.quantity, 0);
+  const cartItemCount = existingContextItemCount + pendingCartItemCount;
 
   return (
     <div className="relative flex flex-col lg:flex-row gap-2 lg:gap-4 h-full min-h-0">
@@ -1062,6 +1491,26 @@ export default function PDVPanel({
               )}
             </div>
 
+            {currentContextLabel && (
+              <div className="mx-3 mt-3 rounded-2xl border border-[#C9A227]/30 bg-amber-50 px-4 py-3 flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-amber-700">Editando no PDV</p>
+                  <p className="text-sm font-black text-slate-800">{currentContextLabel}</p>
+                  <p className="text-[11px] text-slate-500">
+                    {contextLoadMessage || "Itens já lançados ficam separados dos novos itens para não duplicar a comanda."}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 text-[11px] font-bold text-slate-600">
+                  <span className="rounded-full bg-white px-3 py-1 border border-amber-200">
+                    Já lançado: {existingContextItemCount} {existingContextItemCount === 1 ? "item" : "itens"}
+                  </span>
+                  <span className="rounded-full bg-white px-3 py-1 border border-slate-200">
+                    Novo agora: {pendingCartItemCount} {pendingCartItemCount === 1 ? "item" : "itens"}
+                  </span>
+                </div>
+              </div>
+            )}
+
             <div className="flex-1 min-h-0 flex overflow-hidden">
               {/* Coluna de categorias — só no PDV externo em tela cheia, como no mockup de referência */}
               {isExternalFullscreen && (
@@ -1247,26 +1696,29 @@ export default function PDVPanel({
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Mesas Ocupadas</p>
                   <div
-                    className="grid gap-2.5"
-                    style={{ gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))" }}
+                    className="grid gap-3"
+                    style={{ gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))" }}
                   >
                   {activeTables.map((tbl) => (
                     <button
                       key={tbl.tableId}
                       onClick={() => setOrderDetailsView({ type: "table", tableId: tbl.tableId })}
-                      className={`bg-white p-3 rounded-xl border hover:shadow-sm transition-all text-left flex items-center gap-2.5 group ${tbl.wantsCheckout ? 'border-red-300 hover:border-red-500' : 'border-slate-100 hover:border-[#C9A227]'}`}
+                      className={`relative bg-white p-4 rounded-2xl border-2 hover:shadow-md transition-all text-left flex items-center gap-3 group ${tbl.wantsCheckout ? 'border-red-300 hover:border-red-500' : 'border-slate-100 hover:border-[#C9A227]'}`}
                     >
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${tbl.wantsCheckout ? 'bg-red-50 text-red-500 group-hover:bg-red-500 group-hover:text-white' : 'bg-amber-50 text-amber-500 group-hover:bg-[#C9A227] group-hover:text-white'}`}>
-                        <Utensils className="w-3.5 h-3.5" />
+                      {tbl.wantsCheckout && (
+                        <span className="absolute -top-2 -right-2 flex items-center gap-1 bg-red-500 text-white text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full shadow-sm animate-pulse">
+                          Pediu Conta
+                        </span>
+                      )}
+                      <div className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center shrink-0 transition-colors leading-none ${tbl.wantsCheckout ? 'bg-red-50 text-red-500 group-hover:bg-red-500 group-hover:text-white' : 'bg-amber-50 text-amber-600 group-hover:bg-[#C9A227] group-hover:text-white'}`}>
+                        <Utensils className="w-4 h-4 mb-0.5" />
+                        <span className="text-[9px] font-black">{tbl.tableId}</span>
                       </div>
                       <div className="min-w-0 flex-1">
-                        <h4 className="text-xs font-black text-slate-800 truncate">
-                          Mesa {tbl.tableId}
-                          {tbl.wantsCheckout && <span className="ml-1.5 text-[8px] font-black uppercase text-red-500">· Conta</span>}
-                        </h4>
-                        <p className="text-[10px] font-bold text-slate-400 truncate">{tbl.customerName}</p>
+                        <h4 className="text-sm font-black text-slate-800 truncate">Mesa {tbl.tableId}</h4>
+                        <p className="text-[10px] font-bold text-slate-400 truncate">{tbl.customerName || `${tbl.orderCount} ${tbl.orderCount === 1 ? "pedido" : "pedidos"}`}</p>
+                        <p className="text-sm font-black text-[#C9A227] mt-0.5">{fmt(tbl.total)}</p>
                       </div>
-                      <span className="text-xs font-black text-slate-700 shrink-0">{fmt(tbl.total)}</span>
                     </button>
                   ))}
                   </div>
@@ -1290,25 +1742,34 @@ export default function PDVPanel({
               </button>
             </div>
             <div
-              className="grid gap-2.5"
-              style={{ gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))" }}
+              className="grid gap-3"
+              style={{ gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))" }}
             >
               {activeComandas.map((comanda) => (
                   <button
                     key={comanda.id}
                     onClick={() => setOrderDetailsView({ type: "comanda", comanda })}
-                    className="bg-white p-3 rounded-xl border border-slate-100 hover:border-[#C9A227] hover:shadow-sm transition-all text-left flex items-center gap-2.5"
+                    className="bg-white p-4 rounded-2xl border-2 border-slate-100 hover:border-[#C9A227] hover:shadow-md transition-all text-left flex items-center gap-3 group"
                   >
-                    <div className="w-8 h-8 rounded-lg bg-[#C9A227]/10 text-[#C9A227] flex items-center justify-center shrink-0">
-                      <CreditCard className="w-3.5 h-3.5" />
+                    <div className="w-12 h-12 rounded-xl bg-[#C9A227]/10 text-[#C9A227] group-hover:bg-[#C9A227] group-hover:text-white flex flex-col items-center justify-center shrink-0 leading-none transition-colors">
+                      {comanda.counterTicketNumber != null ? (
+                        <>
+                          <span className="text-[8px] font-black uppercase tracking-widest opacity-70">Senha</span>
+                          <span className="text-base font-black tabular-nums">{String(comanda.counterTicketNumber).padStart(2, "0")}</span>
+                        </>
+                      ) : (
+                        <CreditCard className="w-4 h-4" />
+                      )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <h4 className="text-xs font-black text-slate-800 truncate">{dineInOrderLabel(comanda)}</h4>
+                      <h4 className="text-sm font-black text-slate-800 truncate">
+                        {comanda.customerName || dineInOrderLabel(comanda)}
+                      </h4>
                       <p className="text-[10px] font-bold text-slate-400">
                         {comanda.items.length} {comanda.items.length === 1 ? "item" : "itens"}
                       </p>
+                      <p className="text-sm font-black text-[#C9A227] mt-0.5">{fmt(comanda.total)}</p>
                     </div>
-                    <span className="text-xs font-black text-[#C9A227] shrink-0">{fmt(comanda.total)}</span>
                   </button>
                 ))}
               {activeComandas.length === 0 && (
@@ -1327,25 +1788,25 @@ export default function PDVPanel({
               <h4 className="text-xs font-black uppercase tracking-widest text-slate-400">Delivery Aguardando Faturar</h4>
             </div>
             <div
-              className="grid gap-2.5"
-              style={{ gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))" }}
+              className="grid gap-3"
+              style={{ gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))" }}
             >
               {pendingDeliveryOrders.map((order) => (
                 <button
                   key={order.id}
                   onClick={() => { setBillingOrder(order); setBillingPaymentMethod("CASH"); }}
-                  className="bg-white p-3 rounded-xl border border-slate-100 hover:border-[#C9A227] hover:shadow-sm transition-all text-left flex items-center gap-2.5"
+                  className="bg-white p-4 rounded-2xl border-2 border-slate-100 hover:border-[#C9A227] hover:shadow-md transition-all text-left flex items-center gap-3 group"
                 >
-                  <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-600 flex items-center justify-center shrink-0">
-                    <Truck className="w-3.5 h-3.5" />
+                  <div className="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-600 group-hover:bg-blue-500 group-hover:text-white flex items-center justify-center shrink-0 transition-colors">
+                    <Truck className="w-5 h-5" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h4 className="text-xs font-black text-slate-800 truncate">{order.customerName}</h4>
+                    <h4 className="text-sm font-black text-slate-800 truncate">{order.customerName}</h4>
                     <p className="text-[10px] font-bold text-slate-400">
                       {order.items.length} {order.items.length === 1 ? "item" : "itens"} · Entregue
                     </p>
+                    <p className="text-sm font-black text-[#C9A227] mt-0.5">{fmt(order.total)}</p>
                   </div>
-                  <span className="text-xs font-black text-[#C9A227] shrink-0">{fmt(order.total)}</span>
                 </button>
               ))}
               {pendingDeliveryOrders.length === 0 && (
@@ -1438,20 +1899,24 @@ export default function PDVPanel({
               </div>
               <div>
                 <h3 className="text-sm font-black uppercase tracking-widest leading-none">
-                  {selectedTableId ? `Mesa ${selectedTableId}` : "Novo Pedido"}
+                  {currentContextLabel || "Novo Pedido"}
                 </h3>
                 <p className="text-white/40 text-[9px] font-bold uppercase tracking-widest mt-0.5">
-                  {selectedTableId ? "Fechamento de Conta" : "Venda Rápida Balcão"}
+                  {selectedTableId
+                    ? "Mesa aberta em edição"
+                    : selectedComandaId
+                    ? "Comanda aberta em edição"
+                    : "Venda rápida balcão"}
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-1.5">
-              {cart.length > 0 && (
+              {cartItemCount > 0 && (
                 <span className="bg-[#C9A227] text-black text-[10px] font-black rounded-full min-w-[20px] h-[20px] px-1.5 flex items-center justify-center">
-                  {cart.reduce((s, i) => s + i.quantity, 0)}
+                  {cartItemCount}
                 </span>
               )}
-              {(selectedTableId || cart.length > 0) && (
+              {(selectedTableId || selectedComandaId || cart.length > 0) && (
                 <button
                   onClick={clearCart}
                   className="flex items-center gap-1 px-2 py-1 rounded-lg text-white/40 hover:text-red-400 hover:bg-red-400/10 transition-colors"
@@ -1593,7 +2058,7 @@ export default function PDVPanel({
 
         {/* Cart items */}
         <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-2 custom-scrollbar">
-          {cart.length === 0 ? (
+          {existingContextItems.length === 0 && cart.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center space-y-4 opacity-20">
               <div className="w-16 h-16 rounded-full border-2 border-dashed border-white flex items-center justify-center">
                 <ShoppingCart className="w-6 h-6" />
@@ -1601,35 +2066,66 @@ export default function PDVPanel({
               <p className="text-sm font-bold uppercase tracking-widest">Carrinho Vazio</p>
             </div>
           ) : (
-            cart.map((item) => (
-              <div key={item.product.id} className="bg-white/[0.04] border border-white/5 rounded-xl p-2.5 flex items-center gap-3 hover:border-white/10 transition-colors">
-                <div className="flex-1 min-w-0">
-                  <h4 className="text-xs font-bold truncate">{item.product.name}</h4>
-                  <p className="text-[10px] font-bold text-white/40">{fmt(item.price)} un.</p>
+            <>
+              {existingContextItems.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-white/30">Já lançado na conta</p>
+                    <span className="text-[10px] font-black text-[#C9A227]">{fmt(existingContextSubtotal)}</span>
+                  </div>
+                  {existingContextItems.map((item) => (
+                    <div key={item.id} className="bg-white/[0.04] border border-white/5 rounded-xl p-2.5 flex items-start gap-3">
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-xs font-bold truncate">{item.product?.name}</h4>
+                        <p className="text-[10px] font-bold text-white/40">{item.quantity}x {fmt(item.price)} un.</p>
+                        {item.notes && <p className="text-[10px] text-white/30 mt-0.5">{item.notes}</p>}
+                      </div>
+                      <span className="text-xs font-black tabular-nums text-white/70 w-16 text-right shrink-0">
+                        {fmt(item.price * item.quantity)}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-                <div className="flex items-center gap-1 bg-black/20 rounded-lg px-0.5 py-0.5 shrink-0">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); updateQuantity(item.product.id, -1); }}
-                    className="w-8 h-8 sm:w-5 sm:h-5 flex items-center justify-center rounded-md hover:bg-white/10 active:bg-white/20 hover:text-[#C9A227] transition-colors touch-manipulation"
-                  >
-                    <Minus className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
-                  </button>
-                  <span className="text-xs font-black w-5 text-center tabular-nums">{item.quantity}</span>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); updateQuantity(item.product.id, 1); }}
-                    className="w-8 h-8 sm:w-5 sm:h-5 flex items-center justify-center rounded-md hover:bg-white/10 active:bg-white/20 hover:text-[#C9A227] transition-colors touch-manipulation"
-                  >
-                    <Plus className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
-                  </button>
+              )}
+
+              {cart.length > 0 && (
+                <div className="space-y-2 pt-1">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-white/30">Novos itens desta edição</p>
+                    <span className="text-[10px] font-black text-emerald-400">{fmt(cart.reduce((acc, item) => acc + item.price * item.quantity, 0))}</span>
+                  </div>
+                  {cart.map((item) => (
+                    <div key={item.product.id} className="bg-white/[0.04] border border-white/5 rounded-xl p-2.5 flex items-center gap-3 hover:border-white/10 transition-colors">
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-xs font-bold truncate">{item.product.name}</h4>
+                        <p className="text-[10px] font-bold text-white/40">{fmt(item.price)} un.</p>
+                      </div>
+                      <div className="flex items-center gap-1 bg-black/20 rounded-lg px-0.5 py-0.5 shrink-0">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); updateQuantity(item.product.id, -1); }}
+                          className="w-8 h-8 sm:w-5 sm:h-5 flex items-center justify-center rounded-md hover:bg-white/10 active:bg-white/20 hover:text-[#C9A227] transition-colors touch-manipulation"
+                        >
+                          <Minus className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
+                        </button>
+                        <span className="text-xs font-black w-5 text-center tabular-nums">{item.quantity}</span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); updateQuantity(item.product.id, 1); }}
+                          className="w-8 h-8 sm:w-5 sm:h-5 flex items-center justify-center rounded-md hover:bg-white/10 active:bg-white/20 hover:text-[#C9A227] transition-colors touch-manipulation"
+                        >
+                          <Plus className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
+                        </button>
+                      </div>
+                      <span className="text-xs font-black tabular-nums text-[#C9A227] w-16 text-right shrink-0">
+                        {fmt(item.price * item.quantity)}
+                      </span>
+                      <button onClick={() => removeFromCart(item.product.id)} className="p-1 text-white/20 hover:text-red-400 transition-colors shrink-0">
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
-                <span className="text-xs font-black tabular-nums text-[#C9A227] w-16 text-right shrink-0">
-                  {fmt(item.price * item.quantity)}
-                </span>
-                <button onClick={() => removeFromCart(item.product.id)} className="p-1 text-white/20 hover:text-red-400 transition-colors shrink-0">
-                  <Trash2 className="w-3 h-3" />
-                </button>
-              </div>
-            ))
+              )}
+            </>
           )}
         </div>
 
@@ -1702,7 +2198,7 @@ export default function PDVPanel({
                   <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <>
-                    Lançar Pedido
+                    {selectedTableId || selectedComandaId ? "Adicionar Itens" : "Lançar Pedido"}
                     <Package className="w-4 h-4" />
                   </>
                 )}
@@ -1710,7 +2206,7 @@ export default function PDVPanel({
             )}
             {!isWaiterMode && (
               <button
-                disabled={cart.length === 0 || (cashRequired && !currentCash)}
+                disabled={checkoutItems.length === 0 || (cashRequired && !currentCash)}
                 title={cashRequired && !currentCash ? "Abra o caixa para receber pagamentos" : "Atalho: F2"}
                 onClick={() => { setShowCheckout(true); setShowCartDrawer(false); }}
                 className="relative bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-3 rounded-2xl transition-all shadow-xl shadow-[#C9A227]/20 flex items-center justify-center gap-2 uppercase tracking-widest text-[10px]"
@@ -1784,8 +2280,8 @@ export default function PDVPanel({
                 )}
               </div>
             </motion.div>
-          </motion.div>
-        )}
+            </motion.div>
+          )}
       </AnimatePresence>
 
       {/* ── Menu de Mais Opções (F8) ── */}
@@ -1830,7 +2326,7 @@ export default function PDVPanel({
                     <span className="text-sm font-bold text-slate-700">{currentCash ? "Fechar Caixa" : "Abrir Caixa"}</span>
                   </button>
                 )}
-                {(selectedTableId || cart.length > 0) && (
+                {(selectedTableId || selectedComandaId || cart.length > 0) && (
                   <button
                     onClick={() => { setShowMoreOptionsMenu(false); clearCart(); }}
                     className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 transition-colors text-left"
@@ -1868,18 +2364,16 @@ export default function PDVPanel({
           const title = isTable ? `Mesa ${orderDetailsView.tableId}` : dineInOrderLabel(orderDetailsView.comanda);
           const relatedOrders = isTable
             ? orders.filter((o) => o.tableId === orderDetailsView.tableId && o.status !== "CANCELLED" && o.status !== "DELIVERED" && o.status !== "MERGED")
-            : [orderDetailsView.comanda];
-          const detailItems: Array<{ key: string; variantId?: string | null; name: string; quantity: number; price: number; notes: string }> = [];
-          relatedOrders.forEach((order) => {
-            order.items.forEach((item) => {
-              if (!item.product) return;
-              const variantName = item.productVariant ? ` (${item.productVariant.name})` : "";
-              const existing = detailItems.find((i) => i.key === item.productId && i.variantId === item.productVariantId && i.notes === (item.notes || ""));
-              if (existing) existing.quantity += item.quantity;
-              else detailItems.push({ key: item.productId, variantId: item.productVariantId, name: item.product.name + variantName, quantity: item.quantity, price: item.price, notes: item.notes || "" });
-            });
-          });
-          const detailSubtotal = detailItems.reduce((acc, i) => acc + i.price * i.quantity, 0);
+            : orders.filter((o) =>
+                (
+                  (orderDetailsView.comanda.counterTicketNumber != null && o.counterTicketNumber === orderDetailsView.comanda.counterTicketNumber) ||
+                  o.id === orderDetailsView.comanda.id
+                ) &&
+                o.status !== "CANCELLED" &&
+                o.status !== "DELIVERED" &&
+                o.status !== "MERGED"
+              );
+          const detailSubtotal = relatedOrders.reduce((acc, order) => acc + order.total, 0);
 
           return (
             <motion.div
@@ -1890,55 +2384,98 @@ export default function PDVPanel({
                 initial={{ scale: 0.95, y: 20, opacity: 0 }}
                 animate={{ scale: 1, y: 0, opacity: 1 }}
                 exit={{ scale: 0.95, y: 20, opacity: 0 }}
-                className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
+                className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col max-h-[80vh]"
               >
-                <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-                  <div>
-                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Detalhes</p>
-                    <h3 className="text-xl font-black text-slate-800">{title}</h3>
+                <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+                  <div className="min-w-0">
+                    <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Detalhes</p>
+                    <h3 className="text-base font-black text-slate-800 truncate">{title}</h3>
                   </div>
                   <button
                     onClick={() => setOrderDetailsView(null)}
-                    className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors"
+                    className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors shrink-0"
                   >
-                    <X className="w-4 h-4" />
+                    <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-2">
-                  {detailItems.length === 0 ? (
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-2.5">
+                  {relatedOrders.length === 0 ? (
                     <p className="text-center text-xs text-slate-400 py-10">Nenhum item lançado ainda.</p>
                   ) : (
-                    detailItems.map((item) => (
-                      <div key={item.key + item.notes} className="flex justify-between items-start text-sm border-b border-slate-50 pb-2.5">
-                        <div className="pr-3">
-                          <span className="font-bold text-slate-700">{item.quantity}x {item.name}</span>
-                          {item.notes && <p className="text-[11px] italic text-slate-400 mt-0.5">{item.notes}</p>}
+                    relatedOrders.map((order, idx) => (
+                      <div key={order.id} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                            Pedido {idx + 1} · #{order.id.slice(-6).toUpperCase()}
+                          </p>
+                          <button
+                            onClick={() => void handleCancelOpenOrder(order.id)}
+                            disabled={detailActionId === `cancel-${order.id}`}
+                            className="shrink-0 rounded-lg border border-red-200 bg-white px-2 py-1 text-[9px] font-black uppercase tracking-widest text-red-500 transition-colors hover:bg-red-50 disabled:opacity-50"
+                          >
+                            {detailActionId === `cancel-${order.id}` ? "Cancelando..." : "Cancelar"}
+                          </button>
                         </div>
-                        <span className="font-black text-slate-800 whitespace-nowrap">{fmt(item.price * item.quantity)}</span>
+
+                        <div className="space-y-1.5">
+                          {order.items.filter((item) => item.product).map((item) => (
+                            <div key={item.id} className="rounded-lg bg-white px-2.5 py-2 border border-slate-200">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="pr-2 min-w-0">
+                                  <span className="text-xs font-bold text-slate-700">
+                                    {item.quantity}x {item.product?.name}
+                                    {item.productVariant?.name ? ` (${item.productVariant.name})` : ""}
+                                  </span>
+                                  {item.notes && <p className="text-[10px] italic text-slate-400 mt-0.5">{item.notes}</p>}
+                                </div>
+                                <span className="text-xs font-black text-slate-800 whitespace-nowrap">{fmt(item.price * item.quantity)}</span>
+                              </div>
+
+                              <div className="mt-1.5 flex items-center justify-end gap-1.5">
+                                {item.quantity > 1 && (
+                                  <button
+                                    onClick={() => void handleUpdateOpenOrderItemQuantity(order.id, item.id, item.quantity - 1)}
+                                    disabled={detailActionId === item.id}
+                                    className="rounded-md border border-slate-200 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50"
+                                  >
+                                    -1
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => void handleUpdateOpenOrderItemQuantity(order.id, item.id, 0)}
+                                  disabled={detailActionId === item.id}
+                                  className="rounded-md border border-red-200 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-red-500 transition-colors hover:bg-red-50 disabled:opacity-50"
+                                >
+                                  {detailActionId === item.id ? "Salvando..." : "Remover"}
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     ))
                   )}
                 </div>
 
-                <div className="p-6 pt-4 border-t border-slate-100 bg-slate-50 space-y-4">
+                <div className="p-4 pt-3 border-t border-slate-100 bg-slate-50 space-y-3 shrink-0">
                   <div className="flex justify-between items-center">
                     <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total</span>
-                    <span className="text-2xl font-black text-slate-800">{fmt(detailSubtotal)}</span>
+                    <span className="text-xl font-black text-slate-800">{fmt(detailSubtotal)}</span>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-2.5">
                     <button
                       onClick={() => isTable ? handleLoadTable(orderDetailsView.tableId) : handleLoadComanda(orderDetailsView.comanda)}
-                      className="bg-white border border-slate-200 hover:border-[#C9A227] text-slate-700 font-black py-3.5 rounded-2xl text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                      className="bg-white border border-slate-200 hover:border-[#C9A227] text-slate-700 font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      Adicionar Itens
+                      Abrir no PDV
                     </button>
                     {!isWaiterMode && (
                       <button
-                        disabled={detailItems.length === 0}
+                        disabled={relatedOrders.length === 0}
                         onClick={() => handleGoToCheckoutFromDetails(orderDetailsView)}
-                        className="bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-3.5 rounded-2xl text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                        className="bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5"
                       >
                         Fechar Conta
                         <ChevronRight className="w-3.5 h-3.5" />
@@ -1957,10 +2494,12 @@ export default function PDVPanel({
         {showComandaModal && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
+            className="fixed inset-0 z-[300] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
+            onClick={() => { setShowComandaModal(false); setComandaNumber(""); }}
           >
             <motion.div
-              initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }}
+              initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.96, y: 12, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
               className="bg-white rounded-[2.5rem] p-8 w-full max-w-sm space-y-6 shadow-2xl"
             >
               <div className="text-center space-y-2">
@@ -2012,31 +2551,7 @@ export default function PDVPanel({
                 </button>
                 <button
                   disabled={isProcessing || nextTicketLoading}
-                  onClick={async () => {
-                    setIsProcessing(true);
-                    try {
-                      await apiJson(`/api/tenants/${tenant.slug}/pdv/order`, {
-                        method: "POST",
-                        body: JSON.stringify({
-                          customerName: comandaNumber,
-                          customerPhone: "00000000000",
-                          orderType: "DINE_IN",
-                          paymentMethod: "CASH",
-                          operatorName: operatorName || undefined,
-                          items: cart.map((i) => ({ productId: i.product.id, quantity: i.quantity, price: i.price, notes: i.notes || undefined })),
-                          ...(isWaiterMode ? { source: "waiter" } : {}),
-                        }),
-                      });
-                      setCart([]);
-                      setComandaNumber("");
-                      setShowComandaModal(false);
-                      onOrderCreated?.();
-                    } catch (err) {
-                      console.error(err);
-                    } finally {
-                      setIsProcessing(false);
-                    }
-                  }}
+                  onClick={() => void handleCreateComanda()}
                   className="bg-[#0D1B3E] hover:bg-slate-800 text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest transition-all disabled:opacity-50"
                 >
                   {isProcessing ? (
@@ -2071,6 +2586,14 @@ export default function PDVPanel({
                 <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-1">
                   Como foi pago?
                 </label>
+                <div className="max-h-32 overflow-y-auto rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2 space-y-1">
+                  {billingOrder.items.filter((item) => item.product).map((item) => (
+                    <div key={item.id} className="flex items-center justify-between text-xs gap-3">
+                      <span className="font-bold text-slate-600 truncate">{item.quantity}x {item.product?.name}</span>
+                      <span className="font-black text-slate-700 whitespace-nowrap">{fmt(item.price * item.quantity)}</span>
+                    </div>
+                  ))}
+                </div>
                 <div className="grid grid-cols-2 gap-2">
                   {([
                     { id: "CASH", label: "Dinheiro" },
@@ -2125,8 +2648,8 @@ export default function PDVPanel({
                 </button>
               </div>
             </motion.div>
-          </motion.div>
-        )}
+            </motion.div>
+          )}
       </AnimatePresence>
 
       {/* ── Checkout Modal ── */}
@@ -2169,14 +2692,20 @@ export default function PDVPanel({
 
                 <p className="text-[10px] font-black uppercase text-white/40 tracking-[0.2em] mb-1">Resumo</p>
                 <h3 className="text-base font-black text-white mb-3 truncate">
-                  {selectedTableId ? `Mesa ${selectedTableId}` : customerName || "Venda Balcão"}
+                  {currentContextLabel || customerName || "Venda Balcão"}
                 </h3>
 
                 <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar pr-1">
-                  {cart.map((item) => (
-                    <div key={item.product.id} className="flex justify-between text-xs border-b border-white/5 pb-2">
+                  {[...existingContextItems, ...cart.map((item) => ({
+                    id: `new-${item.product.id}`,
+                    quantity: item.quantity,
+                    price: item.price,
+                    notes: item.notes,
+                    product: item.product,
+                  }))].map((item) => (
+                    <div key={item.id} className="flex justify-between text-xs border-b border-white/5 pb-2">
                       <span className="text-white/70 truncate mr-2">
-                        {item.quantity}x {item.product.name}
+                        {item.quantity}x {item.product?.name}
                         {item.notes && <span className="text-[10px] italic text-white/30 block">{item.notes}</span>}
                       </span>
                       <span className="font-black text-white whitespace-nowrap">{fmt(item.price * item.quantity)}</span>
@@ -2254,16 +2783,70 @@ export default function PDVPanel({
 
                     {isSplitMode && (
                       <div className="space-y-1.5 bg-white/[0.03] border border-white/10 rounded-xl p-2.5">
+                        <div className="grid grid-cols-[1fr_auto] gap-2 items-end">
+                          <div>
+                            <p className="text-[9px] font-black uppercase text-white/30 mb-1">Divisão por grupo</p>
+                            <input
+                              type="number"
+                              min={2}
+                              value={groupSplitCount}
+                              onChange={(e) => setGroupSplitCount(e.target.value.replace(/\D/g, ""))}
+                              placeholder="2"
+                              className="w-full bg-black/20 border border-white/10 rounded-lg py-2 px-3 text-[11px] font-black text-white outline-none focus:border-[#C9A227]"
+                            />
+                          </div>
+                          <button
+                            onClick={handleGenerateGroupSplit}
+                            className="h-[38px] px-3 rounded-lg bg-[#C9A227] text-black text-[10px] font-black uppercase tracking-wide hover:bg-[#E8B93A] transition-colors"
+                          >
+                            Gerar
+                          </button>
+                        </div>
+                        <p className="text-[9px] text-white/35">
+                          Se sobrar centavos, o ajuste fica na primeira pessoa.
+                        </p>
                         {paymentSplits.length === 0 ? (
-                          <p className="text-[10px] text-white/30 text-center py-2">Escolha a forma abaixo e clique em "Adicionar Forma".</p>
+                          <p className="text-[10px] text-white/30 text-center py-2">Gere a divisão por grupo ou escolha a forma abaixo e clique em "Adicionar Forma".</p>
                         ) : (
-                          paymentSplits.map((split) => {
-                            const label = PAYMENT_METHODS.find((m) => m.id === split.method)?.label || split.method;
+                          normalizedPaymentSplits.map((split) => {
                             return (
-                              <div key={split.id} className="flex items-center gap-2 bg-white/5 rounded-lg px-2.5 py-2">
-                                <span className="text-[10px] font-black text-white flex-1 truncate">
-                                  {label}{split.cardBrand ? ` · ${split.cardBrand}` : ""}
-                                </span>
+                              <div key={split.id} className="flex items-start gap-2 bg-white/5 rounded-lg px-2.5 py-2">
+                                <div className="flex-1 min-w-0 space-y-1">
+                                  <select
+                                    value={split.method}
+                                    onChange={(e) => handleUpdateSplitMethod(split.id, e.target.value as SplitPaymentMethod)}
+                                    className="w-full bg-black/20 border border-white/10 rounded-md py-1 px-2 text-[10px] font-black text-white outline-none focus:border-[#C9A227]"
+                                  >
+                                    {PAYMENT_METHODS.filter((method) => method.id !== "STONE").map((method) => (
+                                      <option key={method.id} value={method.id}>{method.label}</option>
+                                    ))}
+                                  </select>
+                                  {getBrandsForPaymentMethod(split.method).length > 0 && (
+                                    <select
+                                      value={split.cardBrand || ""}
+                                      onChange={(e) => handleUpdateSplitCardBrand(split.id, e.target.value)}
+                                      className="w-full bg-black/20 border border-white/10 rounded-md py-1 px-2 text-[10px] font-black text-white outline-none focus:border-[#C9A227]"
+                                    >
+                                      <option value="">Selecione a bandeira</option>
+                                      {getBrandsForPaymentMethod(split.method).map((brand) => (
+                                        <option key={brand} value={brand}>{brand}</option>
+                                      ))}
+                                    </select>
+                                  )}
+                                  {split.method === "CREDIT" && (
+                                    <select
+                                      value={split.installments || 1}
+                                      onChange={(e) => handleUpdateSplitInstallments(split.id, Number(e.target.value))}
+                                      className="w-full bg-black/20 border border-white/10 rounded-md py-1 px-2 text-[10px] font-black text-white outline-none focus:border-[#C9A227]"
+                                    >
+                                      {getInstallmentOptionsForMethod(split.method, split.cardBrand).map((option) => (
+                                        <option key={option} value={option}>
+                                          {option}x {option === 1 ? "\u00E0 vista" : fmt(split.amount / option)}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  )}
+                                </div>
                                 <div className="relative w-24">
                                   <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] text-white/30">R$</span>
                                   <input
@@ -2282,9 +2865,18 @@ export default function PDVPanel({
                           })
                         )}
                         <div className="flex items-center justify-between pt-1.5 border-t border-white/10">
-                          <span className="text-[9px] font-black uppercase text-white/40">Falta pagar</span>
-                          <span className={`text-xs font-black tabular-nums ${splitRemaining > 0 ? "text-[#C9A227]" : "text-emerald-400"}`}>{fmt(splitRemaining)}</span>
+                          <span className="text-[9px] font-black uppercase text-white/40">
+                            {splitOverpaidAmount > 0 ? "Excedente" : "Falta pagar"}
+                          </span>
+                          <span className={`text-xs font-black tabular-nums ${splitOverpaidAmount > 0 ? "text-red-400" : splitRemaining > 0 ? "text-[#C9A227]" : "text-emerald-400"}`}>
+                            {fmt(splitOverpaidAmount > 0 ? splitOverpaidAmount : splitRemaining)}
+                          </span>
                         </div>
+                        {splitOverpaidAmount > 0 && (
+                          <p className="text-[9px] text-red-300">
+                            Ajuste os valores das divis\u00F5es para fechar a conta sem excedente.
+                          </p>
+                        )}
                         {splitRemaining > 0 && (
                           <>
                             <p className="text-[9px] font-black uppercase text-white/30 pt-1">Escolha a forma pra adicionar</p>
@@ -2308,6 +2900,30 @@ export default function PDVPanel({
                                 );
                               })}
                             </div>
+                            {paymentMethod !== "STONE" && getBrandsForPaymentMethod(paymentMethod as SplitPaymentMethod).length > 0 && (
+                              <select
+                                value={normalizedCardBrand || ""}
+                                onChange={(e) => setCardBrand(e.target.value)}
+                                className="w-full bg-black/20 border border-white/10 rounded-md py-2 px-2.5 text-[10px] font-black text-white outline-none focus:border-[#C9A227]"
+                              >
+                                {getBrandsForPaymentMethod(paymentMethod as SplitPaymentMethod).map((brand) => (
+                                  <option key={brand} value={brand}>{brand}</option>
+                                ))}
+                              </select>
+                            )}
+                            {paymentMethod === "CREDIT" && (
+                              <select
+                                value={installments}
+                                onChange={(e) => setInstallments(Number(e.target.value))}
+                                className="w-full bg-black/20 border border-white/10 rounded-md py-2 px-2.5 text-[10px] font-black text-white outline-none focus:border-[#C9A227]"
+                              >
+                                {creditInstallmentOptions.map((option) => (
+                                  <option key={option} value={option}>
+                                    {option}x {option === 1 ? "\u00E0 vista" : fmt(splitRemaining / option)}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
                             <button
                               onClick={handleAddPaymentSplit}
                               className="w-full flex items-center justify-center gap-1.5 bg-white/10 hover:bg-white/15 text-white py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition-colors"
@@ -2372,7 +2988,7 @@ export default function PDVPanel({
                           </div>
                         </div>
                         <div className="flex gap-1.5">
-                          {[total, Math.ceil(total / 10) * 10, Math.ceil(total / 50) * 50].filter((v, i, arr) => arr.indexOf(v) === i).slice(0, 3).map((v) => (
+                          {[finalTotal, Math.ceil(finalTotal / 10) * 10, Math.ceil(finalTotal / 50) * 50].filter((v, i, arr) => arr.indexOf(v) === i).slice(0, 3).map((v) => (
                             <button
                               key={v}
                               type="button"
@@ -2396,7 +3012,7 @@ export default function PDVPanel({
                       <div className="bg-white/5 rounded-2xl p-3 border border-white/10 space-y-2.5">
                         <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Parcelamento</p>
                         <div className="grid grid-cols-3 gap-1.5">
-                          {[1, 2, 3, 4, 5, 6].map((n) => (
+                          {creditInstallmentOptions.map((n) => (
                             <button
                               key={n}
                               onClick={() => setInstallments(n)}
@@ -2404,7 +3020,7 @@ export default function PDVPanel({
                                 installments === n ? "bg-[#C9A227] text-black" : "bg-white/5 border border-white/10 text-white/60 hover:bg-white/10"
                               }`}
                             >
-                              {n}x {n === 1 ? "à vista" : fmt(total / n)}
+                              {n}x {n === 1 ? "à vista" : fmt(finalTotal / n)}
                             </button>
                           ))}
                         </div>
@@ -2591,14 +3207,16 @@ export default function PDVPanel({
                     <button
                       disabled={
                         isProcessing ||
-                        (isSplitMode && (paymentSplits.length === 0 || splitRemaining > 0)) ||
-                        (!isSplitMode && paymentMethod === "CASH" && amountReceived !== "" && digitsToNumber(amountReceived) < total)
+                        (isSplitMode && !splitCanFinalize) ||
+                        (!isSplitMode && paymentMethod === "CASH" && amountReceived !== "" && digitsToNumber(amountReceived) < finalTotal)
                       }
                       onClick={handleCheckout}
                       className="w-full bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-3 rounded-xl transition-all shadow-lg shadow-[#C9A227]/25 flex items-center justify-center gap-2.5 uppercase tracking-widest text-xs"
                     >
                       {isProcessing ? (
                         <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                      ) : isSplitMode && splitOverpaidAmount > 0 ? (
+                        <>Excedente {fmt(splitOverpaidAmount)}</>
                       ) : isSplitMode && splitRemaining > 0 ? (
                         <>Falta {fmt(splitRemaining)}</>
                       ) : (

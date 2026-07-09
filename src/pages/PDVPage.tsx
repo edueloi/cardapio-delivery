@@ -3,10 +3,12 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { apiFetch, apiJson } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import socket from "../lib/socket";
+import { playNotificationSound, playNewOrderSound, playKitchenReadySound } from "../lib/notificationSound";
 import type { Order, Tenant } from "../types";
+import { dineInOrderLabel } from "../types";
 import PDVPanel from "../features/dashboard/PDVPanel";
 import WaiterPanel from "../features/dashboard/WaiterPanel";
-import { ShoppingBag, X } from "lucide-react";
+import { ShoppingBag, X, BellRing } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 interface PDVPageProps {
@@ -25,6 +27,7 @@ export default function PDVPage({ mode = "full" }: PDVPageProps) {
   const [checkoutRequests, setCheckoutRequests] = useState<Array<{ tableId: string; customerName: string; timestamp: number }>>([]);
   const [waiterCalls, setWaiterCalls] = useState<Array<{ tableId: string; customerName: string; note: string; requestBill: boolean; timestamp: number }>>([]);
   const [newOrderAlerts, setNewOrderAlerts] = useState<Array<{ id: string; customerName: string; orderType: string; total: number; timestamp: number }>>([]);
+  const [kitchenReadyAlerts, setKitchenReadyAlerts] = useState<Array<{ id: string; label: string; timestamp: number }>>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchTenant = async () => {
@@ -52,30 +55,50 @@ export default function PDVPage({ mode = "full" }: PDVPageProps) {
       return;
     }
     fetchTenant();
-    socket.on("new-order", (newOrder: Order) => {
+
+    const handleNewOrder = (newOrder: Order) => {
       setOrders((prev) => [newOrder, ...prev]);
-      new Audio("/notification.mp3").play().catch(() => {});
+      playNewOrderSound();
       setNewOrderAlerts((prev) => [
         { id: newOrder.id, customerName: newOrder.customerName, orderType: newOrder.orderType, total: newOrder.total, timestamp: Date.now() },
         ...prev,
       ]);
-    });
-    socket.on("order-status-updated", (updatedOrder: Order) => {
-      setOrders((prev) => prev.map((o) => (o.id === updatedOrder.id ? updatedOrder : o)));
-    });
-    socket.on("checkout-requested", ({ tableId, customerName }) => {
-      new Audio("/notification.mp3").play().catch(() => {});
+    };
+
+    const handleOrderStatusUpdated = (updatedOrder: Order) => {
+      setOrders((prev) => {
+        const oldOrder = prev.find((o) => o.id === updatedOrder.id);
+        if (updatedOrder.kitchenReady && (!oldOrder || !oldOrder.kitchenReady)) {
+          playKitchenReadySound();
+          setKitchenReadyAlerts((alerts) => [
+            { id: updatedOrder.id, label: dineInOrderLabel(updatedOrder), timestamp: Date.now() },
+            ...alerts,
+          ]);
+        }
+        return prev.map((o) => (o.id === updatedOrder.id ? updatedOrder : o));
+      });
+    };
+
+    const handleCheckoutRequested = ({ tableId, customerName }: { tableId: string; customerName: string }) => {
+      playNotificationSound();
       setCheckoutRequests((prev) => [{ tableId, customerName, timestamp: Date.now() }, ...prev]);
-    });
-    socket.on("waiter-called", ({ tableId, customerName, note, requestBill }) => {
-      new Audio("/notification.mp3").play().catch(() => {});
+    };
+
+    const handleWaiterCalled = ({ tableId, customerName, note, requestBill }: { tableId: string; customerName: string; note: string; requestBill: boolean }) => {
+      playNotificationSound();
       setWaiterCalls((prev) => [{ tableId, customerName, note, requestBill, timestamp: Date.now() }, ...prev]);
-    });
+    };
+
+    socket.on("new-order", handleNewOrder);
+    socket.on("order-status-updated", handleOrderStatusUpdated);
+    socket.on("checkout-requested", handleCheckoutRequested);
+    socket.on("waiter-called", handleWaiterCalled);
+
     return () => {
-      socket.off("new-order");
-      socket.off("order-status-updated");
-      socket.off("checkout-requested");
-      socket.off("waiter-called");
+      socket.off("new-order", handleNewOrder);
+      socket.off("order-status-updated", handleOrderStatusUpdated);
+      socket.off("checkout-requested", handleCheckoutRequested);
+      socket.off("waiter-called", handleWaiterCalled);
     };
   }, [slug, authLoading, isAuthenticated]);
 
@@ -84,6 +107,15 @@ export default function PDVPage({ mode = "full" }: PDVPageProps) {
     try {
       await apiFetch(`/api/admin/${tenant.id}/table/${tableId}/clear`, { method: "POST" });
       setCheckoutRequests((prev) => prev.filter((r) => r.tableId !== tableId));
+      const ordersData = await apiJson<Order[]>(`/api/admin/${tenant.id}/orders`);
+      setOrders(Array.isArray(ordersData) ? ordersData : []);
+    } catch {}
+  };
+
+  const handleClearComanda = async (orderId: string) => {
+    if (!tenant) return;
+    try {
+      await apiFetch(`/api/admin/${tenant.id}/comanda/${orderId}/clear`, { method: "POST" });
       const ordersData = await apiJson<Order[]>(`/api/admin/${tenant.id}/orders`);
       setOrders(Array.isArray(ordersData) ? ordersData : []);
     } catch {}
@@ -179,12 +211,13 @@ export default function PDVPage({ mode = "full" }: PDVPageProps) {
           onOrderCreated={refreshOrders}
           checkoutRequests={checkoutRequests}
           onClearTable={handleClearTable}
+          onClearComanda={handleClearComanda}
           orders={orders}
         />
       </div>
 
       {/* Toasts de novo pedido do cardápio digital */}
-      <div className="fixed bottom-6 right-6 z-[200] space-y-3 w-full max-w-xs pointer-events-none">
+      <div className="fixed bottom-6 right-6 z-[200] space-y-4 w-full max-w-md pointer-events-none">
         <AnimatePresence>
           {newOrderAlerts.map((alert) => (
             <motion.div
@@ -192,31 +225,62 @@ export default function PDVPage({ mode = "full" }: PDVPageProps) {
               initial={{ opacity: 0, x: 100, scale: 0.9 }}
               animate={{ opacity: 1, x: 0, scale: 1 }}
               exit={{ opacity: 0, scale: 0.5, transition: { duration: 0.2 } }}
-              className="pointer-events-auto bg-emerald-500 text-white p-4 rounded-2xl shadow-2xl flex flex-col gap-2"
+              className="pointer-events-auto bg-emerald-500 text-white p-5 rounded-3xl shadow-2xl ring-4 ring-emerald-500/20 flex flex-col gap-3"
             >
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center animate-bounce">
-                    <ShoppingBag className="w-4 h-4" />
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-full bg-white/20 flex items-center justify-center animate-bounce shrink-0">
+                    <ShoppingBag className="w-5 h-5" />
                   </div>
-                  <span className="text-xs font-black uppercase tracking-widest">
+                  <span className="text-sm font-black uppercase tracking-widest">
                     Novo Pedido — {alert.orderType === "DELIVERY" ? "Delivery" : alert.orderType === "PICKUP" ? "Retirada" : "Mesa"}
                   </span>
                 </div>
                 <button
                   onClick={() => setNewOrderAlerts((prev) => prev.filter((a) => a.timestamp !== alert.timestamp))}
-                  className="p-1 hover:bg-white/20 rounded-lg transition-colors"
+                  className="p-1.5 hover:bg-white/20 rounded-lg transition-colors shrink-0"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-5 h-5" />
                 </button>
               </div>
-              <p className="text-sm font-black">{alert.customerName}</p>
-              <p className="text-xs font-bold opacity-70">
+              <p className="text-lg font-black leading-tight">{alert.customerName}</p>
+              <p className="text-sm font-bold opacity-80">
                 Total: R$ {alert.total.toFixed(2).replace(".", ",")}
               </p>
               <button
                 onClick={() => setNewOrderAlerts((prev) => prev.filter((a) => a.timestamp !== alert.timestamp))}
-                className="w-full bg-white text-emerald-600 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-50 transition-colors"
+                className="w-full bg-white text-emerald-600 py-3 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-emerald-50 transition-colors"
+              >
+                Ciente
+              </button>
+            </motion.div>
+          ))}
+          {kitchenReadyAlerts.map((alert) => (
+            <motion.div
+              key={alert.timestamp}
+              initial={{ opacity: 0, x: 100, scale: 0.9 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.5, transition: { duration: 0.2 } }}
+              className="pointer-events-auto bg-sky-500 text-white p-5 rounded-3xl shadow-2xl ring-4 ring-sky-500/20 flex flex-col gap-3"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-full bg-white/20 flex items-center justify-center animate-bounce shrink-0">
+                    <BellRing className="w-5 h-5" />
+                  </div>
+                  <span className="text-sm font-black uppercase tracking-widest">Pronto na Cozinha</span>
+                </div>
+                <button
+                  onClick={() => setKitchenReadyAlerts((prev) => prev.filter((a) => a.timestamp !== alert.timestamp))}
+                  className="p-1.5 hover:bg-white/20 rounded-lg transition-colors shrink-0"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <p className="text-lg font-black leading-tight">{alert.label}</p>
+              <button
+                onClick={() => setKitchenReadyAlerts((prev) => prev.filter((a) => a.timestamp !== alert.timestamp))}
+                className="w-full bg-white text-sky-600 py-3 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-sky-50 transition-colors"
               >
                 Ciente
               </button>

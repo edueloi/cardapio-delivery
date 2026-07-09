@@ -5,7 +5,6 @@ import fs from "fs";
 import { createServer } from "http";
 import multer from "multer";
 import path from "path";
-import { fileURLToPath } from "url";
 import { randomBytes } from "crypto";
 import { createServer as createViteServer } from "vite";
 import { Server } from "socket.io";
@@ -38,9 +37,6 @@ import {
   sendMessage,
 } from "./src/backend/wpp/baileys-manager";
 import { sendOrderCreatedMessage, sendOrderStatusMessage, sendOwnerOrderAlert, sendLoyaltyPointsMessage, sendLowStockAlert, sendReceiptPdfMessage } from "./src/backend/wpp/messages";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const app = express();
 const httpServer = createServer(app);
@@ -241,6 +237,7 @@ async function requireTenantFromOrder(req: express.Request, res: express.Respons
       items: {
         include: {
           product: true,
+          productVariant: true,
         },
       },
     },
@@ -2034,7 +2031,14 @@ app.get("/api/orders/counter/:slug/:orderId", async (req, res) => {
   try {
     const order = await prisma.order.findFirst({
       where: { id: orderId, tenant: { slug } },
-      include: { items: { include: { product: true } } },
+      include: {
+        items: {
+          include: {
+            product: true,
+            productVariant: true,
+          },
+        },
+      },
     });
     if (!order) return res.status(404).json({ error: "Pedido não encontrado." });
     res.json(order);
@@ -2206,6 +2210,218 @@ async function updateOrderStatus(orderId: string, previousStatus: string, status
   return updatedOrder;
 }
 
+const roundMoney = (value: number) => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+
+function parsePaymentDetailSafe(raw: string | null | undefined) {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function splitAmountByCount(total: number, count: number) {
+  const totalCents = Math.max(0, Math.round(total * 100));
+  const baseCents = Math.floor(totalCents / count);
+  const remainderCents = totalCents % count;
+  return Array.from({ length: count }, (_unused, index) => (baseCents + (index === 0 ? remainderCents : 0)) / 100);
+}
+
+function recalculateOpenOrderAmounts(order: any, nextItems: Array<{ quantity: number; price: number }>) {
+  const previousSubtotal = roundMoney((order.items || []).reduce((acc: number, item: any) => acc + Number(item.price || 0) * Number(item.quantity || 0), 0));
+  const subtotal = roundMoney(nextItems.reduce((acc, item) => acc + Number(item.price || 0) * Number(item.quantity || 0), 0));
+
+  let discountAmount = 0;
+  if (Number(order.discount || 0) > 0) {
+    if (order.discountType === "PERCENT" && previousSubtotal > 0) {
+      const inferredPercent = Math.min(1, Math.max(0, Number(order.discount || 0) / previousSubtotal));
+      discountAmount = roundMoney(subtotal * inferredPercent);
+    } else {
+      discountAmount = roundMoney(Math.min(Number(order.discount || 0), subtotal));
+    }
+  }
+
+  const totalBeforeFee = roundMoney(Math.max(0, subtotal - discountAmount));
+  const serviceFeePercent = Number(order.serviceFeePercent || 0);
+  const serviceFeeAmount = serviceFeePercent > 0 ? roundMoney(subtotal * (serviceFeePercent / 100)) : 0;
+
+  let feeAmount = 0;
+  if (order.feePassedToCustomer) {
+    if (Number(order.feePercent || 0) > 0) {
+      feeAmount = roundMoney(totalBeforeFee * (Number(order.feePercent || 0) / 100));
+    } else if (totalBeforeFee > 0 && previousSubtotal > 0) {
+      feeAmount = roundMoney(Number(order.feeAmount || 0) * (subtotal / previousSubtotal));
+    }
+  }
+
+  const total = roundMoney(totalBeforeFee + serviceFeeAmount + feeAmount);
+  const paymentDetail = parsePaymentDetailSafe(order.paymentDetail);
+
+  if (order.paymentMethod === "SPLIT" && Array.isArray(paymentDetail?.splits) && paymentDetail.splits.length > 0) {
+    const currentSplits = paymentDetail.splits;
+    const redistributedAmounts = splitAmountByCount(total, currentSplits.length);
+    paymentDetail.splits = currentSplits.map((split: any, index: number) => ({
+      ...split,
+      amount: redistributedAmounts[index],
+    }));
+  }
+
+  return {
+    subtotal,
+    discountAmount,
+    feeAmount,
+    feePassedToCustomer: !!order.feePassedToCustomer,
+    serviceFeeAmount,
+    total,
+    paymentDetail,
+  };
+}
+
+async function emitInventoryRestockSideEffects(tenantId: string, inventoryItemId: string) {
+  const updatedItem = await prisma.inventoryItem.findUnique({ where: { id: inventoryItemId } });
+  if (!updatedItem) return;
+
+  io.to(`tenant-${tenantId}`).emit("inventory-update", {
+    id: updatedItem.id,
+    quantity: updatedItem.quantity,
+  });
+
+  if (updatedItem.quantity > 0) {
+    const productsToEnable = await prisma.product.findMany({
+      where: {
+        inventoryItemId: updatedItem.id,
+        available: false,
+        autoDisableWhenOutOfStock: true,
+      },
+    });
+    for (const product of productsToEnable) {
+      await prisma.product.update({ where: { id: product.id }, data: { available: true } });
+      io.to(`tenant-${tenantId}`).emit("product-availability-changed", { id: product.id, available: true });
+    }
+  }
+}
+
+async function restockOrderItemInventory(tx: any, tenantId: string, orderId: string, inventoryItemId: string | null | undefined, quantity: number) {
+  if (!inventoryItemId || quantity <= 0) return false;
+
+  const movements = await tx.stockMovement.findMany({
+    where: {
+      orderId,
+      itemId: inventoryItemId,
+      reason: { in: ["SALE", "ORDER_ITEM_REMOVED_SALE", "ORDER_CANCELLED_SALE"] },
+    },
+    select: { type: true, quantity: true, reason: true },
+  });
+
+  const soldQty = movements
+    .filter((movement: any) => movement.type === "OUT" && movement.reason === "SALE")
+    .reduce((acc: number, movement: any) => acc + Number(movement.quantity || 0), 0);
+  const restoredQty = movements
+    .filter((movement: any) => movement.type === "IN" && movement.reason !== "SALE")
+    .reduce((acc: number, movement: any) => acc + Number(movement.quantity || 0), 0);
+
+  const restockQty = roundMoney(Math.min(quantity, Math.max(0, soldQty - restoredQty)));
+  if (restockQty <= 0) return false;
+
+  await tx.inventoryItem.update({
+    where: { id: inventoryItemId },
+    data: {
+      quantity: { increment: restockQty },
+      movements: {
+        create: {
+          type: "IN",
+          quantity: restockQty,
+          reason: "ORDER_ITEM_REMOVED_SALE",
+          orderId,
+        },
+      },
+    },
+  });
+
+  return true;
+}
+
+async function restockOrderItemRecipe(tx: any, tenantId: string, orderId: string, product: any, removedQuantity: number) {
+  if (!product?.recipeId || removedQuantity <= 0) return [];
+
+  const recipe = await tx.productionRecipe.findUnique({ where: { id: product.recipeId } });
+  if (!recipe || !recipe.outputQuantity || Number(recipe.outputQuantity) <= 0) return [];
+
+  let ingredients: Array<{ inventoryItemId: string; quantity: number }> = [];
+  try {
+    ingredients = JSON.parse(recipe.ingredients as string) || [];
+  } catch {
+    ingredients = [];
+  }
+
+  const touchedInventoryIds: string[] = [];
+  const ratio = removedQuantity / Number(recipe.outputQuantity);
+
+  for (const ingredient of ingredients) {
+    if (!ingredient.inventoryItemId || !ingredient.quantity) continue;
+
+    const expectedQty = roundMoney(Number(ingredient.quantity) * ratio);
+    if (expectedQty <= 0) continue;
+
+    const movements = await tx.stockMovement.findMany({
+      where: {
+        orderId,
+        itemId: ingredient.inventoryItemId,
+        reason: { in: ["PRODUCTION", "ORDER_ITEM_REMOVED_RECIPE", "ORDER_CANCELLED_RECIPE"] },
+      },
+      select: { type: true, quantity: true, reason: true },
+    });
+
+    const consumedQty = movements
+      .filter((movement: any) => movement.type === "OUT" && movement.reason === "PRODUCTION")
+      .reduce((acc: number, movement: any) => acc + Number(movement.quantity || 0), 0);
+    const restoredQty = movements
+      .filter((movement: any) => movement.type === "IN" && movement.reason !== "PRODUCTION")
+      .reduce((acc: number, movement: any) => acc + Number(movement.quantity || 0), 0);
+
+    const restockQty = roundMoney(Math.min(expectedQty, Math.max(0, consumedQty - restoredQty)));
+    if (restockQty <= 0) continue;
+
+    await tx.inventoryItem.update({
+      where: { id: ingredient.inventoryItemId },
+      data: {
+        quantity: { increment: restockQty },
+        movements: {
+          create: {
+            type: "IN",
+            quantity: restockQty,
+            reason: "ORDER_ITEM_REMOVED_RECIPE",
+            orderId,
+          },
+        },
+      },
+    });
+
+    touchedInventoryIds.push(ingredient.inventoryItemId);
+  }
+
+  return touchedInventoryIds;
+}
+
+async function restockCancelledOrder(tx: any, order: any) {
+  const touchedInventoryIds = new Set<string>();
+
+  for (const item of order.items || []) {
+    const inventoryItemId = item.productVariantId
+      ? item.productVariant?.inventoryItemId
+      : item.product?.inventoryItemId;
+
+    const directRestocked = await restockOrderItemInventory(tx, order.tenantId, order.id, inventoryItemId, Number(item.quantity || 0));
+    if (directRestocked && inventoryItemId) touchedInventoryIds.add(inventoryItemId);
+
+    const recipeInventoryIds = await restockOrderItemRecipe(tx, order.tenantId, order.id, item.product, Number(item.quantity || 0));
+    for (const touchedId of recipeInventoryIds) touchedInventoryIds.add(touchedId);
+  }
+
+  return Array.from(touchedInventoryIds);
+}
+
 app.patch("/api/orders/:id/status", requireAuth, async (req, res) => {
   const tenantOrder = await requireTenantFromOrder(req, res, req.params.id);
   if (!tenantOrder) return;
@@ -2255,6 +2471,196 @@ app.post("/api/orders/:id/cancel", requireAuth, async (req, res) => {
   }
 });
 
+// Edição de pedido aberto no PDV: reduz/remove itens de uma mesa ou comanda ainda
+// não faturada. Se já houve baixa de estoque, devolve apenas a quantidade ainda não
+// restaurada, evitando estorno duplicado em múltiplas edições.
+app.patch("/api/tenants/:slug/pdv/orders/:orderId/items/:orderItemId", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, ["pos", "waiter"]);
+  if (!tenant) return;
+
+  const nextQuantity = Number(req.body?.quantity);
+  if (!Number.isInteger(nextQuantity) || nextQuantity < 0) {
+    return res.status(400).json({ error: "Quantidade inválida." });
+  }
+
+  try {
+    const order = await prisma.order.findFirst({
+      where: { id: req.params.orderId, tenantId: tenant.id },
+      include: {
+        tenant: true,
+        items: {
+          include: {
+            product: true,
+            productVariant: true,
+          },
+        },
+      },
+    });
+    if (!order) return res.status(404).json({ error: "Pedido não encontrado." });
+    if (order.orderType !== "DINE_IN") return res.status(400).json({ error: "Somente mesas e comandas podem ser editadas aqui." });
+    if (["DELIVERED", "CANCELLED", "MERGED"].includes(order.status)) {
+      return res.status(400).json({ error: "Este pedido não pode mais ser editado." });
+    }
+
+    const billedMovement = await prisma.cashMovement.findFirst({
+      where: { tenantId: tenant.id, orderId: order.id },
+      select: { id: true },
+    });
+    if (billedMovement) return res.status(400).json({ error: "Este pedido já foi faturado no caixa." });
+
+    const targetItem = order.items.find((item: any) => item.id === req.params.orderItemId);
+    if (!targetItem) return res.status(404).json({ error: "Item do pedido não encontrado." });
+    if (nextQuantity > Number(targetItem.quantity || 0)) {
+      return res.status(400).json({ error: "A nova quantidade não pode ser maior que a atual." });
+    }
+    if (nextQuantity === Number(targetItem.quantity || 0)) return res.json(order);
+
+    const removedQuantity = Number(targetItem.quantity || 0) - nextQuantity;
+    const remainingItems = order.items
+      .map((item: any) => item.id === targetItem.id ? { ...item, quantity: nextQuantity } : item)
+      .filter((item: any) => Number(item.quantity || 0) > 0);
+
+    const result = await prisma.$transaction(async (tx: any) => {
+      const touchedInventoryIds = new Set<string>();
+
+      const inventoryItemId = targetItem.productVariantId
+        ? targetItem.productVariant?.inventoryItemId
+        : targetItem.product?.inventoryItemId;
+
+      const directRestocked = await restockOrderItemInventory(tx, tenant.id, order.id, inventoryItemId, removedQuantity);
+      if (directRestocked && inventoryItemId) touchedInventoryIds.add(inventoryItemId);
+
+      const recipeInventoryIds = await restockOrderItemRecipe(tx, tenant.id, order.id, targetItem.product, removedQuantity);
+      for (const touchedId of recipeInventoryIds) touchedInventoryIds.add(touchedId);
+
+      let updatedOrder;
+      if (remainingItems.length === 0) {
+        updatedOrder = await tx.order.update({
+          where: { id: order.id },
+          data: { status: "CANCELLED" },
+          include: {
+            tenant: true,
+            items: {
+              include: {
+                product: true,
+                productVariant: true,
+              },
+            },
+          },
+        });
+      } else {
+        if (nextQuantity === 0) {
+          await tx.orderItem.delete({ where: { id: targetItem.id } });
+        } else {
+          await tx.orderItem.update({
+            where: { id: targetItem.id },
+            data: { quantity: nextQuantity },
+          });
+        }
+
+        const recalculated = recalculateOpenOrderAmounts(order, remainingItems);
+        updatedOrder = await tx.order.update({
+          where: { id: order.id },
+          data: {
+            total: recalculated.total,
+            discount: recalculated.discountAmount,
+            feeAmount: recalculated.feePassedToCustomer ? recalculated.feeAmount : (order.feeAmount ?? null),
+            serviceFeeAmount: recalculated.serviceFeeAmount || null,
+            paymentDetail: recalculated.paymentDetail ? JSON.stringify(recalculated.paymentDetail) : order.paymentDetail,
+          },
+          include: {
+            tenant: true,
+            items: {
+              include: {
+                product: true,
+                productVariant: true,
+              },
+            },
+          },
+        });
+      }
+
+      return {
+        updatedOrder,
+        touchedInventoryIds: Array.from(touchedInventoryIds),
+      };
+    });
+
+    for (const inventoryItemId of result.touchedInventoryIds) {
+      await emitInventoryRestockSideEffects(tenant.id, inventoryItemId);
+    }
+
+    io.to(`tenant-${tenant.id}`).emit("order-status-updated", result.updatedOrder);
+    if (order.tableId) io.to(`${tenant.id}-mesa-${order.tableId}`).emit("table-update");
+    res.json(result.updatedOrder);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao editar item do pedido." });
+  }
+});
+
+// Cancela uma mesa/comanda ainda aberta no PDV. Diferente do cancelamento do histórico,
+// aqui também desfaz as baixas de estoque já feitas, porque a venda ainda não foi faturada.
+app.post("/api/tenants/:slug/pdv/orders/:orderId/cancel-open", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, ["pos", "waiter"]);
+  if (!tenant) return;
+
+  try {
+    const order = await prisma.order.findFirst({
+      where: { id: req.params.orderId, tenantId: tenant.id },
+      include: {
+        tenant: true,
+        items: {
+          include: {
+            product: true,
+            productVariant: true,
+          },
+        },
+      },
+    });
+    if (!order) return res.status(404).json({ error: "Pedido não encontrado." });
+    if (order.orderType !== "DINE_IN") return res.status(400).json({ error: "Somente mesas e comandas podem ser canceladas aqui." });
+    if (["DELIVERED", "CANCELLED", "MERGED"].includes(order.status)) {
+      return res.status(400).json({ error: "Este pedido não pode mais ser cancelado." });
+    }
+
+    const billedMovement = await prisma.cashMovement.findFirst({
+      where: { tenantId: tenant.id, orderId: order.id },
+      select: { id: true },
+    });
+    if (billedMovement) return res.status(400).json({ error: "Este pedido já foi faturado no caixa." });
+
+    const result = await prisma.$transaction(async (tx: any) => {
+      const touchedInventoryIds = await restockCancelledOrder(tx, order);
+      const updatedOrder = await tx.order.update({
+        where: { id: order.id },
+        data: { status: "CANCELLED" },
+        include: {
+          tenant: true,
+          items: {
+            include: {
+              product: true,
+              productVariant: true,
+            },
+          },
+        },
+      });
+      return { updatedOrder, touchedInventoryIds };
+    });
+
+    for (const inventoryItemId of result.touchedInventoryIds) {
+      await emitInventoryRestockSideEffects(tenant.id, inventoryItemId);
+    }
+
+    io.to(`tenant-${tenant.id}`).emit("order-status-updated", result.updatedOrder);
+    if (order.tableId) io.to(`${tenant.id}-mesa-${order.tableId}`).emit("table-update");
+    res.json(result.updatedOrder);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao cancelar pedido aberto." });
+  }
+});
+
 app.get("/api/admin/:tenantId/orders", requireAuth, async (req, res) => {
   const tenant = await requireTenantById(req, res, req.params.tenantId);
   if (!tenant) return;
@@ -2266,6 +2672,7 @@ app.get("/api/admin/:tenantId/orders", requireAuth, async (req, res) => {
         items: {
           include: {
             product: true,
+            productVariant: true,
           },
         },
       },
@@ -3350,7 +3757,7 @@ async function attachOrderDetails<T extends { orderId?: string | null }>(movemen
     const order = m.orderId ? orderMap.get(m.orderId) : null;
     if (!order) return { ...m, order: null };
     const grossTotal = order.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    let paymentDetail: { cardBrand?: string; installments?: number; splits?: Array<{ method: string; amount: number; cardBrand?: string }> } = {};
+    let paymentDetail: { cardBrand?: string; installments?: number; splits?: Array<{ method: string; amount: number; cardBrand?: string; installments?: number }> } = {};
     try { paymentDetail = order.paymentDetail ? JSON.parse(order.paymentDetail) : {}; } catch {}
     return {
       ...m,
@@ -4447,6 +4854,7 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
       installments,
       serviceChargeIncluded,
       source,
+      counterTicketNumber: requestedCounterTicketNumber,
     } = req.body;
 
     // O placar do garçom (leaderboard) só conta pedidos com operatorName preenchido —
@@ -4457,8 +4865,30 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
 
     const validatedItems = Array.isArray(items) ? items : [];
     const isDineIn = orderType === "DINE_IN";
+    const isCounterComanda = isDineIn && !tableId;
+    const isDraftDineIn = isCounterComanda && validatedItems.length === 0;
     if (!isDineIn && validatedItems.length === 0) {
       return res.status(400).json({ error: "Nenhum item no pedido." });
+    }
+
+    let counterTicketNumber: number | null = null;
+    if (isCounterComanda) {
+      if (Number.isInteger(Number(requestedCounterTicketNumber)) && Number(requestedCounterTicketNumber) > 0) {
+        counterTicketNumber = Number(requestedCounterTicketNumber);
+      } else {
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+        const lastTicket = await prisma.order.findFirst({
+          where: {
+            tenantId: tenant.id,
+            counterTicketNumber: { not: null },
+            createdAt: { gte: startOfDay },
+          },
+          orderBy: { counterTicketNumber: "desc" },
+          select: { counterTicketNumber: true },
+        });
+        counterTicketNumber = (lastTicket?.counterTicketNumber ?? 0) + 1;
+      }
     }
 
     // Lançamento do garçom (comanda) para a cozinha ver: nasce PENDING, sem debitar
@@ -4468,7 +4898,9 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
     // fatura e debita na hora, pois ali a venda já está confirmada/paga.
     const isWaiterComanda = source === "waiter" && orderType === "DINE_IN";
     const isPDVComandaLaunch = orderType === "DINE_IN" && req.body.status === "PENDING";
-    const initialStatus = (isWaiterComanda || isPDVComandaLaunch) ? "PENDING" : "DELIVERED";
+    const initialStatus = isDraftDineIn
+      ? "AWAITING_PAYMENT"
+      : (isWaiterComanda || isPDVComandaLaunch) ? "PENDING" : "DELIVERED";
 
     // Fetch products and calculate totals
     const productIds = validatedItems.map((i: any) => i.productId);
@@ -4521,8 +4953,8 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
         const cfg = pm?.pix;
         return { percent: cfg?.brandFees?.["PIX"]?.installmentFees?.["1"] ?? 0, passToCustomer: !!cfg?.passFeeToCustomer };
       }
-      if ((method === "CREDIT" || method === "DEBIT") && brand) {
-        const methodKey = method === "CREDIT" ? "credit" : "debit";
+      if ((method === "CREDIT" || method === "DEBIT" || method === "VR") && brand) {
+        const methodKey = method === "CREDIT" ? "credit" : method === "DEBIT" ? "debit" : "meal";
         const cfg = pm?.[methodKey];
         const installmentKey = method === "CREDIT" ? String(installmentsCount || 1) : "1";
         return { percent: cfg?.brandFees?.[brand]?.installmentFees?.[installmentKey] ?? 0, passToCustomer: !!cfg?.passFeeToCustomer };
@@ -4534,7 +4966,7 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
         const pm = JSON.parse(tenant.paymentMethods as string);
         if (paymentMethod === "SPLIT" && Array.isArray(paymentMetadata?.splits)) {
           for (const split of paymentMetadata.splits) {
-            const { percent, passToCustomer } = computeFeeForMethod(pm, split.method, split.cardBrand, 1);
+            const { percent, passToCustomer } = computeFeeForMethod(pm, split.method, split.cardBrand, split.installments || 1);
             if (passToCustomer && percent > 0) feeAmount += Number(split.amount || 0) * (percent / 100);
           }
           feePassedToCustomer = feeAmount > 0;
@@ -4581,10 +5013,11 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
     const order = await prisma.order.create({
       data: {
         tenantId: tenant.id,
-        customerName: customerName || "Venda PDV",
+        customerName: customerName || (isCounterComanda ? "" : "Venda PDV"),
         customerPhone: customerPhone || "00000000000",
         orderType: orderType || "TAKEAWAY",
         tableId: tableId || null,
+        counterTicketNumber,
         paymentMethod: paymentMethod || "CASH",
         paymentDetail: paymentMetadata ? JSON.stringify(paymentMetadata) : null,
         discount: discountAmount,
@@ -4608,7 +5041,7 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
     // Comanda do garçom ou lançamento pendente ainda não é venda faturada — sem movimento de caixa
     // e sem debitar estoque agora. Isso acontece quando o pedido avançar de status
     // (PREPARING debita estoque, DELIVERED fecha a venda), igual ao delivery.
-    if (initialStatus !== "PENDING") {
+    if (initialStatus !== "PENDING" && !isDraftDineIn) {
       // Register cash movement for the payment
       const currentCash = await prisma.cashRegister.findFirst({
         where: { tenantId: tenant.id, status: "OPEN" },
@@ -4665,7 +5098,7 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
     // Só emite quando o pedido de fato precisa de atenção da cozinha (nasce PENDING,
     // ex: comanda do garçom). Uma venda de balcão ou fechamento de conta via "Pagar"
     // já nasce DELIVERED (paga na hora) e não deve virar alerta de "novo pedido".
-    if (order.status !== "DELIVERED") {
+    if (order.status !== "DELIVERED" && order.items.length > 0) {
       io.to(`tenant-${tenant.id}`).emit("new-order", order);
     }
     res.json(order);

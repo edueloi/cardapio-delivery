@@ -78,11 +78,21 @@ export type OrderMode = "DELIVERY_ONLY" | "PREORDER_ONLY" | "BOTH";
 // partir dele nascem com tableId=null e ganham counterTicketNumber (senha sequencial diária).
 export const COUNTER_ORDER_TABLE_ID = "Balcao";
 
+// Alguns pedidos antigos foram salvos com o label completo dentro de customerName
+// (ex: "Balcão — Senha 01 — João" em vez de só "João") por um bug já corrigido.
+// Aqui extraímos só o nome de verdade, pra não duplicar "Balcão — Senha" no rótulo.
+export function cleanCustomerName(customerName?: string | null): string {
+  if (!customerName) return "";
+  const match = customerName.match(/—\s*([^—]+)$/);
+  return (match ? match[1] : customerName).trim();
+}
+
 // Rótulo exibido nos painéis (Cozinha, Pedidos, PDV, Garçom) para um pedido DINE_IN:
 // mesa numerada ("Mesa 5"), balcão com senha ("Balcão — Senha 12 — João"), ou fallback.
 export function dineInOrderLabel(order: { tableId?: string | null; counterTicketNumber?: number | null; customerName?: string }): string {
   if (order.counterTicketNumber != null) {
-    const name = order.customerName ? ` — ${order.customerName}` : "";
+    const cleanName = cleanCustomerName(order.customerName);
+    const name = cleanName ? ` — ${cleanName}` : "";
     return `Balcão — Senha ${String(order.counterTicketNumber).padStart(2, "0")}${name}`;
   }
   if (order.tableId) return `Mesa ${order.tableId}`;
@@ -484,7 +494,7 @@ export interface Order {
   tableId?: string | null;
   counterTicketNumber?: number | null; // senha sequencial diária — só para pedidos de balcão (sem mesa)
   kitchenReady?: boolean;
-  paymentMethod: 'PIX' | 'CREDIT' | 'DEBIT' | 'MEAL' | 'FOOD' | 'CASH';
+  paymentMethod: 'PIX' | 'CREDIT' | 'DEBIT' | 'MEAL' | 'FOOD' | 'CASH' | 'VR' | 'SPLIT' | 'STONE_CREDIT' | 'STONE_DEBIT' | 'STONE_PIX';
   paymentDetail?: string;
   scheduledDate?: string | null; // ISO date string YYYY-MM-DD
   scheduledTime?: string | null; // HH:mm
@@ -519,6 +529,7 @@ export interface OrderItem {
   price: number;
   notes?: string;
   product?: Product;
+  productVariant?: ProductVariant | null;
 }
 
 export interface Comanda {

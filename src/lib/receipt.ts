@@ -29,7 +29,7 @@ export interface ReceiptData {
   paymentMethod?: string;
   amountReceived?: number;
   change?: number;
-  paymentSplits?: Array<{ method: string; amount: number; cardBrand?: string }>;
+  paymentSplits?: Array<{ method: string; amount: number; cardBrand?: string; installments?: number }>;
 }
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -225,7 +225,7 @@ export function buildReceiptPdf(data: ReceiptData): jsPDF {
       doc.text("Pagamento (dividido):", margin, y);
       y += 4;
       for (const split of data.paymentSplits) {
-        const label = `${paymentLabel(split.method)}${split.cardBrand ? ` · ${split.cardBrand}` : ""}`;
+        const label = `${paymentLabel(split.method)}${split.cardBrand ? ` | ${split.cardBrand}` : ""}${split.method === "CREDIT" && split.installments ? ` | ${split.installments}x` : ""}`;
         doc.text(`  ${label}`, margin, y);
         doc.text(fmtMoney(split.amount), width - margin, y, { align: "right" });
         y += 4;

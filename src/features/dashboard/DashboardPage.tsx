@@ -4,12 +4,13 @@ import { DashboardShell, useToast } from "../../components";
 import { apiFetch, apiJson, AuthError } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import socket from "../../lib/socket";
+import { playNotificationSound, playNewOrderSound, playKitchenReadySound } from "../../lib/notificationSound";
 import type { Order, Tenant } from "../../types";
 import DashboardContent from "./DashboardContent";
 import { DASHBOARD_NAVIGATION } from "./config/navigation";
 import { type DashboardOrderTabId, type DashboardTabId, type MyMembership, PATH_TO_TAB, TAB_TO_PATH, canAccess, OWNER_ONLY_TABS, ALL_PERMISSION_TABS } from "./types";
 import { motion, AnimatePresence } from "motion/react";
-import { Bell, Receipt, ShoppingBag, X } from "lucide-react";
+import { Bell, BellRing, Receipt, ShoppingBag, X } from "lucide-react";
 
 export default function DashboardPage() {
   const { slug, tab: tabParam, orderId } = useParams<{ slug: string; tab?: string; orderId?: string }>();
@@ -25,6 +26,7 @@ export default function DashboardPage() {
   const [checkoutRequests, setCheckoutRequests] = useState<Array<{ tableId: string; customerName: string; timestamp: number }>>([]);
   const [waiterCalls, setWaiterCalls] = useState<Array<{ tableId: string; customerName: string; note: string; requestBill: boolean; timestamp: number }>>([]);
   const [newOrderAlerts, setNewOrderAlerts] = useState<Array<{ id: string; customerName: string; orderType: string; total: number; timestamp: number }>>([]);
+  const [kitchenReadyAlerts, setKitchenReadyAlerts] = useState<Array<{ id: string; label: string; timestamp: number }>>([]);
 
   const activeTab: DashboardTabId = (tabParam ? PATH_TO_TAB[tabParam] : undefined) ?? (orderId ? "history" : "overview");
 
@@ -90,31 +92,31 @@ export default function DashboardPage() {
   useEffect(() => {
     void fetchTenant();
 
-    socket.on("new-order", (newOrder: Order) => {
+    const handleNewOrder = (newOrder: Order) => {
       setOrders((prev) => (Array.isArray(prev) ? [newOrder, ...prev] : [newOrder]));
-      new Audio("/notification.mp3").play().catch(() => undefined);
+      playNewOrderSound();
       setNewOrderAlerts((prev) => [
         { id: newOrder.id, customerName: newOrder.customerName, orderType: newOrder.orderType, total: newOrder.total, timestamp: Date.now() },
         ...prev,
       ]);
-    });
+    };
 
-    socket.on("order-status-updated", (updatedOrder: Order) => {
+    const handleOrderStatusUpdated = (updatedOrder: Order) => {
       setOrders((prev) => {
         if (!Array.isArray(prev)) return [];
         const oldOrder = prev.find((o) => o.id === updatedOrder.id);
         if (updatedOrder.kitchenReady && (!oldOrder || !oldOrder.kitchenReady)) {
-          new Audio("/notification.mp3").play().catch(() => undefined);
+          playKitchenReadySound();
           const who = updatedOrder.orderType === "DINE_IN"
             ? (updatedOrder.tableId ? `Mesa ${updatedOrder.tableId}` : `Senha ${String(updatedOrder.counterTicketNumber).padStart(2, "0")}`)
             : updatedOrder.customerName;
-          toast.success(`Cozinha preparou os itens do pedido de ${who}!`);
+          setKitchenReadyAlerts((alerts) => [{ id: updatedOrder.id, label: who, timestamp: Date.now() }, ...alerts]);
         }
         return prev.map((order) => (order.id === updatedOrder.id ? updatedOrder : order));
       });
-    });
+    };
 
-    socket.on("inventory-update", ({ id, quantity }) => {
+    const handleInventoryUpdate = ({ id, quantity }: { id: string; quantity: number }) => {
       setTenant(prev => {
         if (!prev) return prev;
         return {
@@ -133,45 +135,54 @@ export default function DashboardPage() {
           }))
         };
       });
-    });
+    };
 
-    socket.on("checkout-requested", ({ tableId, customerName }) => {
-      new Audio("/notification.mp3").play().catch(() => undefined);
+    const handleCheckoutRequested = ({ tableId, customerName }: { tableId: string; customerName: string }) => {
+      playNotificationSound();
       setCheckoutRequests(prev => [
         { tableId, customerName, timestamp: Date.now() },
         ...prev
       ]);
-    });
+    };
 
-    socket.on("waiter-called", ({ tableId, customerName, note, requestBill }) => {
-      new Audio("/notification.mp3").play().catch(() => undefined);
+    const handleWaiterCalled = ({ tableId, customerName, note, requestBill }: { tableId: string; customerName: string; note: string; requestBill: boolean }) => {
+      playNotificationSound();
       setWaiterCalls(prev => [
         { tableId, customerName, note, requestBill, timestamp: Date.now() },
         ...prev
       ]);
-    });
+    };
 
     // Cardápio/estoque mudou (em qualquer aba, dispositivo ou usuário) — recarrega
     // a árvore completa do tenant para manter tudo sincronizado sem precisar de F5.
-    socket.on("menu-updated", () => {
+    const handleMenuUpdated = () => {
       void fetchTenant();
-    });
+    };
 
     // Comanda pronta pra servir — dispara em qualquer tela do dashboard, não só na do
     // Garçom, já que o(a) garçom pode estar em Mesas, Cardápio etc. quando a cozinha avisa.
-    socket.on("comanda-ready", ({ tableId, customerName, operatorName }) => {
-      new Audio("/notification.mp3").play().catch(() => undefined);
+    const handleComandaReady = ({ tableId, customerName, operatorName }: { tableId?: string; customerName?: string; operatorName?: string }) => {
+      playNotificationSound();
       const who = tableId ? `Mesa ${tableId}` : customerName || "Comanda";
       toast.success(`${who} está pronta para servir!${operatorName ? ` (${operatorName})` : ""}`);
-    });
+    };
+
+    socket.on("new-order", handleNewOrder);
+    socket.on("order-status-updated", handleOrderStatusUpdated);
+    socket.on("inventory-update", handleInventoryUpdate);
+    socket.on("checkout-requested", handleCheckoutRequested);
+    socket.on("waiter-called", handleWaiterCalled);
+    socket.on("menu-updated", handleMenuUpdated);
+    socket.on("comanda-ready", handleComandaReady);
 
     return () => {
-      socket.off("new-order");
-      socket.off("order-status-updated");
-      socket.off("checkout-requested");
-      socket.off("waiter-called");
-      socket.off("menu-updated");
-      socket.off("comanda-ready");
+      socket.off("new-order", handleNewOrder);
+      socket.off("order-status-updated", handleOrderStatusUpdated);
+      socket.off("inventory-update", handleInventoryUpdate);
+      socket.off("checkout-requested", handleCheckoutRequested);
+      socket.off("waiter-called", handleWaiterCalled);
+      socket.off("menu-updated", handleMenuUpdated);
+      socket.off("comanda-ready", handleComandaReady);
     };
   }, [slug]);
 
@@ -303,7 +314,7 @@ export default function DashboardPage() {
         />
       </DashboardShell>
 
-      <div className="fixed bottom-6 right-6 z-[200] space-y-3 w-full max-w-xs pointer-events-none">
+      <div className="fixed bottom-6 right-6 z-[200] space-y-4 w-full max-w-md pointer-events-none">
         <AnimatePresence>
           {newOrderAlerts.map((alert) => (
             <motion.div
@@ -311,26 +322,26 @@ export default function DashboardPage() {
               initial={{ opacity: 0, x: 100, scale: 0.9 }}
               animate={{ opacity: 1, x: 0, scale: 1 }}
               exit={{ opacity: 0, scale: 0.5, transition: { duration: 0.2 } }}
-              className="pointer-events-auto bg-emerald-500 text-white p-4 rounded-2xl shadow-2xl flex flex-col gap-2"
+              className="pointer-events-auto bg-emerald-500 text-white p-5 rounded-3xl shadow-2xl ring-4 ring-emerald-500/20 flex flex-col gap-3"
             >
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center animate-bounce">
-                    <ShoppingBag className="w-4 h-4" />
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-full bg-white/20 flex items-center justify-center animate-bounce shrink-0">
+                    <ShoppingBag className="w-5 h-5" />
                   </div>
-                  <span className="text-xs font-black uppercase tracking-widest">
+                  <span className="text-sm font-black uppercase tracking-widest">
                     Novo Pedido — {alert.orderType === "DELIVERY" ? "Delivery" : alert.orderType === "PICKUP" ? "Retirada" : "Mesa"}
                   </span>
                 </div>
                 <button
                   onClick={() => setNewOrderAlerts((prev) => prev.filter((a) => a.timestamp !== alert.timestamp))}
-                  className="p-1 hover:bg-white/20 rounded-lg transition-colors"
+                  className="p-1.5 hover:bg-white/20 rounded-lg transition-colors shrink-0"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-5 h-5" />
                 </button>
               </div>
-              <p className="text-sm font-black">{alert.customerName}</p>
-              <p className="text-xs font-bold opacity-70">
+              <p className="text-lg font-black leading-tight">{alert.customerName}</p>
+              <p className="text-sm font-bold opacity-80">
                 Total: R$ {alert.total.toFixed(2).replace(".", ",")}
               </p>
               <button
@@ -338,9 +349,40 @@ export default function DashboardPage() {
                   navigateToTab("live-orders");
                   setNewOrderAlerts((prev) => prev.filter((a) => a.timestamp !== alert.timestamp));
                 }}
-                className="w-full bg-white text-emerald-600 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-50 transition-colors"
+                className="w-full bg-white text-emerald-600 py-3 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-emerald-50 transition-colors"
               >
                 Ver Pedido
+              </button>
+            </motion.div>
+          ))}
+          {kitchenReadyAlerts.map((alert) => (
+            <motion.div
+              key={alert.timestamp}
+              initial={{ opacity: 0, x: 100, scale: 0.9 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.5, transition: { duration: 0.2 } }}
+              className="pointer-events-auto bg-sky-500 text-white p-5 rounded-3xl shadow-2xl ring-4 ring-sky-500/20 flex flex-col gap-3"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-full bg-white/20 flex items-center justify-center animate-bounce shrink-0">
+                    <BellRing className="w-5 h-5" />
+                  </div>
+                  <span className="text-sm font-black uppercase tracking-widest">Pronto na Cozinha</span>
+                </div>
+                <button
+                  onClick={() => setKitchenReadyAlerts((prev) => prev.filter((a) => a.timestamp !== alert.timestamp))}
+                  className="p-1.5 hover:bg-white/20 rounded-lg transition-colors shrink-0"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <p className="text-lg font-black leading-tight">{alert.label}</p>
+              <button
+                onClick={() => setKitchenReadyAlerts((prev) => prev.filter((a) => a.timestamp !== alert.timestamp))}
+                className="w-full bg-white text-sky-600 py-3 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-sky-50 transition-colors"
+              >
+                Ciente
               </button>
             </motion.div>
           ))}
@@ -350,26 +392,26 @@ export default function DashboardPage() {
               initial={{ opacity: 0, x: 100, scale: 0.9 }}
               animate={{ opacity: 1, x: 0, scale: 1 }}
               exit={{ opacity: 0, scale: 0.5, transition: { duration: 0.2 } }}
-              className="pointer-events-auto bg-amber-500 text-black p-4 rounded-2xl shadow-2xl flex flex-col gap-2"
+              className="pointer-events-auto bg-amber-500 text-black p-5 rounded-3xl shadow-2xl ring-4 ring-amber-500/20 flex flex-col gap-3"
             >
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-black/10 flex items-center justify-center animate-pulse">
-                    <Bell className="w-4 h-4" />
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-full bg-black/10 flex items-center justify-center animate-pulse shrink-0">
+                    <Bell className="w-5 h-5" />
                   </div>
-                  <span className="text-xs font-black uppercase tracking-widest">
+                  <span className="text-sm font-black uppercase tracking-widest">
                     {w.requestBill ? "Pedir Conta — " : "Garçom — "}Mesa {w.tableId}
                   </span>
                 </div>
-                <button onClick={() => setWaiterCalls(prev => prev.filter(c => c.timestamp !== w.timestamp))} className="p-1 hover:bg-black/10 rounded-lg transition-colors">
-                  <X className="w-4 h-4" />
+                <button onClick={() => setWaiterCalls(prev => prev.filter(c => c.timestamp !== w.timestamp))} className="p-1.5 hover:bg-black/10 rounded-lg transition-colors shrink-0">
+                  <X className="w-5 h-5" />
                 </button>
               </div>
-              <p className="text-xs font-bold opacity-70">{w.customerName}</p>
-              {w.note && <p className="text-xs bg-black/10 rounded-xl px-3 py-2 italic">{w.note}</p>}
+              <p className="text-sm font-bold opacity-80">{w.customerName}</p>
+              {w.note && <p className="text-sm bg-black/10 rounded-xl px-3 py-2.5 italic">{w.note}</p>}
               <button
                 onClick={() => setWaiterCalls(prev => prev.filter(c => c.timestamp !== w.timestamp))}
-                className="w-full bg-black text-amber-400 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black/80 transition-colors"
+                className="w-full bg-black text-amber-400 py-3 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-black/80 transition-colors"
               >
                 Ciente
               </button>
@@ -381,31 +423,31 @@ export default function DashboardPage() {
               initial={{ opacity: 0, x: 100, scale: 0.9 }}
               animate={{ opacity: 1, x: 0, scale: 1 }}
               exit={{ opacity: 0, scale: 0.5, transition: { duration: 0.2 } }}
-              className="pointer-events-auto bg-red-600 text-white p-4 rounded-2xl shadow-2xl border border-red-500 flex flex-col gap-3"
+              className="pointer-events-auto bg-red-600 text-white p-5 rounded-3xl shadow-2xl ring-4 ring-red-600/20 border border-red-500 flex flex-col gap-3"
             >
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center animate-pulse">
-                    <Receipt className="w-4 h-4" />
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-full bg-white/20 flex items-center justify-center animate-pulse shrink-0">
+                    <Receipt className="w-5 h-5" />
                   </div>
-                  <span className="text-xs font-black uppercase tracking-widest">Fechar Mesa {req.tableId}</span>
+                  <span className="text-sm font-black uppercase tracking-widest">Fechar Mesa {req.tableId}</span>
                 </div>
                 <button
                   onClick={() => setCheckoutRequests(prev => prev.filter(r => r.timestamp !== req.timestamp))}
-                  className="p-1 hover:bg-white/10 rounded-lg transition-colors"
+                  className="p-1.5 hover:bg-white/10 rounded-lg transition-colors shrink-0"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-5 h-5" />
                 </button>
               </div>
               <div className="space-y-1">
-                <p className="text-[10px] font-bold opacity-60 uppercase">Cliente</p>
-                <p className="text-sm font-black">{req.customerName}</p>
+                <p className="text-[11px] font-bold opacity-70 uppercase tracking-widest">Cliente</p>
+                <p className="text-lg font-black">{req.customerName}</p>
               </div>
               <button
                 onClick={() => {
                   navigateToTab("pos");
                 }}
-                className="w-full bg-white text-red-600 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-50 transition-colors"
+                className="w-full bg-white text-red-600 py-3 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-red-50 transition-colors"
               >
                 Abrir no PDV
               </button>

@@ -232,7 +232,17 @@ export function OrdersList({
                 className="flex items-center gap-3 px-3 py-2.5 cursor-pointer active:bg-slate-50 transition-colors"
                 onClick={() => toggleOrder(order.id, isHistory)}
               >
-                {/* ID + info */}
+                {/* Identificação: senha/mesa em destaque, ID + info em seguida */}
+                {order.orderType === 'DINE_IN' && (order.tableId || order.counterTicketNumber != null) && (
+                  <div className="shrink-0 w-14 h-14 rounded-xl bg-[#0D1B3E]/5 border border-[#0D1B3E]/10 flex flex-col items-center justify-center leading-none">
+                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">
+                      {order.tableId ? "Mesa" : "Senha"}
+                    </span>
+                    <span className="text-lg font-black text-[#0D1B3E] tabular-nums">
+                      {order.tableId || String(order.counterTicketNumber).padStart(2, "0")}
+                    </span>
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs font-black text-slate-800 tracking-tight">#{order.id.slice(-4).toUpperCase()}</span>
@@ -247,7 +257,7 @@ export function OrdersList({
                     <OrderWaitTime createdAt={order.createdAt} status={order.status} />
                   </div>
                   <p className="text-[11px] text-slate-400 font-medium mt-0.5 truncate">
-                    {order.orderType === 'DINE_IN' ? `[Mesa ${order.tableId || '?'}] ` : ''}{order.customerName}
+                    {order.customerName || (order.orderType === 'DINE_IN' ? dineInOrderLabel(order) : '')}
                   </p>
                 </div>
 
@@ -311,11 +321,19 @@ export function OrdersList({
                         <p className="ds-label tracking-[0.2em]">Conteúdo do Pedido</p>
                         {order.items?.map((item, idx) => (
                           <div key={idx} className="bg-white rounded-xl border border-slate-200/60 px-3 py-2 flex items-start justify-between gap-2 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
-                            <div>
-                              <p className="text-xs font-bold text-slate-800 tracking-tight">{item.quantity}x {item.product?.name}</p>
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-slate-800 tracking-tight">
+                                {item.quantity}x {item.product?.name}
+                                {item.productVariant?.name && (
+                                  <span className="ml-1.5 text-[10px] font-black uppercase text-[#C9A227] tracking-wide">
+                                    · {item.productVariant.name}
+                                  </span>
+                                )}
+                              </p>
                               {item.notes && (
-                                <p className="text-[10px] text-amber-600 font-bold mt-1 flex items-center gap-1 uppercase tracking-wide">
-                                  <Utensils className="w-2.5 h-2.5 shrink-0" /> {item.notes}
+                                <p className="text-[10px] text-amber-700 font-bold mt-1.5 flex items-start gap-1.5 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1">
+                                  <Utensils className="w-2.5 h-2.5 shrink-0 mt-0.5" />
+                                  <span className="normal-case tracking-normal">{item.notes}</span>
                                 </p>
                               )}
                             </div>

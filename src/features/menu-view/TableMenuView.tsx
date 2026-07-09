@@ -106,14 +106,15 @@ export default function TableMenuView() {
       socket.emit("join-table", `${tenant.id}-mesa-${tableId}`);
     }
 
-    socket.on("table-update", () => {
+    const handleTableUpdate = () => {
       fetchActiveOrders();
       // If we are in the menu and orders are now empty, it means the admin cleared the table
       // We check if the fetch returns empty in the fetchActiveOrders itself
-    });
-    
+    };
+    socket.on("table-update", handleTableUpdate);
+
     return () => {
-      socket.off("table-update");
+      socket.off("table-update", handleTableUpdate);
     };
   }, [tenant, tableId]);
 

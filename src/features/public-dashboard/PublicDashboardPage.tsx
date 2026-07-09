@@ -1,7 +1,9 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import socket from "../../lib/socket";
-import type { Order, Tenant } from "../../types";
+import { playKitchenReadySound } from "../../lib/notificationSound";
+import { announceOrderReady } from "../../lib/voiceAnnouncement";
+import type { DisplayPanelConfig, Order, Tenant } from "../../types";
 import { dineInOrderLabel } from "../../types";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -35,6 +37,48 @@ function orderTime(iso: string) {
 
 function minutesAgo(iso: string) {
   return Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+}
+
+const DEFAULT_DISPLAY_CONFIG: DisplayPanelConfig = {
+  showDelivery: false,
+  showPickup: true,
+  showDineIn: true,
+};
+
+const READY_ANNOUNCEMENT_DURATION_MS = 10000;
+
+function isDisplayOrderVisible(orderType: Order["orderType"], config: DisplayPanelConfig) {
+  if (orderType === "DELIVERY") return config.showDelivery;
+  if (orderType === "DINE_IN") return config.showDineIn;
+  return config.showPickup;
+}
+
+function readyAnnouncementTitle(order: Order) {
+  if (order.counterTicketNumber != null) return "SENHA";
+  if (order.tableId) return "MESA";
+  return "PEDIDO";
+}
+
+function readyAnnouncementCode(order: Order) {
+  if (order.counterTicketNumber != null) {
+    return `N${String(order.counterTicketNumber).padStart(3, "0")}`;
+  }
+  if (order.tableId) return String(order.tableId).toUpperCase();
+  return orderCode(order).replace("#", "");
+}
+
+function readyAnnouncementSubtitle(order: Order) {
+  if (order.counterTicketNumber != null) return "Retire seu pedido no balcão";
+  if (order.orderType === "DINE_IN" && order.tableId) return "Seu pedido está pronto para servir";
+  if (order.orderType === "DELIVERY") return "Pedido pronto para retirada";
+  return "Seu pedido está pronto";
+}
+
+// Só anunciamos por voz pedidos de balcão/comanda (têm senha numérica).
+// Mesa e delivery não têm "senha" para chamar em voz alta.
+function announceReadyOrder(order: Order) {
+  if (order.counterTicketNumber == null) return;
+  announceOrderReady(order.counterTicketNumber, order.customerName);
 }
 
 /* ─── sub-components ──────────────────────────────────────── */
@@ -215,6 +259,11 @@ export default function PublicDashboardPage() {
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [readyAnnouncementQueue, setReadyAnnouncementQueue] = useState<Order[]>([]);
+  const [activeReadyAnnouncement, setActiveReadyAnnouncement] = useState<Order | null>(null);
+  const ordersRef = useRef<Order[]>([]);
+  const displayConfigRef = useRef<DisplayPanelConfig>(DEFAULT_DISPLAY_CONFIG);
+  const announcedReadyIdsRef = useRef<Set<string>>(new Set());
 
   const fetchOrders = async () => {
     if (!slug) return;
@@ -225,6 +274,37 @@ export default function PublicDashboardPage() {
     } catch (err) {
       console.error("Failed to fetch orders:", err);
     }
+  };
+
+  const displayConfig = useMemo(() => {
+    try {
+      return tenant?.displayPanelConfig
+        ? { ...DEFAULT_DISPLAY_CONFIG, ...JSON.parse(tenant.displayPanelConfig) }
+        : DEFAULT_DISPLAY_CONFIG;
+    } catch {
+      return DEFAULT_DISPLAY_CONFIG;
+    }
+  }, [tenant?.displayPanelConfig]);
+
+  useEffect(() => {
+    ordersRef.current = orders;
+  }, [orders]);
+
+  useEffect(() => {
+    displayConfigRef.current = displayConfig;
+  }, [displayConfig]);
+
+  const isOrderTypeVisible = (orderType: Order["orderType"]) => {
+    return isDisplayOrderVisible(orderType, displayConfig);
+  };
+
+  const enqueueReadyAnnouncement = (order: Order) => {
+    if (order.status !== "SHIPPED") return;
+    if (!isDisplayOrderVisible(order.orderType, displayConfigRef.current)) return;
+    if (announcedReadyIdsRef.current.has(order.id)) return;
+
+    announcedReadyIdsRef.current.add(order.id);
+    setReadyAnnouncementQueue((prev) => [...prev, order]);
   };
 
   useEffect(() => {
@@ -240,43 +320,71 @@ export default function PublicDashboardPage() {
       }
     };
 
+    const upsertOrder = (incomingOrder: Order) => {
+      setOrders((prev) => {
+        const exists = prev.some((order) => order.id === incomingOrder.id);
+        if (!exists) return [incomingOrder, ...prev];
+        return prev.map((order) => (order.id === incomingOrder.id ? incomingOrder : order));
+      });
+    };
+
+    const handleOrderStatusUpdated = (updatedOrder: Order) => {
+      const previousOrder = ordersRef.current.find((order) => order.id === updatedOrder.id);
+      if (updatedOrder.status === "SHIPPED" && previousOrder?.status !== "SHIPPED") {
+        enqueueReadyAnnouncement(updatedOrder);
+      }
+      upsertOrder(updatedOrder);
+    };
+
+    const handleNewOrder = (newOrder: Order) => {
+      upsertOrder(newOrder);
+    };
+
     fetchTenant();
     fetchOrders();
 
-    socket.on("order-status-updated", () => fetchOrders());
-    socket.on("new-order", () => fetchOrders());
+    socket.on("order-status-updated", handleOrderStatusUpdated);
+    socket.on("new-order", handleNewOrder);
 
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
 
     return () => {
-      socket.off("order-status-updated");
-      socket.off("new-order");
+      socket.off("order-status-updated", handleOrderStatusUpdated);
+      socket.off("new-order", handleNewOrder);
       clearInterval(timer);
     };
   }, [slug]);
-
-  const displayConfig = useMemo(() => {
-    const defaults = { showDelivery: false, showPickup: true, showDineIn: true };
-    try {
-      return tenant?.displayPanelConfig
-        ? { ...defaults, ...JSON.parse(tenant.displayPanelConfig) }
-        : defaults;
-    } catch {
-      return defaults;
-    }
-  }, [tenant?.displayPanelConfig]);
-
-  const isOrderTypeVisible = (orderType: Order["orderType"]) => {
-    if (orderType === "DELIVERY") return displayConfig.showDelivery;
-    if (orderType === "DINE_IN") return displayConfig.showDineIn;
-    return displayConfig.showPickup;
-  };
 
   const visibleOrders = orders.filter((o) => isOrderTypeVisible(o.orderType));
   const preparingOrders = visibleOrders.filter((o) => o.status === "PREPARING");
   const readyOrders = visibleOrders
     .filter((o) => o.status === "SHIPPED")
     .slice(0, 8);
+
+  useEffect(() => {
+    if (activeReadyAnnouncement || readyAnnouncementQueue.length === 0) return;
+    const [nextAnnouncement, ...remaining] = readyAnnouncementQueue;
+    setActiveReadyAnnouncement(nextAnnouncement);
+    setReadyAnnouncementQueue(remaining);
+  }, [activeReadyAnnouncement, readyAnnouncementQueue]);
+
+  useEffect(() => {
+    if (!activeReadyAnnouncement) return;
+
+    playKitchenReadySound();
+    // pequeno atraso pra voz não sobrepor o som da campainha
+    const voiceTimer = window.setTimeout(() => {
+      announceReadyOrder(activeReadyAnnouncement);
+    }, 900);
+    const dismissTimer = window.setTimeout(() => {
+      setActiveReadyAnnouncement(null);
+    }, READY_ANNOUNCEMENT_DURATION_MS);
+
+    return () => {
+      window.clearTimeout(voiceTimer);
+      window.clearTimeout(dismissTimer);
+    };
+  }, [activeReadyAnnouncement]);
 
   /* ─── loading ─── */
   if (!tenant)
@@ -322,6 +430,128 @@ export default function PublicDashboardPage() {
       }}
     >
       {/* ── HEADER ─────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {activeReadyAnnouncement && (
+          <motion.div
+            key={`ready-announcement-${activeReadyAnnouncement.id}`}
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 1.02 }}
+            transition={{ duration: 0.35 }}
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 200,
+              background: "linear-gradient(135deg, rgba(10,27,62,0.97) 0%, rgba(11,42,73,0.98) 55%, rgba(8,18,36,0.98) 100%)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                background: "radial-gradient(circle at center, rgba(201,162,39,0.16) 0%, rgba(201,162,39,0) 60%)",
+              }}
+            />
+            <div
+              style={{
+                position: "relative",
+                width: "min(92vw, 1400px)",
+                minHeight: "min(78vh, 760px)",
+                borderRadius: 36,
+                border: "1px solid rgba(201,162,39,0.28)",
+                background: "linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)",
+                boxShadow: "0 30px 120px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.08)",
+                backdropFilter: "blur(14px)",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                textAlign: "center",
+                padding: "5vh 4vw",
+                gap: 20,
+              }}
+            >
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "10px 18px",
+                  borderRadius: 999,
+                  border: "1px solid rgba(34,197,94,0.25)",
+                  background: "rgba(34,197,94,0.08)",
+                  color: "#86efac",
+                }}
+              >
+                <Bell style={{ width: 18, height: 18 }} />
+                <span
+                  style={{
+                    fontSize: "clamp(0.8rem, 1.1vw, 1rem)",
+                    fontWeight: 900,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.24em",
+                  }}
+                >
+                  Pedido pronto
+                </span>
+              </div>
+
+              <span
+                style={{
+                  fontSize: "clamp(1.25rem, 2.6vw, 2.4rem)",
+                  fontWeight: 800,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.5em",
+                  color: "rgba(255,255,255,0.78)",
+                }}
+              >
+                {readyAnnouncementTitle(activeReadyAnnouncement)}
+              </span>
+
+              <span
+                style={{
+                  fontSize: "clamp(5rem, 17vw, 12rem)",
+                  lineHeight: 0.9,
+                  fontWeight: 900,
+                  letterSpacing: "-0.06em",
+                  color: "#ffffff",
+                  textShadow: "0 18px 40px rgba(0,0,0,0.28)",
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                {readyAnnouncementCode(activeReadyAnnouncement)}
+              </span>
+
+              <span
+                style={{
+                  fontSize: "clamp(1rem, 2vw, 1.8rem)",
+                  fontWeight: 800,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.18em",
+                  color: "#C9A227",
+                }}
+              >
+                {readyAnnouncementSubtitle(activeReadyAnnouncement)}
+              </span>
+
+              <span
+                style={{
+                  fontSize: "clamp(0.95rem, 1.45vw, 1.25rem)",
+                  fontWeight: 700,
+                  color: "rgba(255,255,255,0.62)",
+                }}
+              >
+                {orderLocation(activeReadyAnnouncement)}
+                {activeReadyAnnouncement.customerName ? ` • ${activeReadyAnnouncement.customerName}` : ""}
+              </span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <header
         style={{
           background: "rgba(10,20,35,0.95)",

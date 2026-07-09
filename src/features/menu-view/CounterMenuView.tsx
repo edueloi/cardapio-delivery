@@ -163,12 +163,13 @@ export default function CounterMenuView() {
     // Balcão não tem mesa/sala própria — só entra na sala geral do tenant.
     socket.emit("join-tenant", tenant.id);
 
-    socket.on("order-status-updated", (updatedOrder: Order) => {
+    const handleOrderStatusUpdated = (updatedOrder: Order) => {
       setTicketOrder(prev => (prev && updatedOrder.id === prev.id) ? updatedOrder : prev);
-    });
+    };
+    socket.on("order-status-updated", handleOrderStatusUpdated);
 
     return () => {
-      socket.off("order-status-updated");
+      socket.off("order-status-updated", handleOrderStatusUpdated);
     };
   }, [tenant]);
 

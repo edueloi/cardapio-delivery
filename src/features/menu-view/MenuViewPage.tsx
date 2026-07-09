@@ -345,10 +345,11 @@ export default function MenuViewPage() {
       .then((data) => { if (Array.isArray(data)) setBundles(data); })
       .catch(() => {});
 
-    socket.on("order-status-updated", (updated: Order) => {
+    const handleOrderStatusUpdated = (updated: Order) => {
       setActiveOrder((prev) => (prev?.id === updated.id ? updated : prev));
-    });
-    return () => { socket.off("order-status-updated"); };
+    };
+    socket.on("order-status-updated", handleOrderStatusUpdated);
+    return () => { socket.off("order-status-updated", handleOrderStatusUpdated); };
   }, [slug]);
 
   // Quando delivery é pausado pelo estabelecimento, redireciona automaticamente para Retirada
