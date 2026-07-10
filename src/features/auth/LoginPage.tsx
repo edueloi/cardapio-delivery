@@ -8,7 +8,7 @@ import LoadingScreen from "../../components/LoadingScreen";
 export default function LoginPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { login } = useAuth();
+  const { login, isAuthenticated, loading: authLoading, account, tenants } = useAuth();
 
   const [identifier, setIdentifier] = useState(
     () => localStorage.getItem("boxsys_remember_login") ?? localStorage.getItem("boxsys_remember_email") ?? ""
@@ -28,6 +28,17 @@ export default function LoginPage() {
   function handleLoadingComplete() {
     if (redirectRef.current) navigate(redirectRef.current, { replace: true });
   }
+
+  // Sessão salva (token de até 30 dias) ainda válida — não faz sentido pedir usuário/senha
+  // de novo. Isso é o que fazia o app desktop (Electron, sessão persistente entre reinícios)
+  // sempre cair na tela de login mesmo com o token intacto no localStorage: esta página
+  // nunca checava se já havia uma sessão autenticada antes de renderizar o formulário.
+  useEffect(() => {
+    if (!authLoading && isAuthenticated && account) {
+      const target = resolvePostAuthPath(next, tenants, (account as any).isSuperAdmin);
+      navigate(target, { replace: true });
+    }
+  }, [authLoading, isAuthenticated, account, tenants, next, navigate]);
 
   useEffect(() => {
     if (showLoading && redirectRef.current) {
@@ -57,6 +68,20 @@ export default function LoginPage() {
       setSubmitting(false);
     }
   };
+
+  // Enquanto decide se já existe sessão válida (ou já decidiu que existe e o redirect
+  // está pendente), não mostra o formulário — evita o "flash" da tela de login antes de
+  // pular direto pro painel.
+  if (authLoading || (isAuthenticated && account)) {
+    return (
+      <LoadingScreen
+        durationMs={1200}
+        badgeText="Bem-vindo de volta"
+        statusText="Verificando sessão"
+        description="Estamos restaurando seu acesso."
+      />
+    );
+  }
 
   return (
     <>
