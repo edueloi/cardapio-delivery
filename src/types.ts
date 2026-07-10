@@ -195,7 +195,22 @@ export interface Tenant {
   waiterNotifyOnReady?: boolean; // avisa o garçom quando a cozinha marca a comanda como pronta pra servir
   requireCashRegister?: boolean; // se false, PDV vende sem precisar abrir/fechar caixa
   receiptPaperWidth?: 58 | 80; // largura da bobina térmica (mm) usada no recibo do PDV
+  printingConfig?: string | null; // JSON string: PrintingConfig
 }
+
+// Controla a impressão automática do PDV/comanda/mesa/delivery e do fechamento de caixa.
+// Serializado como JSON string em Tenant.printingConfig — mesmo padrão de stoneConfig/fiscalConfig.
+export interface PrintingConfig {
+  autoPrintOnOrderCreate: boolean; // imprime sozinho ao criar pedido (PDV, comanda/mesa via QR Code, delivery)
+  autoPrintEstablishmentCopy: boolean; // 2ª via (estabelecimento/cozinha) além da via do cliente, em PDV/comanda/mesa
+  autoPrintCashClosingReport: boolean; // imprime o resumo de vendas ao fechar o caixa
+}
+
+export const DEFAULT_PRINTING_CONFIG: PrintingConfig = {
+  autoPrintOnOrderCreate: false,
+  autoPrintEstablishmentCopy: true,
+  autoPrintCashClosingReport: true,
+};
 
 // Controla quais tipos de pedido aparecem no Painel TV (/:slug/display) — tela exposta pro cliente ver o status.
 // Delivery não é "retirado", então por padrão fica de fora; o dono pode reativar se quiser.

@@ -138,3 +138,13 @@ ipcMain.handle("printer:print-receipt", async (_event, data) => {
     return { ok: false, error: err.message || "Falha ao imprimir." };
   }
 });
+
+ipcMain.handle("printer:print-cash-closing", async (_event, { tenantName, summary }) => {
+  try {
+    await printer.printCashClosingReport(tenantName, summary);
+    return { ok: true };
+  } catch (err) {
+    console.error("[main] Cash closing print failed:", err);
+    return { ok: false, error: err.message || "Falha ao imprimir o fechamento." };
+  }
+});

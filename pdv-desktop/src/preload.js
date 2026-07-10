@@ -18,6 +18,14 @@ contextBridge.exposeInMainWorld("pdvDesktop", {
     }
     return result;
   },
+
+  printCashClosingReport: async (tenantName, summary) => {
+    const result = await ipcRenderer.invoke("printer:print-cash-closing", { tenantName, summary });
+    if (!result.ok) {
+      window.alert((result.error || "Falha ao imprimir o fechamento de caixa.") + "\n\nAperte F9 para configurar a impressora.");
+    }
+    return result;
+  },
 });
 
 // Botão flutuante pra sair do app — em modo kiosk (frame: false) não existe barra de

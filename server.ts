@@ -1849,6 +1849,7 @@ app.patch("/api/owner/tenants/:tenantId", requireAuth, async (req, res) => {
     stoneConfig,
     fiscalConfig,
     displayPanelConfig,
+    printingConfig,
     waiterNotifyOnReady,
     requireCashRegister,
     receiptPaperWidth,
@@ -1941,6 +1942,14 @@ app.patch("/api/owner/tenants/:tenantId", requireAuth, async (req, res) => {
               : typeof displayPanelConfig === "string"
               ? displayPanelConfig
               : JSON.stringify(displayPanelConfig),
+        }),
+        ...(printingConfig !== undefined && {
+          printingConfig:
+            printingConfig === null || printingConfig === "null"
+              ? null
+              : typeof printingConfig === "string"
+              ? printingConfig
+              : JSON.stringify(printingConfig),
         }),
       },
     });
@@ -3081,6 +3090,7 @@ app.post("/api/orders", async (req, res) => {
         items: {
           include: {
             product: true,
+            productVariant: true,
           },
         },
         tenant: true,
@@ -3088,6 +3098,7 @@ app.post("/api/orders", async (req, res) => {
     });
 
     io.to(`tenant-${tenant.id}`).emit("new-order", order);
+    io.to(`tenant-${tenant.id}`).emit("order-created", order);
     if (order.tableId) {
       io.to(`${tenant.id}-mesa-${order.tableId}`).emit("table-update");
     }
@@ -5593,6 +5604,55 @@ app.post("/api/tenants/:slug/cash/close", requireAuth, async (req, res) => {
     const expectedBalance =
       currentCash.openingBalance + (ordersSinceOpen._sum.total || 0);
 
+    // Resumo de vendas do turno pra imprimir junto com o fechamento — o dono usa isso pra
+    // bater caixa (total por forma de pagamento, qtd de pedidos, sangrias/suprimentos), sem
+    // precisar abrir o Fluxo de Caixa separado. SPLIT é detalhado à parte (paymentDetail
+    // guarda a divisão real por forma), senão a linha "Dividido" ficaria sem breakdown útil.
+    const deliveredOrders = await prisma.order.findMany({
+      where: {
+        tenantId: tenant.id,
+        status: "DELIVERED",
+        createdAt: { gte: currentCash.openedAt },
+      },
+      select: { paymentMethod: true, paymentDetail: true, total: true },
+    });
+
+    const byMethod = new Map<string, { count: number; total: number }>();
+    const addToMethod = (method: string, amount: number) => {
+      const entry = byMethod.get(method) || { count: 0, total: 0 };
+      entry.total += amount;
+      byMethod.set(method, entry);
+    };
+    for (const order of deliveredOrders) {
+      if (order.paymentMethod === "SPLIT" && order.paymentDetail) {
+        let splits: Array<{ method: string; amount: number }> = [];
+        try { splits = JSON.parse(order.paymentDetail).splits || []; } catch {}
+        for (const split of splits) addToMethod(split.method, split.amount);
+      } else {
+        addToMethod(order.paymentMethod, order.total);
+      }
+    }
+    const salesByMethod = Array.from(byMethod.entries()).map(([method, v]) => ({
+      method,
+      total: v.total,
+    }));
+
+    const movementsSinceOpen = await prisma.cashMovement.findMany({
+      where: { cashRegisterId: currentCash.id, type: { in: ["SANGRIA", "SUPRIMENTO"] } },
+      select: { type: true, amount: true, description: true },
+    });
+
+    const closingSummary = {
+      openedAt: currentCash.openedAt,
+      closedAt: new Date(),
+      openingBalance: currentCash.openingBalance,
+      expectedBalance,
+      ordersCount: deliveredOrders.length,
+      grossTotal: deliveredOrders.reduce((sum, o) => sum + o.total, 0),
+      salesByMethod,
+      movements: movementsSinceOpen,
+    };
+
     const closedCash = await prisma.cashRegister.update({
       where: { id: currentCash.id },
       data: {
@@ -5608,7 +5668,7 @@ app.post("/api/tenants/:slug/cash/close", requireAuth, async (req, res) => {
       status: "CLOSED",
     });
 
-    res.json(closedCash);
+    res.json({ ...closedCash, summary: closingSummary });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to close cash" });
@@ -7580,7 +7640,7 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
         total,
         items: { create: orderItems },
       },
-      include: { items: { include: { product: true } } },
+      include: { items: { include: { product: true, productVariant: true } } },
     });
 
     // Comanda do garçom ou lançamento pendente ainda não é venda faturada — sem movimento de caixa
@@ -7712,6 +7772,12 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
     // já nasce DELIVERED (paga na hora) e não deve virar alerta de "novo pedido".
     if (order.status !== "DELIVERED" && order.items.length > 0) {
       io.to(`tenant-${tenant.id}`).emit("new-order", order);
+    }
+    // "order-created" é separado de "new-order": dispara SEMPRE que um pedido nasce por
+    // essa rota (inclusive venda de balcão já DELIVERED), pois serve pra impressão
+    // automática — que precisa acontecer pra toda venda, não só pras que alertam a cozinha.
+    if (order.items.length > 0) {
+      io.to(`tenant-${tenant.id}`).emit("order-created", order);
     }
     res.json(order);
   } catch (error) {

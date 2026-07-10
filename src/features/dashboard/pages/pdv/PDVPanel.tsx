@@ -9,11 +9,11 @@ import {
   MoreHorizontal, DoorOpen, DoorClosed, Maximize2, Minimize2, Split, Truck, MessageSquarePlus, Pencil
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import type { Tenant, Product, ProductExtra, Order, PaymentConfig, PaymentMethodConfig, StoneConfig, Customer } from "../../../../types";
-import { dineInOrderLabel } from "../../../../types";
+import type { Tenant, Product, ProductExtra, Order, PaymentConfig, PaymentMethodConfig, StoneConfig, Customer, PrintingConfig } from "../../../../types";
+import { dineInOrderLabel, DEFAULT_PRINTING_CONFIG } from "../../../../types";
 import { apiJson } from "../../../../lib/api";
 import { useToast } from "../../../../components";
-import { downloadReceiptPdf, printReceiptPdf } from "../../../../lib/receipt";
+import { downloadReceiptPdf, printReceiptPdf, printCashClosingReportPdf } from "../../../../lib/receipt";
 import socket from "../../../../lib/socket";
 
 const fmt = (n: number) =>
@@ -290,6 +290,52 @@ export default function PDVPanel({
     return () => { socket.off("cash-status-changed", handler); };
   }, [fetchCurrentCash, isWaiterMode]);
 
+  const printingConfig = useMemo<PrintingConfig>(() => {
+    try {
+      return tenant.printingConfig
+        ? { ...DEFAULT_PRINTING_CONFIG, ...JSON.parse(tenant.printingConfig) }
+        : DEFAULT_PRINTING_CONFIG;
+    } catch {
+      return DEFAULT_PRINTING_CONFIG;
+    }
+  }, [tenant.printingConfig]);
+
+  const printOrderAuto = useCallback((order: any) => {
+    const desktop = (window as any).pdvDesktop;
+    const doPrint = (data: any) => {
+      if (desktop?.printReceipt) desktop.printReceipt(data);
+      else printReceiptPdf(data);
+    };
+    const isDineIn = order.orderType === "DINE_IN";
+    const clientCopy = buildReceiptDataFromOrder(order, isDineIn ? "CLIENTE" : undefined);
+    if (clientCopy) doPrint(clientCopy);
+    if (isDineIn && printingConfig.autoPrintEstablishmentCopy) {
+      const establishmentCopy = buildReceiptDataFromOrder(order, "ESTABELECIMENTO");
+      if (establishmentCopy) doPrint(establishmentCopy);
+    }
+  }, [printingConfig]);
+
+  // Toda venda/lançamento criado a partir DESTA aba já imprime na hora, logo depois da
+  // chamada HTTP ter sucesso (ver handleCheckout/handleCreateComanda/handleLaunchOrder) —
+  // sem precisar do socket. Esse Set evita imprimir de novo quando o "order-created" desse
+  // mesmo pedido chega de volta pelo socket (toda aba do tenant recebe o evento, inclusive
+  // quem acabou de criar o pedido).
+  const autoPrintedOrderIds = useRef<Set<string>>(new Set());
+
+  // Pedidos criados por QUALQUER origem (QR Code da mesa/comanda pelo cliente, delivery
+  // público, ou outra aba do PDV/garçom) chegam aqui em tempo real — é o que garante que o
+  // app desktop (Electron) imprime mesmo pedidos que essa aba não iniciou.
+  useEffect(() => {
+    if (!printingConfig.autoPrintOnOrderCreate) return;
+    const handler = (order: any) => {
+      if (!order?.id || autoPrintedOrderIds.current.has(order.id)) return;
+      autoPrintedOrderIds.current.add(order.id);
+      printOrderAuto(order);
+    };
+    socket.on("order-created", handler);
+    return () => { socket.off("order-created", handler); };
+  }, [printingConfig.autoPrintOnOrderCreate, printOrderAuto]);
+
   const handleOpenCash = async () => {
     setCashActionLoading(true);
     setCashError("");
@@ -312,10 +358,30 @@ export default function PDVPanel({
     setCashActionLoading(true);
     setCashError("");
     try {
-      await apiJson(`/api/tenants/${tenant.slug}/cash/close`, {
+      const result = await apiJson<{ summary?: any }>(`/api/tenants/${tenant.slug}/cash/close`, {
         method: "POST",
         body: JSON.stringify({ closingBalance: digitsToNumber(closingBalanceInput) }),
       });
+      if (result?.summary) {
+        let printingConfigNow: PrintingConfig = DEFAULT_PRINTING_CONFIG;
+        try {
+          printingConfigNow = tenant.printingConfig
+            ? { ...DEFAULT_PRINTING_CONFIG, ...JSON.parse(tenant.printingConfig) }
+            : DEFAULT_PRINTING_CONFIG;
+        } catch {}
+        if (printingConfigNow.autoPrintCashClosingReport) {
+          const summaryWithBalance = {
+            ...result.summary,
+            closingBalance: digitsToNumber(closingBalanceInput),
+          };
+          const desktop = (window as any).pdvDesktop;
+          if (desktop?.printCashClosingReport) {
+            desktop.printCashClosingReport(tenant.name, summaryWithBalance);
+          } else {
+            printCashClosingReportPdf(tenant.name, summaryWithBalance, (tenant.receiptPaperWidth === 58 ? 58 : 80) as 58 | 80);
+          }
+        }
+      }
       setShowCloseCashModal(false);
       setClosingBalanceInput("");
       await fetchCurrentCash();
@@ -1052,6 +1118,7 @@ export default function PDVPanel({
           operatorName: operatorName || undefined,
           items: cart.map((i) => ({
             productId: i.product.id,
+            productVariantId: i.productVariantId,
             quantity: i.quantity,
             price: i.price,
             notes: i.notes || undefined,
@@ -1066,6 +1133,10 @@ export default function PDVPanel({
       onOrderCreated?.();
 
       if (createdOrder?.id) {
+        if (printingConfig.autoPrintOnOrderCreate) {
+          autoPrintedOrderIds.current.add(createdOrder.id);
+          printOrderAuto(createdOrder);
+        }
         handleLoadComanda(createdOrder);
         setActiveTab("products");
       } else {
@@ -1085,7 +1156,7 @@ export default function PDVPanel({
     if (cart.length === 0 || (!selectedTableId && !selectedComandaId)) return;
     setIsProcessing(true);
     try {
-      await apiJson(`/api/tenants/${tenant.slug}/pdv/order`, {
+      const launchedOrder = await apiJson<Order>(`/api/tenants/${tenant.slug}/pdv/order`, {
         method: "POST",
         body: JSON.stringify({
           customerName: customerName || currentContextLabel || "Comanda",
@@ -1096,10 +1167,14 @@ export default function PDVPanel({
           status: "PENDING",
           paymentMethod: "CASH",
           operatorName: operatorName || undefined,
-          items: cart.map((item) => ({ productId: item.product.id, quantity: item.quantity, price: item.price, notes: item.notes || undefined })),
+          items: cart.map((item) => ({ productId: item.product.id, productVariantId: item.productVariantId, quantity: item.quantity, price: item.price, notes: item.notes || undefined })),
           ...(isWaiterMode ? { source: "waiter" } : {}),
         }),
       });
+      if (printingConfig.autoPrintOnOrderCreate && launchedOrder?.id) {
+        autoPrintedOrderIds.current.add(launchedOrder.id);
+        printOrderAuto(launchedOrder);
+      }
       setCart([]);
       setDiscountValue("");
       setAmountReceived("");
@@ -1206,6 +1281,10 @@ export default function PDVPanel({
         body: JSON.stringify(orderData),
       }) as { id: string; [key: string]: unknown };
       lastOrderRef.current = order;
+      if (printingConfig.autoPrintOnOrderCreate && (order as any).id) {
+        autoPrintedOrderIds.current.add((order as any).id);
+        printOrderAuto(order);
+      }
 
       if (isStone) {
         setIsProcessing(false);
@@ -1317,12 +1396,19 @@ export default function PDVPanel({
     }
   };
 
-  const buildReceiptData = () => {
-    const order = lastOrderRef.current;
+  // Nome do item pro recibo — inclui a variação escolhida (ex: "Pizza (G)") quando houver,
+  // senão o pedido impresso não mostra qual tamanho/opção foi vendido.
+  const itemDisplayName = (i: any) => {
+    const base = i.product?.name || "";
+    const variantName = i.productVariant?.name;
+    return variantName ? `${base} (${variantName})` : base;
+  };
+
+  const buildReceiptDataFromOrder = (order: any, copyLabel?: "CLIENTE" | "ESTABELECIMENTO") => {
     if (!order) return null;
     const items = (order.items || []).map((i: any) => ({
       quantity: i.quantity,
-      name: i.product?.name || "",
+      name: itemDisplayName(i),
       price: i.price,
       notes: i.notes || undefined,
     }));
@@ -1341,6 +1427,7 @@ export default function PDVPanel({
       paperWidthMm: (tenant.receiptPaperWidth === 58 ? 58 : 80) as 58 | 80,
       createdAt: order.createdAt ? new Date(order.createdAt) : new Date(),
       customerName: (!isNumericName || order.tableId) ? order.customerName : undefined,
+      copyLabel,
       items,
       subtotal: orderSubtotal,
       discountAmount: order.discount || 0,
@@ -1356,6 +1443,8 @@ export default function PDVPanel({
       paymentSplits: order.paymentMethod === "SPLIT" ? paymentDetail.splits : undefined,
     };
   };
+
+  const buildReceiptData = () => buildReceiptDataFromOrder(lastOrderRef.current);
 
   const handleDownloadReceipt = () => {
     const data = buildReceiptData();
@@ -2923,21 +3012,35 @@ export default function PDVPanel({
                         ) : (
                           normalizedPaymentSplits.map((split) => {
                             return (
-                              <div key={split.id} className="flex items-start gap-2 bg-white/5 rounded-lg px-2.5 py-2">
-                                <div className="flex-1 min-w-0 space-y-1">
-                                  <select
-                                    value={split.method}
-                                    onChange={(e) => handleUpdateSplitMethod(split.id, e.target.value as SplitPaymentMethod)}
-                                    className="w-full bg-black/20 border border-white/10 rounded-md py-1 px-2 text-[10px] font-black text-white outline-none focus:border-[#C9A227]"
-                                  >
-                                    {PAYMENT_METHODS.filter((method) => method.id !== "STONE").map((method) => (
-                                      <option key={method.id} value={method.id}>{method.label}</option>
-                                    ))}
-                                  </select>
+              <div key={split.id} className="flex items-start gap-2 bg-white/5 rounded-lg px-2.5 py-2">
+                                <div className="flex-1 min-w-0 space-y-1.5">
+                                  <div className="grid grid-cols-4 gap-1">
+                                    {PAYMENT_METHODS.filter((method) => method.id !== "STONE").map((method) => {
+                                      const Icon = method.icon;
+                                      const active = split.method === method.id;
+                                      return (
+                                        <button
+                                          key={method.id}
+                                          type="button"
+                                          onClick={() => handleUpdateSplitMethod(split.id, method.id as SplitPaymentMethod)}
+                                          title={method.label}
+                                          className={`flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-md border transition-all ${
+                                            active
+                                              ? "bg-[#C9A227] border-[#C9A227]"
+                                              : "bg-black/20 border-white/10 hover:bg-white/10"
+                                          }`}
+                                        >
+                                          <Icon className={`w-3 h-3 ${active ? "text-black" : "text-white/60"}`} />
+                                          <span className={`text-[7px] font-black uppercase leading-none ${active ? "text-black" : "text-white/60"}`}>{method.label}</span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
                                   {getBrandsForPaymentMethod(split.method).length > 0 && (
                                     <select
                                       value={split.cardBrand || ""}
                                       onChange={(e) => handleUpdateSplitCardBrand(split.id, e.target.value)}
+                                      style={{ colorScheme: "dark" }}
                                       className="w-full bg-black/20 border border-white/10 rounded-md py-1 px-2 text-[10px] font-black text-white outline-none focus:border-[#C9A227]"
                                     >
                                       <option value="">Selecione a bandeira</option>
@@ -2950,6 +3053,7 @@ export default function PDVPanel({
                                     <select
                                       value={split.installments || 1}
                                       onChange={(e) => handleUpdateSplitInstallments(split.id, Number(e.target.value))}
+                                      style={{ colorScheme: "dark" }}
                                       className="w-full bg-black/20 border border-white/10 rounded-md py-1 px-2 text-[10px] font-black text-white outline-none focus:border-[#C9A227]"
                                     >
                                       {getInstallmentOptionsForMethod(split.method, split.cardBrand).map((option) => (
@@ -3017,6 +3121,7 @@ export default function PDVPanel({
                               <select
                                 value={normalizedCardBrand || ""}
                                 onChange={(e) => setCardBrand(e.target.value)}
+                                style={{ colorScheme: "dark" }}
                                 className="w-full bg-black/20 border border-white/10 rounded-md py-2 px-2.5 text-[10px] font-black text-white outline-none focus:border-[#C9A227]"
                               >
                                 {getBrandsForPaymentMethod(paymentMethod as SplitPaymentMethod).map((brand) => (
@@ -3028,6 +3133,7 @@ export default function PDVPanel({
                               <select
                                 value={installments}
                                 onChange={(e) => setInstallments(Number(e.target.value))}
+                                style={{ colorScheme: "dark" }}
                                 className="w-full bg-black/20 border border-white/10 rounded-md py-2 px-2.5 text-[10px] font-black text-white outline-none focus:border-[#C9A227]"
                               >
                                 {creditInstallmentOptions.map((option) => (

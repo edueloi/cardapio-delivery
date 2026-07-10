@@ -1073,6 +1073,11 @@ const migrations = [
     check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'promotions' AND COLUMN_NAME = 'promo_price'",
     run: "ALTER TABLE promotions ADD COLUMN promo_price DOUBLE NULL",
   },
+  {
+    name: 'add_tenants_printing_config',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenants' AND COLUMN_NAME = 'printing_config'",
+    run: "ALTER TABLE tenants ADD COLUMN printing_config TEXT NULL",
+  },
 ];
 
 async function run() {

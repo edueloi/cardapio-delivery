@@ -17,6 +17,8 @@ export interface ReceiptData {
   customerName?: string;
   isPreCheckout?: boolean;
   paperWidthMm?: 58 | 80;
+  /** "CLIENTE" ou "ESTABELECIMENTO" — impresso em destaque junto com a senha, quando presente. */
+  copyLabel?: "CLIENTE" | "ESTABELECIMENTO";
   items: ReceiptItem[];
   subtotal: number;
   discountAmount?: number;
@@ -74,8 +76,9 @@ function estimateHeight(data: ReceiptData, nameLines: string[], addressLines: st
   y += addressLines.length * 4;
   y += 4; // data
   if (data.orderId) y += 4;
+  if (data.copyLabel) y += 5;
   if (data.tableId) y += 6;
-  else if (data.counterTicketNumber != null) y += 6;
+  else if (data.counterTicketNumber != null) y += 18;
   if (data.customerName) y += 4;
   y += 1 + 5; // linha + espaço
   for (const item of data.items) {
@@ -139,6 +142,14 @@ export function buildReceiptPdf(data: ReceiptData): jsPDF {
     doc.text(`Pedido #${data.orderId.slice(-8).toUpperCase()}`, width / 2, y, { align: "center" });
     y += 4;
   }
+  if (data.copyLabel) {
+    doc.setFont("courier", "bold");
+    doc.setFontSize(9);
+    doc.text(`VIA DO ${data.copyLabel}`, width / 2, y, { align: "center" });
+    y += 5;
+    doc.setFont("courier", "normal");
+    doc.setFontSize(8);
+  }
   if (data.tableId) {
     doc.setFont("courier", "bold");
     doc.setFontSize(width === 58 ? 12 : 14);
@@ -147,11 +158,16 @@ export function buildReceiptPdf(data: ReceiptData): jsPDF {
     doc.setFont("courier", "normal");
     doc.setFontSize(8);
   } else if (data.counterTicketNumber != null) {
+    // Senha em destaque bem maior — é a referência que o cliente usa pra buscar o pedido
+    // no balcão/painel, precisa ser visível de longe, bem mais que o resto do cupom.
     doc.setFont("courier", "bold");
-    doc.setFontSize(width === 58 ? 12 : 14);
-    doc.text(`SENHA ${String(data.counterTicketNumber).padStart(2, "0")}`, width / 2, y + 2, { align: "center" });
-    y += 6;
+    doc.setFontSize(width === 58 ? 22 : 28);
+    doc.text(String(data.counterTicketNumber).padStart(2, "0"), width / 2, y + 8, { align: "center" });
+    y += 10;
     doc.setFont("courier", "normal");
+    doc.setFontSize(width === 58 ? 8 : 9);
+    doc.text("SENHA", width / 2, y, { align: "center" });
+    y += 4;
     doc.setFontSize(8);
   }
   if (data.customerName) {
@@ -172,7 +188,7 @@ export function buildReceiptPdf(data: ReceiptData): jsPDF {
     doc.text(priceStr, width - margin, y, { align: "right" });
     y += 4;
     if (item.notes) {
-      doc.setFont("courier", "italic");
+      doc.setFont("courier", "bolditalic");
       doc.text(`  Obs: ${item.notes}`, margin, y, { maxWidth: width - margin * 2 });
       doc.setFont("courier", "normal");
       y += 4;
@@ -250,6 +266,139 @@ export function buildReceiptPdf(data: ReceiptData): jsPDF {
   doc.text("Obrigado pela preferência!", width / 2, y, { align: "center" });
 
   return doc;
+}
+
+export interface CashClosingSummary {
+  openedAt: string | Date;
+  closedAt?: string | Date;
+  openingBalance: number;
+  closingBalance: number;
+  expectedBalance: number;
+  ordersCount: number;
+  grossTotal: number;
+  salesByMethod: Array<{ method: string; total: number }>;
+  movements: Array<{ type: string; amount: number; description?: string | null }>;
+}
+
+const CASH_METHOD_LABELS: Record<string, string> = {
+  CASH: "Dinheiro",
+  PIX: "PIX",
+  CREDIT: "Cartão de Crédito",
+  DEBIT: "Cartão de Débito",
+  VR: "Vale Refeição",
+};
+
+function cashMethodLabel(method: string): string {
+  if (method.startsWith("STONE_")) return `Maquininha (${method.replace("STONE_", "")})`;
+  return CASH_METHOD_LABELS[method] || method;
+}
+
+export function buildCashClosingReportPdf(
+  tenantName: string,
+  summary: CashClosingSummary,
+  paperWidthMm?: 58 | 80
+): jsPDF {
+  const width = paperWidthMm === 58 ? 58 : 80;
+  const margin = width === 58 ? 3 : 5;
+  const cols = width === 58 ? 32 : 42;
+
+  const sangrias = summary.movements.filter((m) => m.type === "SANGRIA");
+  const suprimentos = summary.movements.filter((m) => m.type === "SUPRIMENTO");
+  const sangriaTotal = sangrias.reduce((s, m) => s + m.amount, 0);
+  const suprimentoTotal = suprimentos.reduce((s, m) => s + m.amount, 0);
+
+  let lines = 14; // cabeçalho + totais fixos
+  lines += summary.salesByMethod.length;
+  lines += sangrias.length + suprimentos.length + 2;
+
+  const doc = new jsPDF({ unit: "mm", format: [width, 20 + lines * 4.5] });
+  let y = 8;
+
+  doc.setFont("courier", "bold");
+  doc.setFontSize(width === 58 ? 10 : 12);
+  doc.text(tenantName, width / 2, y, { align: "center" });
+  y += 5;
+  doc.text("FECHAMENTO DE CAIXA", width / 2, y, { align: "center" });
+  y += 5;
+
+  doc.setFont("courier", "normal");
+  doc.setFontSize(8);
+  const openedStr = new Date(summary.openedAt).toLocaleString("pt-BR");
+  const closedStr = summary.closedAt ? new Date(summary.closedAt).toLocaleString("pt-BR") : new Date().toLocaleString("pt-BR");
+  doc.text(`Abertura: ${openedStr}`, margin, y); y += 4;
+  doc.text(`Fechamento: ${closedStr}`, margin, y); y += 4;
+
+  y += 1;
+  doc.line(margin, y, width - margin, y);
+  y += 5;
+
+  doc.text(`Pedidos no turno: ${summary.ordersCount}`, margin, y); y += 4;
+  doc.text("Total vendido", margin, y);
+  doc.text(fmtMoney(summary.grossTotal), width - margin, y, { align: "right" });
+  y += 5;
+
+  if (summary.salesByMethod.length > 0) {
+    doc.setFont("courier", "bold");
+    doc.text("Por forma de pagamento:", margin, y);
+    doc.setFont("courier", "normal");
+    y += 4;
+    for (const entry of summary.salesByMethod) {
+      doc.text(`  ${cashMethodLabel(entry.method)}`, margin, y);
+      doc.text(fmtMoney(entry.total), width - margin, y, { align: "right" });
+      y += 4;
+    }
+    y += 1;
+  }
+
+  doc.line(margin, y, width - margin, y);
+  y += 5;
+
+  doc.text("Fundo de abertura", margin, y);
+  doc.text(fmtMoney(summary.openingBalance), width - margin, y, { align: "right" });
+  y += 4;
+
+  if (sangrias.length > 0) {
+    doc.text("Sangrias", margin, y);
+    doc.text(`-${fmtMoney(sangriaTotal)}`, width - margin, y, { align: "right" });
+    y += 4;
+  }
+  if (suprimentos.length > 0) {
+    doc.text("Suprimentos", margin, y);
+    doc.text(`+${fmtMoney(suprimentoTotal)}`, width - margin, y, { align: "right" });
+    y += 4;
+  }
+
+  y += 1;
+  doc.line(margin, y, width - margin, y);
+  y += 6;
+
+  doc.setFont("courier", "bold");
+  doc.setFontSize(10);
+  doc.text("Esperado em caixa", margin, y);
+  doc.text(fmtMoney(summary.expectedBalance), width - margin, y, { align: "right" });
+  y += 5;
+  doc.text("Contado", margin, y);
+  doc.text(fmtMoney(summary.closingBalance), width - margin, y, { align: "right" });
+  y += 5;
+  const diff = summary.closingBalance - summary.expectedBalance;
+  doc.text(diff < 0 ? "Falta" : "Sobra", margin, y);
+  doc.text(fmtMoney(Math.abs(diff)), width - margin, y, { align: "right" });
+  y += 6;
+
+  doc.setFont("courier", "normal");
+  doc.setFontSize(8);
+  doc.line(margin, y, width - margin, y);
+  y += 5;
+  doc.text("Use este resumo para conferir o caixa.", width / 2, y, { align: "center" });
+
+  return doc;
+}
+
+export function printCashClosingReportPdf(tenantName: string, summary: CashClosingSummary, paperWidthMm?: 58 | 80) {
+  const doc = buildCashClosingReportPdf(tenantName, summary, paperWidthMm);
+  doc.autoPrint();
+  const blobUrl = doc.output("bloburl");
+  window.open(blobUrl as unknown as string, "_blank");
 }
 
 export function downloadReceiptPdf(data: ReceiptData) {

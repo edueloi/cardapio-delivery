@@ -43,11 +43,13 @@ import {
 import { apiJson } from "../../../../lib/api";
 import {
   DeliveryConfig,
+  DEFAULT_PRINTING_CONFIG,
   DisplayPanelConfig,
   FiscalConfig,
   KmRange,
   PaymentConfig,
   PaymentMethodConfig,
+  PrintingConfig,
   StoneConfig,
   Tenant,
 } from "../../../../types";
@@ -133,10 +135,16 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
     catch { return DEFAULT_DISPLAY_PANEL; }
   });
 
+  const [printing, setPrinting] = useState<PrintingConfig>(() => {
+    try { return tenant?.printingConfig ? { ...DEFAULT_PRINTING_CONFIG, ...JSON.parse(tenant.printingConfig) } : DEFAULT_PRINTING_CONFIG; }
+    catch { return DEFAULT_PRINTING_CONFIG; }
+  });
+
   useEffect(() => {
     if (tenant) {
       setForm({ name: tenant.name || "", description: tenant.description || "", logoUrl: tenant.logoUrl || "", whatsapp: maskPhone(tenant.whatsapp) || "", isOpen: tenant.isOpen ?? true, isDeliveryOpen: tenant.isDeliveryOpen ?? true, orderMode: (tenant.orderMode ?? "DELIVERY_ONLY") as "DELIVERY_ONLY" | "PREORDER_ONLY" | "BOTH", scheduleMode: tenant.scheduleMode ?? false, scheduleType: (tenant.scheduleType ?? "CLIENT_CHOOSES") as "CLIENT_CHOOSES" | "OWNER_DEFINES", scheduleNotes: tenant.scheduleNotes || "", waiterNotifyOnReady: tenant.waiterNotifyOnReady ?? true, requireCashRegister: tenant.requireCashRegister ?? true, receiptPaperWidth: (tenant.receiptPaperWidth ?? 80) as 58 | 80 });
       setScheduleDays(parseScheduleDays(tenant.scheduleDays));
+      try { setPrinting(tenant.printingConfig ? { ...DEFAULT_PRINTING_CONFIG, ...JSON.parse(tenant.printingConfig) } : DEFAULT_PRINTING_CONFIG); } catch { setPrinting(DEFAULT_PRINTING_CONFIG); }
       setAddr(parseAddress(tenant.address) ?? { ...EMPTY_ADDR });
       try { setHours(tenant.businessHours ? JSON.parse(tenant.businessHours) : DEFAULT_HOURS); } catch { setHours(DEFAULT_HOURS); }
       setDelivery(parseDeliveryConfig(tenant.deliveryConfig));
@@ -178,6 +186,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
           stoneConfig: JSON.stringify(stone),
           fiscalConfig: JSON.stringify(fiscal),
           displayPanelConfig: JSON.stringify(displayPanel),
+          printingConfig: JSON.stringify(printing),
           scheduleDays: JSON.stringify(scheduleDays),
         })
       });
@@ -341,6 +350,29 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                     ]}
                     size="sm"
                   />
+                </div>
+                <div className="flex items-center justify-between gap-4 py-5 border-t border-zinc-100">
+                  <div>
+                    <p className="text-sm font-black text-slate-900">Imprimir Automaticamente ao Criar Pedido</p>
+                    <p className="text-xs text-slate-500 mt-1">Assim que um pedido é criado (PDV, comanda/mesa via QR Code, delivery), imprime sozinho na impressora térmica configurada no app desktop — sem precisar clicar em "Imprimir".</p>
+                  </div>
+                  <Switch checked={printing.autoPrintOnOrderCreate} onCheckedChange={v => setPrinting(p => ({ ...p, autoPrintOnOrderCreate: v }))} />
+                </div>
+                {printing.autoPrintOnOrderCreate && (
+                  <div className="flex items-center justify-between gap-4 py-5 border-t border-zinc-100">
+                    <div>
+                      <p className="text-sm font-black text-slate-900">2ª Via para o Estabelecimento</p>
+                      <p className="text-xs text-slate-500 mt-1">Em pedidos de PDV, comanda e mesa, imprime uma segunda via (marcada "VIA DO ESTABELECIMENTO") além da via do cliente. Pedidos de delivery imprimem só 1 via.</p>
+                    </div>
+                    <Switch checked={printing.autoPrintEstablishmentCopy} onCheckedChange={v => setPrinting(p => ({ ...p, autoPrintEstablishmentCopy: v }))} />
+                  </div>
+                )}
+                <div className="flex items-center justify-between gap-4 py-5 border-t border-zinc-100">
+                  <div>
+                    <p className="text-sm font-black text-slate-900">Imprimir Resumo ao Fechar Caixa</p>
+                    <p className="text-xs text-slate-500 mt-1">Ao fechar o caixa, imprime automaticamente o resumo consolidado do turno (totais por forma de pagamento, quantidade de pedidos, sangrias/suprimentos) para conferência.</p>
+                  </div>
+                  <Switch checked={printing.autoPrintCashClosingReport} onCheckedChange={v => setPrinting(p => ({ ...p, autoPrintCashClosingReport: v }))} />
                 </div>
                 <DesktopPrinterSettings />
                 {/* ── Modo de Operação (Delivery / Encomenda / Misto) ── */}

@@ -33,6 +33,7 @@ const CMD = {
   alignRight: `${ESC}a2`,
   sizeNormal: `${GS}!\x00`,
   sizeDouble: `${GS}!\x11`,
+  sizeTriple: `${GS}!\x22`,
   cut: `${GS}V\x01`,
   feed: (n) => "\n".repeat(n),
 };
@@ -122,10 +123,17 @@ function buildEscPosBuffer(data) {
   out += dateStr + "\n";
   if (data.orderId) out += `Pedido #${String(data.orderId).slice(-8).toUpperCase()}\n`;
 
+  if (data.copyLabel) {
+    out += CMD.boldOn + `VIA DO ${data.copyLabel}\n` + CMD.boldOff;
+  }
+
   if (data.counterTicketNumber != null) {
-    out += "\n" + CMD.boldOn + CMD.sizeDouble;
-    out += `SENHA ${String(data.counterTicketNumber).padStart(2, "0")}\n`;
-    out += CMD.sizeNormal + CMD.boldOff;
+    // Senha bem grande — é o que o cliente usa pra identificar o pedido no balcão/painel.
+    out += "\n" + CMD.boldOn + CMD.sizeTriple;
+    out += `${String(data.counterTicketNumber).padStart(2, "0")}\n`;
+    out += CMD.sizeNormal;
+    out += "SENHA\n";
+    out += CMD.boldOff;
   }
 
   if (data.customerName) out += `Cliente: ${data.customerName}\n`;
@@ -143,7 +151,9 @@ function buildEscPosBuffer(data) {
       out += twoCol(label, priceStr, cols);
     }
     if (item.notes) {
+      out += CMD.boldOn;
       for (const line of wrapLine(`  Obs: ${item.notes}`, cols)) out += line + "\n";
+      out += CMD.boldOff;
     }
   }
 
@@ -281,6 +291,64 @@ async function printReceipt(data, mainWindow) {
   await sendRawToPrinter(buffer, config.name);
 }
 
+function buildCashClosingEscPosBuffer(tenantName, summary) {
+  const config = getPrinterConfig();
+  const width = config.widthMm === 58 ? 58 : 80;
+  const cols = CHARS_PER_LINE[width];
+
+  const sangrias = (summary.movements || []).filter((m) => m.type === "SANGRIA");
+  const suprimentos = (summary.movements || []).filter((m) => m.type === "SUPRIMENTO");
+  const sangriaTotal = sangrias.reduce((s, m) => s + m.amount, 0);
+  const suprimentoTotal = suprimentos.reduce((s, m) => s + m.amount, 0);
+
+  let out = CMD.init + CMD.codepagePortuguese;
+  out += CMD.alignCenter + CMD.boldOn;
+  out += tenantName + "\n";
+  out += "FECHAMENTO DE CAIXA\n";
+  out += CMD.boldOff + CMD.alignLeft;
+
+  out += `Abertura: ${new Date(summary.openedAt).toLocaleString("pt-BR")}\n`;
+  out += `Fechamento: ${new Date(summary.closedAt || Date.now()).toLocaleString("pt-BR")}\n`;
+  out += "-".repeat(cols) + "\n";
+
+  out += `Pedidos no turno: ${summary.ordersCount}\n`;
+  out += twoCol("Total vendido", fmtMoney(summary.grossTotal), cols);
+
+  if ((summary.salesByMethod || []).length > 0) {
+    out += CMD.boldOn + "Por forma de pagamento:\n" + CMD.boldOff;
+    for (const entry of summary.salesByMethod) {
+      out += twoCol(`  ${paymentLabel(entry.method)}`, fmtMoney(entry.total), cols);
+    }
+  }
+
+  out += "-".repeat(cols) + "\n";
+  out += twoCol("Fundo de abertura", fmtMoney(summary.openingBalance), cols);
+  if (sangrias.length > 0) out += twoCol("Sangrias", `-${fmtMoney(sangriaTotal)}`, cols);
+  if (suprimentos.length > 0) out += twoCol("Suprimentos", `+${fmtMoney(suprimentoTotal)}`, cols);
+
+  out += "-".repeat(cols) + "\n";
+  out += CMD.boldOn;
+  out += twoCol("Esperado em caixa", fmtMoney(summary.expectedBalance), cols);
+  out += twoCol("Contado", fmtMoney(summary.closingBalance), cols);
+  const diff = summary.closingBalance - summary.expectedBalance;
+  out += twoCol(diff < 0 ? "Falta" : "Sobra", fmtMoney(Math.abs(diff)), cols);
+  out += CMD.boldOff;
+
+  out += CMD.feed(5);
+  out += CMD.cut;
+
+  return iconv.encode(out, "cp860");
+}
+
+async function printCashClosingReport(tenantName, summary) {
+  const config = getPrinterConfig();
+  if (!config.name) {
+    throw new Error("Nenhuma impressora configurada. Aperte F9 para escolher a impressora térmica.");
+  }
+  const buffer = buildCashClosingEscPosBuffer(tenantName, summary);
+  await sendRawToPrinter(buffer, config.name);
+}
+
 async function testPrint(mainWindow) {
   await printReceipt({
     tenantName: "Teste de Impressão",
@@ -296,4 +364,4 @@ async function testPrint(mainWindow) {
   }, mainWindow);
 }
 
-module.exports = { printReceipt, testPrint, getPrinterConfig, setPrinterConfig, listPrinters };
+module.exports = { printReceipt, printCashClosingReport, testPrint, getPrinterConfig, setPrinterConfig, listPrinters };
