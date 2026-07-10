@@ -554,7 +554,7 @@ export default function TableMenuView() {
                         {promotions[promoIndex].product && (
                           <div className="text-right">
                             <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest mb-1">A partir de</p>
-                            <p className="text-3xl font-black text-white tracking-tighter">{fmt(promotions[promoIndex].product.price)}</p>
+                            <p className="text-3xl font-black text-white tracking-tighter">{fmt(promotions[promoIndex].promoPrice || promotions[promoIndex].product.price)}</p>
                           </div>
                         )}
                       </div>
@@ -597,7 +597,7 @@ export default function TableMenuView() {
                           <h2 className="text-xl font-serif text-white tracking-tight">{promotions[promoIndex].title}</h2>
                         </div>
                         {promotions[promoIndex].product && (
-                          <p className="text-2xl font-black text-white">{fmt(promotions[promoIndex].product.price)}</p>
+                          <p className="text-2xl font-black text-white">{fmt(promotions[promoIndex].promoPrice || promotions[promoIndex].product.price)}</p>
                         )}
                       </div>
                       {promotions.length > 1 && (

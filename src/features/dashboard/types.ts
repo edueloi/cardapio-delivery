@@ -24,6 +24,7 @@ export type DashboardTabId =
   | "entries"
   | "suppliers"
   | "waiter"
+  | "manual"
   | "ifood";
 
 export type DashboardOrderTabId = "pending" | "preparing" | "shipped";
@@ -52,6 +53,7 @@ export const TAB_TO_PATH: Record<DashboardTabId, string> = {
   "entries": "entradas-saidas",
   "suppliers": "fornecedores",
   "waiter": "garcom",
+  "manual": "manual",
   "ifood": "ifood",
 };
 
@@ -86,7 +88,7 @@ export const ALL_PERMISSION_TABS: DashboardTabId[] = [
   "overview", "pos", "waiter", "live-orders", "scheduled", "kds", "tables",
   "history", "menu", "inventory", "production", "suppliers", "finance", "entries", "reports",
   "customers", "loyalty", "promotions", "whatsapp",
-  "profile", "staff", "downloads",
+  "profile", "staff", "downloads", "manual",
 ];
 
 // Tabs always visible to OWNER, never to non-owners regardless of permissions

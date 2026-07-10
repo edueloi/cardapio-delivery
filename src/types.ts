@@ -88,12 +88,13 @@ export function cleanCustomerName(customerName?: string | null): string {
 }
 
 // Rótulo exibido nos painéis (Cozinha, Pedidos, PDV, Garçom) para um pedido DINE_IN:
-// mesa numerada ("Mesa 5"), balcão com senha ("Balcão — Senha 12 — João"), ou fallback.
+// mesa numerada ("Mesa 5"), balcão com senha ("Senha 12 — João"), ou fallback.
 export function dineInOrderLabel(order: { tableId?: string | null; counterTicketNumber?: number | null; customerName?: string }): string {
   if (order.counterTicketNumber != null) {
     const cleanName = cleanCustomerName(order.customerName);
-    const name = cleanName ? ` — ${cleanName}` : "";
-    return `Balcão — Senha ${String(order.counterTicketNumber).padStart(2, "0")}${name}`;
+    const isRedundant = cleanName.toLowerCase().startsWith("senha ") || cleanName.toLowerCase() === "venda pdv" || cleanName.toLowerCase().startsWith("balcão");
+    const name = (cleanName && !isRedundant) ? ` — ${cleanName}` : "";
+    return `Senha ${String(order.counterTicketNumber).padStart(2, "0")}${name}`;
   }
   if (order.tableId) return `Mesa ${order.tableId}`;
   return "Comanda";
@@ -236,6 +237,12 @@ export interface Account {
   id: string;
   name: string;
   email: string;
+  username?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  avatarUrl?: string | null;
+  birthDate?: string | null;
+  isSuperAdmin?: boolean;
 }
 
 export interface TenantMembership {

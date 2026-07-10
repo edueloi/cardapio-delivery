@@ -85,6 +85,36 @@ const migrations = [
     run: "ALTER TABLE accounts ADD COLUMN is_super_admin TINYINT(1) NOT NULL DEFAULT 0",
   },
   {
+    name: 'add_accounts_username',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'accounts' AND COLUMN_NAME = 'username'",
+    run: "ALTER TABLE accounts ADD COLUMN username VARCHAR(191) NULL",
+  },
+  {
+    name: 'add_accounts_username_unique',
+    check: "SELECT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'accounts' AND INDEX_NAME = 'accounts_username_key'",
+    run: "CREATE UNIQUE INDEX accounts_username_key ON accounts (username)",
+  },
+  {
+    name: 'add_accounts_phone',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'accounts' AND COLUMN_NAME = 'phone'",
+    run: "ALTER TABLE accounts ADD COLUMN phone VARCHAR(50) NULL",
+  },
+  {
+    name: 'add_accounts_address',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'accounts' AND COLUMN_NAME = 'address'",
+    run: "ALTER TABLE accounts ADD COLUMN address TEXT NULL",
+  },
+  {
+    name: 'add_accounts_avatar_url',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'accounts' AND COLUMN_NAME = 'avatar_url'",
+    run: "ALTER TABLE accounts ADD COLUMN avatar_url VARCHAR(191) NULL",
+  },
+  {
+    name: 'add_accounts_birth_date',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'accounts' AND COLUMN_NAME = 'birth_date'",
+    run: "ALTER TABLE accounts ADD COLUMN birth_date DATE NULL",
+  },
+  {
     name: 'add_orders_scheduled_date',
     check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'scheduled_date'",
     run: "ALTER TABLE orders ADD COLUMN scheduled_date DATE NULL",
@@ -1032,6 +1062,16 @@ const migrations = [
     name: 'add_customers_cpf',
     check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'customers' AND COLUMN_NAME = 'cpf'",
     run: "ALTER TABLE customers ADD COLUMN cpf VARCHAR(191) NULL",
+  },
+  {
+    name: 'add_orders_billed',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'billed'",
+    run: "ALTER TABLE orders ADD COLUMN billed TINYINT(1) NOT NULL DEFAULT 0",
+  },
+  {
+    name: 'add_promotions_promo_price',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'promotions' AND COLUMN_NAME = 'promo_price'",
+    run: "ALTER TABLE promotions ADD COLUMN promo_price DOUBLE NULL",
   },
 ];
 

@@ -10,6 +10,8 @@ interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "
   label?: string;
   error?: string;
   hint?: string;
+  hintClassName?: string;
+  status?: "success" | "error" | "default";
   iconLeft?: React.ReactNode;
   iconRight?: React.ReactNode;
   addonLeft?: React.ReactNode;
@@ -24,6 +26,8 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
       label,
       error,
       hint,
+      hintClassName,
+      status = "default",
       iconLeft,
       iconRight,
       addonLeft,
@@ -65,7 +69,8 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             "group relative flex items-stretch overflow-hidden transition-all duration-200",
             "rounded-[10px] bg-zinc-50 border border-zinc-200 shadow-sm",
             "focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-500/10 focus-within:bg-white",
-            error && "border-red-400 focus-within:border-red-500 focus-within:ring-red-500/10 bg-red-50/30",
+            status === "success" && "border-emerald-400 focus-within:border-emerald-500 focus-within:ring-emerald-500/10 bg-emerald-50/10",
+            (status === "error" || error) && "border-red-400 focus-within:border-red-500 focus-within:ring-red-500/10 bg-red-50/30",
             size === "sm" && "h-9"
           )}
         >
@@ -117,7 +122,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           <p className="text-[11px] font-semibold text-red-500">{error}</p>
         )}
         {hint && !error && (
-          <p className="text-[11px] text-zinc-400">{hint}</p>
+          <p className={cn("text-[11px] text-zinc-400", hintClassName)}>{hint}</p>
         )}
       </div>
     );

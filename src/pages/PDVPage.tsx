@@ -6,8 +6,7 @@ import socket from "../lib/socket";
 import { playNotificationSound, playNewOrderSound, playKitchenReadySound } from "../lib/notificationSound";
 import type { Order, Tenant } from "../types";
 import { dineInOrderLabel } from "../types";
-import PDVPanel from "../features/dashboard/PDVPanel";
-import WaiterPanel from "../features/dashboard/WaiterPanel";
+import { PDVPanel, WaiterPanel } from "../features/dashboard/pages";
 import { ShoppingBag, X, BellRing } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 

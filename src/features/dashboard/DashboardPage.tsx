@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { DashboardShell, useToast } from "../../components";
 import { apiFetch, apiJson, AuthError } from "../../lib/api";
@@ -10,7 +10,7 @@ import DashboardContent from "./DashboardContent";
 import { DASHBOARD_NAVIGATION } from "./config/navigation";
 import { type DashboardOrderTabId, type DashboardTabId, type MyMembership, PATH_TO_TAB, TAB_TO_PATH, canAccess, OWNER_ONLY_TABS, ALL_PERMISSION_TABS } from "./types";
 import { motion, AnimatePresence } from "motion/react";
-import { Bell, BellRing, Receipt, ShoppingBag, X } from "lucide-react";
+import { AlertCircle, Bell, BellRing, CheckCircle2, ChefHat, Clock, Receipt, ShoppingBag, X } from "lucide-react";
 
 export default function DashboardPage() {
   const { slug, tab: tabParam, orderId } = useParams<{ slug: string; tab?: string; orderId?: string }>();
@@ -27,6 +27,7 @@ export default function DashboardPage() {
   const [waiterCalls, setWaiterCalls] = useState<Array<{ tableId: string; customerName: string; note: string; requestBill: boolean; timestamp: number }>>([]);
   const [newOrderAlerts, setNewOrderAlerts] = useState<Array<{ id: string; customerName: string; orderType: string; total: number; timestamp: number }>>([]);
   const [kitchenReadyAlerts, setKitchenReadyAlerts] = useState<Array<{ id: string; label: string; timestamp: number }>>([]);
+  const tenantRef = useRef<Tenant | null>(null);
 
   const activeTab: DashboardTabId = (tabParam ? PATH_TO_TAB[tabParam] : undefined) ?? (orderId ? "history" : "overview");
 
@@ -36,6 +37,10 @@ export default function DashboardPage() {
 
   // Quando o membro não tem acesso à tela padrão (ex: operador de PDV sem permissão em "Visão Geral"),
   // manda direto para a primeira tela que ele pode ver, em vez de mostrar "Acesso restrito".
+  useEffect(() => {
+    tenantRef.current = tenant;
+  }, [tenant]);
+
   useEffect(() => {
     if (!membership || tabParam) return;
     if (canAccess(membership, activeTab)) return;
@@ -52,7 +57,9 @@ export default function DashboardPage() {
     }
   };
 
-  const fetchTenant = async () => {
+  const fetchTenant = async (options?: { background?: boolean }) => {
+    const background = options?.background === true;
+
     if (!slug) {
       setTenant(null);
       setOrders([]);
@@ -61,7 +68,8 @@ export default function DashboardPage() {
     }
 
     // Only show full loading if we don't have a tenant yet or slug changed
-    if (!tenant || tenant.slug !== slug) {
+    const currentTenant = tenantRef.current;
+    if (!background && (!currentTenant || currentTenant.slug !== slug)) {
       setLoading(true);
     }
 
@@ -83,9 +91,11 @@ export default function DashboardPage() {
         return;
       }
       // Erro transitório (servidor reiniciando) — tenta novamente em 3s
-      setTimeout(() => void fetchTenant(), 3000);
+      setTimeout(() => void fetchTenant({ background }), 3000);
     } finally {
-      setLoading(false);
+      if (!background) {
+        setLoading(false);
+      }
     }
   };
 
@@ -106,11 +116,15 @@ export default function DashboardPage() {
         if (!Array.isArray(prev)) return [];
         const oldOrder = prev.find((o) => o.id === updatedOrder.id);
         if (updatedOrder.kitchenReady && (!oldOrder || !oldOrder.kitchenReady)) {
-          playKitchenReadySound();
           const who = updatedOrder.orderType === "DINE_IN"
             ? (updatedOrder.tableId ? `Mesa ${updatedOrder.tableId}` : `Senha ${String(updatedOrder.counterTicketNumber).padStart(2, "0")}`)
             : updatedOrder.customerName;
-          setKitchenReadyAlerts((alerts) => [{ id: updatedOrder.id, label: who, timestamp: Date.now() }, ...alerts]);
+            
+          setKitchenReadyAlerts((alerts) => {
+            if (alerts.some(a => a.label === who)) return alerts;
+            playKitchenReadySound();
+            return [{ id: updatedOrder.id, label: who, timestamp: Date.now() + Math.random() }, ...alerts];
+          });
         }
         return prev.map((order) => (order.id === updatedOrder.id ? updatedOrder : order));
       });
@@ -156,7 +170,7 @@ export default function DashboardPage() {
     // Cardápio/estoque mudou (em qualquer aba, dispositivo ou usuário) — recarrega
     // a árvore completa do tenant para manter tudo sincronizado sem precisar de F5.
     const handleMenuUpdated = () => {
-      void fetchTenant();
+      void fetchTenant({ background: true });
     };
 
     // Comanda pronta pra servir — dispara em qualquer tela do dashboard, não só na do
@@ -239,6 +253,32 @@ export default function DashboardPage() {
     })
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
+  const pendingOrders = orders.filter((order) => order.status === "PENDING").length;
+  const preparingOrders = orders.filter((order) => order.status === "PREPARING").length;
+  const shippedOrders = orders.filter((order) => order.status === "SHIPPED").length;
+  const delayedOrders = orders.filter((order) => (order.status === "PENDING" || order.status === "PREPARING") && Date.now() - new Date(order.createdAt).getTime() > 30 * 60000).length;
+
+  const liveOrdersHeaderBadges = activeTab === "live-orders" ? (
+    <>
+      <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-700 rounded-lg border border-amber-200 whitespace-nowrap">
+        <Clock className="w-3.5 h-3.5" />
+        <span className="text-[10px] font-black uppercase tracking-wider">Pendentes: {pendingOrders}</span>
+      </div>
+      <div className="flex items-center gap-1.5 px-2.5 py-1 bg-orange-50 text-orange-700 rounded-lg border border-orange-200 whitespace-nowrap">
+        <ChefHat className="w-3.5 h-3.5" />
+        <span className="text-[10px] font-black uppercase tracking-wider">Em preparo: {preparingOrders}</span>
+      </div>
+      <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-200 whitespace-nowrap">
+        <CheckCircle2 className="w-3.5 h-3.5" />
+        <span className="text-[10px] font-black uppercase tracking-wider">Prontos: {shippedOrders}</span>
+      </div>
+      <div className="flex items-center gap-1.5 px-2.5 py-1 bg-red-50 text-red-600 rounded-lg border border-red-200 whitespace-nowrap">
+        <AlertCircle className="w-3.5 h-3.5" />
+        <span className="text-[10px] font-black uppercase tracking-wider">Atrasados: {delayedOrders}</span>
+      </div>
+    </>
+  ) : null;
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#0D1B3E] flex items-center justify-center">
@@ -279,9 +319,11 @@ export default function DashboardPage() {
     <>
       <DashboardShell
         tenantName={tenant.name}
+        tenantLogoUrl={tenant.logoUrl ?? null}
         slug={slug ?? ""}
         activeTab={activeTab}
         navigationGroups={filteredNavigation}
+        headerBadges={liveOrdersHeaderBadges}
         isMobileMenuOpen={isMobileMenuOpen}
         onToggleMobileMenu={() => setIsMobileMenuOpen((current) => !current)}
         onCloseMobileMenu={() => setIsMobileMenuOpen(false)}

@@ -39,6 +39,9 @@ export interface GridTableProps<T> {
   disableMobileCards?: boolean;
   // Feature: Remove the card wrapper (border/shadow/rounded) from the desktop table — use when the parent already provides the container styling
   noDesktopCard?: boolean;
+  // Feature: Provide expandable body content for desktop tables
+  renderDesktopExpandedContent?: (row: T) => ReactNode;
+  isRowExpanded?: (row: T) => boolean;
   // Pagination — when provided, GridTable renders a Pagination bar at the bottom
   pagination?: {
     total: number;
@@ -177,7 +180,7 @@ export function GridTable<T>({
   data, columns, keyExtractor, selectedIds, onToggleSelect, onToggleSelectAll,
   onRowClick, emptyMessage = 'Nenhum registro encontrado.', sortKey, sortOrder = 'asc', onSort, isLoading = false,
   renderMobileItem, renderMobileExpandedContent, renderMobileAvatar, getMobileBorderClass,
-  disableMobileCards = false, noDesktopCard = false, pagination,
+  disableMobileCards = false, noDesktopCard = false, renderDesktopExpandedContent, isRowExpanded, pagination,
 }: GridTableProps<T>) {
   const isSelectable = !!selectedIds && !!onToggleSelect;
   const allSelected = isSelectable && data.length > 0 && data.every((row) => selectedIds.has(String(keyExtractor(row))));
@@ -274,29 +277,38 @@ export function GridTable<T>({
                 data.map((row, rowIdx) => {
                   const id = String(keyExtractor(row));
                   const isSelected = isSelectable && selectedIds.has(id);
+                  const expanded = isRowExpanded ? isRowExpanded(row) : false;
                   return (
-                    <tr
-                      key={id}
-                      onClick={() => onRowClick?.(row)}
-                      className={cn(
-                        'group transition-colors',
-                        onRowClick && 'cursor-pointer',
-                        isSelected ? 'bg-amber-50/50 hover:bg-amber-100/60' : rowIdx % 2 === 0 ? 'bg-white hover:bg-zinc-50/80' : 'bg-zinc-50/50 hover:bg-zinc-100/60',
+                    <React.Fragment key={id}>
+                      <tr
+                        onClick={() => onRowClick?.(row)}
+                        className={cn(
+                          'group transition-colors',
+                          onRowClick && 'cursor-pointer',
+                          isSelected ? 'bg-amber-50/50 hover:bg-amber-100/60' : rowIdx % 2 === 0 ? 'bg-white hover:bg-zinc-50/80' : 'bg-zinc-50/50 hover:bg-zinc-100/60',
+                        )}
+                      >
+                        {isSelectable && (
+                          <td className="px-4 py-3.5 text-center w-10 shrink-0" onClick={(e) => e.stopPropagation()}>
+                            <button onClick={() => onToggleSelect(id)} className="text-zinc-300 hover:text-amber-500 transition-colors">
+                              {isSelected ? <CheckSquare size={16} className="text-amber-500" /> : <Square size={16} />}
+                            </button>
+                          </td>
+                        )}
+                        {columns.map((col, idx) => (
+                          <td key={idx} className={cn('px-4 py-3.5 text-xs text-zinc-700', col.className)}>
+                            {col.render ? col.render(row) : col.accessor ? String(row[col.accessor] ?? '') : null}
+                          </td>
+                        ))}
+                      </tr>
+                      {expanded && renderDesktopExpandedContent && (
+                        <tr>
+                          <td colSpan={columns.length + (isSelectable ? 1 : 0)} className="p-0 border-b border-zinc-100 bg-zinc-50/30 shadow-inner">
+                            {renderDesktopExpandedContent(row)}
+                          </td>
+                        </tr>
                       )}
-                    >
-                      {isSelectable && (
-                        <td className="px-4 py-3.5 text-center w-10 shrink-0" onClick={(e) => e.stopPropagation()}>
-                          <button onClick={() => onToggleSelect(id)} className="text-zinc-300 hover:text-amber-500 transition-colors">
-                            {isSelected ? <CheckSquare size={16} className="text-amber-500" /> : <Square size={16} />}
-                          </button>
-                        </td>
-                      )}
-                      {columns.map((col, idx) => (
-                        <td key={idx} className={cn('px-4 py-3.5 text-xs text-zinc-700', col.className)}>
-                          {col.render ? col.render(row) : col.accessor ? String(row[col.accessor] ?? '') : null}
-                        </td>
-                      ))}
-                    </tr>
+                    </React.Fragment>
                   );
                 })
               )}

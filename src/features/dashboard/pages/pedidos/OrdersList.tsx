@@ -1,0 +1,571 @@
+﻿import React, { useEffect, useMemo, useState } from "react";
+import {
+  DndContext,
+  DragOverlay,
+  closestCenter,
+  useDraggable,
+  useDroppable,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
+import { useNavigate } from "react-router-dom";
+import { AnimatePresence, motion } from "motion/react";
+import {
+  Bell,
+  CheckCircle2,
+  ChefHat,
+  Clock,
+  Eye,
+  FileText,
+  Phone,
+  Utensils,
+  X,
+} from "lucide-react";
+import { PaymentBadge } from "../../../../components";
+import { Order, dineInOrderLabel } from "../../../../types";
+
+function maskPhone(value: string | null | undefined): string {
+  if (!value) return "";
+  const digits = String(value).replace(/\D/g, "");
+  // Remove 55 prefix if present for masking
+  const clean = (digits.startsWith("55") && digits.length >= 12) ? digits.slice(2) : digits;
+  
+  if (clean.length <= 2) return clean.length > 0 ? `(${clean}` : "";
+  if (clean.length <= 6) return `(${clean.slice(0, 2)}) ${clean.slice(2)}`;
+  if (clean.length <= 10) return `(${clean.slice(0, 2)}) ${clean.slice(2, 6)}-${clean.slice(6)}`;
+  return `(${clean.slice(0, 2)}) ${clean.slice(2, 7)}-${clean.slice(7, 11)}`;
+}
+
+function OrderWaitTime({ createdAt, status }: { createdAt: string, status: string }) {
+  const [wait, setWait] = useState("");
+
+  useEffect(() => {
+    if (status === 'DELIVERED' || status === 'CANCELLED') {
+      setWait("--");
+      return;
+    }
+    const update = () => {
+      const diff = Math.floor((new Date().getTime() - new Date(createdAt).getTime()) / 60000);
+      setWait(`${diff} min`);
+    };
+    update();
+    const interval = setInterval(update, 30000);
+    return () => clearInterval(interval);
+  }, [createdAt, status]);
+
+  if (wait === "--") return null;
+
+  return <span className="text-[10px] font-bold text-orange-500 bg-orange-50 px-2 py-0.5 rounded-full">{wait}</span>;
+}
+
+const STATUS_MAP = {
+  PENDING:          { label: 'Aguardando',   color: 'bg-amber-100 text-amber-700',   border: '#F59E0B' },
+  PREPARING:        { label: 'Em Preparo',   color: 'bg-blue-100 text-blue-700',     border: '#3B82F6' },
+  SHIPPED:          { label: 'Pronto',       color: 'bg-orange-100 text-orange-700', border: '#F97316' },
+  AWAITING_PAYMENT: { label: 'Ag. Caixa',   color: 'bg-purple-100 text-purple-700', border: '#A855F7' },
+  DELIVERED:        { label: 'Concluído',   color: 'bg-green-100 text-green-700',   border: '#22C55E' },
+} as const;
+
+const fmt = (n: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
+
+// ─── Alerta de entrega pendente ───────────────────────────────────────────────
+// Monitora pedidos em AWAITING_PAYMENT e dispara um modal após 5 min pedindo
+// ao operador para confirmar se o pedido já foi entregue ao cliente.
+const ALERT_DELAY_MS = 5 * 60 * 1000; // 5 minutos
+
+function orderSenhaLabel(order: Order): string {
+  if (order.counterTicketNumber != null)
+    return `Senha ${String(order.counterTicketNumber).padStart(2, '0')}`;
+  if (order.tableId) return `Mesa ${order.tableId}`;
+  return `#${order.id.slice(-4).toUpperCase()}`;
+}
+
+function AwaitingPaymentAlert({
+  orders,
+  updateStatus,
+  categoryMap,
+}: {
+  orders: Order[];
+  updateStatus: (id: string, status: string) => void;
+  categoryMap: Record<string, string>;
+}) {
+  const [alertOrder, setAlertOrder] = useState<Order | null>(null);
+  const timerMap = React.useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  useEffect(() => {
+    const awaitingIds = new Set(
+      orders.filter((o) => o.status === 'AWAITING_PAYMENT').map((o) => o.id)
+    );
+    // Cancela timers de pedidos que saíram do estado
+    timerMap.current.forEach((timer, id) => {
+      if (!awaitingIds.has(id)) {
+        clearTimeout(timer);
+        timerMap.current.delete(id);
+      }
+    });
+    // Cria timer para novos pedidos em AWAITING_PAYMENT
+    orders.forEach((order) => {
+      if (order.status !== 'AWAITING_PAYMENT') return;
+      if (timerMap.current.has(order.id)) return;
+      const timer = setTimeout(() => {
+        setAlertOrder((prev) => prev ?? order);
+        timerMap.current.delete(order.id);
+      }, ALERT_DELAY_MS);
+      timerMap.current.set(order.id, timer);
+    });
+  }, [orders]);
+
+  if (!alertOrder) return null;
+
+  const readyTime = new Date(alertOrder.createdAt).toLocaleTimeString([], {
+    hour: '2-digit', minute: '2-digit',
+  });
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        key="delivery-alert"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+        onClick={(e) => { if (e.target === e.currentTarget) setAlertOrder(null); }}
+      >
+        <motion.div
+          initial={{ scale: 0.92, y: 20 }}
+          animate={{ scale: 1, y: 0 }}
+          exit={{ scale: 0.92, y: 20 }}
+          className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden"
+        >
+          {/* Header laranja */}
+          <div className="bg-amber-500 px-5 py-4 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center shrink-0 animate-pulse">
+              <Bell className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <p className="text-sm font-black text-white">Pedido aguardando caixa</p>
+              <p className="text-[11px] text-white/80 font-bold">Já faz mais de 5 minutos — foi entregue?</p>
+            </div>
+            <button onClick={() => setAlertOrder(null)} className="ml-auto p-1.5 rounded-xl hover:bg-white/20 text-white transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Detalhes do pedido */}
+          <div className="px-5 py-4 space-y-3">
+            {/* Senha + hora pronto */}
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-14 h-14 rounded-2xl bg-[#0D1B3E] flex flex-col items-center justify-center leading-none shrink-0">
+                  <span className="text-[8px] font-black uppercase tracking-widest text-white/50">
+                    {alertOrder.counterTicketNumber != null ? 'Senha' : alertOrder.tableId ? 'Mesa' : 'Pedido'}
+                  </span>
+                  <span className="text-xl font-black text-white tabular-nums">
+                    {alertOrder.counterTicketNumber != null
+                      ? String(alertOrder.counterTicketNumber).padStart(2, '0')
+                      : (alertOrder.tableId ?? alertOrder.id.slice(-4).toUpperCase())}
+                  </span>
+                </div>
+                <div>
+                  {alertOrder.customerName && (
+                    <p className="text-sm font-black text-slate-800">{alertOrder.customerName}</p>
+                  )}
+                  <p className="text-xs text-slate-400 font-bold">{orderSenhaLabel(alertOrder)}</p>
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                <p className="text-lg font-black text-slate-800">{fmt(alertOrder.total)}</p>
+                <p className="text-[10px] text-slate-400 font-bold flex items-center gap-1 justify-end mt-0.5">
+                  <Clock className="w-3 h-3" /> Pronto às {readyTime}
+                </p>
+              </div>
+            </div>
+
+            {/* Itens do pedido */}
+            <div className="bg-slate-50 rounded-2xl p-3 space-y-1.5 max-h-40 overflow-y-auto">
+              {alertOrder.items?.slice(0, 6).map((item, idx) => {
+                const catName = item.product?.categoryId ? categoryMap[item.product.categoryId] : undefined;
+                return (
+                  <div key={idx} className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      {catName && (
+                        <span className="text-[8px] font-black uppercase px-1 py-0.5 rounded bg-slate-200 text-slate-500 shrink-0">
+                          {catName}
+                        </span>
+                      )}
+                      <span className="text-xs font-bold text-slate-700 truncate">
+                        {item.quantity}x {item.product?.name}
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-black text-slate-400 shrink-0 tabular-nums">
+                      {fmt(item.price * item.quantity)}
+                    </span>
+                  </div>
+                );
+              })}
+              {(alertOrder.items?.length ?? 0) > 6 && (
+                <p className="text-[10px] text-slate-400 font-bold text-center">
+                  +{(alertOrder.items?.length ?? 0) - 6} item(s)
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Botões de ação */}
+          <div className="px-5 pb-5 flex gap-2">
+            <button
+              onClick={() => setAlertOrder(null)}
+              className="flex-1 py-3 rounded-2xl border-2 border-slate-200 text-[11px] font-black uppercase tracking-widest text-slate-500 hover:bg-slate-50 transition-colors"
+            >
+              Fechar
+            </button>
+            <button
+              onClick={() => {
+                updateStatus(alertOrder.id, 'DELIVERED');
+                setAlertOrder(null);
+              }}
+              className="flex-1 py-3 rounded-2xl bg-emerald-500 text-[11px] font-black uppercase tracking-widest text-white hover:bg-emerald-600 active:scale-95 transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/30"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Já foi entregue
+            </button>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
+
+function KanbanCard({ order, categoryMap, updateStatus, isExpanded, toggleOrder, isOverlay }: { order: Order, categoryMap: any, updateStatus: any, isExpanded: boolean, toggleOrder: () => void, isOverlay?: boolean }) {
+  const isDelayed = Date.now() - new Date(order.createdAt).getTime() > 30 * 60000 && order.status !== 'DELIVERED' && order.status !== 'CANCELLED';
+  const isPaid = order.billed === true;
+
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: order.id,
+    data: { order }
+  });
+
+  const style = transform ? {
+    transform: CSS.Translate.toString(transform),
+    zIndex: isDragging ? 50 : 1,
+    opacity: isDragging ? 0.3 : 1,
+  } : undefined;
+
+  const handleNextAction = (e: any) => {
+    e.stopPropagation();
+    if (order.status === 'PENDING') updateStatus(order.id, 'PREPARING');
+    else if (order.status === 'PREPARING') updateStatus(order.id, 'SHIPPED');
+    else if (order.status === 'SHIPPED') {
+      if (order.orderType === 'DELIVERY') updateStatus(order.id, 'DELIVERED');
+      else updateStatus(order.id, 'AWAITING_PAYMENT');
+    }
+  };
+
+  const actionLabel = order.status === 'PENDING' ? 'Aceitar pedido' 
+                    : order.status === 'PREPARING' ? (order.orderType === 'DELIVERY' ? 'Despachar' : 'Marcar pronto')
+                    : order.status === 'SHIPPED' ? (order.orderType === 'DELIVERY' ? 'Confirmar Entrega' : 'Entregar')
+                    : 'Ação';
+
+  return (
+    <motion.div
+      ref={setNodeRef}
+      style={style}
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      className={`bg-white rounded-[1.25rem] p-3 sm:p-4 flex flex-col gap-3 border shadow-[0_2px_12px_rgba(0,0,0,0.03)] overflow-hidden transition-all ${isDelayed ? 'border-red-300 ring-2 ring-red-100' : 'border-slate-200/60'} ${isDragging ? 'shadow-xl scale-105 border-blue-400 cursor-grabbing' : ''}`}
+    >
+      {/* Top: Senha + Time (Draggable Area) */}
+      <div className="flex items-start justify-between gap-2 cursor-grab active:cursor-grabbing" {...listeners} {...attributes}>
+        <div className="flex items-center gap-2.5 min-w-0">
+          {order.orderType === 'DINE_IN' && (order.tableId || order.counterTicketNumber != null) && (
+            <div className="shrink-0 w-11 h-11 flex flex-col items-center justify-center bg-slate-50 border border-slate-100 rounded-xl leading-none">
+              <span className="text-[7px] font-black uppercase tracking-widest text-slate-400">{order.tableId ? "Mesa" : "Senha"}</span>
+              <span className="text-base font-black text-[#0D1B3E] tabular-nums mt-0.5">{order.tableId || String(order.counterTicketNumber).padStart(2, "0")}</span>
+            </div>
+          )}
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-black text-slate-800 tracking-tight">#{order.id.slice(-4).toUpperCase()}</span>
+              {isPaid && (
+                <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-md text-[8px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0">
+                  <CheckCircle2 className="w-2.5 h-2.5" /> Pago
+                </span>
+              )}
+            </div>
+            <p className="text-[10px] text-slate-400 font-medium mt-0.5 truncate">
+              {order.customerName || (order.orderType === 'DINE_IN' ? dineInOrderLabel(order) : '')}
+            </p>
+          </div>
+        </div>
+        <div className={`flex flex-col items-end shrink-0 ${isDelayed ? 'text-red-500' : 'text-slate-400'}`}>
+          <span className="text-[10px] font-black uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-lg">
+            <OrderWaitTime createdAt={order.createdAt} status={order.status} />
+          </span>
+        </div>
+      </div>
+
+      {/* Items list */}
+      <div className="space-y-0">
+        {order.items?.map((item: any, idx: number) => {
+          const isKitchen = item.product?.kitchenPrint === true;
+          const itemCategory = item.product?.categoryId
+            ? categoryMap[item.product.categoryId]
+            : "";
+          return (
+            <div
+              key={idx}
+              className={`py-2 ${idx > 0 ? "border-t border-dashed border-slate-200" : ""}`}
+            >
+              <div className="min-w-0">
+                {(isKitchen || itemCategory) && (
+                  <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                    {itemCategory && (
+                      <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 tracking-wide">
+                        {itemCategory}
+                      </span>
+                    )}
+                    {isKitchen && (
+                      <span className="text-[8px] font-black uppercase px-1 py-0.5 rounded bg-orange-100 text-orange-600 tracking-wide flex items-center gap-0.5">
+                        <ChefHat className="w-2 h-2" />
+                        Cozinha
+                      </span>
+                    )}
+                  </div>
+                )}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold text-slate-700 leading-tight">
+                      {item.quantity}x {item.product?.name}
+                    </p>
+                    {item.productVariant?.name && (
+                      <p className="text-[10px] font-black uppercase text-[#C9A227] mt-0.5">· {item.productVariant.name}</p>
+                    )}
+                    {item.notes && (
+                      <div className="mt-1 bg-amber-50 border border-amber-200 text-amber-800 text-[9px] font-bold px-2 py-1 rounded-lg flex items-start gap-1">
+                        <Utensils className="w-2.5 h-2.5 mt-0.5 shrink-0" />
+                        <span>{item.notes}</span>
+                      </div>
+                    )}
+                  </div>
+                  <span className="text-[10px] font-black text-slate-400 tabular-nums shrink-0 pt-0.5">
+                    {fmt(item.price * item.quantity)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="h-px bg-slate-100 w-full" />
+
+      {/* Total */}
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total</span>
+        <span className="text-sm font-black text-slate-800">{fmt(order.total)}</span>
+      </div>
+
+      {/* Actions */}
+      <div className="grid grid-cols-1 gap-2">
+        <button
+          type="button"
+          onClick={toggleOrder}
+          className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 text-[9px] font-black uppercase tracking-widest rounded-xl transition-colors"
+        >
+          <FileText className="w-3 h-3" />
+          Ver detalhes
+        </button>
+        <button
+          type="button"
+          onClick={handleNextAction}
+          className={`w-full flex items-center justify-center gap-1.5 py-2.5 text-white text-[9px] font-black uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-95 ${order.status === 'PENDING' ? 'bg-[#0D1B3E] hover:bg-blue-950 shadow-blue-900/20' : order.status === 'PREPARING' ? 'bg-[#C9A227] hover:bg-[#b58f20] shadow-[#C9A227]/20' : 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/20'}`}
+        >
+          <CheckCircle2 className="w-3 h-3" />
+          {actionLabel}
+        </button>
+      </div>
+
+      {/* Expanded Details */}
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="pt-4 mt-2 border-t border-slate-100 space-y-3">
+              <div className="bg-slate-50 rounded-xl p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                    <Phone className="w-3 h-3 text-slate-400" />
+                    {maskPhone(order.customerPhone)}
+                  </div>
+                  <span className="text-[8px] font-black uppercase tracking-[0.15em] px-2 py-0.5 bg-slate-200 text-slate-600 rounded-md">
+                    {order.orderType === 'DELIVERY' ? 'Delivery' : order.orderType === 'DINE_IN' ? dineInOrderLabel(order) : 'Retirada'}
+                  </span>
+                </div>
+                {order.address && (
+                  <p className="text-[9px] text-slate-500 font-medium italic border-l-2 border-slate-300 pl-2">
+                    {order.address}
+                  </p>
+                )}
+                <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Método de Pgto</span>
+                  {order.orderType === "DINE_IN" && !order.billed ? (
+                    <span className="text-[9px] font-bold text-slate-400 italic">A definir no fechamento</span>
+                  ) : (
+                    <PaymentBadge method={order.paymentMethod.toLowerCase() as any} size="sm" />
+                  )}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+export function OrdersList({
+  filteredOrders,
+  updateStatus,
+  slug,
+  activeOrderId,
+  tenant,
+}: {
+  filteredOrders: Order[];
+  updateStatus: any;
+  slug?: string;
+  activeOrderId?: string;
+  tenant?: import("../../../../types").Tenant | null;
+}) {
+  const categoryMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    tenant?.categories?.forEach((cat) => { map[cat.id] = cat.name; });
+    return map;
+  }, [tenant?.categories]);
+  
+  const navigate = useNavigate();
+  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(() => new Set());
+  
+  useEffect(() => {
+    if (activeOrderId) {
+      setExpandedOrders((prev) => new Set([...prev, activeOrderId]));
+    }
+  }, [activeOrderId]);
+
+  const toggleOrder = (orderId: string, isHistory: boolean) => {
+    if (isHistory && slug) {
+      if (expandedOrders.has(orderId)) {
+        navigate(`/dashboard/${slug}/historico`);
+        setExpandedOrders((prev) => { const s = new Set(prev); s.delete(orderId); return s; });
+      } else {
+        navigate(`/dashboard/${slug}/historico/${orderId}`);
+        setExpandedOrders((prev) => new Set([...prev, orderId]));
+      }
+    } else {
+      setExpandedOrders((prev) => {
+        const s = new Set(prev);
+        if (s.has(orderId)) s.delete(orderId); else s.add(orderId);
+        return s;
+      });
+    }
+  };
+
+  const pendingOrders = filteredOrders.filter(o => o.status === 'PENDING');
+  const preparingOrders = filteredOrders.filter(o => o.status === 'PREPARING');
+  const shippedOrders = filteredOrders.filter(o => o.status === 'SHIPPED');
+
+  // Helper for Kanban Column
+  const KanbanColumn = ({ id, title, count, orders, borderColor, textColor }: { id: string, title: string, count: number, orders: Order[], borderColor: string, textColor: string }) => {
+    const { isOver, setNodeRef } = useDroppable({ id });
+    
+    return (
+      <div 
+        ref={setNodeRef} 
+        className={`flex flex-col bg-slate-50/50 rounded-[1.75rem] border-2 p-3 sm:p-4 h-full transition-all ${isOver ? `border-dashed bg-white shadow-inner scale-[1.02] ${borderColor}` : 'border-solid border-slate-100'}`}
+      >
+        <div className={`flex items-center justify-between pb-2.5 mb-3 border-b-2 ${borderColor}`}>
+          <h3 className={`font-black uppercase tracking-widest text-[13px] sm:text-sm ${textColor}`}>{title}</h3>
+          <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-black border ${borderColor} ${textColor} bg-white`}>{count}</span>
+        </div>
+        <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3">
+          {orders.length === 0 ? (
+            <div className={`flex flex-col items-center justify-center h-32 sm:h-36 text-center transition-all ${isOver ? 'opacity-100 scale-110' : 'opacity-40 grayscale'}`}>
+              <span className="text-3xl sm:text-4xl mb-2">{isOver ? '📥' : '🍽️'}</span>
+              <p className={`text-xs font-bold ${isOver ? textColor : 'text-slate-500'}`}>{isOver ? 'Solte aqui' : `Nenhum pedido ${title.toLowerCase()}`}</p>
+            </div>
+          ) : (
+            <AnimatePresence mode="popLayout">
+              {orders.map((order) => (
+                <KanbanCard 
+                  key={order.id} 
+                  order={order} 
+                  categoryMap={categoryMap} 
+                  updateStatus={updateStatus} 
+                  isExpanded={expandedOrders.has(order.id)}
+                  toggleOrder={() => toggleOrder(order.id, order.status === "DELIVERED" || order.status === "CANCELLED")}
+                />
+              ))}
+            </AnimatePresence>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    setActiveId(null);
+    const { active, over } = event;
+    if (!over) return;
+    
+    const orderId = active.id as string;
+    const targetStatus = over.id as string;
+    
+    const order = filteredOrders.find(o => o.id === orderId);
+    if (!order) return;
+    
+    if (order.status !== targetStatus) {
+      updateStatus(orderId, targetStatus);
+    }
+  };
+
+  return (
+    <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd} collisionDetection={closestCenter}>
+      <div className="flex flex-col h-full space-y-3 min-h-0">
+        <AwaitingPaymentAlert orders={filteredOrders} updateStatus={updateStatus} categoryMap={categoryMap} />
+        
+        {/* Kanban Board */}
+        <div className="flex-1 min-h-0 grid gap-4 pb-3 overflow-hidden grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
+          <KanbanColumn id="PENDING" title="Pendentes" count={pendingOrders.length} orders={pendingOrders} borderColor="border-amber-400" textColor="text-amber-500" />
+          <KanbanColumn id="PREPARING" title="Em preparo" count={preparingOrders.length} orders={preparingOrders} borderColor="border-orange-400" textColor="text-orange-500" />
+          <KanbanColumn id="SHIPPED" title="Prontos / Retire" count={shippedOrders.length} orders={shippedOrders} borderColor="border-emerald-400" textColor="text-emerald-500" />
+        </div>
+      </div>
+      <DragOverlay dropAnimation={{ duration: 250, easing: 'ease' }}>
+        {activeId ? (
+          <KanbanCard 
+            order={filteredOrders.find(o => o.id === activeId)!} 
+            categoryMap={categoryMap} 
+            updateStatus={updateStatus} 
+            isExpanded={expandedOrders.has(activeId)}
+            toggleOrder={() => {}}
+            isOverlay
+          />
+        ) : null}
+      </DragOverlay>
+    </DndContext>
+  );
+}
+

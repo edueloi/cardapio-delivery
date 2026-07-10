@@ -78,7 +78,12 @@ model SystemConfig {
 model Account {
   id             String   @id @default(cuid())
   email          String   @unique
+  username       String?  @unique
   name           String
+  phone          String?
+  address        String?  @db.Text
+  avatarUrl      String?  @map("avatar_url")
+  birthDate      DateTime? @map("birth_date") @db.Date
   passwordHash   String   @map("password_hash")
   isSuperAdmin   Boolean  @default(false) @map("is_super_admin")
   createdAt      DateTime @default(now()) @map("created_at")
@@ -672,6 +677,7 @@ model Order {
   counterTicketNumber Int? @map("counter_ticket_number") // senha sequencial diária — só para pedidos de balcão (tableId nulo, orderType DINE_IN)
   kitchenReady Boolean  @default(false) @map("kitchen_ready")
   paymentMethod String  @default("CASH") @map("payment_method")
+  billed        Boolean @default(false)
   paymentDetail String? @map("payment_detail") @db.Text
   discount     Float?   @default(0)
   discountType String?  @map("discount_type") // PERCENT, FIXED
@@ -730,6 +736,7 @@ model Promotion {
   description String?  @db.Text
   imageUrl    String?  @map("image_url")
   linkProductId String? @map("link_product_id")
+  promoPrice  Float?   @map("promo_price")
   active      Boolean  @default(true)
   sortOrder   Int      @default(0) @map("sort_order")
   startsAt    DateTime? @map("starts_at")

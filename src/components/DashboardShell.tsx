@@ -1,8 +1,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { type LucideIcon, LogOut, Menu, Monitor, Utensils, X, ShieldCheck, Bell, ChefHat, ExternalLink, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { type LucideIcon, LogOut, Menu, Monitor, Utensils, X, ShieldCheck, ChefHat, ExternalLink, PanelLeftClose, PanelLeftOpen, Settings2 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
+import DashboardAccountMenu from "./DashboardAccountMenu";
 
 const SIDEBAR_COLLAPSED_KEY = "boxsys_sidebar_collapsed";
 
@@ -21,9 +22,11 @@ interface DashboardNavigationGroup {
 
 interface DashboardShellProps {
   tenantName?: string;
+  tenantLogoUrl?: string | null;
   slug: string;
   activeTab: string;
   navigationGroups: DashboardNavigationGroup[];
+  headerBadges?: ReactNode;
   isMobileMenuOpen: boolean;
   onToggleMobileMenu: () => void;
   onCloseMobileMenu: () => void;
@@ -45,9 +48,11 @@ function findActiveItem(groups: DashboardNavigationGroup[], activeTab: string) {
 
 export default function DashboardShell({
   tenantName,
+  tenantLogoUrl,
   slug,
   activeTab,
   navigationGroups,
+  headerBadges,
   isMobileMenuOpen,
   onToggleMobileMenu,
   onCloseMobileMenu,
@@ -57,29 +62,27 @@ export default function DashboardShell({
   hideHeader = false,
   children,
 }: DashboardShellProps) {
-  const tenantInitial = tenantName?.[0]?.toUpperCase() || "G";
-  const tenantLabel   = tenantName || "Box Sys";
   const active        = findActiveItem(navigationGroups, activeTab);
   const ActiveIcon    = active?.item.icon;
   const logoSrc       = "/images/logo.png";
+  const isLiveOrdersTab = activeTab === "live-orders";
 
   // Sidebar compacta (só ícones) — preferência persistida por navegador, independente do tenant.
   const [isCollapsed, setIsCollapsed] = useState(() => {
     try { return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1"; } catch { return false; }
   });
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
 
   useEffect(() => {
     try { window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, isCollapsed ? "1" : "0"); } catch {}
   }, [isCollapsed]);
 
   return (
-    <div className={cn(
-      "bg-[#F4F6FA] flex flex-col xl:flex-row font-sans relative",
-      hideHeader ? "h-screen h-[100dvh] overflow-hidden" : "min-h-screen"
-    )}>
+    <>
+      <div className="bg-[#F4F6FA] flex flex-col xl:flex-row font-sans relative h-screen h-[100dvh] overflow-hidden">
 
       {/* ══ MOBILE TOPBAR ══ */}
-      <div className="xl:hidden sticky top-0 z-40 bg-[#0A1628] border-b border-white/[0.07]">
+      <div className="xl:hidden shrink-0 z-40 bg-[#0A1628] border-b border-white/[0.07]">
         <div className="flex items-center justify-between gap-3 px-4 h-14">
           {/* Logo */}
           <div className="flex items-center gap-2.5 min-w-0">
@@ -98,6 +101,12 @@ export default function DashboardShell({
               <Utensils className="w-4 h-4" />
             </Link>
             <button
+              onClick={() => setIsAccountMenuOpen(true)}
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+            >
+              <Settings2 className="w-4 h-4" />
+            </button>
+            <button
               onClick={onToggleMobileMenu}
               className="w-9 h-9 rounded-xl flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-colors"
             >
@@ -114,6 +123,14 @@ export default function DashboardShell({
               <span className="text-[11px] font-black uppercase tracking-wider text-[#C9A227]">
                 {active.item.label}
               </span>
+            </div>
+          </div>
+        )}
+
+        {headerBadges && (
+          <div className="px-4 pb-3 overflow-x-auto">
+            <div className="flex items-center gap-2 min-w-max">
+              {headerBadges}
             </div>
           </div>
         )}
@@ -300,11 +317,14 @@ export default function DashboardShell({
       </AnimatePresence>
 
       {/* ══ CONTEÚDO PRINCIPAL ══ */}
-      <main className={cn("flex-1 flex flex-col min-w-0 overflow-x-hidden", hideHeader && "min-h-0")}>
+      <main className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
 
         {/* ══ DESKTOP TOPBAR ══ */}
-        {!hideHeader && (
-        <header className="hidden xl:flex items-center justify-between gap-4 bg-white border-b border-slate-200/80 sticky top-0 z-30 px-6 lg:px-8 h-16 shrink-0">
+          {!hideHeader && (
+        <header className={cn(
+          "hidden xl:flex items-center justify-between gap-4 bg-white border-b border-slate-200/80 z-30 h-16 shrink-0",
+          isLiveOrdersTab ? "px-4 lg:px-5" : "px-6 lg:px-8"
+        )}>
 
           {/* Esquerda — breadcrumb da aba ativa */}
           <div className="flex items-center gap-3 min-w-0">
@@ -327,29 +347,50 @@ export default function DashboardShell({
             )}
           </div>
 
-          {/* Direita — ações */}
-          <div className="flex items-center gap-2 shrink-0">
-
-            {/* Notificações placeholder */}
-            <button className="w-9 h-9 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-[#0A1628] transition-all">
-              <Bell className="w-4 h-4" />
-            </button>
-
-            {/* Avatar */}
-            <div className="flex items-center gap-2.5 bg-[#0A1628] rounded-xl px-3 py-1.5">
-              <div className="w-6 h-6 rounded-lg bg-[#C9A227] flex items-center justify-center font-black text-white text-[11px]">
-                {tenantInitial}
+          <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
+            {headerBadges && (
+              <div className="min-w-0 flex-1 overflow-x-auto">
+                <div className="flex min-w-max items-center justify-end gap-2 pr-1">
+                  {headerBadges}
+                </div>
               </div>
-              <span className="text-[12px] font-bold text-white/80 hidden xl:block max-w-[100px] truncate">
-                {tenantLabel}
-              </span>
+            )}
+
+            {/* Direita — ações */}
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setIsAccountMenuOpen(true)}
+                className="w-10 h-10 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-500 hover:text-[#0A1628] transition-all"
+              >
+                <Settings2 className="w-4 h-4" />
+              </button>
             </div>
           </div>
         </header>
         )}
 
-        <div className={hideHeader ? "flex-1 min-h-0 flex flex-col overflow-hidden p-2 sm:p-3" : "px-3 py-3 sm:p-5 md:p-7 overflow-y-auto"}>{children}</div>
-      </main>
-    </div>
+          <div
+            className={cn(
+              "flex-1 min-h-0 overflow-y-auto custom-scrollbar",
+              hideHeader
+                ? "flex flex-col p-2 sm:p-3"
+                : (isLiveOrdersTab
+                    ? "px-2 py-2 sm:px-3 sm:py-3 lg:px-4 lg:py-4"
+                    : "px-3 py-3 sm:p-5 md:p-7")
+            )}
+          >
+            {children}
+          </div>
+        </main>
+      </div>
+      <DashboardAccountMenu
+        isOpen={isAccountMenuOpen}
+        onClose={() => setIsAccountMenuOpen(false)}
+        tenantName={tenantName || "Box Sys"}
+        tenantLogoUrl={tenantLogoUrl}
+        slug={slug}
+        onSelectTab={onSelectTab}
+      />
+    </>
   );
 }

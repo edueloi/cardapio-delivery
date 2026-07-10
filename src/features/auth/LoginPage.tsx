@@ -10,9 +10,13 @@ export default function LoginPage() {
   const [searchParams] = useSearchParams();
   const { login } = useAuth();
 
-  const [email, setEmail]       = useState(() => localStorage.getItem("boxsys_remember_email") ?? "");
+  const [identifier, setIdentifier] = useState(
+    () => localStorage.getItem("boxsys_remember_login") ?? localStorage.getItem("boxsys_remember_email") ?? ""
+  );
   const [password, setPassword] = useState("");
-  const [remember, setRemember] = useState(() => !!localStorage.getItem("boxsys_remember_email"));
+  const [remember, setRemember] = useState(
+    () => !!(localStorage.getItem("boxsys_remember_login") ?? localStorage.getItem("boxsys_remember_email"))
+  );
   const [error, setError]       = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -38,13 +42,18 @@ export default function LoginPage() {
     setSubmitting(true);
     setError("");
     try {
-      const payload = await login(email.trim(), password);
-      if (remember) localStorage.setItem("boxsys_remember_email", email.trim());
-      else          localStorage.removeItem("boxsys_remember_email");
+      const cleanedIdentifier = identifier.trim();
+      const payload = await login(cleanedIdentifier, password);
+      if (remember) {
+        localStorage.setItem("boxsys_remember_login", cleanedIdentifier);
+      } else {
+        localStorage.removeItem("boxsys_remember_login");
+        localStorage.removeItem("boxsys_remember_email");
+      }
       redirectRef.current = resolvePostAuthPath(next, payload.tenants, (payload.account as any).isSuperAdmin);
       setShowLoading(true);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "E-mail ou senha incorretos.");
+      setError(err instanceof Error ? err.message : "Usuário, e-mail ou senha incorretos.");
       setSubmitting(false);
     }
   };
@@ -140,17 +149,17 @@ export default function LoginPage() {
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-5">
-                {/* E-mail */}
+                {/* E-mail ou usuário */}
                 <div className="space-y-1.5">
                   <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-                    E-mail
+                    E-mail ou usuário
                   </label>
                   <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="seuemail@dominio.com"
-                    autoComplete="email"
+                    type="text"
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    placeholder="seuemail@dominio.com ou seuusuario"
+                    autoComplete="username"
                     required
                     className="w-full h-13 px-4 py-3.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 placeholder:text-slate-300 text-sm focus:outline-none focus:border-[#C9A227] focus:bg-white focus:ring-2 focus:ring-[#C9A227]/15 transition-all"
                   />

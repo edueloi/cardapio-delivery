@@ -1,0 +1,26 @@
+export { default as OverviewPanel } from "./visao-geral";
+export { OrdersList } from "./pedidos";
+export { ScheduledOrdersPanel } from "./agendamentos";
+export { OrderHistoryPanel } from "./historico";
+export { MenuManagement } from "./cardapio";
+export { InventoryPanel } from "./estoque";
+export { default as ProductionPanel } from "./producao";
+export { SuppliersPanel } from "./fornecedores";
+export { default as CashFlowPanel } from "./financeiro";
+export { default as EntradasSaidasPanel } from "./entradas-saidas";
+export { default as ReportsPanel } from "./relatorios";
+export { default as CustomerCRMPanel } from "./clientes";
+export { default as LoyaltyPanel } from "./fidelidade";
+export { default as PromotionsPanel } from "./promocoes";
+export { default as BundlesPanel } from "./combos";
+export { WhatsAppManagementPanel } from "./whatsapp";
+export { ProfileManagement } from "./configuracoes";
+export { StaffList } from "./equipe";
+export { default as DownloadsPanel } from "./downloads";
+export { TableManagement } from "./mesas";
+export { default as PDVPanel } from "./pdv";
+export { default as WaiterPanel } from "./garcom";
+export { KitchenKDSPanel } from "./cozinha";
+export { default as IfoodPanel } from "./ifood";
+export { default as ManualPanel } from "./manual";
+

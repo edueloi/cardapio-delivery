@@ -43,6 +43,7 @@ export default defineConfig(({mode}) => {
         workbox: {
           globIgnores: ['**/images/*.png'],
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+          maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
           navigateFallback: '/index.html',
           navigateFallbackDenylist: [/^\/api/, /^\/socket\.io/],
           // O SW novo assume controle imediatamente (sem esperar todas as abas antigas

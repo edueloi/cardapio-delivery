@@ -10,6 +10,11 @@ export interface AuthAccount {
   id: string;
   email: string;
   name: string;
+  username?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  avatarUrl?: string | null;
+  birthDate?: Date | null;
   isSuperAdmin: boolean;
 }
 
@@ -84,6 +89,11 @@ export async function getSessionAccount(token: string): Promise<AuthAccount | nu
           id: true,
           email: true,
           name: true,
+          username: true,
+          phone: true,
+          address: true,
+          avatarUrl: true,
+          birthDate: true,
           isSuperAdmin: true,
         },
       },

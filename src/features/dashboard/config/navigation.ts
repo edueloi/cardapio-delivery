@@ -21,6 +21,7 @@ import {
   Utensils,
   Wallet,
   ArrowLeftRight,
+  BookOpen,
 } from "lucide-react";
 import type { DashboardNavigationGroup } from "../types";
 
@@ -34,7 +35,7 @@ export const DASHBOARD_NAVIGATION: DashboardNavigationGroup[] = [
       { id: "waiter",    label: "Garçom",             tab: "waiter",       icon: UserCog },
       { id: "orders",    label: "Painel de Pedidos",  tab: "live-orders",  icon: Clock },
       { id: "scheduled", label: "Agendamentos",       tab: "scheduled",    icon: CalendarDays },
-      { id: "kds",       label: "Monitor de Cozinha", tab: "kds",          icon: Utensils },
+
       { id: "tables",    label: "Mesas e QR Code",    tab: "tables",       icon: ClipboardList },
       { id: "history",   label: "Histórico",          tab: "history",      icon: History },
     ],
@@ -78,6 +79,7 @@ export const DASHBOARD_NAVIGATION: DashboardNavigationGroup[] = [
       { id: "profile",    label: "Configurações",      tab: "profile",      icon: Settings,      ownerOnly: true },
       { id: "staff",      label: "Equipe",             tab: "staff",        icon: ClipboardList, ownerOnly: true },
       { id: "downloads",  label: "Downloads",          tab: "downloads",    icon: Download },
+      { id: "manual",     label: "Manual e Ajuda",     tab: "manual",       icon: BookOpen },
     ],
   },
 ];

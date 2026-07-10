@@ -3,6 +3,10 @@ import {
   LayoutDashboard,
   MessageSquare,
   Utensils,
+  ChefHat,
+  CheckCircle2,
+  AlertCircle,
+  History
 } from "lucide-react";
 import {
   FilterLineSegmented,
@@ -11,31 +15,32 @@ import {
 } from "../../components";
 import type { Order, Tenant } from "../../types";
 import {
+  BundlesPanel,
+  CashFlowPanel,
+  CustomerCRMPanel,
+  DownloadsPanel,
+  EntradasSaidasPanel,
+  IfoodPanel,
   InventoryPanel,
   KitchenKDSPanel,
+  LoyaltyPanel,
   MenuManagement,
   OrderHistoryPanel,
   OrdersList,
+  OverviewPanel,
+  PDVPanel,
+  ProductionPanel,
   ProfileManagement,
+  PromotionsPanel,
+  ReportsPanel,
   ScheduledOrdersPanel,
   StaffList,
+  SuppliersPanel,
   TableManagement,
-} from "./DashboardPanels";
-import PDVPanel from "./PDVPanel";
-import WaiterPanel from "./WaiterPanel";
-import LoyaltyPanel from "./LoyaltyPanel";
-import IfoodPanel from "./IfoodPanel";
-import CashFlowPanel from "./CashFlowPanel";
-import CustomerCRMPanel from "./CustomerCRMPanel";
-import ReportsPanel from "./ReportsPanel";
-import DownloadsPanel from "./DownloadsPanel";
-import PromotionsPanel from "./PromotionsPanel";
-import BundlesPanel from "./BundlesPanel";
-import ProductionPanel from "./ProductionPanel";
-import SuppliersPanel from "./SuppliersPanel";
-import { WhatsAppManagementPanel } from "./WhatsAppPanel";
-import OverviewPanel from "./OverviewPanel";
-import EntradasSaidasPanel from "./EntradasSaidasPanel";
+  WaiterPanel,
+  WhatsAppManagementPanel,
+  ManualPanel,
+} from "./pages";
 import { type DashboardOrderTabId, type DashboardTabId, type MyMembership, canAccess } from "./types";
 
 interface DashboardContentProps {
@@ -90,63 +95,35 @@ export default function DashboardContent({
   waiterCalls,
   onDismissWaiterCall,
   membership,
+  activeOrderId
 }: DashboardContentProps) {
   const allowed = (tab: DashboardTabId) => canAccess(membership ?? null, tab);
   const pendingOrders = orders.filter((order) => order.status === "PENDING").length;
   const preparingOrders = orders.filter((order) => order.status === "PREPARING").length;
   const shippedOrders = orders.filter((order) => order.status === "SHIPPED").length;
+  const delayedOrders = orders.filter((order) => (order.status === "PENDING" || order.status === "PREPARING") && Date.now() - new Date(order.createdAt).getTime() > 30 * 60000).length;
+  const activeOrders = orders.filter((order) => order.status !== "DELIVERED" && order.status !== "CANCELLED");
 
   // If the active tab is not accessible, show the access denied screen
   if (!allowed(activeTab)) return <AccessDenied />;
 
   return (
     <>
+      {/* Overview is the only full-width section now */}
       {activeTab === "overview" && (
-        <PageWrapper>
-          <OverviewPanel
-            tenant={tenant}
-            slug={slug}
-            orders={orders}
-            setActiveTab={setActiveTab}
-            setSubTab={setSubTab}
-          />
-        </PageWrapper>
+        <OverviewPanel
+          tenant={tenant}
+          slug={slug}
+          orders={orders}
+          setActiveTab={setActiveTab}
+          setSubTab={setSubTab}
+        />
       )}
 
-      {activeTab === "live-orders" && (
-        <PageWrapper>
-          <SectionTitle
-            title="Painel de Pedidos"
-            description="O que está acontecendo agora?"
-            icon={Clock}
-            action={
-              <FilterLineSegmented
-                options={[
-                  { value: "pending", label: `Pendentes (${pendingOrders})` },
-                  { value: "preparing", label: `Cozinha (${preparingOrders})` },
-                  { value: "shipped", label: `Prontos (${shippedOrders})` },
-                ]}
-                value={subTab}
-                onChange={(id) => setSubTab(id as DashboardOrderTabId)}
-              />
-            }
-            className="mb-6"
-          />
-
-          <div className="grid grid-cols-12 gap-6">
-            <div className="col-span-12">
-              <OrdersList filteredOrders={filteredOrders} updateStatus={updateStatus} slug={slug} />
-            </div>
-          </div>
-        </PageWrapper>
-      )}
-
-      {activeTab === "scheduled" && (
-        <ScheduledOrdersPanel orders={orders} updateStatus={updateStatus} slug={slug} />
-      )}
-
+      {/* Standard wrapped sections */}
       {activeTab === "history" && (
         <PageWrapper>
+
           <OrderHistoryPanel
             orders={orders}
             slug={slug}
@@ -154,6 +131,43 @@ export default function DashboardContent({
             onOrderChanged={refreshTenant}
           />
         </PageWrapper>
+      )}
+
+      {activeTab === "live-orders" && (
+        <PageWrapper className="px-0 sm:px-1 lg:px-2 xl:px-3 pt-0">
+          <SectionTitle
+            title="Painel de Pedidos"
+            description="O que está acontecendo agora?"
+            icon={Clock}
+            action={
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-lg border border-amber-200">
+                  <Clock className="w-3.5 h-3.5" />
+                  <span className="text-[10px] font-black uppercase tracking-wider">Pendentes: {pendingOrders}</span>
+                </div>
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-orange-50 text-orange-700 rounded-lg border border-orange-200">
+                  <ChefHat className="w-3.5 h-3.5" />
+                  <span className="text-[10px] font-black uppercase tracking-wider">Em Preparo: {preparingOrders}</span>
+                </div>
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-200">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span className="text-[10px] font-black uppercase tracking-wider">Prontos: {shippedOrders}</span>
+                </div>
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-red-50 text-red-600 rounded-lg border border-red-200">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span className="text-[10px] font-black uppercase tracking-wider">Atrasados: {delayedOrders}</span>
+                </div>
+              </div>
+            }
+            className="hidden"
+          />
+
+          <OrdersList filteredOrders={activeOrders} updateStatus={updateStatus} slug={slug} tenant={tenant} />
+        </PageWrapper>
+      )}
+
+      {activeTab === "scheduled" && (
+        <ScheduledOrdersPanel orders={orders} updateStatus={updateStatus} slug={slug} />
       )}
 
       {activeTab === "menu" && (
@@ -288,6 +302,9 @@ export default function DashboardContent({
       )}
       {activeTab === "bundles" && (
         <BundlesPanel tenant={tenant} />
+      )}
+      {activeTab === "manual" && (
+        <ManualPanel membership={membership ?? null} />
       )}
       {activeTab === "kds" && (
         <KitchenKDSPanel orders={orders} updateStatus={updateStatus} waiterCalls={waiterCalls} onDismissWaiterCall={onDismissWaiterCall} />

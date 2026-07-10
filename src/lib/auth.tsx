@@ -26,7 +26,7 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   account: Account | null;
   tenants: TenantMembership[];
-  login: (email: string, password: string) => Promise<AuthPayload>;
+  login: (identifier: string, password: string) => Promise<AuthPayload>;
   register: (input: RegisterInput) => Promise<AuthPayload>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -115,10 +115,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refresh();
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (identifier: string, password: string) => {
     const payload = await apiJson<AuthPayload>("/api/auth/login", {
       method: "POST",
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ identifier, password }),
     });
     applyPayload(payload);
     return payload;
