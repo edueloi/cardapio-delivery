@@ -1195,6 +1195,7 @@ export default function PDVPanel({
   const handleCheckout = async () => {
     if (checkoutItems.length === 0 || (cashRequired && !currentCash)) return;
     if (isSplitMode && !splitCanFinalize) return;
+    if (!isSplitMode && paymentMethod === "CASH" && digitsToNumber(amountReceived) < finalTotal) return;
     setIsProcessing(true);
 
     const isStone = paymentMethod === "STONE";
@@ -1351,7 +1352,7 @@ export default function PDVPanel({
     handleCheckoutRef.current = () => {
       if (isProcessing) return;
       if (isSplitMode && !splitCanFinalize) return;
-      if (paymentMethod === "CASH" && amountReceived !== "" && digitsToNumber(amountReceived) < finalTotal) return;
+      if (!isSplitMode && paymentMethod === "CASH" && digitsToNumber(amountReceived) < finalTotal) return;
       void handleCheckout();
     };
   }, [handleCheckout, isProcessing, isSplitMode, splitCanFinalize, paymentMethod, amountReceived, finalTotal]);
@@ -3427,7 +3428,7 @@ export default function PDVPanel({
                       disabled={
                         isProcessing ||
                         (isSplitMode && !splitCanFinalize) ||
-                        (!isSplitMode && paymentMethod === "CASH" && amountReceived !== "" && digitsToNumber(amountReceived) < finalTotal)
+                        (!isSplitMode && paymentMethod === "CASH" && digitsToNumber(amountReceived) < finalTotal)
                       }
                       onClick={handleCheckout}
                       className="w-full bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-3 rounded-xl transition-all shadow-lg shadow-[#C9A227]/25 flex items-center justify-center gap-2.5 uppercase tracking-widest text-xs"
