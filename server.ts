@@ -5146,6 +5146,11 @@ app.post("/api/products", requireAuth, async (req, res) => {
   const tenant = await requireTenantById(req, res, tenantId, "menu");
   if (!tenant) return;
 
+  if (!name || !categoryId || isNaN(parseFloat(price))) {
+    res.status(400).json({ error: "Nome, categoria e preço são obrigatórios." });
+    return;
+  }
+
   try {
     const maxOrder = await prisma.product.aggregate({
       where: { categoryId },
