@@ -25,6 +25,10 @@ import {
   verifyPassword,
 } from "./src/backend/auth";
 import { parseProductionRecipeRecord } from "./src/backend/production";
+import {
+  convertProductionQuantity,
+  getInventoryStockInGranularUnit,
+} from "./src/lib/production";
 import { registerProductionRoutes } from "./src/backend/production-routes";
 import {
   generateDueEntries,
@@ -3330,6 +3334,7 @@ async function updateOrderStatus(
           const ingredients: Array<{
             inventoryItemId: string;
             quantity: number;
+            unit?: string;
           }> = (() => {
             try {
               return JSON.parse(recipeRaw.ingredients as string) || [];
@@ -3347,7 +3352,8 @@ async function updateOrderStatus(
               ingredient.inventoryItemId,
               deductQty,
               updatedOrder.id,
-              "PRODUCTION"
+              "PRODUCTION",
+              ingredient.unit
             );
             for (const b of updatedBatches) {
               io.to(`tenant-${updatedOrder.tenantId}`).emit(
@@ -3567,13 +3573,33 @@ async function emitInventoryRestockSideEffects(
   }
 }
 
+// Converte uma quantidade pedida (na unidade do ingrediente/receita) para a unidade
+// em que `InventoryItem.quantity` é armazenado (unidade de compra: garrafa, pacote, etc).
+// Ex: receita pede "200 ml", item tem purchaseQty=1000 + stockUnit="ml" (1 garrafa = 1000ml)
+// → 200ml / 1000 = 0.2 garrafa a debitar de `quantity`.
+function convertToPurchaseUnitQuantity(
+  item: { unit?: string | null; purchaseQty?: number | null; stockUnit?: string | null },
+  requestedQuantity: number,
+  requestedUnit?: string | null
+): number | null {
+  if (!requestedUnit) return requestedQuantity;
+
+  const { effectiveUnit } = getInventoryStockInGranularUnit(item as any);
+  const granularQuantity = convertProductionQuantity(requestedQuantity, requestedUnit, effectiveUnit);
+  if (granularQuantity === null) return null;
+
+  const hasConversion = item.purchaseQty && item.stockUnit;
+  return hasConversion ? granularQuantity / Number(item.purchaseQty) : granularQuantity;
+}
+
 async function deductStockFIFO(
   tx: any,
   tenantId: string,
   baseInventoryItemId: string,
   quantityToDeduct: number,
   orderId: string,
-  reason: string = "SALE"
+  reason: string = "SALE",
+  requestedUnit?: string | null
 ) {
   if (!baseInventoryItemId || quantityToDeduct <= 0) return [];
 
@@ -3581,6 +3607,9 @@ async function deductStockFIFO(
     .findUnique({ where: { id: baseInventoryItemId } })
     .catch(() => null);
   if (!targetItem) return [];
+
+  const convertedQuantity = convertToPurchaseUnitQuantity(targetItem, quantityToDeduct, requestedUnit);
+  if (convertedQuantity === null) return [];
 
   const batches = await tx.inventoryItem.findMany({
     where: { tenantId, name: targetItem.name },
@@ -3594,7 +3623,7 @@ async function deductStockFIFO(
     return a.createdAt.getTime() - b.createdAt.getTime();
   });
 
-  let remaining = quantityToDeduct;
+  let remaining = convertedQuantity;
   const availableBatches = batches.filter((b: any) => b.quantity > 0);
   const batchesToDeduct =
     availableBatches.length > 0 ? availableBatches : [batches[0]];
@@ -3637,7 +3666,8 @@ async function restockOrderItemInventory(
   baseInventoryItemId: string | null | undefined,
   quantity: number,
   outReason: string = "SALE",
-  inReason: string = "ORDER_ITEM_REMOVED_SALE"
+  inReason: string = "ORDER_ITEM_REMOVED_SALE",
+  requestedUnit?: string | null
 ) {
   if (!baseInventoryItemId || quantity <= 0) return false;
 
@@ -3645,6 +3675,9 @@ async function restockOrderItemInventory(
     .findUnique({ where: { id: baseInventoryItemId } })
     .catch(() => null);
   if (!targetItem) return false;
+
+  const convertedQuantity = convertToPurchaseUnitQuantity(targetItem, quantity, requestedUnit);
+  if (convertedQuantity === null) return false;
 
   const batches = await tx.inventoryItem.findMany({
     where: { tenantId, name: targetItem.name },
@@ -3671,7 +3704,7 @@ async function restockOrderItemInventory(
       batchNetSold[mov.itemId] -= Number(mov.quantity || 0);
   }
 
-  let remainingToRestock = roundMoney(quantity);
+  let remainingToRestock = roundMoney(convertedQuantity);
   let restockedAnything = false;
 
   for (const [batchId, netSold] of Object.entries(batchNetSold)) {
@@ -3735,7 +3768,7 @@ async function restockOrderItemRecipe(
   if (!recipe || !recipe.outputQuantity || Number(recipe.outputQuantity) <= 0)
     return [];
 
-  let ingredients: Array<{ inventoryItemId: string; quantity: number }> = [];
+  let ingredients: Array<{ inventoryItemId: string; quantity: number; unit?: string }> = [];
   try {
     ingredients = JSON.parse(recipe.ingredients as string) || [];
   } catch {
@@ -3758,7 +3791,8 @@ async function restockOrderItemRecipe(
       ingredient.inventoryItemId,
       expectedQty,
       "PRODUCTION",
-      "ORDER_ITEM_REMOVED_RECIPE"
+      "ORDER_ITEM_REMOVED_RECIPE",
+      ingredient.unit
     );
     if (restocked) touchedInventoryIds.push(ingredient.inventoryItemId);
   }
@@ -5366,6 +5400,30 @@ app.patch("/api/products/:id/availability", requireAuth, async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to update product availability" });
+  }
+});
+
+// Vincula/desvincula a ficha de insumos (ProductionRecipe) sem tocar em mais nada do
+// produto — usado pelo fluxo simples de "Insumos usados" no cadastro do cardápio.
+app.patch("/api/products/:id/recipe", requireAuth, async (req, res) => {
+  const scoped = await requireTenantFromProduct(req, res, req.params.id);
+  if (!scoped) return;
+
+  const { recipeId } = req.body;
+
+  try {
+    await prisma.$executeRawUnsafe(
+      "UPDATE products SET recipe_id = ? WHERE id = ?",
+      recipeId || null,
+      scoped.product.id
+    );
+    io.to(`tenant-${scoped.tenant.id}`).emit("menu-updated", {
+      tenantId: scoped.tenant.id,
+    });
+    res.json({ id: scoped.product.id, recipeId: recipeId || null });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to update product recipe link" });
   }
 });
 
@@ -7751,6 +7809,7 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
             const ingredients: Array<{
               inventoryItemId: string;
               quantity: number;
+              unit?: string;
             }> = (() => {
               try {
                 return JSON.parse(recipeRaw.ingredients as string) || [];
@@ -7768,7 +7827,8 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
                 ingredient.inventoryItemId,
                 deductQty,
                 order.id,
-                "SALE"
+                "SALE",
+                ingredient.unit
               );
               for (const b of updatedBatches) {
                 io.to(`tenant-${tenant.id}`).emit(

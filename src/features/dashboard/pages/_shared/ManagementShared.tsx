@@ -464,6 +464,166 @@ export function ProductionLinkField({
   );
 }
 
+export interface RecipeIngredientDraft {
+  _key: string;
+  inventoryItemId: string;
+  quantity: string;
+  unit: string;
+}
+
+const RECIPE_UNIT_OPTIONS = ["g", "kg", "ml", "l", "un", "dz", "cm", "m"];
+
+// Lista simples de insumos que o produto consome ao ser vendido — cada item do
+// estoque pode ter sua própria quantidade e unidade (100g de frango, 1un de espeto,
+// 10g de sal...). Some tudo isso vira uma ProductionRecipe por trás, mas o usuário
+// não precisa saber disso nem entender "rendimento" — a dedução já é automática na venda.
+export function RecipeIngredientsField({
+  inventoryItems,
+  value,
+  onChange,
+}: {
+  inventoryItems: any[];
+  value: RecipeIngredientDraft[];
+  onChange: (val: RecipeIngredientDraft[]) => void;
+}) {
+  const [pickerOpenFor, setPickerOpenFor] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+
+  const saleItems = inventoryItems;
+  const itemById = new Map(saleItems.map((item: any) => [item.id, item]));
+
+  const addIngredient = () => {
+    const draft: RecipeIngredientDraft = {
+      _key: crypto.randomUUID(),
+      inventoryItemId: "",
+      quantity: "",
+      unit: "un",
+    };
+    onChange([...value, draft]);
+    setPickerOpenFor(draft._key);
+  };
+
+  const updateIngredient = (key: string, patch: Partial<RecipeIngredientDraft>) => {
+    onChange(value.map(ing => ing._key === key ? { ...ing, ...patch } : ing));
+  };
+
+  const removeIngredient = (key: string) => {
+    onChange(value.filter(ing => ing._key !== key));
+  };
+
+  const filtered = saleItems.filter((item: any) =>
+    !search || item.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-2">
+      <label className="block text-[11px] font-black uppercase tracking-widest text-orange-600">Insumos usados (opcional)</label>
+      <p className="text-[11px] text-slate-500 -mt-1">Ao vender este produto, as quantidades abaixo são descontadas do estoque automaticamente.</p>
+
+      <div className="space-y-2">
+        {value.map(ing => {
+          const item = itemById.get(ing.inventoryItemId);
+          return (
+            <div key={ing._key} className="flex items-center gap-2 bg-orange-50/60 border border-orange-200 rounded-xl px-2.5 py-2">
+              <button
+                type="button"
+                onClick={() => { setPickerOpenFor(ing._key); setSearch(""); }}
+                className="flex-1 min-w-0 text-left text-sm font-bold text-slate-800 truncate hover:text-orange-600"
+              >
+                {item ? item.name : <span className="text-slate-400 font-semibold">Escolher item do estoque...</span>}
+              </button>
+              <input
+                type="number"
+                inputMode="decimal"
+                placeholder="Qtd"
+                value={ing.quantity}
+                onChange={e => updateIngredient(ing._key, { quantity: e.target.value })}
+                className="w-16 bg-white border border-orange-200 rounded-lg px-2 py-1.5 text-sm font-bold text-center focus:outline-none focus:ring-2 focus:ring-orange-400"
+              />
+              <select
+                value={ing.unit}
+                onChange={e => updateIngredient(ing._key, { unit: e.target.value })}
+                className="bg-white border border-orange-200 rounded-lg px-1.5 py-1.5 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-orange-400"
+              >
+                {RECIPE_UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
+              </select>
+              <button
+                type="button"
+                onClick={() => removeIngredient(ing._key)}
+                className="p-1.5 text-slate-400 hover:text-red-500 shrink-0"
+                title="Remover insumo"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      <button
+        type="button"
+        onClick={addIngredient}
+        className="w-full flex items-center justify-center gap-1.5 border-2 border-dashed border-orange-200 rounded-xl px-3 py-2 text-xs font-black uppercase tracking-wide text-orange-600 hover:bg-orange-50 transition-colors"
+      >
+        <Plus className="w-3.5 h-3.5" /> Adicionar insumo
+      </button>
+
+      {saleItems.length === 0 && (
+        <p className="text-[11px] text-slate-400 italic">Nenhum item cadastrado no estoque ainda.</p>
+      )}
+
+      {/* Modal de seleção do item de estoque para o insumo sendo editado */}
+      <Modal
+        isOpen={!!pickerOpenFor}
+        onClose={() => { setPickerOpenFor(null); setSearch(""); }}
+        title="Escolher item do estoque"
+        size="md"
+        mobileStyle="bottom-sheet"
+        footer={<ModalFooter><Button variant="outline" onClick={() => { setPickerOpenFor(null); setSearch(""); }}>Fechar</Button></ModalFooter>}
+      >
+        <div className="space-y-3 p-1">
+          <input
+            autoFocus
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar item..."
+            className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-orange-400"
+          />
+          <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
+            {filtered.map((item: any) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  if (pickerOpenFor) {
+                    updateIngredient(pickerOpenFor, {
+                      inventoryItemId: item.id,
+                      unit: item.stockUnit || item.unit || "un",
+                    });
+                  }
+                  setPickerOpenFor(null);
+                  setSearch("");
+                }}
+                className="w-full flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm text-left hover:bg-slate-50 border border-transparent transition-colors"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="font-black text-slate-800 truncate">{item.name}</p>
+                  <p className={`text-[10px] font-black uppercase ${item.quantity <= 0 ? "text-red-500" : item.quantity < 5 ? "text-amber-500" : "text-green-600"}`}>
+                    {item.quantity <= 0 ? "Esgotado" : `${item.quantity} ${item.unit || 'un'}`}
+                  </p>
+                </div>
+              </button>
+            ))}
+            {filtered.length === 0 && (
+              <p className="text-center text-sm text-slate-400 py-6">Nenhum item encontrado</p>
+            )}
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
 export const DAY_KEYS_UI = ["sun","mon","tue","wed","thu","fri","sat"] as const;
 export const DAY_LABELS: Record<string, string> = { sun:"Domingo", mon:"Segunda", tue:"Terça", wed:"Quarta", thu:"Quinta", fri:"Sexta", sat:"Sábado" };
 

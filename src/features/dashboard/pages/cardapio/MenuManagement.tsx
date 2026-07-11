@@ -50,7 +50,8 @@ import { Tenant } from "../../../../types";
 import {
   ImageUploader,
   InventoryLinkField,
-  ProductionLinkField,
+  RecipeIngredientDraft,
+  RecipeIngredientsField,
   VariantImageUploader,
 } from "../_shared/ManagementShared";
 
@@ -319,6 +320,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
     ncm: "", cfop: "5102", csosn: "400", unitCom: "UN", origem: 0, aliqIcms: 0,
   });
   const [extraInput, setExtraInput] = useState({ label: "", price: "" });
+  const [recipeIngredients, setRecipeIngredients] = useState<RecipeIngredientDraft[]>([]);
 
   useEffect(() => {
     if (tenant) {
@@ -374,6 +376,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
     setEditingProduct(null);
     setProdForm({ name: "", description: "", price: "", imageUrl: "", inventoryItemId: "", recipeId: "", available: true, pdvOnly: false, kitchenPrint: false, autoDisableWhenOutOfStock: false, scheduleRuleEnabled: false, scheduleRuleType: "weekday", scheduleRuleWeekdays: [], scheduleRuleStartTime: "", scheduleRuleEndTime: "", scheduleRuleStartDate: "", scheduleRuleEndDate: "", variants: [], extras: [], ncm: "", cfop: "5102", csosn: "400", unitCom: "UN", origem: 0, aliqIcms: 0 });
     setExtraInput({ label: "", price: "" });
+    setRecipeIngredients([]);
     setProdModal({ open: true, categoryId });
   };
 
@@ -423,6 +426,15 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
       unitCom: prod.unitCom || "UN", origem: prod.origem ?? 0, aliqIcms: prod.aliqIcms ?? 0,
     });
     setExtraInput({ label: "", price: "" });
+    const linkedRecipe = prod.recipeId ? productionRecipes.find((r: any) => r.id === prod.recipeId) : null;
+    setRecipeIngredients(
+      linkedRecipe?.ingredients?.map((ing: any) => ({
+        _key: crypto.randomUUID(),
+        inventoryItemId: ing.inventoryItemId,
+        quantity: String(ing.quantity ?? ""),
+        unit: ing.unit || "un",
+      })) || []
+    );
     setProdModal({ open: true, categoryId: prod.categoryId });
   };
 
@@ -451,6 +463,12 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
         return;
       }
     }
+    const validIngredients = recipeIngredients.filter(ing => ing.inventoryItemId && ing.quantity && !isNaN(parseFloat(ing.quantity)));
+    const incompleteIngredient = recipeIngredients.find(ing => !ing.inventoryItemId || !ing.quantity || isNaN(parseFloat(ing.quantity)));
+    if (incompleteIngredient) {
+      toast.error("Preencha o item e a quantidade de todos os insumos, ou remova a linha vazia.");
+      return;
+    }
     const url = editingProduct ? `/api/products/${editingProduct.id}` : '/api/products';
     let scheduleRule: string | null = null;
     if (prodForm.scheduleRuleEnabled) {
@@ -477,11 +495,18 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
         tenantId: tenant?.id
       })
     });
-    const saved = await res.json().catch(() => ({}));
+    let saved = await res.json().catch(() => ({}));
     if (!res.ok) {
       toast.error(saved?.error || "Falha ao salvar produto.");
       return;
     }
+
+    const recipeSyncResult = await syncProductRecipe(
+      { ...saved, recipeId: editingProduct?.recipeId || null },
+      validIngredients
+    );
+    if (recipeSyncResult !== null) saved = { ...saved, recipeId: recipeSyncResult || null };
+
     if (editingProduct) {
       setLocalCategories(cats => cats.map(cat => ({
         ...cat,
@@ -494,7 +519,62 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
           : cat
       ));
     }
+    apiFetch(`/api/tenants/${tenant?.slug}/production/recipes`)
+      .then(r => r.json())
+      .then(data => setProductionRecipes(Array.isArray(data) ? data : []))
+      .catch(() => {});
     closeProdModal();
+  };
+
+  // Sincroniza a lista simples de "insumos usados" com uma ProductionRecipe por trás —
+  // o usuário só vê "insumo + quantidade + unidade", nunca "receita"/"rendimento".
+  const syncProductRecipe = async (product: any, ingredients: typeof recipeIngredients): Promise<string | null> => {
+    if (!tenant) return null;
+    const existingRecipeId: string | null = product.recipeId || null;
+
+    if (ingredients.length === 0) {
+      if (existingRecipeId) {
+        await apiFetch(`/api/products/${product.id}/recipe`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recipeId: null }),
+        }).catch(() => {});
+        await apiFetch(`/api/tenants/${tenant.slug}/production/recipes/${existingRecipeId}`, { method: 'DELETE' }).catch(() => {});
+        return "";
+      }
+      return null;
+    }
+
+    const payload = {
+      name: `Insumos — ${product.name}`,
+      outputQuantity: 1,
+      outputUnit: "un",
+      productId: product.id,
+      ingredients: ingredients.map(ing => ({ inventoryItemId: ing.inventoryItemId, quantity: parseFloat(ing.quantity), unit: ing.unit })),
+      active: true,
+    };
+
+    const url = existingRecipeId
+      ? `/api/tenants/${tenant.slug}/production/recipes/${existingRecipeId}`
+      : `/api/tenants/${tenant.slug}/production/recipes`;
+    const res = await apiFetch(url, {
+      method: existingRecipeId ? 'PATCH' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const recipe = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast.error(recipe?.error || "Falha ao salvar os insumos do produto.");
+      return null;
+    }
+    if (!existingRecipeId) {
+      await apiFetch(`/api/products/${product.id}/recipe`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipeId: recipe.id }),
+      }).catch(() => {});
+    }
+    return recipe.id;
   };
 
   const deleteProduct = async (id: string) => {
@@ -884,12 +964,10 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
           />
 
           {/* Vínculo de receita de produção */}
-          <ProductionLinkField
-            recipes={productionRecipes}
-            value={prodForm.recipeId}
-            onChange={val => setProdForm({ ...prodForm, recipeId: val })}
-            allCategories={localCategories}
-            editingProductId={editingProduct?.id}
+          <RecipeIngredientsField
+            inventoryItems={inventoryItems}
+            value={recipeIngredients}
+            onChange={setRecipeIngredients}
           />
 
           <div className="flex items-center justify-between py-1 border-t border-slate-100">
