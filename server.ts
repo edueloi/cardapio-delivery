@@ -5379,7 +5379,24 @@ app.delete("/api/products/:id", requireAuth, async (req, res) => {
       tenantId: scoped.tenant.id,
     });
     res.sendStatus(200);
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.code === "P2003") {
+      // Produto já usado em pedidos (histórico de vendas) — não pode ser excluído
+      // fisicamente por causa da FK em order_items. Desativa em vez de apagar.
+      const product = await prisma.product.update({
+        where: { id: scoped.product.id },
+        data: { available: false },
+      });
+      io.to(`tenant-${scoped.tenant.id}`).emit("menu-updated", {
+        tenantId: scoped.tenant.id,
+      });
+      res.status(409).json({
+        error: "Este produto já foi usado em pedidos e não pode ser excluído. Ele foi desativado do cardápio.",
+        deactivated: true,
+        product,
+      });
+      return;
+    }
     console.error(error);
     res.status(500).json({ error: "Failed to delete product" });
   }

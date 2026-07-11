@@ -498,7 +498,23 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
   };
 
   const deleteProduct = async (id: string) => {
-    await apiFetch(`/api/products/${id}`, { method: 'DELETE' });
+    const res = await apiFetch(`/api/products/${id}`, { method: 'DELETE' });
+    if (res.status === 409) {
+      const data = await res.json().catch(() => ({}));
+      if (data?.deactivated) {
+        toast.error(data.error || "Produto já usado em pedidos — foi desativado em vez de excluído.");
+        setLocalCategories(cats => cats.map(cat => ({
+          ...cat,
+          products: cat.products?.map((p: any) => p.id === id ? { ...p, available: false } : p)
+        })));
+        return;
+      }
+    }
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data?.error || "Falha ao excluir produto.");
+      return;
+    }
     setLocalCategories(cats => cats.map(cat => ({
       ...cat,
       products: cat.products?.filter((p: any) => p.id !== id)
