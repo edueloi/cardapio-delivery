@@ -431,7 +431,26 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
   const closeProdModal = () => { setProdModal({ open: false, categoryId: null }); setEditingProduct(null); };
 
   const saveProduct = async () => {
-    if (!prodForm.name || !prodModal.categoryId) return;
+    if (!prodForm.name.trim()) {
+      toast.error("Informe o nome do produto.");
+      return;
+    }
+    if (!prodModal.categoryId) {
+      toast.error("Selecione uma categoria.");
+      return;
+    }
+    const hasVariants = prodForm.variants.length > 0;
+    if (!hasVariants && (!prodForm.price || isNaN(parseFloat(prodForm.price)))) {
+      toast.error("Informe o preço do produto.");
+      return;
+    }
+    if (hasVariants) {
+      const invalidVariant = prodForm.variants.find(v => !v.name.trim() || !v.price || isNaN(parseFloat(v.price)));
+      if (invalidVariant) {
+        toast.error("Preencha nome e preço de todas as variações.");
+        return;
+      }
+    }
     const url = editingProduct ? `/api/products/${editingProduct.id}` : '/api/products';
     let scheduleRule: string | null = null;
     if (prodForm.scheduleRuleEnabled) {
@@ -458,7 +477,11 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
         tenantId: tenant?.id
       })
     });
-    const saved = await res.json();
+    const saved = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast.error(saved?.error || "Falha ao salvar produto.");
+      return;
+    }
     if (editingProduct) {
       setLocalCategories(cats => cats.map(cat => ({
         ...cat,
