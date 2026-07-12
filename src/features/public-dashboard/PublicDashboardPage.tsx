@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import socket from "../../lib/socket";
-import { playKitchenReadySound } from "../../lib/notificationSound";
+import { playTvPanelReadySound } from "../../lib/notificationSound";
 import { announceOrderReady } from "../../lib/voiceAnnouncement";
 import type { DisplayPanelConfig, Order, Tenant } from "../../types";
 import { dineInOrderLabel } from "../../types";
@@ -404,7 +404,7 @@ export default function PublicDashboardPage() {
   useEffect(() => {
     if (!activeReadyAnnouncement) return;
 
-    playKitchenReadySound();
+    playTvPanelReadySound();
     // pequeno atraso pra voz não sobrepor o som da campainha
     const voiceTimer = window.setTimeout(() => {
       announceReadyOrder(activeReadyAnnouncement, displayConfig.voiceAnnouncement !== false);

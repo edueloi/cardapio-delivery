@@ -13,7 +13,8 @@ function getAudioContext(): AudioContext | null {
 // de uma entrada aqui — cai pro beep sintetizado se o arquivo faltar/falhar.
 const ALERT_FILES = {
   newOrder: "/alerts/novo_pedido.mp3",
-  kitchenReady: "/alerts/som_painel_cozinha.mp3",
+  kitchenReady: "/alerts/som_campainha.mp3",
+  tvPanelReady: "/alerts/som_painel_cozinha.mp3",
   lowStock: "/alerts/estoque_baixo.mp3",
 } as const;
 
@@ -34,9 +35,15 @@ export function playNewOrderSound() {
   playAlertFile("newOrder");
 }
 
-// Som de pedido pronto na cozinha (saída para o salão/PDV).
+// Som de pedido pronto na cozinha (saída para o salão/PDV) — usado no dashboard.
 export function playKitchenReadySound() {
   playAlertFile("kitchenReady");
+}
+
+// Som de pedido pronto no Painel de TV (/:slug/display) — som próprio, diferente
+// do usado no dashboard administrativo.
+export function playTvPanelReadySound() {
+  playAlertFile("tvPanelReady");
 }
 
 // Som de alerta de estoque baixo.
