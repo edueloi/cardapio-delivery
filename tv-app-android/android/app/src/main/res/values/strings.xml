@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Painel TV BoxSys</string>
+    <string name="title_activity_main">Painel TV BoxSys</string>
+    <string name="package_name">br.com.boxsys.paineltv</string>
+    <string name="custom_url_scheme">br.com.boxsys.paineltv</string>
+</resources>

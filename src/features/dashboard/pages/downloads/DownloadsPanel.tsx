@@ -1,4 +1,4 @@
-import { Download, Monitor, Globe, CheckCircle2, ArrowRight, Package2, Smartphone, Share, Plus, MoreHorizontal } from "lucide-react";
+import { Download, Monitor, Globe, CheckCircle2, ArrowRight, Package2, Smartphone, Share, Plus, MoreHorizontal, Tv } from "lucide-react";
 import { PageWrapper, SectionTitle, ContentCard } from "../../../../components";
 
 const VERSION = "1.0.3";
@@ -252,6 +252,65 @@ export default function DownloadsPanel() {
           <li className="flex items-center gap-2"><ArrowRight className="w-3.5 h-3.5 text-[#C9A227] shrink-0" /> Digite o mesmo <strong>e-mail e senha</strong> que você usa no painel web</li>
           <li className="flex items-center gap-2"><ArrowRight className="w-3.5 h-3.5 text-[#C9A227] shrink-0" /> Clique em <strong>Entrar no PDV</strong> — o app abre direto no caixa</li>
         </ol>
+      </div>
+
+      {/* Divisor */}
+      <div className="flex items-center gap-4 my-8">
+        <div className="flex-1 h-px bg-slate-200" />
+        <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Painel TV — Android TV / Fire Stick</span>
+        <div className="flex-1 h-px bg-slate-200" />
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 mb-6">
+        <div className="flex items-start gap-4 mb-4">
+          <div className="w-12 h-12 rounded-2xl bg-[#0D1B3E] flex items-center justify-center shrink-0">
+            <Tv className="w-6 h-6 text-[#C9A227]" />
+          </div>
+          <div>
+            <h3 className="font-black text-slate-800 text-base leading-tight">Painel de Pedidos na TV</h3>
+            <p className="text-sm text-slate-500 mt-1">
+              App para Android TV e Fire TV Stick que mostra só o Painel de Pedidos em tela cheia — ideal pra deixar
+              fixo na TV do balcão ou da cozinha. Uma vez vinculado, fica sempre conectado (mesmo desligando e
+              ligando de novo), até você desvincular em Configurações → TVs.
+            </p>
+          </div>
+        </div>
+
+        <a
+          href="/downloads/BoxSys-PainelTV.apk"
+          download="BoxSys-PainelTV.apk"
+          className="inline-flex items-center justify-center gap-2 bg-[#0D1B3E] hover:bg-[#162548] text-white font-black text-sm uppercase tracking-widest py-3 px-6 rounded-xl transition-colors mb-6"
+        >
+          <Download className="w-4 h-4" />
+          Baixar APK do Painel TV
+        </a>
+
+        <ContentCard title="Como instalar na TV (Fire TV Stick)">
+          <ol className="space-y-4">
+            {[
+              { n: "1", title: "Instale o app \"Downloader\"", desc: "Na Fire TV, abra a loja de apps da Amazon e instale o app gratuito \"Downloader\"." },
+              { n: "2", title: "Digite a URL do APK", desc: <>Abra o Downloader e digite: <strong className="text-slate-800">{typeof window !== "undefined" ? window.location.origin : ""}/downloads/BoxSys-PainelTV.apk</strong></> },
+              { n: "3", title: "Baixe e instale", desc: "O Downloader vai baixar e perguntar se pode instalar apps de fontes desconhecidas — permita e conclua a instalação." },
+              { n: "4", title: "Abra o app", desc: "Ele vai mostrar um código de 6 dígitos na tela." },
+              { n: "5", title: "Vincule no painel web", desc: "No computador ou celular, vá em Configurações → TVs, digite o código e pronto — a TV já fica autenticada e conectada permanentemente." },
+            ].map((s) => (
+              <li key={s.n} className="flex items-start gap-3">
+                <span className="w-7 h-7 rounded-full bg-[#C9A227] text-black text-xs font-black flex items-center justify-center shrink-0">
+                  {s.n}
+                </span>
+                <div>
+                  <p className="text-sm font-bold text-slate-800">{s.title}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{s.desc}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </ContentCard>
+
+        <p className="text-xs text-slate-400 mt-4">
+          Em Android TV (não Fire Stick), o processo é o mesmo — o Downloader também está disponível na Google Play Store da TV.
+          Depois de instalado, o app inicia sozinho toda vez que a TV é ligada, sem precisar abrir manualmente.
+        </p>
       </div>
     </PageWrapper>
   );

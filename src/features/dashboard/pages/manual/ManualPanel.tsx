@@ -1209,6 +1209,116 @@ export default function ManualPanel({ membership }: Props) {
       )
     },
     {
+      id: "painel-tv",
+      title: "Painel TV (Android TV / Fire Stick)",
+      tab: "downloads",
+      icon: Monitor,
+      keywords: ["tv", "fire stick", "firestick", "android tv", "painel de pedidos", "downloader", "vincular", "parear", "codigo"],
+      content: (
+        <div className="space-y-6">
+          <div className="bg-gradient-to-r from-[#0D1B3E]/10 to-amber-500/5 p-6 rounded-3xl border border-amber-500/10">
+            <h4 className="text-base font-black text-[#0A1628] mb-2">O que é o Painel TV?</h4>
+            <p className="text-slate-600 text-sm leading-relaxed">
+              É um aplicativo que mostra só o Painel de Pedidos em tela cheia numa TV comum (Android TV) ou com um
+              Fire TV Stick da Amazon — ideal pra deixar fixo no balcão ou na cozinha, avisando por som e voz quando
+              um pedido fica pronto. Uma vez vinculado ao seu estabelecimento, o aparelho fica sempre conectado
+              automaticamente (mesmo desligando e ligando a TV de novo) até você desvincular manualmente.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <h5 className="text-xs font-black uppercase tracking-widest text-slate-400">Passo a passo — Fire TV Stick</h5>
+            <div className="space-y-3">
+              {[
+                {
+                  n: "1",
+                  title: 'Instale o app "Downloader"',
+                  desc: 'No controle da Fire TV, vá em Buscar e procure por "Downloader" (ícone laranja com uma seta). Instale — é grátis, feito pela própria Amazon.',
+                },
+                {
+                  n: "2",
+                  title: "Abra o Downloader e digite a URL do APK",
+                  desc: 'Dentro do Downloader, selecione o campo de URL e digite o endereço do arquivo — você encontra o link certo em Downloads → seção "Painel TV" do seu painel web (aparece um botão "Baixar APK do Painel TV" com a URL completa logo abaixo).',
+                },
+                {
+                  n: "3",
+                  title: "Permita instalação e confirme",
+                  desc: 'O Downloader vai perguntar se pode instalar apps de "fontes desconhecidas" — responda que sim (é normal, pois o app não vem da loja oficial). Depois, toque em Instalar.',
+                },
+                {
+                  n: "4",
+                  title: "Abra o app instalado",
+                  desc: 'Ele vai mostrar um código de 6 dígitos bem grande na tela, com a mensagem "Vincule esta TV".',
+                },
+                {
+                  n: "5",
+                  title: "Vincule no painel web",
+                  desc: 'No computador ou celular, acesse o painel do seu estabelecimento em Configurações → seção "TVs (Android TV / Fire Stick)". Digite o código de 6 dígitos que apareceu na TV, dê um nome pra ela (ex: "TV do Balcão") e clique em Vincular.',
+                },
+                {
+                  n: "6",
+                  title: "Pronto — sempre conectado",
+                  desc: "A TV já troca sozinha para o Painel de Pedidos do seu estabelecimento. Se desligar e ligar a TV de novo (ou faltar luz), o app abre automaticamente sozinho, sem precisar repetir nenhum passo.",
+                },
+              ].map((s) => (
+                <div key={s.n} className="flex items-start gap-3 bg-white p-4 rounded-2xl border border-slate-100">
+                  <span className="w-7 h-7 rounded-full bg-[#C9A227] text-black text-xs font-black flex items-center justify-center shrink-0 mt-0.5">
+                    {s.n}
+                  </span>
+                  <div>
+                    <p className="text-sm font-bold text-slate-800">{s.title}</p>
+                    <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{s.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="border-t border-slate-100 pt-4 space-y-3">
+            <h6 className="text-xs font-black text-slate-800 uppercase tracking-widest text-amber-600">Perguntas frequentes</h6>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-bold flex items-center gap-1 text-emerald-800">
+                  <CheckCircle2 className="w-4 h-4" /> Funciona em Android TV comum também?
+                </span>
+                <p className="leading-relaxed">
+                  Sim. O processo é o mesmo — o app Downloader também está disponível na Google Play Store de qualquer
+                  TV com Android TV, não só no Fire Stick.
+                </p>
+              </div>
+              <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-bold flex items-center gap-1 text-emerald-800">
+                  <Bell className="w-4 h-4" /> Posso desligar o aviso por voz?
+                </span>
+                <p className="leading-relaxed">
+                  Sim. Em Configurações → Painel TV existe um interruptor "Anúncio por voz" — desligando, o painel
+                  continua tocando o som e mostrando o pedido pronto na tela, só sem falar em voz alta.
+                </p>
+              </div>
+              <div className="bg-red-50/50 p-4 rounded-xl border border-red-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-bold flex items-center gap-1 text-red-800">
+                  <X className="w-4 h-4" /> Quero trocar de TV / vender o aparelho
+                </span>
+                <p className="leading-relaxed">
+                  Vá em Configurações → TVs e clique em "Desvincular" ao lado do aparelho. Ele volta a mostrar um
+                  código de pareamento novo, sem mais acesso ao seu estabelecimento.
+                </p>
+              </div>
+              <div className="bg-red-50/50 p-4 rounded-xl border border-red-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-bold flex items-center gap-1 text-red-800">
+                  <X className="w-4 h-4" /> O código expirou antes de eu vincular
+                </span>
+                <p className="leading-relaxed">
+                  O código vale por 15 minutos. Se expirar, basta esperar alguns segundos na tela da TV — ela gera um
+                  código novo automaticamente.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )
+    },
+    {
       id: "downloads",
       title: "Downloads",
       tab: "downloads",

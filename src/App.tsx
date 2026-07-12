@@ -22,6 +22,7 @@ import AdminAccessPage from "./features/auth/AdminAccessPage";
 import InviteRegisterPage from "./features/auth/InviteRegisterPage";
 import ForgotPasswordPage from "./features/auth/ForgotPasswordPage";
 import ResetPasswordPage from "./features/auth/ResetPasswordPage";
+import TvAppPage from "./pages/TvAppPage";
 
 // Em cozinha.boxsys.com.br a raiz "/" deve cair direto na tela de login da
 // cozinha, sem precisar digitar "/cozinha" no final — mais fácil de favoritar
@@ -87,6 +88,7 @@ function AnimatedRoutes() {
           />
 
           <Route path="/:slug/display" element={<PublicDashboard />} />
+          <Route path="/tv-app" element={<TvAppPage />} />
           <Route path="/cond/:slug" element={<CondominiumPage />} />
 
           <Route

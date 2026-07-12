@@ -15,6 +15,13 @@ public/downloads/*.apk
 
 # Chave de assinatura do APK — nunca commitar (perder = quebra atualização do app instalado)
 android-keystore/
+tv-app-android/*.jks
+tv-app-android/android/keystore.properties
+tv-app-android/android/local.properties
+tv-app-android/android/build/
+tv-app-android/android/app/build/
+tv-app-android/android/.gradle/
+tv-app-android/android/capacitor-cordova-android-plugins/build/
 
 # App desktop Electron — instaladores gerados manualmente, não versionar (ficam em public/downloads/)
 pdv-desktop/dist-installer/
