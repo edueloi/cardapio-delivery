@@ -367,6 +367,11 @@ app.use(
   "/downloads",
   express.static(path.join(process.cwd(), "public", "downloads"))
 );
+// URL curta pra digitar no controle remoto da TV/Fire Stick (app Downloader) —
+// bem mais fácil que a URL completa do APK.
+app.get("/tv", (req, res) => {
+  res.redirect(302, "/downloads/BoxSys-PainelTV.apk");
+});
 app.use(authMiddleware);
 registerProductionRoutes({
   app,

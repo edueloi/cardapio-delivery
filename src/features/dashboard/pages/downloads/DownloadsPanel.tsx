@@ -289,7 +289,7 @@ export default function DownloadsPanel() {
           <ol className="space-y-4">
             {[
               { n: "1", title: "Instale o app \"Downloader\"", desc: "Na Fire TV, abra a loja de apps da Amazon e instale o app gratuito \"Downloader\"." },
-              { n: "2", title: "Digite a URL do APK", desc: <>Abra o Downloader e digite: <strong className="text-slate-800">{typeof window !== "undefined" ? window.location.origin : ""}/downloads/BoxSys-PainelTV.apk</strong></> },
+              { n: "2", title: "Digite a URL do APK", desc: <>Abra o Downloader e digite: <strong className="text-slate-800">boxsys.com.br/tv</strong> (URL curta, fácil de digitar no controle)</> },
               { n: "3", title: "Baixe e instale", desc: "O Downloader vai baixar e perguntar se pode instalar apps de fontes desconhecidas — permita e conclua a instalação." },
               { n: "4", title: "Abra o app", desc: "Ele vai mostrar um código de 6 dígitos na tela." },
               { n: "5", title: "Vincule no painel web", desc: "No computador ou celular, vá em Configurações → TVs, digite o código e pronto — a TV já fica autenticada e conectada permanentemente." },

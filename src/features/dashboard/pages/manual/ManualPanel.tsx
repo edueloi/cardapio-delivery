@@ -1237,8 +1237,8 @@ export default function ManualPanel({ membership }: Props) {
                 },
                 {
                   n: "2",
-                  title: "Abra o Downloader e digite a URL do APK",
-                  desc: 'Dentro do Downloader, selecione o campo de URL e digite o endereço do arquivo — você encontra o link certo em Downloads → seção "Painel TV" do seu painel web (aparece um botão "Baixar APK do Painel TV" com a URL completa logo abaixo).',
+                  title: "Abra o Downloader e digite a URL curta",
+                  desc: 'Dentro do Downloader, selecione o campo de URL e digite: boxsys.com.br/tv — é bem curta de propósito, pra facilitar digitar com o controle remoto.',
                 },
                 {
                   n: "3",
