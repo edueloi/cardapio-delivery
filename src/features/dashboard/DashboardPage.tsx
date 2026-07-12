@@ -220,11 +220,21 @@ export default function DashboardPage() {
 
   const updateStatus = async (id: string, status: string) => {
     try {
-      await apiFetch(`/api/orders/${id}/status`, {
+      const res = await apiFetch(`/api/orders/${id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
+      // Atualiza a tela com a resposta da própria requisição, sem depender do socket
+      // devolver o evento — se o socket dessa aba estiver "zumbi" (fora da room do
+      // tenant), o clique mudava o pedido no banco mas a coluna não se mexia, e o
+      // operador clicava de novo achando que não funcionou.
+      if (res.ok) {
+        const updatedOrder = await res.json().catch(() => null);
+        if (updatedOrder?.id) {
+          setOrders((prev) => (Array.isArray(prev) ? prev.map((o) => (o.id === updatedOrder.id ? updatedOrder : o)) : prev));
+        }
+      }
     } catch (err) {
       console.error(err);
     }

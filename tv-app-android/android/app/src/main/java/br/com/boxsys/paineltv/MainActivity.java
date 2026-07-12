@@ -3,6 +3,7 @@ package br.com.boxsys.paineltv;
 import android.os.Bundle;
 import android.view.View;
 import android.view.WindowManager;
+import android.webkit.WebSettings;
 import com.getcapacitor.BridgeActivity;
 
 // Painel de TV: sempre em tela cheia, sem barra de status/navegação, tela nunca
@@ -13,6 +14,16 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         hideSystemUi();
+        allowAutoplayWithoutGesture();
+    }
+
+    // Sem isso, o WebView bloqueia qualquer áudio/voz (som de "pedido pronto",
+    // anúncio por voz) até o usuário tocar a tela pelo menos uma vez — mas este
+    // app nunca recebe toque nenhum (fica sozinho numa TV, controlado por
+    // controle remoto que nem é usado nessa tela), então o som nunca tocaria.
+    private void allowAutoplayWithoutGesture() {
+        WebSettings settings = getBridge().getWebView().getSettings();
+        settings.setMediaPlaybackRequiresUserGesture(false);
     }
 
     @Override

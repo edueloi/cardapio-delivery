@@ -13,7 +13,7 @@ function getAudioContext(): AudioContext | null {
 // de uma entrada aqui — cai pro beep sintetizado se o arquivo faltar/falhar.
 const ALERT_FILES = {
   newOrder: "/alerts/novo_pedido.mp3",
-  kitchenReady: "/alerts/saida_cozinha.mp3",
+  kitchenReady: "/alerts/som_painel_cozinha.mp3",
   lowStock: "/alerts/estoque_baixo.mp3",
 } as const;
 
