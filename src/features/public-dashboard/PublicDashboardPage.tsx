@@ -273,7 +273,19 @@ export default function PublicDashboardPage() {
     try {
       const res = await fetch(`/api/tenants/${slug}/orders`);
       const data = await res.json();
-      setOrders(Array.isArray(data) ? data : []);
+      const nextOrders: Order[] = Array.isArray(data) ? data : [];
+
+      // Detecta pedidos que viraram SHIPPED desde o último fetch/evento conhecido —
+      // cobre o caso do socket estar "zumbi" (conectado mas fora da room), onde o
+      // polling é quem primeiro percebe a mudança e precisa disparar o aviso sonoro.
+      for (const order of nextOrders) {
+        const previousOrder = ordersRef.current.find((o) => o.id === order.id);
+        if (order.status === "SHIPPED" && previousOrder?.status !== "SHIPPED") {
+          enqueueReadyAnnouncement(order);
+        }
+      }
+
+      setOrders(nextOrders);
     } catch (err) {
       console.error("Failed to fetch orders:", err);
     }
@@ -359,11 +371,20 @@ export default function PublicDashboardPage() {
 
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
 
+    // Rede de segurança: independente do socket estar conectado/na room certa,
+    // rebusca os pedidos periodicamente. Isso cobre o Painel de TV rodando dentro
+    // de um WebView (Fire Stick/Android TV) fixo 24h, onde ninguém percebe (nem
+    // consegue dar F5 facilmente) se o socket ficar "zumbi" — conectado mas surdo.
+    const pollTimer = setInterval(() => {
+      fetchOrders();
+    }, 15000);
+
     return () => {
       socket.off("order-status-updated", handleOrderStatusUpdated);
       socket.off("new-order", handleNewOrder);
       socket.off("order-reannounced", handleReannounce);
       clearInterval(timer);
+      clearInterval(pollTimer);
     };
   }, [slug]);
 
