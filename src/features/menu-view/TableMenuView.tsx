@@ -232,7 +232,7 @@ export default function TableMenuView() {
   if (!tenant) return <div className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center font-serif">Restaurante não encontrado</div>;
 
   return (
-    <div className="min-h-screen bg-[#0b0f14] text-[#f5f5f5] selection:bg-[#C9A227]/30 font-sans relative overflow-x-hidden lg:flex lg:h-screen">
+    <div className="min-h-screen bg-[#0b0f14] text-[#f5f5f5] selection:bg-[#C9A227]/30 font-sans relative overflow-x-hidden lg:flex lg:h-screen lg:overflow-hidden">
       
       {/* Background Decor */}
       <div className="fixed inset-0 z-0 pointer-events-none lg:absolute">
