@@ -62,6 +62,7 @@ model Tenant {
   kitchenAccessRequests KitchenAccessRequest[]
   wppMessageLogs   WppMessageLog[]
   inviteTokens     InviteToken[]
+  tvDevices        TvDevice[]
 
   @@map("tenants")
 }
@@ -225,6 +226,30 @@ model KitchenSession {
   kitchenStaff KitchenStaff? @relation(fields: [kitchenStaffId], references: [id], onDelete: Cascade)
 
   @@map("kitchen_sessions")
+}
+
+// App de TV (Android TV / Fire Stick) que exibe só o Painel de Pedidos. Fluxo tipo
+// Netflix: o app gera um código de 6 dígitos (deviceToken já existe desde a primeira
+// abertura, mas sem tenant ainda) e o dono digita esse código em Configurações > TVs
+// pra vincular o aparelho ao estabelecimento. Depois de vinculado, o app usa o
+// deviceToken direto (sessão permanente) e nunca desloga sozinho — só se o dono
+// desvincular (unlinkedAt preenchido / tenantId zerado).
+model TvDevice {
+  id                   String    @id @default(cuid())
+  deviceToken          String    @unique @map("device_token") // segredo permanente salvo no app
+  tenantId             String?   @map("tenant_id")             // null até ser vinculado
+  label                String?   // nome opcional dado pelo dono, ex: "TV Balcão"
+  pairingCode          String?   @map("pairing_code")          // código de 6 dígitos atual (null após vincular ou expirar)
+  pairingCodeExpiresAt DateTime? @map("pairing_code_expires_at")
+  lastSeenAt           DateTime? @map("last_seen_at")           // último heartbeat/poll do app
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([pairingCode])
+  @@map("tv_devices")
 }
 
 model InviteToken {

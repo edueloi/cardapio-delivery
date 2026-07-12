@@ -67,6 +67,7 @@ import {
   KitchenAccessRequestsCard,
   KitchenPasswordCard,
   KitchenStaffCard,
+  TvDevicesCard,
   KmRangeAdder,
   maskPhone,
   parseAddress,
@@ -530,6 +531,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
             {tenant?.id && <KitchenPasswordCard tenantId={tenant.id} />}
             {tenant?.id && <KitchenAccessRequestsCard tenantId={tenant.id} onApproved={() => {}} />}
             {tenant?.id && <KitchenStaffCard tenantId={tenant.id} />}
+            {tenant?.slug && <TvDevicesCard slug={tenant.slug} />}
 
           </motion.div>
         )}

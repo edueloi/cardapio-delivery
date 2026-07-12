@@ -17,6 +17,7 @@ import {
   Image as ImageIcon,
   Info,
   MapPin,
+  Monitor,
   Package,
   Plus,
   QrCode,
@@ -1384,6 +1385,169 @@ export function KitchenStaffCard({ tenantId }: { tenantId: string }) {
                     {member.active ? "Desativar" : "Ativar"}
                   </button>
                   <button onClick={() => handleDelete(member)} className="text-[10px] font-black uppercase text-red-500 hover:text-red-600">Remover</button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </ContentCard>
+  );
+}
+
+interface TvDeviceRecord {
+  id: string;
+  label: string | null;
+  lastSeenAt: string | null;
+  createdAt: string;
+}
+
+// Gestão dos aparelhos de TV (Android TV / Fire Stick) vinculados ao estabelecimento —
+// cada um exibe só o Painel de Pedidos (/:slug/display) e fica "sempre conectado" até
+// o dono desvincular por aqui. Pareamento tipo Netflix: a TV mostra um código de 6
+// dígitos, o dono digita ele abaixo pra vincular o aparelho a este estabelecimento.
+export function TvDevicesCard({ slug }: { slug: string }) {
+  const toast = useToast();
+  const [devices, setDevices] = useState<TvDeviceRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [pairingCode, setPairingCode] = useState("");
+  const [label, setLabel] = useState("");
+  const [pairing, setPairing] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingLabel, setEditingLabel] = useState("");
+
+  const fetchDevices = () => {
+    apiJson<TvDeviceRecord[]>(`/api/tenants/${slug}/tv-devices`)
+      .then((data) => setDevices(Array.isArray(data) ? data : []))
+      .catch(() => setDevices([]))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { fetchDevices(); }, [slug]);
+
+  const handlePair = async () => {
+    const code = pairingCode.trim();
+    if (code.length !== 6) { toast.error("Digite o código de 6 dígitos exibido na TV."); return; }
+    setPairing(true);
+    try {
+      await apiFetch(`/api/tenants/${slug}/tv-devices/pair`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pairingCode: code, label: label.trim() || undefined }),
+      });
+      setPairingCode(""); setLabel("");
+      fetchDevices();
+      toast.success("TV vinculada com sucesso!");
+    } catch (err: any) {
+      toast.error(err.message || "Código inválido ou expirado.");
+    } finally {
+      setPairing(false);
+    }
+  };
+
+  const handleRename = async (id: string) => {
+    try {
+      await apiFetch(`/api/tenants/${slug}/tv-devices/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label: editingLabel.trim() }),
+      });
+      setEditingId(null);
+      fetchDevices();
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao renomear.");
+    }
+  };
+
+  const handleUnpair = async (device: TvDeviceRecord) => {
+    if (!window.confirm(`Desvincular "${device.label || "esta TV"}"? O aparelho vai voltar a pedir um novo código de pareamento.`)) return;
+    try {
+      await apiFetch(`/api/tenants/${slug}/tv-devices/${device.id}`, { method: "DELETE" });
+      fetchDevices();
+      toast.success("TV desvinculada.");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao desvincular.");
+    }
+  };
+
+  return (
+    <ContentCard padding="lg">
+      <div className="flex items-center gap-3 mb-1">
+        <Monitor className="w-4 h-4 text-slate-400" />
+        <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">TVs (Android TV / Fire Stick)</p>
+      </div>
+      <p className="text-[10px] text-slate-400 mb-6">
+        Instale o app do Painel de Pedidos na TV ou Fire Stick — ele vai mostrar um código de 6 dígitos na tela.
+        Digite esse código abaixo pra vincular o aparelho a este estabelecimento. Uma vez vinculado, fica sempre
+        conectado automaticamente (mesmo desligando e ligando de novo) até você desvincular por aqui.
+      </p>
+
+      <div className="flex flex-col sm:flex-row gap-3 sm:items-end mb-6">
+        <div className="flex-1 space-y-1.5">
+          <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Código exibido na TV</label>
+          <input
+            type="text"
+            inputMode="numeric"
+            maxLength={6}
+            value={pairingCode}
+            onChange={(e) => setPairingCode(e.target.value.replace(/\D/g, ""))}
+            placeholder="000000"
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-lg font-black tracking-[0.3em] text-center focus:border-[#C9A227] outline-none transition-all"
+          />
+        </div>
+        <div className="flex-1 space-y-1.5">
+          <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Nome (opcional)</label>
+          <input
+            type="text"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder="Ex: TV do Balcão"
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm font-bold focus:border-[#C9A227] outline-none transition-all"
+          />
+        </div>
+        <button
+          type="button"
+          disabled={pairing || pairingCode.length !== 6}
+          onClick={handlePair}
+          className="bg-[#0D1B3E] hover:bg-slate-800 disabled:opacity-40 text-white px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all shrink-0"
+        >
+          {pairing ? "Vinculando..." : "Vincular"}
+        </button>
+      </div>
+
+      {!loading && devices.length === 0 && (
+        <p className="text-xs text-slate-300 text-center py-4">Nenhuma TV vinculada ainda.</p>
+      )}
+
+      {devices.length > 0 && (
+        <div className="space-y-2">
+          {devices.map((device) => (
+            <div key={device.id} className="flex items-center gap-3 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3">
+              <div className="w-2 h-2 rounded-full shrink-0 bg-green-500" />
+              <div className="flex-1 min-w-0">
+                <span className="text-sm font-bold text-slate-700 truncate block">{device.label || "TV sem nome"}</span>
+                <span className="text-[10px] text-slate-400">
+                  {device.lastSeenAt ? `Visto por último em ${new Date(device.lastSeenAt).toLocaleString("pt-BR")}` : "Ainda sem atividade"}
+                </span>
+              </div>
+
+              {editingId === device.id ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={editingLabel}
+                    onChange={(e) => setEditingLabel(e.target.value)}
+                    placeholder="Nome da TV"
+                    autoFocus
+                    className="bg-white border border-slate-200 rounded-lg py-1.5 px-3 text-xs font-bold w-32 outline-none focus:border-[#C9A227]"
+                  />
+                  <button onClick={() => handleRename(device.id)} className="text-[10px] font-black uppercase text-green-600 hover:text-green-700">Salvar</button>
+                  <button onClick={() => setEditingId(null)} className="text-[10px] font-black uppercase text-slate-400 hover:text-slate-600">Cancelar</button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 shrink-0">
+                  <button onClick={() => { setEditingId(device.id); setEditingLabel(device.label || ""); }} className="text-[10px] font-black uppercase text-slate-400 hover:text-slate-600">Renomear</button>
+                  <button onClick={() => handleUnpair(device)} className="text-[10px] font-black uppercase text-red-500 hover:text-red-600">Desvincular</button>
                 </div>
               )}
             </div>
