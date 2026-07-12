@@ -336,7 +336,7 @@ export default function TableMenuView() {
                     {tenant.name?.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?"}
                   </div>
                 )}
-                <div className="text-white font-black text-xl leading-tight tracking-tight uppercase line-clamp-2">
+                <div className="text-white font-black text-sm leading-snug tracking-tight uppercase line-clamp-2">
                   {tenant.name}
                 </div>
                 <p className="text-[10px] font-black text-white/20 tracking-[0.3em] mt-2 uppercase">Mesa {tableId}</p>
@@ -385,52 +385,39 @@ export default function TableMenuView() {
             </div>
           </aside>
 
-          <div className="flex-1 flex flex-col h-full overflow-hidden relative bg-white lg:bg-[#0b0f14]">
+          <div className="flex-1 flex flex-col relative bg-white lg:bg-[#0b0f14] lg:h-full lg:overflow-hidden">
             {/* Mobile/Tablet Header */}
             <header className="sticky top-0 z-40 lg:hidden shrink-0 bg-[#0b0f14]/95 backdrop-blur-xl border-b border-white/[0.06]">
-              <div className="flex items-center justify-between px-4 py-3 gap-3">
-                {/* Logo + Mesa */}
-                <div className="flex items-center gap-3 shrink-0">
+              <div className="flex items-center justify-between px-4 pt-3 gap-3">
+                {/* Logo + Nome + Mesa */}
+                <div className="flex items-center gap-2.5 min-w-0">
                   {tenant.logoUrl ? (
-                    <img src={tenant.logoUrl} className="w-9 h-9 rounded-xl object-cover" alt={tenant.name} />
+                    <img src={tenant.logoUrl} className="w-9 h-9 rounded-xl object-cover shrink-0" alt={tenant.name} />
                   ) : (
                     <div
-                      className="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-black text-black"
+                      className="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-black text-black shrink-0"
                       style={{ background: "linear-gradient(135deg, #C9A227, #a37d1a)" }}
                     >
                       {tenant.name?.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?"}
                     </div>
                   )}
-                  <div>
-                    <p className="text-[10px] font-black text-white/30 uppercase tracking-widest leading-none">{tableId === 'Balcao' ? 'Balcão' : `Mesa ${tableId}`}</p>
-                    <p className="text-sm font-bold text-white leading-tight truncate max-w-[100px]">{tenant.name}</p>
+                  <div className="min-w-0">
+                    <p className="text-[9px] font-black text-white/30 uppercase tracking-widest leading-none">{tableId === 'Balcao' ? 'Balcão' : `Mesa ${tableId}`}</p>
+                    <p className="text-sm font-bold text-white leading-tight truncate">{tenant.name}</p>
                   </div>
                 </div>
 
-                {/* Search */}
-                <div className="flex-1 bg-white/5 border border-white/10 rounded-xl flex items-center px-3 py-2 gap-2 focus-within:border-amber-500/40 transition-all">
-                  <Search className="w-3.5 h-3.5 text-white/30 shrink-0" />
-                  <input
-                    type="text"
-                    placeholder="Buscar..."
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
-                    className="bg-transparent border-none outline-none text-sm w-full text-white placeholder:text-white/20"
-                  />
-                  {searchTerm && <button onClick={() => setSearchTerm("")}><X className="w-3 h-3 text-white/30" /></button>}
-                </div>
-
                 {/* Actions */}
-                <div className="flex items-center gap-1 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0">
                   <button
                     onClick={() => { setShowWaiterModal(true); setWaiterSent(false); setWaiterNote(""); setWaiterRequestBill(false); }}
-                    className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/60 hover:text-amber-400 transition-all active:scale-90"
+                    className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/60 hover:text-amber-400 transition-all active:scale-90 shrink-0"
                   >
                     <Bell className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => setShowBill(true)}
-                    className="relative flex items-center gap-1.5 bg-amber-500 text-black px-3 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all"
+                    className="relative flex items-center gap-1.5 bg-amber-500 text-black px-3 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all shrink-0 whitespace-nowrap"
                   >
                     <Receipt className="w-3.5 h-3.5" />
                     {fmt(totalBill)}
@@ -438,8 +425,23 @@ export default function TableMenuView() {
                 </div>
               </div>
 
+              {/* Search */}
+              <div className="px-4 pt-2.5">
+                <div className="bg-white/5 border border-white/10 rounded-xl flex items-center px-3 py-2 gap-2 focus-within:border-amber-500/40 transition-all">
+                  <Search className="w-3.5 h-3.5 text-white/30 shrink-0" />
+                  <input
+                    type="text"
+                    placeholder="Buscar no cardápio..."
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    className="bg-transparent border-none outline-none text-sm w-full text-white placeholder:text-white/20"
+                  />
+                  {searchTerm && <button onClick={() => setSearchTerm("")}><X className="w-3 h-3 text-white/30" /></button>}
+                </div>
+              </div>
+
               {/* Categories Horizontal Scroll */}
-              <div className="flex gap-2 px-4 pb-3 overflow-x-auto scrollbar-hide">
+              <div className="flex gap-2 px-4 pt-2.5 pb-3 overflow-x-auto scrollbar-hide">
                 {tenant.categories?.map(cat => (
                   <button
                     key={cat.id}
@@ -514,7 +516,7 @@ export default function TableMenuView() {
               </div>
             </header>
 
-            <div className="flex-1 overflow-y-auto lg:p-12 relative custom-scrollbar pb-32 lg:pb-12 bg-[#0b0f14] lg:min-h-0">
+            <div className="flex-1 lg:overflow-y-auto lg:p-12 relative custom-scrollbar pb-32 lg:pb-12 bg-[#0b0f14] lg:min-h-0">
 
               {/* Promotions Carousel / Fallback Banner — só na primeira categoria ou sem filtro */}
               {promotions.length > 0 && !showBill && !selectedProduct && (!selectedCategoryId || selectedCategoryId === tenant.categories?.[0]?.id) && (
