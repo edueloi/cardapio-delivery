@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { type LucideIcon, LogOut, Menu, Monitor, Utensils, X, ShieldCheck, ChefHat, ExternalLink, PanelLeftClose, PanelLeftOpen, Settings2 } from "lucide-react";
+import { type LucideIcon, LogOut, Menu, Monitor, Utensils, X, ShieldCheck, ChefHat, ExternalLink, PanelLeftClose, PanelLeftOpen, Settings2, AlertTriangle } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 import DashboardAccountMenu from "./DashboardAccountMenu";
 
@@ -26,6 +26,8 @@ interface DashboardShellProps {
   slug: string;
   activeTab: string;
   navigationGroups: DashboardNavigationGroup[];
+  /** Contagem de alertas por tab (ex: { inventory: 3 }) — mostra um triângulo de aviso com o número ao lado do item. */
+  navigationAlerts?: Partial<Record<string, number>>;
   headerBadges?: ReactNode;
   isMobileMenuOpen: boolean;
   onToggleMobileMenu: () => void;
@@ -52,6 +54,7 @@ export default function DashboardShell({
   slug,
   activeTab,
   navigationGroups,
+  navigationAlerts,
   headerBadges,
   isMobileMenuOpen,
   onToggleMobileMenu,
@@ -184,13 +187,14 @@ export default function DashboardShell({
               <div className="space-y-0.5">
                 {group.items.map((item) => {
                   const isActive = activeTab === item.tab;
+                  const alertCount = navigationAlerts?.[item.tab] || 0;
                   return (
                     <button
                       key={item.id}
                       onClick={() => onSelectTab(item.tab)}
-                      title={isCollapsed ? item.label : undefined}
+                      title={isCollapsed ? (alertCount > 0 ? `${item.label} — ${alertCount} alerta(s)` : item.label) : undefined}
                       className={cn(
-                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left group",
+                        "relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left group",
                         isCollapsed && "justify-center",
                         isActive
                           ? "bg-[#C9A227] text-white shadow-lg shadow-[#C9A227]/20"
@@ -202,9 +206,21 @@ export default function DashboardShell({
                         isActive ? "text-white" : "text-slate-500 group-hover:text-[#C9A227]"
                       )} />
                       {!isCollapsed && (
-                        <span className="text-[12px] font-semibold tracking-wide leading-none">
+                        <span className="text-[12px] font-semibold tracking-wide leading-none flex-1">
                           {item.label}
                         </span>
+                      )}
+                      {alertCount > 0 && (
+                        isCollapsed ? (
+                          <span className="absolute top-1 right-1 flex items-center justify-center min-w-[15px] h-[15px] px-0.5 rounded-full bg-amber-400 text-[#0A1628] text-[9px] font-black leading-none shadow">
+                            {alertCount > 9 ? "9+" : alertCount}
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 shrink-0 bg-amber-400/15 text-amber-400 px-1.5 py-0.5 rounded-md">
+                            <AlertTriangle className="w-3 h-3" />
+                            <span className="text-[10px] font-black leading-none">{alertCount > 99 ? "99+" : alertCount}</span>
+                          </span>
+                        )
                       )}
                     </button>
                   );

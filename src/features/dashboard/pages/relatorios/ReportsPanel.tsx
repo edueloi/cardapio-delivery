@@ -35,6 +35,21 @@ interface DailyData {
   count: number;
 }
 
+interface MonthlyData {
+  month: number;
+  total: number;
+  count: number;
+}
+
+interface TopInventoryItem {
+  id: string;
+  name: string;
+  unit: string | null;
+  quantity: number;
+}
+
+const MONTH_LABELS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+
 const PAYMENT_LABELS: Record<string, { label: string; icon: React.ElementType; color: string }> = {
   CASH:   { label: "Dinheiro", icon: Banknote,    color: "bg-green-500" },
   PIX:    { label: "PIX",      icon: QrCode,      color: "bg-violet-500" },
@@ -56,11 +71,13 @@ interface ReportsPanelProps {
 }
 
 export default function ReportsPanel({ slug, tenant }: ReportsPanelProps) {
-  const [period, setPeriod] = useState<"today" | "week" | "month" | "custom">("today");
+  const [period, setPeriod] = useState<"today" | "week" | "month" | "year" | "custom">("today");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [summary, setSummary] = useState<ReportSummary | null>(null);
   const [dailyData, setDailyData] = useState<DailyData[]>([]);
+  const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
+  const [topInventory, setTopInventory] = useState<TopInventoryItem[]>([]);
   const [loading, setLoading] = useState(false);
 
   const buildDates = useCallback(() => {
@@ -80,6 +97,11 @@ export default function ReportsPanel({ slug, tenant }: ReportsPanelProps) {
       const to = new Date(now); to.setHours(23, 59, 59, 999);
       return { from: from.toISOString(), to: to.toISOString() };
     }
+    if (period === "year") {
+      const from = new Date(now.getFullYear(), 0, 1);
+      const to = new Date(now); to.setHours(23, 59, 59, 999);
+      return { from: from.toISOString(), to: to.toISOString() };
+    }
     return { from: customFrom ? new Date(customFrom).toISOString() : "", to: customTo ? new Date(customTo + "T23:59:59").toISOString() : "" };
   }, [period, customFrom, customTo]);
 
@@ -88,12 +110,16 @@ export default function ReportsPanel({ slug, tenant }: ReportsPanelProps) {
     if (!from || !to) return;
     setLoading(true);
     try {
-      const [summRes, dailyRes] = await Promise.all([
+      const [summRes, dailyRes, monthlyRes, topInvRes] = await Promise.all([
         apiFetch(`/api/tenants/${slug}/reports/summary?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
         apiFetch(`/api/tenants/${slug}/reports/daily?days=${period === "month" ? 30 : period === "week" ? 7 : 1}`),
+        apiFetch(`/api/tenants/${slug}/reports/monthly?year=${new Date().getFullYear()}`),
+        apiFetch(`/api/tenants/${slug}/reports/top-inventory?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
       ]);
       if (summRes.ok) setSummary(await summRes.json());
       if (dailyRes.ok) setDailyData(await dailyRes.json());
+      if (monthlyRes.ok) setMonthlyData(await monthlyRes.json());
+      if (topInvRes.ok) setTopInventory(await topInvRes.json());
     } catch (e) {
       console.error(e);
     } finally {
@@ -105,6 +131,8 @@ export default function ReportsPanel({ slug, tenant }: ReportsPanelProps) {
 
   const maxDailyTotal = dailyData.length > 0 ? Math.max(...dailyData.map((d) => d.total)) : 1;
   const maxHourlyTotal = summary ? Math.max(...summary.hourly.map((h) => h.total), 1) : 1;
+  const maxMonthlyTotal = monthlyData.length > 0 ? Math.max(...monthlyData.map((m) => m.total), 1) : 1;
+  const maxTopInventoryQty = topInventory.length > 0 ? Math.max(...topInventory.map((i) => i.quantity), 1) : 1;
 
   const exportCSV = () => {
     if (!summary) return;
@@ -139,7 +167,7 @@ export default function ReportsPanel({ slug, tenant }: ReportsPanelProps) {
       {/* Period selector */}
       <ContentCard className="mb-6">
         <div className="flex flex-wrap gap-2 items-center">
-          {(["today", "week", "month", "custom"] as const).map((p) => (
+          {(["today", "week", "month", "year", "custom"] as const).map((p) => (
             <button
               key={p}
               onClick={() => setPeriod(p)}
@@ -147,7 +175,7 @@ export default function ReportsPanel({ slug, tenant }: ReportsPanelProps) {
                 period === p ? "bg-[#0D1B3E] text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
               }`}
             >
-              {p === "today" ? "Hoje" : p === "week" ? "7 Dias" : p === "month" ? "Este Mês" : "Personalizado"}
+              {p === "today" ? "Hoje" : p === "week" ? "7 Dias" : p === "month" ? "Este Mês" : p === "year" ? "Este Ano" : "Personalizado"}
             </button>
           ))}
 
@@ -266,6 +294,34 @@ export default function ReportsPanel({ slug, tenant }: ReportsPanelProps) {
             </ContentCard>
           </div>
 
+          {/* Monthly chart (visão "Este Ano") */}
+          {period === "year" && (
+            <ContentCard>
+              <h3 className="text-sm font-black uppercase tracking-widest text-slate-700 mb-4">
+                Receita por Mês — {new Date().getFullYear()}
+              </h3>
+              <div className="flex items-end gap-2 h-32">
+                {monthlyData.map((m) => {
+                  const pct = maxMonthlyTotal > 0 ? (m.total / maxMonthlyTotal) * 100 : 0;
+                  return (
+                    <div key={m.month} className="flex flex-col items-center gap-1 flex-1 group relative">
+                      {m.total > 0 && (
+                        <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[9px] font-black px-2 py-0.5 rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                          {fmt(m.total)}
+                        </div>
+                      )}
+                      <div
+                        className={`w-full rounded-t-lg transition-colors min-h-[4px] ${m.total > 0 ? "bg-[#0D1B3E] hover:bg-[#1a3068]" : "bg-slate-100"}`}
+                        style={{ height: `${Math.max(4, pct)}%` }}
+                      />
+                      <span className="text-[9px] text-slate-400 font-bold">{MONTH_LABELS[m.month]}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </ContentCard>
+          )}
+
           {/* Daily chart */}
           {dailyData.length > 1 && (
             <ContentCard>
@@ -348,6 +404,39 @@ export default function ReportsPanel({ slug, tenant }: ReportsPanelProps) {
                         </div>
                         <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
                           <div className="h-full rounded-full bg-[#C9A227]" style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </ContentCard>
+          )}
+
+          {/* Top inventory consumption */}
+          {topInventory.length > 0 && (
+            <ContentCard>
+              <h3 className="text-sm font-black uppercase tracking-widest text-slate-700 mb-4 flex items-center gap-2">
+                <Package className="w-4 h-4" />
+                Estoque Que Mais Sai
+              </h3>
+              <div className="space-y-3">
+                {topInventory.map((item, i) => {
+                  const pct = (item.quantity / maxTopInventoryQty) * 100;
+                  return (
+                    <div key={item.id} className="flex items-center gap-3">
+                      <span className="w-6 text-[10px] font-black text-slate-400 text-center shrink-0">
+                        #{i + 1}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-sm font-bold text-slate-800 truncate">{item.name}</span>
+                          <span className="text-sm font-black text-[#0D1B3E] shrink-0 ml-2">
+                            {item.quantity.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} {item.unit || "un"}
+                          </span>
+                        </div>
+                        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full bg-[#0D1B3E]" style={{ width: `${pct}%` }} />
                         </div>
                       </div>
                     </div>

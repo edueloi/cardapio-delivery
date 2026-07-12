@@ -27,6 +27,7 @@ export default function DashboardPage() {
   const [waiterCalls, setWaiterCalls] = useState<Array<{ tableId: string; customerName: string; note: string; requestBill: boolean; timestamp: number }>>([]);
   const [newOrderAlerts, setNewOrderAlerts] = useState<Array<{ id: string; customerName: string; orderType: string; total: number; timestamp: number }>>([]);
   const [kitchenReadyAlerts, setKitchenReadyAlerts] = useState<Array<{ id: string; label: string; timestamp: number }>>([]);
+  const [inventoryAlertCount, setInventoryAlertCount] = useState(0);
   const tenantRef = useRef<Tenant | null>(null);
 
   const activeTab: DashboardTabId = (tabParam ? PATH_TO_TAB[tabParam] : undefined) ?? (orderId ? "history" : "overview");
@@ -57,6 +58,20 @@ export default function DashboardPage() {
     }
   };
 
+  // Itens em estoque crítico (quantity <= minStock) ou esgotados (quantity <= 0) —
+  // alimenta o triângulo de alerta ao lado de "Estoque" no menu lateral.
+  const fetchInventoryAlerts = async (tenantSlug: string) => {
+    try {
+      const items = await apiJson<any[]>(`/api/tenants/${tenantSlug}/inventory`);
+      const count = Array.isArray(items)
+        ? items.filter((i) => i.quantity <= 0 || (i.minStock && i.quantity <= i.minStock)).length
+        : 0;
+      setInventoryAlertCount(count);
+    } catch {
+      setInventoryAlertCount(0);
+    }
+  };
+
   const fetchTenant = async (options?: { background?: boolean }) => {
     const background = options?.background === true;
 
@@ -78,6 +93,7 @@ export default function DashboardPage() {
       setTenant(data);
       socket.emit("join-tenant", data.id);
       await fetchOrders(data.id);
+      void fetchInventoryAlerts(data.slug);
       try {
         const mem = await apiJson<MyMembership>(`/api/owner/tenants/${data.id}/my-membership`);
         setMembership(mem);
@@ -149,6 +165,7 @@ export default function DashboardPage() {
           }))
         };
       });
+      if (slug) void fetchInventoryAlerts(slug);
     };
 
     const handleCheckoutRequested = ({ tableId, customerName }: { tableId: string; customerName: string }) => {
@@ -171,6 +188,7 @@ export default function DashboardPage() {
     // a árvore completa do tenant para manter tudo sincronizado sem precisar de F5.
     const handleMenuUpdated = () => {
       void fetchTenant({ background: true });
+      if (slug) void fetchInventoryAlerts(slug);
     };
 
     // Comanda pronta pra servir — dispara em qualquer tela do dashboard, não só na do
@@ -323,6 +341,7 @@ export default function DashboardPage() {
         slug={slug ?? ""}
         activeTab={activeTab}
         navigationGroups={filteredNavigation}
+        navigationAlerts={{ inventory: inventoryAlertCount }}
         headerBadges={liveOrdersHeaderBadges}
         isMobileMenuOpen={isMobileMenuOpen}
         onToggleMobileMenu={() => setIsMobileMenuOpen((current) => !current)}

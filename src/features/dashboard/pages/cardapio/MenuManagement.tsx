@@ -131,6 +131,9 @@ function SortableProductRow({
             </>
           )}
         </p>
+        {prod.description && (
+          <p className="text-[11px] text-slate-400 truncate mt-0.5">{prod.description}</p>
+        )}
       </div>
       <div className="flex items-center gap-1 shrink-0">
         <button

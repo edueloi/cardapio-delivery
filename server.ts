@@ -7421,6 +7421,95 @@ app.get("/api/tenants/:slug/reports/daily", requireAuth, async (req, res) => {
   }
 });
 
+// Receita agregada por mês (usado na visão "Este Ano" — 12 barras em vez de ~365)
+app.get("/api/tenants/:slug/reports/monthly", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(
+    req,
+    res,
+    req.params.slug,
+    "reports"
+  );
+  if (!tenant) return;
+
+  try {
+    const year = parseInt((req.query.year as string) || String(new Date().getFullYear()));
+    const from = new Date(year, 0, 1);
+    const to = new Date(year, 11, 31, 23, 59, 59, 999);
+
+    const orders = await prisma.order.findMany({
+      where: {
+        tenantId: tenant.id,
+        status: "DELIVERED",
+        createdAt: { gte: from, lte: to },
+      },
+      select: { createdAt: true, total: true },
+    });
+
+    const monthlyMap: Record<number, { total: number; count: number }> = {};
+    for (const order of orders) {
+      const m = order.createdAt.getMonth();
+      if (!monthlyMap[m]) monthlyMap[m] = { total: 0, count: 0 };
+      monthlyMap[m].total += order.total;
+      monthlyMap[m].count++;
+    }
+
+    const result = Array.from({ length: 12 }, (_, m) => ({
+      month: m,
+      total: monthlyMap[m]?.total || 0,
+      count: monthlyMap[m]?.count || 0,
+    }));
+    res.json(result);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao buscar dados mensais." });
+  }
+});
+
+// Itens de estoque que mais saem (consumo real via stock_movements, tipo OUT/venda)
+// no período — cobre tanto o vínculo direto (Product.inventoryItemId) quanto o
+// consumo de insumos de fichas técnicas (reason "PRODUCTION").
+app.get("/api/tenants/:slug/reports/top-inventory", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(
+    req,
+    res,
+    req.params.slug,
+    "reports"
+  );
+  if (!tenant) return;
+
+  try {
+    const { from, to } = req.query as Record<string, string>;
+    const dateFrom = from ? new Date(from) : new Date(new Date().setHours(0, 0, 0, 0));
+    const dateTo = to ? new Date(to) : new Date(new Date().setHours(23, 59, 59, 999));
+
+    const movements = await prisma.stockMovement.findMany({
+      where: {
+        type: "OUT",
+        reason: { in: ["SALE", "PRODUCTION"] },
+        createdAt: { gte: dateFrom, lte: dateTo },
+        item: { tenantId: tenant.id },
+      },
+      select: { quantity: true, item: { select: { id: true, name: true, unit: true } } },
+    });
+
+    const byItem: Record<string, { id: string; name: string; unit: string | null; quantity: number }> = {};
+    for (const mov of movements) {
+      if (!mov.item) continue;
+      const key = mov.item.id;
+      if (!byItem[key]) byItem[key] = { id: mov.item.id, name: mov.item.name, unit: mov.item.unit, quantity: 0 };
+      byItem[key].quantity += mov.quantity;
+    }
+
+    const result = Object.values(byItem)
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 10);
+    res.json(result);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao buscar consumo de estoque." });
+  }
+});
+
 // ─────────────────────────────────────────────────────────────
 // Placar do garçom: comandas lançadas hoje, agrupadas por operador
 // ─────────────────────────────────────────────────────────────
