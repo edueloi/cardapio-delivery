@@ -265,6 +265,12 @@ export default function DashboardPage() {
     }
   };
 
+  const liveOrderCounts = {
+    pending: orders.filter((o) => o.status === "PENDING").length,
+    preparing: orders.filter((o) => o.status === "PREPARING").length,
+    ready: orders.filter((o) => o.status === "SHIPPED").length,
+  };
+
   const filteredOrders = [...orders]
     .filter((order) => {
       if (activeTab === "live-orders") {
@@ -352,6 +358,7 @@ export default function DashboardPage() {
         activeTab={activeTab}
         navigationGroups={filteredNavigation}
         navigationAlerts={{ inventory: inventoryAlertCount }}
+        navigationOrderCounts={liveOrderCounts}
         headerBadges={liveOrdersHeaderBadges}
         isMobileMenuOpen={isMobileMenuOpen}
         onToggleMobileMenu={() => setIsMobileMenuOpen((current) => !current)}

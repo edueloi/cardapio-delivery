@@ -3215,8 +3215,18 @@ async function updateOrderStatus(
   status: string,
   kitchenReady?: boolean
 ) {
-  const forceKitchenReady =
-    status === "SHIPPED" || status === "DELIVERED" ? true : kitchenReady;
+  // Só considera "pronto na cozinha" quem de fato tem item que vai pra cozinha
+  // (kitchenPrint: true) — pedidos só com itens de prateleira (ex: água, refrigerante)
+  // não passam pela cozinha, então marcá-los como SHIPPED direto no Painel de
+  // Pedidos não deveria disparar o alerta sonoro "Pronto na Cozinha".
+  let forceKitchenReady = kitchenReady;
+  if (status === "SHIPPED" || status === "DELIVERED") {
+    const hasKitchenItem = await prisma.orderItem.findFirst({
+      where: { orderId, product: { kitchenPrint: true } },
+      select: { id: true },
+    });
+    forceKitchenReady = !!hasKitchenItem;
+  }
   const updatedOrder = await prisma.order.update({
     where: { id: orderId },
     data: {

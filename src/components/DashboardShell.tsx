@@ -28,6 +28,8 @@ interface DashboardShellProps {
   navigationGroups: DashboardNavigationGroup[];
   /** Contagem de alertas por tab (ex: { inventory: 3 }) — mostra um triângulo de aviso com o número ao lado do item. */
   navigationAlerts?: Partial<Record<string, number>>;
+  /** Contagem de pedidos por status, só pro item "live-orders" — 3 bolinhas coloridas (pendente/preparo/pronto). */
+  navigationOrderCounts?: { pending: number; preparing: number; ready: number };
   headerBadges?: ReactNode;
   isMobileMenuOpen: boolean;
   onToggleMobileMenu: () => void;
@@ -55,6 +57,7 @@ export default function DashboardShell({
   activeTab,
   navigationGroups,
   navigationAlerts,
+  navigationOrderCounts,
   headerBadges,
   isMobileMenuOpen,
   onToggleMobileMenu,
@@ -188,6 +191,8 @@ export default function DashboardShell({
                 {group.items.map((item) => {
                   const isActive = activeTab === item.tab;
                   const alertCount = navigationAlerts?.[item.tab] || 0;
+                  const orderCounts = item.tab === "live-orders" ? navigationOrderCounts : undefined;
+                  const hasOrderDots = orderCounts && (orderCounts.pending > 0 || orderCounts.preparing > 0 || orderCounts.ready > 0);
                   return (
                     <button
                       key={item.id}
@@ -210,7 +215,29 @@ export default function DashboardShell({
                           {item.label}
                         </span>
                       )}
-                      {alertCount > 0 && (
+                      {hasOrderDots && !isCollapsed && (
+                        <span className="flex items-center gap-1 shrink-0">
+                          {orderCounts!.pending > 0 && (
+                            <span title={`${orderCounts!.pending} pendente(s)`} className="flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full bg-amber-400 text-[#0A1628] text-[9px] font-black leading-none">
+                              {orderCounts!.pending > 9 ? "9+" : orderCounts!.pending}
+                            </span>
+                          )}
+                          {orderCounts!.preparing > 0 && (
+                            <span title={`${orderCounts!.preparing} em preparo`} className="flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full bg-orange-500 text-white text-[9px] font-black leading-none">
+                              {orderCounts!.preparing > 9 ? "9+" : orderCounts!.preparing}
+                            </span>
+                          )}
+                          {orderCounts!.ready > 0 && (
+                            <span title={`${orderCounts!.ready} pronto(s)`} className="flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full bg-emerald-500 text-white text-[9px] font-black leading-none">
+                              {orderCounts!.ready > 9 ? "9+" : orderCounts!.ready}
+                            </span>
+                          )}
+                        </span>
+                      )}
+                      {hasOrderDots && isCollapsed && (
+                        <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-emerald-500 shadow" />
+                      )}
+                      {!hasOrderDots && alertCount > 0 && (
                         isCollapsed ? (
                           <span className="absolute top-1 right-1 flex items-center justify-center min-w-[15px] h-[15px] px-0.5 rounded-full bg-amber-400 text-[#0A1628] text-[9px] font-black leading-none shadow">
                             {alertCount > 9 ? "9+" : alertCount}
