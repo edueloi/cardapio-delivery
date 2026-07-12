@@ -217,6 +217,7 @@ export function DesktopPrinterSettings() {
 // Modal de vínculo de estoque
 export function InventoryLinkField({
   inventoryItems,
+  inventoryCategories = [],
   value,
   onChange,
   autoDisable,
@@ -225,6 +226,7 @@ export function InventoryLinkField({
   editingProductId,
 }: {
   inventoryItems: any[];
+  inventoryCategories?: any[];
   value: string;
   onChange: (val: string) => void;
   autoDisable: boolean;
@@ -234,9 +236,11 @@ export function InventoryLinkField({
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
 
   // Apenas itens de VENDA (não uso interno)
   const saleItems = inventoryItems.filter(item => item.usage !== 'INTERNAL');
+  const categoryById = new Map(inventoryCategories.map((cat: any) => [cat.id, cat]));
 
   // Verifica quais itens já estão vinculados a outros produtos (exceto o editando)
   const allProducts = allCategories.flatMap((c: any) => c.products || []);
@@ -249,8 +253,21 @@ export function InventoryLinkField({
   const selectedItem = saleItems.find(i => i.id === value);
 
   const filtered = saleItems.filter(item =>
-    !search || item.name.toLowerCase().includes(search.toLowerCase())
+    (!search || item.name.toLowerCase().includes(search.toLowerCase())) &&
+    (categoryFilter === "all" || item.categoryId === categoryFilter)
   );
+
+  const groupedFiltered = (() => {
+    const groups = new Map<string, { label: string; items: any[] }>();
+    for (const item of filtered) {
+      const key = item.categoryId || "_none";
+      if (!groups.has(key)) {
+        groups.set(key, { label: categoryById.get(item.categoryId)?.name || "Sem categoria", items: [] });
+      }
+      groups.get(key)!.items.push(item);
+    }
+    return Array.from(groups.values()).sort((a, b) => a.label.localeCompare(b.label));
+  })();
 
   return (
     <div className="space-y-2">
@@ -286,8 +303,8 @@ export function InventoryLinkField({
       )}
 
       {/* Modal de seleção */}
-      <Modal isOpen={open} onClose={() => { setOpen(false); setSearch(""); }} title="Vincular ao Estoque" size="md" mobileStyle="bottom-sheet"
-        footer={<ModalFooter><Button variant="ghost" onClick={() => { onChange(""); setOpen(false); setSearch(""); }}>Remover vínculo</Button><Button variant="outline" onClick={() => { setOpen(false); setSearch(""); }}>Fechar</Button></ModalFooter>}
+      <Modal isOpen={open} onClose={() => { setOpen(false); setSearch(""); setCategoryFilter("all"); }} title="Vincular ao Estoque" size="md" mobileStyle="bottom-sheet"
+        footer={<ModalFooter><Button variant="ghost" onClick={() => { onChange(""); setOpen(false); setSearch(""); setCategoryFilter("all"); }}>Remover vínculo</Button><Button variant="outline" onClick={() => { setOpen(false); setSearch(""); setCategoryFilter("all"); }}>Fechar</Button></ModalFooter>}
       >
         <div className="space-y-3 p-1">
           <input
@@ -297,40 +314,61 @@ export function InventoryLinkField({
             placeholder="Buscar item..."
             className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400"
           />
-          <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
+          {inventoryCategories.length > 0 && (
+            <select
+              value={categoryFilter}
+              onChange={e => setCategoryFilter(e.target.value)}
+              className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400"
+            >
+              <option value="all">Todas as categorias</option>
+              {inventoryCategories.map((cat: any) => (
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
+              ))}
+            </select>
+          )}
+          <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
             <button
               type="button"
-              onClick={() => { onChange(""); setOpen(false); setSearch(""); }}
+              onClick={() => { onChange(""); setOpen(false); setSearch(""); setCategoryFilter("all"); }}
               className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-left transition-colors ${!value ? "bg-amber-50 border border-amber-200 text-amber-800" : "hover:bg-slate-50 text-slate-500"}`}
             >
               Sem vínculo de estoque
             </button>
-            {filtered.map((item: any) => {
-              const alreadyUsed = usedItemIds.has(item.id);
-              const isSelected = value === item.id;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  disabled={alreadyUsed && !isSelected}
-                  onClick={() => { onChange(item.id); setOpen(false); setSearch(""); }}
-                  className={`w-full flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm text-left transition-colors ${
-                    isSelected ? "bg-amber-50 border border-amber-200" :
-                    alreadyUsed ? "opacity-50 cursor-not-allowed bg-slate-50" :
-                    "hover:bg-slate-50 border border-transparent"
-                  }`}
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="font-black text-slate-800 truncate">{item.name}</p>
-                    <p className={`text-[10px] font-black uppercase ${item.quantity <= 0 ? "text-red-500" : item.quantity < 5 ? "text-amber-500" : "text-green-600"}`}>
-                      {item.quantity <= 0 ? "Esgotado" : `${item.quantity} ${item.unit || 'un'}`}
-                    </p>
-                    {alreadyUsed && !isSelected && <p className="text-[10px] text-slate-400 font-semibold">Já vinculado a outro produto</p>}
-                  </div>
-                  {isSelected && <CheckCircle2 className="w-4 h-4 text-amber-500 shrink-0" />}
-                </button>
-              );
-            })}
+            {groupedFiltered.map(group => (
+              <div key={group.label}>
+                {categoryFilter === "all" && (
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1 mb-1">{group.label}</p>
+                )}
+                <div className="space-y-2">
+                  {group.items.map((item: any) => {
+                    const alreadyUsed = usedItemIds.has(item.id);
+                    const isSelected = value === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        disabled={alreadyUsed && !isSelected}
+                        onClick={() => { onChange(item.id); setOpen(false); setSearch(""); setCategoryFilter("all"); }}
+                        className={`w-full flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm text-left transition-colors ${
+                          isSelected ? "bg-amber-50 border border-amber-200" :
+                          alreadyUsed ? "opacity-50 cursor-not-allowed bg-slate-50" :
+                          "hover:bg-slate-50 border border-transparent"
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="font-black text-slate-800 truncate">{item.name}</p>
+                          <p className={`text-[10px] font-black uppercase ${item.quantity <= 0 ? "text-red-500" : item.quantity < 5 ? "text-amber-500" : "text-green-600"}`}>
+                            {item.quantity <= 0 ? "Esgotado" : `${item.quantity} ${item.unit || 'un'}`}
+                          </p>
+                          {alreadyUsed && !isSelected && <p className="text-[10px] text-slate-400 font-semibold">Já vinculado a outro produto</p>}
+                        </div>
+                        {isSelected && <CheckCircle2 className="w-4 h-4 text-amber-500 shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
             {filtered.length === 0 && (
               <p className="text-center text-sm text-slate-400 py-6">Nenhum item encontrado</p>
             )}
@@ -479,18 +517,22 @@ const RECIPE_UNIT_OPTIONS = ["g", "kg", "ml", "l", "un", "dz", "cm", "m"];
 // não precisa saber disso nem entender "rendimento" — a dedução já é automática na venda.
 export function RecipeIngredientsField({
   inventoryItems,
+  inventoryCategories = [],
   value,
   onChange,
 }: {
   inventoryItems: any[];
+  inventoryCategories?: any[];
   value: RecipeIngredientDraft[];
   onChange: (val: RecipeIngredientDraft[]) => void;
 }) {
   const [pickerOpenFor, setPickerOpenFor] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
 
   const saleItems = inventoryItems;
   const itemById = new Map(saleItems.map((item: any) => [item.id, item]));
+  const categoryById = new Map(inventoryCategories.map((cat: any) => [cat.id, cat]));
 
   const addIngredient = () => {
     const draft: RecipeIngredientDraft = {
@@ -512,8 +554,22 @@ export function RecipeIngredientsField({
   };
 
   const filtered = saleItems.filter((item: any) =>
-    !search || item.name.toLowerCase().includes(search.toLowerCase())
+    (!search || item.name.toLowerCase().includes(search.toLowerCase())) &&
+    (categoryFilter === "all" || item.categoryId === categoryFilter)
   );
+
+  // Agrupa por categoria de estoque pra facilitar achar o item certo quando tem muitos
+  const groupedFiltered = (() => {
+    const groups = new Map<string, { label: string; items: any[] }>();
+    for (const item of filtered) {
+      const key = item.categoryId || "_none";
+      if (!groups.has(key)) {
+        groups.set(key, { label: categoryById.get(item.categoryId)?.name || "Sem categoria", items: [] });
+      }
+      groups.get(key)!.items.push(item);
+    }
+    return Array.from(groups.values()).sort((a, b) => a.label.localeCompare(b.label));
+  })();
 
   return (
     <div className="space-y-2">
@@ -575,11 +631,11 @@ export function RecipeIngredientsField({
       {/* Modal de seleção do item de estoque para o insumo sendo editado */}
       <Modal
         isOpen={!!pickerOpenFor}
-        onClose={() => { setPickerOpenFor(null); setSearch(""); }}
+        onClose={() => { setPickerOpenFor(null); setSearch(""); setCategoryFilter("all"); }}
         title="Escolher item do estoque"
         size="md"
         mobileStyle="bottom-sheet"
-        footer={<ModalFooter><Button variant="outline" onClick={() => { setPickerOpenFor(null); setSearch(""); }}>Fechar</Button></ModalFooter>}
+        footer={<ModalFooter><Button variant="outline" onClick={() => { setPickerOpenFor(null); setSearch(""); setCategoryFilter("all"); }}>Fechar</Button></ModalFooter>}
       >
         <div className="space-y-3 p-1">
           <input
@@ -589,30 +645,52 @@ export function RecipeIngredientsField({
             placeholder="Buscar item..."
             className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-orange-400"
           />
-          <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
-            {filtered.map((item: any) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => {
-                  if (pickerOpenFor) {
-                    updateIngredient(pickerOpenFor, {
-                      inventoryItemId: item.id,
-                      unit: item.stockUnit || item.unit || "un",
-                    });
-                  }
-                  setPickerOpenFor(null);
-                  setSearch("");
-                }}
-                className="w-full flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm text-left hover:bg-slate-50 border border-transparent transition-colors"
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="font-black text-slate-800 truncate">{item.name}</p>
-                  <p className={`text-[10px] font-black uppercase ${item.quantity <= 0 ? "text-red-500" : item.quantity < 5 ? "text-amber-500" : "text-green-600"}`}>
-                    {item.quantity <= 0 ? "Esgotado" : `${item.quantity} ${item.unit || 'un'}`}
-                  </p>
+          {inventoryCategories.length > 0 && (
+            <select
+              value={categoryFilter}
+              onChange={e => setCategoryFilter(e.target.value)}
+              className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-orange-400"
+            >
+              <option value="all">Todas as categorias</option>
+              {inventoryCategories.map((cat: any) => (
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
+              ))}
+            </select>
+          )}
+          <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
+            {groupedFiltered.map(group => (
+              <div key={group.label}>
+                {categoryFilter === "all" && (
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1 mb-1">{group.label}</p>
+                )}
+                <div className="space-y-2">
+                  {group.items.map((item: any) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        if (pickerOpenFor) {
+                          updateIngredient(pickerOpenFor, {
+                            inventoryItemId: item.id,
+                            unit: item.stockUnit || item.unit || "un",
+                          });
+                        }
+                        setPickerOpenFor(null);
+                        setSearch("");
+                        setCategoryFilter("all");
+                      }}
+                      className="w-full flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm text-left hover:bg-slate-50 border border-transparent transition-colors"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="font-black text-slate-800 truncate">{item.name}</p>
+                        <p className={`text-[10px] font-black uppercase ${item.quantity <= 0 ? "text-red-500" : item.quantity < 5 ? "text-amber-500" : "text-green-600"}`}>
+                          {item.quantity <= 0 ? "Esgotado" : `${item.quantity} ${item.unit || 'un'}`}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
                 </div>
-              </button>
+              </div>
             ))}
             {filtered.length === 0 && (
               <p className="text-center text-sm text-slate-400 py-6">Nenhum item encontrado</p>

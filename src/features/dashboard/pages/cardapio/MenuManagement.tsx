@@ -303,6 +303,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
   const [prodModal, setProdModal] = useState<{ open: boolean; categoryId: string | null }>({ open: false, categoryId: null });
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
+  const [inventoryCategories, setInventoryCategories] = useState<any[]>([]);
   const [productionRecipes, setProductionRecipes] = useState<any[]>([]);
   const [prodForm, setProdForm] = useState({
     name: "", description: "", price: "", imageUrl: "", inventoryItemId: "", recipeId: "",
@@ -328,6 +329,10 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
       apiFetch(`/api/tenants/${tenant.slug}/inventory`)
         .then(res => res.json())
         .then(data => setInventoryItems(data))
+        .catch(() => {});
+      apiFetch(`/api/tenants/${tenant.slug}/inventory/categories`)
+        .then(res => res.json())
+        .then(data => setInventoryCategories(Array.isArray(data) ? data : []))
         .catch(() => {});
       apiFetch(`/api/tenants/${tenant.slug}/production/recipes`)
         .then(res => res.json())
@@ -955,6 +960,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
           {/* Vínculo de estoque */}
           <InventoryLinkField
             inventoryItems={inventoryItems}
+            inventoryCategories={inventoryCategories}
             value={prodForm.inventoryItemId}
             onChange={val => setProdForm({ ...prodForm, inventoryItemId: val })}
             autoDisable={prodForm.autoDisableWhenOutOfStock}
@@ -966,6 +972,7 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
           {/* Vínculo de receita de produção */}
           <RecipeIngredientsField
             inventoryItems={inventoryItems}
+            inventoryCategories={inventoryCategories}
             value={recipeIngredients}
             onChange={setRecipeIngredients}
           />
