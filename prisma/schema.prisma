@@ -403,7 +403,17 @@ model CashRegister {
   expectedBalance Float?    @map("expected_balance")
   status          String    @default("OPEN") // OPEN, CLOSED
   notes           String?
-  operatorName    String?   @map("operator_name")
+  operatorName    String?   @map("operator_name") // legado — mantido por compatibilidade, mas openedByName/Email são a fonte confiável agora
+
+  // Quem abriu/fechou o caixa — preenchido automaticamente pela conta autenticada
+  // (não é mais texto livre digitado pelo operador), pra ter um log confiável de
+  // nome + e-mail + data/hora de cada abertura e fechamento.
+  openedByAccountId String?  @map("opened_by_account_id")
+  openedByName      String?  @map("opened_by_name")
+  openedByEmail     String?  @map("opened_by_email")
+  closedByAccountId String?  @map("closed_by_account_id")
+  closedByName      String?  @map("closed_by_name")
+  closedByEmail     String?  @map("closed_by_email")
 
   tenant    Tenant          @relation(fields: [tenantId], references: [id])
   movements CashMovement[]

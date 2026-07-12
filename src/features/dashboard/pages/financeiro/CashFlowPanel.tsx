@@ -234,7 +234,20 @@ function HistoryCard({ h }: { h: CashRegister & { movements?: CashMovement[] } }
           </p>
           <p className="text-[11px] text-slate-400">
             {fmtTime(h.openedAt)} → {h.closedAt ? fmtTime(h.closedAt) : "Aberto"}
-            {h.operatorName ? ` · ${h.operatorName}` : ""}
+          </p>
+          <p className="text-[10px] text-slate-400 mt-0.5 space-y-0.5">
+            {(h.openedByName || h.operatorName) && (
+              <span className="block">
+                Abriu: <strong className="text-slate-500">{h.openedByName || h.operatorName}</strong>
+                {h.openedByEmail ? ` (${h.openedByEmail})` : ""}
+              </span>
+            )}
+            {h.closedByName && (
+              <span className="block">
+                Fechou: <strong className="text-slate-500">{h.closedByName}</strong>
+                {h.closedByEmail ? ` (${h.closedByEmail})` : ""}
+              </span>
+            )}
           </p>
         </div>
         <div className="text-right shrink-0">
@@ -291,7 +304,6 @@ export default function CashFlowPanel({ slug }: CashFlowPanelProps) {
   const [showCloseModal,    setShowCloseModal]    = useState(false);
   const [showMovementModal, setShowMovementModal] = useState(false);
   const [openingBalance,    setOpeningBalance]    = useState("0");
-  const [operatorName,      setOperatorName]      = useState("");
   const [openLoading,       setOpenLoading]       = useState(false);
   const [closingBalance,    setClosingBalance]    = useState("");
   const [closeNotes,        setCloseNotes]        = useState("");
@@ -351,8 +363,8 @@ export default function CashFlowPanel({ slug }: CashFlowPanelProps) {
   const handleOpenCash = async () => {
     setOpenLoading(true);
     try {
-      await apiJson(`/api/tenants/${slug}/cash/open`, { method: "POST", body: JSON.stringify({ openingBalance: parseFloat(openingBalance || "0"), operatorName }) });
-      setShowOpenModal(false); setOpeningBalance("0"); setOperatorName("");
+      await apiJson(`/api/tenants/${slug}/cash/open`, { method: "POST", body: JSON.stringify({ openingBalance: parseFloat(openingBalance || "0") }) });
+      setShowOpenModal(false); setOpeningBalance("0");
       fetchCaixa();
     } catch { toast.error("Erro ao abrir caixa."); }
     finally { setOpenLoading(false); }
@@ -448,7 +460,7 @@ export default function CashFlowPanel({ slug }: CashFlowPanelProps) {
                 </div>
                 <p className="text-xs text-white/60">
                   Desde {fmtDateTime(currentCash!.openedAt)}
-                  {currentCash!.operatorName ? ` · Operador: ${currentCash!.operatorName}` : ""}
+                  {(currentCash!.openedByName || currentCash!.operatorName) ? ` · Aberto por: ${currentCash!.openedByName || currentCash!.operatorName}` : ""}
                   {" · "} Fundo: {fmt(currentCash!.openingBalance)}
                 </p>
               </div>
@@ -617,8 +629,8 @@ export default function CashFlowPanel({ slug }: CashFlowPanelProps) {
         footer={<ModalFooter><Button variant="ghost" onClick={() => setShowOpenModal(false)}>Cancelar</Button><Button variant="primary" loading={openLoading} onClick={handleOpenCash} iconLeft={<Unlock className="w-4 h-4" />}>Abrir Caixa</Button></ModalFooter>}
       >
         <div className="space-y-4 p-1">
-          <Input label="Operador / Responsável" placeholder="Nome do operador" value={operatorName} onChange={e => setOperatorName(e.target.value)} />
           <Input label="Fundo de Caixa (R$)" type="number" placeholder="0,00" value={openingBalance} onChange={e => setOpeningBalance(e.target.value)} hint="Valor em dinheiro presente no caixa ao abrir." />
+          <p className="text-[11px] text-slate-400">A abertura fica registrada automaticamente com o nome e e-mail da sua conta.</p>
         </div>
       </Modal>
 

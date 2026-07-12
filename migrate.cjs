@@ -1097,6 +1097,36 @@ const migrations = [
       CONSTRAINT tv_devices_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL ON UPDATE CASCADE
     ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
   },
+  {
+    name: 'add_cash_registers_opened_by_account_id',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'cash_registers' AND COLUMN_NAME = 'opened_by_account_id'",
+    run: "ALTER TABLE cash_registers ADD COLUMN opened_by_account_id VARCHAR(191) NULL",
+  },
+  {
+    name: 'add_cash_registers_opened_by_name',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'cash_registers' AND COLUMN_NAME = 'opened_by_name'",
+    run: "ALTER TABLE cash_registers ADD COLUMN opened_by_name VARCHAR(191) NULL",
+  },
+  {
+    name: 'add_cash_registers_opened_by_email',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'cash_registers' AND COLUMN_NAME = 'opened_by_email'",
+    run: "ALTER TABLE cash_registers ADD COLUMN opened_by_email VARCHAR(191) NULL",
+  },
+  {
+    name: 'add_cash_registers_closed_by_account_id',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'cash_registers' AND COLUMN_NAME = 'closed_by_account_id'",
+    run: "ALTER TABLE cash_registers ADD COLUMN closed_by_account_id VARCHAR(191) NULL",
+  },
+  {
+    name: 'add_cash_registers_closed_by_name',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'cash_registers' AND COLUMN_NAME = 'closed_by_name'",
+    run: "ALTER TABLE cash_registers ADD COLUMN closed_by_name VARCHAR(191) NULL",
+  },
+  {
+    name: 'add_cash_registers_closed_by_email',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'cash_registers' AND COLUMN_NAME = 'closed_by_email'",
+    run: "ALTER TABLE cash_registers ADD COLUMN closed_by_email VARCHAR(191) NULL",
+  },
 ];
 
 async function run() {

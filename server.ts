@@ -370,7 +370,13 @@ app.use(
 // URL curta pra digitar no controle remoto da TV/Fire Stick (app Downloader) —
 // bem mais fácil que a URL completa do APK.
 app.get("/tv", (req, res) => {
-  res.redirect(302, "/downloads/BoxSys-PainelTV.apk");
+  // Serve o arquivo direto em vez de redirecionar — o cliente HTTP do app Downloader
+  // (Fire TV) é simplificado e às vezes não segue redirect (relativo ou absoluto)
+  // corretamente, resultando em tela branca sem baixar nada.
+  res.download(
+    path.join(process.cwd(), "public", "downloads", "BoxSys-PainelTV.apk"),
+    "BoxSys-PainelTV.apk"
+  );
 });
 app.use(authMiddleware);
 registerProductionRoutes({
@@ -5833,11 +5839,15 @@ app.post("/api/tenants/:slug/cash/open", requireAuth, async (req, res) => {
       return res.json(existing);
     }
 
+    const account = currentAccount(req);
     const openCash = await prisma.cashRegister.create({
       data: {
         tenantId: tenant.id,
         openingBalance: parseFloat(req.body.openingBalance) || 0,
-        operatorName: req.body.operatorName || null,
+        operatorName: account?.name || req.body.operatorName || null,
+        openedByAccountId: account?.id || null,
+        openedByName: account?.name || null,
+        openedByEmail: account?.email || null,
         status: "OPEN",
       },
     });
@@ -5934,6 +5944,7 @@ app.post("/api/tenants/:slug/cash/close", requireAuth, async (req, res) => {
       movements: movementsSinceOpen,
     };
 
+    const closingAccount = currentAccount(req);
     const closedCash = await prisma.cashRegister.update({
       where: { id: currentCash.id },
       data: {
@@ -5942,6 +5953,9 @@ app.post("/api/tenants/:slug/cash/close", requireAuth, async (req, res) => {
         closingBalance: parseFloat(req.body.closingBalance),
         expectedBalance,
         notes: req.body.notes,
+        closedByAccountId: closingAccount?.id || null,
+        closedByName: closingAccount?.name || null,
+        closedByEmail: closingAccount?.email || null,
       },
     });
 

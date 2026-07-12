@@ -579,6 +579,10 @@ export interface CashRegister {
   status: 'OPEN' | 'CLOSED';
   notes?: string;
   operatorName?: string | null;
+  openedByName?: string | null;
+  openedByEmail?: string | null;
+  closedByName?: string | null;
+  closedByEmail?: string | null;
 }
 
 export interface CashMovementOrderItem {
