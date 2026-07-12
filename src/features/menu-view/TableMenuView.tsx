@@ -458,62 +458,56 @@ export default function TableMenuView() {
 
 
             {/* Desktop Header (Visible on LG) */}
-            <header className="hidden lg:flex sticky top-0 z-40 bg-black/40 backdrop-blur-2xl border-b border-white/5 px-8 py-4 items-center justify-between shrink-0">
-              <div className="flex items-center gap-8">
-                <div className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-full px-5 py-2">
-                  <Utensils className="w-4 h-4 text-amber-500" />
-                  <span className="text-xs font-black text-white uppercase tracking-widest">MESA {tableId}</span>
-                </div>
-                
-                <div className="bg-white/5 border border-white/[0.06] rounded-full px-4 py-2 flex items-center gap-2">
-                  <span className="text-xs text-white">PT</span>
+            <header className="hidden lg:grid grid-cols-[auto_1fr_auto] sticky top-0 z-40 bg-black/40 backdrop-blur-2xl border-b border-white/5 px-6 xl:px-8 py-4 items-center gap-4 shrink-0">
+              <div className="flex items-center gap-3 xl:gap-4 min-w-0 shrink-0">
+                <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-full px-4 py-2 shrink-0">
+                  <Utensils className="w-4 h-4 text-amber-500 shrink-0" />
+                  <span className="text-xs font-black text-white uppercase tracking-widest whitespace-nowrap">MESA {tableId}</span>
                 </div>
               </div>
 
-              <div className="absolute left-1/2 -translate-x-1/2">
-                <div className="flex items-center gap-8">
-                  <div className="relative group">
-                    <div className="flex items-center gap-3 bg-white/5 border border-white/[0.06] rounded-full px-5 py-2 focus-within:border-[#C9A227]/50 transition-all">
-                      <Search className="w-4 h-4 text-[#C9A227]" />
-                      <input 
-                        type="text"
-                        value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
-                        placeholder="Buscar no cardápio..."
-                        className="bg-transparent border-none outline-none text-xs text-white w-40 xl:w-60 placeholder:text-white/20"
-                      />
-                      {searchTerm && (
-                        <button onClick={() => setSearchTerm("")} className="hover:text-white text-white/20">
-                          <X className="w-3 h-3" />
-                        </button>
-                      )}
-                    </div>
+              <div className="flex items-center justify-center gap-4 xl:gap-8 min-w-0">
+                <div className="relative group min-w-0">
+                  <div className="flex items-center gap-2 bg-white/5 border border-white/[0.06] rounded-full px-4 py-2 focus-within:border-[#C9A227]/50 transition-all">
+                    <Search className="w-4 h-4 text-[#C9A227] shrink-0" />
+                    <input
+                      type="text"
+                      value={searchTerm}
+                      onChange={e => setSearchTerm(e.target.value)}
+                      placeholder="Buscar no cardápio..."
+                      className="bg-transparent border-none outline-none text-xs text-white w-24 xl:w-56 placeholder:text-white/20"
+                    />
+                    {searchTerm && (
+                      <button onClick={() => setSearchTerm("")} className="hover:text-white text-white/20 shrink-0">
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
                   </div>
-                  <button
-                    onClick={() => { setShowWaiterModal(true); setWaiterSent(false); setWaiterNote(""); setWaiterRequestBill(false); }}
-                    className="flex items-center gap-2 text-white hover:text-[#C9A227] transition-all group"
-                  >
-                    <Bell className="w-5 h-5 group-hover:text-[#C9A227]" />
-                    <span className="text-[9px] font-black uppercase tracking-widest hidden xl:block">Chamar Garçom</span>
-                  </button>
                 </div>
+                <button
+                  onClick={() => { setShowWaiterModal(true); setWaiterSent(false); setWaiterNote(""); setWaiterRequestBill(false); }}
+                  className="flex items-center gap-2 text-white hover:text-[#C9A227] transition-all group shrink-0"
+                >
+                  <Bell className="w-5 h-5 group-hover:text-[#C9A227]" />
+                  <span className="text-[9px] font-black uppercase tracking-widest hidden xl:block whitespace-nowrap">Chamar Garçom</span>
+                </button>
               </div>
 
-              <div className="flex items-center gap-8">
-                <button 
+              <div className="flex items-center gap-4 xl:gap-8 justify-end min-w-0 shrink-0">
+                <button
                   onClick={() => setShowQR(true)}
-                  className="flex items-center gap-2 text-white hover:text-amber-500 transition-all group"
+                  className="flex items-center gap-2 text-white hover:text-amber-500 transition-all group shrink-0"
                 >
                   <Smartphone className="w-5 h-5 group-hover:text-amber-500" />
-                  <span className="text-[9px] font-black uppercase tracking-widest hidden xl:block">Pedir pelo Celular</span>
+                  <span className="text-[9px] font-black uppercase tracking-widest hidden xl:block whitespace-nowrap">Pedir pelo Celular</span>
                 </button>
-                <button 
+                <button
                   onClick={() => setShowBill(true)}
-                  className="flex items-center gap-2 text-amber-500 hover:text-amber-400 transition-all group"
+                  className="flex items-center gap-2 text-amber-500 hover:text-amber-400 transition-all group shrink-0"
                 >
                   <Receipt className="w-5 h-5" />
-                  <span className="text-[9px] font-black uppercase tracking-widest hidden xl:block">Minha Conta</span>
-                  <div className="ml-2 bg-amber-500 text-black px-2 py-0.5 rounded-full text-[10px] font-black">
+                  <span className="text-[9px] font-black uppercase tracking-widest hidden xl:block whitespace-nowrap">Minha Conta</span>
+                  <div className="ml-1 bg-amber-500 text-black px-2 py-0.5 rounded-full text-[10px] font-black whitespace-nowrap">
                     {fmt(totalBill)}
                   </div>
                 </button>
@@ -615,10 +609,10 @@ export default function TableMenuView() {
               {/* Categories & Products */}
               <div className="p-4 lg:p-0 space-y-8 lg:space-y-12">
                 {tenant.categories?.filter(cat =>
-                  (!selectedCategoryId || cat.id === selectedCategoryId || !isDesktop) &&
+                  (!!searchTerm || !selectedCategoryId || cat.id === selectedCategoryId || !isDesktop) &&
                   (!searchTerm || cat.products.some(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.description?.toLowerCase().includes(searchTerm.toLowerCase())))
                 ).map(cat => (
-                  <section key={cat.id} className={`space-y-4 lg:space-y-6 ${selectedCategoryId && selectedCategoryId !== cat.id && !searchTerm ? 'lg:hidden' : ''}`}>
+                  <section key={cat.id} className={`space-y-4 lg:space-y-6 ${!searchTerm && selectedCategoryId && selectedCategoryId !== cat.id ? 'lg:hidden' : ''}`}>
                     <h2 className="text-[11px] font-black text-amber-500 uppercase tracking-[0.2em] flex items-center gap-3">
                       {cat.name}
                       <div className="h-px flex-1 bg-white/[0.06]" />
@@ -664,7 +658,7 @@ export default function TableMenuView() {
                     </div>
 
                     {/* Desktop: cards */}
-                    <div className="hidden lg:grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5">
+                    <div className="hidden lg:grid grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
                       {cat.products.filter(p =>
                         !searchTerm ||
                         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -675,7 +669,7 @@ export default function TableMenuView() {
                           whileHover={{ y: -4, scale: 1.01 }}
                           whileTap={{ scale: 0.97 }}
                           onClick={() => { setSelectedProduct(p); setSelectedVariant(p.variants && p.variants.length > 0 ? p.variants[0] : null); setSelectedExtras([]); setQty(1); setNotes(""); }}
-                          className="group flex flex-col rounded-3xl bg-[#161d27] border border-white/[0.06] hover:bg-[#1c2532] hover:border-[#C9A227]/30 transition-all cursor-pointer overflow-hidden"
+                          className="group flex flex-col rounded-2xl bg-[#161d27] border border-white/[0.06] hover:bg-[#1c2532] hover:border-[#C9A227]/30 transition-all cursor-pointer overflow-hidden"
                         >
                           <div className="aspect-[4/3] overflow-hidden bg-white/5 shrink-0 flex items-center justify-center">
                             {p.imageUrl ? (
@@ -684,20 +678,20 @@ export default function TableMenuView() {
                                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                               />
                             ) : (
-                              <Utensils className="w-10 h-10 text-white/20" />
+                              <Utensils className="w-8 h-8 text-white/20" />
                             )}
                           </div>
-                          <div className="flex-1 p-5 space-y-2 flex flex-col justify-between">
+                          <div className="flex-1 p-3.5 space-y-1.5 flex flex-col justify-between">
                             <div>
-                              <h3 className="font-bold text-white group-hover:text-[#C9A227] transition-colors text-base leading-tight">{p.name}</h3>
+                              <h3 className="font-bold text-white group-hover:text-[#C9A227] transition-colors text-sm leading-tight">{p.name}</h3>
                               {p.description && (
-                                <p className="text-xs text-[#9ca3af] line-clamp-2 leading-relaxed mt-1">{p.description}</p>
+                                <p className="text-[11px] text-[#9ca3af] line-clamp-2 leading-relaxed mt-1">{p.description}</p>
                               )}
                             </div>
-                            <div className="flex items-center justify-between pt-2">
-                              <p className="text-base font-black text-[#C9A227]">{fmt(p.price)}</p>
-                              <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 group-hover:bg-amber-500 group-hover:text-black transition-all">
-                                <Plus className="w-4 h-4" />
+                            <div className="flex items-center justify-between pt-1.5">
+                              <p className="text-sm font-black text-[#C9A227]">{fmt(p.price)}</p>
+                              <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 group-hover:bg-amber-500 group-hover:text-black transition-all shrink-0">
+                                <Plus className="w-3.5 h-3.5" />
                               </div>
                             </div>
                           </div>

@@ -176,6 +176,7 @@ export function InventoryPanel({ tenant }: { tenant: Tenant | null }) {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [adjustingItem, setAdjustingItem] = useState<any | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [showManageCategories, setShowManageCategories] = useState(false);
 
   const toggleRow = (id: string) => {
     setExpandedRows(prev => {
@@ -393,6 +394,15 @@ export function InventoryPanel({ tenant }: { tenant: Tenant | null }) {
                 </button>
               )}
             </div>
+            <button
+              type="button"
+              onClick={() => setShowManageCategories(true)}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border border-zinc-200 rounded-lg bg-white text-slate-600 hover:bg-zinc-50 transition-colors shrink-0"
+              title="Editar ou excluir categorias de estoque"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              Categorias
+            </button>
           </div>
 
           {/* Badge de filtro ativo */}
@@ -661,6 +671,190 @@ export function InventoryPanel({ tenant }: { tenant: Tenant | null }) {
           </span>
         }
         confirmLabel="Remover"
+        loading={deleteLoading}
+        variant="danger"
+      />
+
+      <Modal
+        isOpen={showManageCategories}
+        onClose={() => setShowManageCategories(false)}
+        title="Categorias de Estoque"
+        size="sm"
+        mobileStyle="center"
+      >
+        <ManageInventoryCategoriesList
+          tenant={tenant}
+          categories={categories}
+          items={items}
+          onChange={fetchData}
+        />
+      </Modal>
+    </div>
+  );
+}
+
+function ManageInventoryCategoriesList({ tenant, categories, items, onChange }: {
+  tenant: Tenant | null;
+  categories: any[];
+  items: any[];
+  onChange: () => void;
+}) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [deleteItemCount, setDeleteItemCount] = useState<number | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [addingName, setAddingName] = useState("");
+  const [addingLoading, setAddingLoading] = useState(false);
+
+  const startEdit = (cat: any) => {
+    setEditingId(cat.id);
+    setEditingName(cat.name);
+  };
+
+  const saveEdit = async (id: string) => {
+    const name = editingName.trim();
+    if (!name) return;
+    setSavingId(id);
+    try {
+      await apiFetch(`/api/inventory/categories/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      onChange();
+      setEditingId(null);
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const askDelete = (cat: any) => {
+    setDeleteTarget(cat);
+    setDeleteItemCount(items.filter(i => i.categoryId === cat.id).length);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    try {
+      await apiFetch(`/api/inventory/categories/${deleteTarget.id}?force=true`, { method: "DELETE" });
+      onChange();
+    } finally {
+      setDeleteLoading(false);
+      setDeleteTarget(null);
+      setDeleteItemCount(null);
+    }
+  };
+
+  const handleAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = addingName.trim();
+    if (!name || !tenant) return;
+    setAddingLoading(true);
+    try {
+      await apiFetch("/api/inventory/categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, tenantId: tenant.id }),
+      });
+      onChange();
+      setAddingName("");
+    } finally {
+      setAddingLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-1.5 max-h-[50vh] overflow-y-auto pr-1">
+        {categories.map(cat => {
+          const count = items.filter(i => i.categoryId === cat.id).length;
+          const isEditing = editingId === cat.id;
+          return (
+            <div key={cat.id} className="flex items-center gap-2 border border-zinc-100 rounded-xl px-3 py-2 bg-white">
+              {isEditing ? (
+                <>
+                  <input
+                    autoFocus
+                    value={editingName}
+                    onChange={e => setEditingName(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") saveEdit(cat.id); if (e.key === "Escape") setEditingId(null); }}
+                    className="flex-1 min-w-0 text-sm font-semibold border border-zinc-200 rounded-lg px-2 py-1.5 outline-none focus:border-amber-400"
+                  />
+                  <button
+                    onClick={() => saveEdit(cat.id)}
+                    disabled={savingId === cat.id}
+                    className="text-xs font-bold text-amber-600 hover:text-amber-700 px-2 py-1 disabled:opacity-50"
+                  >
+                    Salvar
+                  </button>
+                  <button
+                    onClick={() => setEditingId(null)}
+                    className="text-xs font-semibold text-slate-400 hover:text-slate-600 px-1"
+                  >
+                    Cancelar
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-slate-700 truncate">{cat.name}</p>
+                    <p className="text-[10px] text-slate-400 font-semibold">{count} item(ns)</p>
+                  </div>
+                  <button
+                    onClick={() => startEdit(cat)}
+                    className="p-1.5 text-slate-400 hover:text-amber-600 transition-colors"
+                    title="Editar nome"
+                  >
+                    <Settings className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => askDelete(cat)}
+                    className="p-1.5 text-slate-400 hover:text-red-500 transition-colors"
+                    title="Excluir categoria"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </>
+              )}
+            </div>
+          );
+        })}
+        {categories.length === 0 && (
+          <p className="text-center text-sm text-slate-400 py-6">Nenhuma categoria cadastrada ainda.</p>
+        )}
+      </div>
+
+      <form onSubmit={handleAdd} className="flex items-center gap-2 pt-2 border-t border-zinc-100">
+        <input
+          value={addingName}
+          onChange={e => setAddingName(e.target.value)}
+          placeholder="Nova categoria..."
+          className="flex-1 min-w-0 text-sm font-semibold border border-zinc-200 rounded-lg px-3 py-2 outline-none focus:border-amber-400"
+        />
+        <Button type="submit" size="sm" disabled={!addingName.trim() || addingLoading}>
+          Adicionar
+        </Button>
+      </form>
+
+      <ConfirmModal
+        isOpen={!!deleteTarget}
+        onClose={() => { setDeleteTarget(null); setDeleteItemCount(null); }}
+        onConfirm={confirmDelete}
+        title="Excluir categoria"
+        message={
+          <span>
+            Tem certeza que deseja excluir <strong>{deleteTarget?.name}</strong>?
+            {!!deleteItemCount && (
+              <span className="block mt-2 text-amber-600 text-xs font-semibold">
+                Esta categoria tem {deleteItemCount} item(ns) de estoque. Eles ficarão sem categoria, mas não serão apagados.
+              </span>
+            )}
+          </span>
+        }
+        confirmLabel="Excluir"
         loading={deleteLoading}
         variant="danger"
       />

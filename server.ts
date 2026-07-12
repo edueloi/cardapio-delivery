@@ -6580,6 +6580,74 @@ app.get(
   }
 );
 
+app.patch("/api/inventory/categories/:id", requireAuth, async (req, res) => {
+  const existing = await prisma.inventoryCategory.findUnique({
+    where: { id: req.params.id },
+  });
+  if (!existing) {
+    return res.status(404).json({ error: "Categoria não encontrada." });
+  }
+  const tenant = await requireTenantById(req, res, existing.tenantId, "inventory");
+  if (!tenant) return;
+
+  const name = String(req.body?.name || "").trim();
+  if (!name) {
+    return res.status(400).json({ error: "Informe o nome da categoria." });
+  }
+
+  try {
+    const category = await prisma.inventoryCategory.update({
+      where: { id: existing.id },
+      data: { name },
+    });
+    res.json(category);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to update inventory category" });
+  }
+});
+
+// Exclui uma categoria de estoque. Se houver itens vinculados e o caller não
+// confirmar (?force=true), retorna 409 com a contagem para o front avisar o
+// usuário antes de prosseguir — ao confirmar, os itens ficam sem categoria
+// (categoryId null) em vez de serem apagados ou bloquear a exclusão.
+app.delete("/api/inventory/categories/:id", requireAuth, async (req, res) => {
+  const existing = await prisma.inventoryCategory.findUnique({
+    where: { id: req.params.id },
+  });
+  if (!existing) {
+    return res.status(404).json({ error: "Categoria não encontrada." });
+  }
+  const tenant = await requireTenantById(req, res, existing.tenantId, "inventory");
+  if (!tenant) return;
+
+  try {
+    const itemCount = await prisma.inventoryItem.count({
+      where: { categoryId: existing.id },
+    });
+
+    if (itemCount > 0 && req.query.force !== "true") {
+      return res.status(409).json({
+        error: `Esta categoria tem ${itemCount} item(ns) de estoque vinculado(s).`,
+        itemCount,
+      });
+    }
+
+    await prisma.$transaction([
+      prisma.inventoryItem.updateMany({
+        where: { categoryId: existing.id },
+        data: { categoryId: null },
+      }),
+      prisma.inventoryCategory.delete({ where: { id: existing.id } }),
+    ]);
+
+    res.json({ ok: true, itemsUncategorized: itemCount });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to delete inventory category" });
+  }
+});
+
 app.get("/api/tenants/:slug/inventory", requireAuth, async (req, res) => {
   const tenant = await requireTenantBySlug(
     req,

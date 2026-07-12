@@ -392,7 +392,7 @@ export default function PublicDashboardPage() {
       <div
         style={{
           minHeight: "100vh",
-          background: "#0d1b2a",
+          background: "#000000",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -413,7 +413,7 @@ export default function PublicDashboardPage() {
     );
 
   /* ─── colours ─── */
-  const BG = "#0d1b2a";
+  const BG = "#000000";
   const SURFACE = "rgba(255,255,255,0.03)";
   const DIVIDER = "rgba(255,255,255,0.06)";
 
@@ -442,7 +442,7 @@ export default function PublicDashboardPage() {
               position: "fixed",
               inset: 0,
               zIndex: 200,
-              background: "linear-gradient(135deg, rgba(10,27,62,0.97) 0%, rgba(11,42,73,0.98) 55%, rgba(8,18,36,0.98) 100%)",
+              background: "#000000",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -453,7 +453,7 @@ export default function PublicDashboardPage() {
               style={{
                 position: "absolute",
                 inset: 0,
-                background: "radial-gradient(circle at center, rgba(201,162,39,0.16) 0%, rgba(201,162,39,0) 60%)",
+                background: "radial-gradient(circle at center, rgba(201,162,39,0.20) 0%, rgba(201,162,39,0) 60%)",
               }}
             />
             <div
@@ -462,9 +462,9 @@ export default function PublicDashboardPage() {
                 width: "min(92vw, 1400px)",
                 minHeight: "min(78vh, 760px)",
                 borderRadius: 36,
-                border: "1px solid rgba(201,162,39,0.28)",
-                background: "linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)",
-                boxShadow: "0 30px 120px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.08)",
+                border: "1px solid rgba(201,162,39,0.35)",
+                background: "linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)",
+                boxShadow: "0 30px 120px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08)",
                 backdropFilter: "blur(14px)",
                 display: "flex",
                 flexDirection: "column",
@@ -517,9 +517,12 @@ export default function PublicDashboardPage() {
                   fontSize: "clamp(5rem, 17vw, 12rem)",
                   lineHeight: 0.9,
                   fontWeight: 900,
-                  letterSpacing: "-0.06em",
-                  color: "#ffffff",
-                  textShadow: "0 18px 40px rgba(0,0,0,0.28)",
+                  letterSpacing: "-0.04em",
+                  background: "linear-gradient(180deg, #ffffff 0%, #f3d98a 55%, #C9A227 100%)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  backgroundClip: "text",
+                  filter: "drop-shadow(0 0 46px rgba(201,162,39,0.55)) drop-shadow(0 18px 40px rgba(0,0,0,0.5))",
                   fontVariantNumeric: "tabular-nums",
                 }}
               >
@@ -554,7 +557,7 @@ export default function PublicDashboardPage() {
       </AnimatePresence>
       <header
         style={{
-          background: "rgba(10,20,35,0.95)",
+          background: "rgba(0,0,0,0.95)",
           borderBottom: `1px solid ${DIVIDER}`,
           padding: "0 28px",
           height: 76,
@@ -574,10 +577,9 @@ export default function PublicDashboardPage() {
               style={{
                 height: 52,
                 width: 52,
-                objectFit: "contain",
+                objectFit: "cover",
                 borderRadius: 12,
-                background: "#fff",
-                padding: 4,
+                background: "#000",
               }}
             />
           ) : (
@@ -866,7 +868,7 @@ export default function PublicDashboardPage() {
       <footer
         style={{
           height: 46,
-          background: "rgba(8,16,28,0.95)",
+          background: "rgba(0,0,0,0.95)",
           borderTop: `1px solid ${DIVIDER}`,
           display: "flex",
           alignItems: "center",

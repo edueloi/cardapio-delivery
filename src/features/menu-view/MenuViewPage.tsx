@@ -909,14 +909,14 @@ export default function MenuViewPage() {
               borderBottom: "1px solid rgba(0,0,0,0.05)",
             }}
           >
-            <div className="flex gap-2 px-4 lg:px-6 py-3 w-max min-w-full">
+            <div className="flex gap-1.5 px-4 lg:px-6 py-2.5 w-max min-w-full">
               {filteredCategories.map((cat) => (
                 <motion.button
                   key={cat.id}
                   data-cat={cat.id}
                   onClick={() => scrollToCategory(cat.id)}
                   whileTap={{ scale: 0.93 }}
-                  className={`relative px-4 py-2.5 rounded-full whitespace-nowrap text-[13px] font-black transition-all duration-200 ${
+                  className={`relative px-3.5 py-2 rounded-full whitespace-nowrap text-[11px] font-bold transition-all duration-200 ${
                     activeCategory === cat.id
                       ? "text-white shadow-lg"
                       : "bg-white text-slate-500 hover:text-slate-700 border border-slate-100 shadow-sm"
@@ -1176,10 +1176,10 @@ export default function MenuViewPage() {
                   className="absolute bottom-5 left-5 right-5 flex items-end justify-between"
                 >
                   <div>
-                    <h2 className="text-xl font-black text-white leading-tight drop-shadow-lg">{selectedProduct.name}</h2>
+                    <h2 className="text-lg font-black text-white leading-tight drop-shadow-lg">{selectedProduct.name}</h2>
                   </div>
-                  <div className="rounded-2xl px-4 py-2.5 shadow-xl shrink-0 ml-3" style={{ background: `linear-gradient(135deg, ${BRAND} 0%, ${BRAND_DARK} 100%)` }}>
-                    <span className="text-base font-black text-white">
+                  <div className="rounded-xl px-3.5 py-2 shadow-xl shrink-0 ml-3" style={{ background: `linear-gradient(135deg, ${BRAND} 0%, ${BRAND_DARK} 100%)` }}>
+                    <span className="text-sm font-black text-white">
                       {fmt(selectedVariant ? selectedVariant.price : selectedProduct.price)}
                     </span>
                   </div>
@@ -1240,39 +1240,39 @@ export default function MenuViewPage() {
                       value={productNotes}
                       onChange={(e) => setProductNotes(e.target.value)}
                       placeholder="Ex: sem cebola, ponto mal passado…"
-                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm focus:outline-none transition-all resize-none min-h-[80px] font-medium text-slate-700"
+                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-3.5 text-[13px] focus:outline-none transition-all resize-none min-h-[72px] font-medium text-slate-700"
                       style={{ focusBorderColor: BRAND } as any}
                     />
                   </div>
 
                   {/* Quantity */}
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-black text-slate-700">Quantidade</span>
-                    <div className="flex items-center gap-3 bg-slate-50 rounded-2xl p-2 border border-slate-100">
+                    <span className="text-[13px] font-bold text-slate-700">Quantidade</span>
+                    <div className="flex items-center gap-2.5 bg-slate-50 rounded-xl p-1.5 border border-slate-100">
                       <motion.button
                         whileTap={{ scale: 0.88 }}
                         onClick={() => setProductQty((q) => Math.max(1, q - 1))}
-                        className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center border border-slate-100"
+                        className="w-8 h-8 bg-white rounded-lg shadow-sm flex items-center justify-center border border-slate-100"
                         style={{ color: productQty === 1 ? "#CBD5E1" : "#374151" }}
                       >
-                        <Minus className="w-4 h-4" />
+                        <Minus className="w-3.5 h-3.5" />
                       </motion.button>
                       <motion.span
                         key={productQty}
                         initial={{ scale: 0.7, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
                         transition={{ type: "spring", stiffness: 400, damping: 20 }}
-                        className="text-lg font-black w-7 text-center text-slate-900"
+                        className="text-sm font-black w-6 text-center text-slate-900"
                       >
                         {productQty}
                       </motion.span>
                       <motion.button
                         whileTap={{ scale: 0.88 }}
                         onClick={() => setProductQty((q) => q + 1)}
-                        className="w-10 h-10 rounded-xl shadow-sm flex items-center justify-center text-white"
+                        className="w-8 h-8 rounded-lg shadow-sm flex items-center justify-center text-white"
                         style={{ background: `linear-gradient(135deg, #111 0%, #333 100%)` }}
                       >
-                        <Plus className="w-4 h-4" />
+                        <Plus className="w-3.5 h-3.5" />
                       </motion.button>
                     </div>
                   </div>
@@ -1285,16 +1285,16 @@ export default function MenuViewPage() {
                   whileTap={{ scale: 0.97 }}
                   whileHover={{ scale: 1.01 }}
                   onClick={addToCart}
-                  className="w-full flex items-center justify-between px-6 py-4 rounded-2xl text-white font-black text-[15px] shadow-2xl relative overflow-hidden"
+                  className="w-full flex items-center justify-between px-5 py-3.5 rounded-2xl text-white font-bold text-[13px] shadow-2xl relative overflow-hidden"
                   style={{ background: `linear-gradient(135deg, ${BRAND} 0%, ${BRAND_DARK} 100%)` }}
                 >
                   <motion.div
                     className="absolute inset-0 opacity-0 hover:opacity-100 transition-opacity"
                     style={{ background: "rgba(255,255,255,0.1)" }}
                   />
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
-                      <ShoppingCart className="w-4 h-4" />
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center">
+                      <ShoppingCart className="w-3.5 h-3.5" />
                     </div>
                     <span>Adicionar ao carrinho</span>
                   </div>
