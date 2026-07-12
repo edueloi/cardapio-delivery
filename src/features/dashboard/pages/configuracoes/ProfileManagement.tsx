@@ -129,7 +129,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
     try { return tenant?.fiscalConfig ? JSON.parse(tenant.fiscalConfig) : DEFAULT_FISCAL; } catch { return DEFAULT_FISCAL; }
   });
 
-  const DEFAULT_DISPLAY_PANEL: DisplayPanelConfig = { showDelivery: false, showPickup: true, showDineIn: true };
+  const DEFAULT_DISPLAY_PANEL: DisplayPanelConfig = { showDelivery: false, showPickup: true, showDineIn: true, voiceAnnouncement: true };
   const [displayPanel, setDisplayPanel] = useState<DisplayPanelConfig>(() => {
     try { return tenant?.displayPanelConfig ? { ...DEFAULT_DISPLAY_PANEL, ...JSON.parse(tenant.displayPanelConfig) } : DEFAULT_DISPLAY_PANEL; }
     catch { return DEFAULT_DISPLAY_PANEL; }
@@ -514,6 +514,16 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                     />
                   </div>
                 ))}
+                <div className="flex items-center justify-between gap-4 bg-slate-50 border border-slate-100 rounded-2xl p-4">
+                  <div>
+                    <p className="text-xs font-black text-slate-700">Anúncio por voz</p>
+                    <p className="text-[11px] text-slate-400">Fala em voz alta "Senha número X, retirar no balcão" quando o pedido fica pronto. Desligue se preferir só o som/aviso visual.</p>
+                  </div>
+                  <Switch
+                    checked={displayPanel.voiceAnnouncement !== false}
+                    onCheckedChange={(v) => setDisplayPanel({ ...displayPanel, voiceAnnouncement: v })}
+                  />
+                </div>
               </div>
             </ContentCard>
 

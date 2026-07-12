@@ -22,7 +22,8 @@ import {
   Utensils,
   X,
 } from "lucide-react";
-import { PaymentBadge } from "../../../../components";
+import { PaymentBadge, useToast } from "../../../../components";
+import { apiFetch } from "../../../../lib/api";
 import { Order, dineInOrderLabel } from "../../../../types";
 
 function maskPhone(value: string | null | undefined): string {
@@ -241,6 +242,22 @@ function AwaitingPaymentAlert({
 function KanbanCard({ order, categoryMap, updateStatus, isExpanded, toggleOrder, isOverlay }: { order: Order, categoryMap: any, updateStatus: any, isExpanded: boolean, toggleOrder: () => void, isOverlay?: boolean }) {
   const isDelayed = Date.now() - new Date(order.createdAt).getTime() > 30 * 60000 && order.status !== 'DELIVERED' && order.status !== 'CANCELLED';
   const isPaid = order.billed === true;
+  const toast = useToast();
+  const [reannouncing, setReannouncing] = useState(false);
+
+  const handleReannounce = async (e: any) => {
+    e.stopPropagation();
+    setReannouncing(true);
+    try {
+      const res = await apiFetch(`/api/orders/${order.id}/reannounce`, { method: 'POST' });
+      if (res.ok) toast.success('Chamando de novo no painel de TV!');
+      else toast.error('Não foi possível chamar de novo.');
+    } catch {
+      toast.error('Não foi possível chamar de novo.');
+    } finally {
+      setReannouncing(false);
+    }
+  };
 
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: order.id,
@@ -386,6 +403,17 @@ function KanbanCard({ order, categoryMap, updateStatus, isExpanded, toggleOrder,
           <CheckCircle2 className="w-3 h-3" />
           {actionLabel}
         </button>
+        {order.status === 'SHIPPED' && (
+          <button
+            type="button"
+            onClick={handleReannounce}
+            disabled={reannouncing}
+            className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-white border border-amber-200 hover:bg-amber-50 text-amber-600 text-[9px] font-black uppercase tracking-widest rounded-xl transition-colors disabled:opacity-50"
+          >
+            <Bell className="w-3 h-3" />
+            Chamar novamente
+          </button>
+        )}
       </div>
 
       {/* Expanded Details */}

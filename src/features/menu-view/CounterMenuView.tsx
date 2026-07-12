@@ -19,23 +19,30 @@ const fmt = (n: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
 
 // Tradução de status para o cliente que está acompanhando a senha do balcão.
-const STATUS_LABEL: Record<string, string> = {
-  AWAITING_PAYMENT: "Aguardando Pagamento",
-  PENDING: "Pedido pago — aguardando início do preparo",
-  PREPARING: "Estamos preparando seu pedido",
-  SHIPPED: "Pronto! Pode retirar no balcão",
-  DELIVERED: "Pedido entregue",
-  MERGED: "Pedido concluído no caixa",
-  CANCELLED: "Pedido cancelado",
-};
+// `billed` é quem diz se o pagamento já foi confirmado pelo operador no caixa —
+// o pedido pode estar em PENDING/PREPARING sem ainda ter sido pago (ex: cliente
+// escolheu pagar no balcão, ou o operador ainda não bateu o pagamento no PDV).
+function getStatusLabel(status: string, billed: boolean) {
+  if (status === "AWAITING_PAYMENT") return "Aguardando Pagamento";
+  if (["PENDING", "PREPARING"].includes(status)) {
+    return billed ? "Pedido pago — na fila de preparo" : "Pedido recebido — aguardando confirmação do pagamento";
+  }
+  if (status === "SHIPPED") return "Pronto! Pode retirar no balcão";
+  if (status === "DELIVERED") return "Pedido entregue";
+  if (status === "MERGED") return "Pedido concluído no caixa";
+  if (status === "CANCELLED") return "Pedido cancelado";
+  return status;
+}
 
 // Mensagem de instrução dinâmica
-function getInstructionText(status: string) {
+function getInstructionText(status: string, billed: boolean) {
   if (status === "AWAITING_PAYMENT") {
     return "Pague no caixa e acompanhe pela tela — chamaremos sua senha quando estiver pronto.";
   }
   if (["PENDING", "PREPARING"].includes(status)) {
-    return "Pagamento confirmado! Seu pedido já está na fila de preparo. Fique atento à sua senha.";
+    return billed
+      ? "Pagamento confirmado! Seu pedido já está na fila de preparo. Fique atento à sua senha."
+      : "Recebemos seu pedido. Dirija-se ao caixa para confirmar o pagamento — assim que confirmado, entra na fila de preparo.";
   }
   if (status === "SHIPPED") {
     return "Seu pedido está pronto! Dirija-se ao balcão para retirar.";
@@ -461,13 +468,13 @@ export default function CounterMenuView() {
                     ["SHIPPED", "DELIVERED", "MERGED"].includes(ticketOrder.status) ? "text-green-400" :
                     ticketOrder.status === "CANCELLED" ? "text-red-400" : "text-amber-300"
                   }`}>
-                    {STATUS_LABEL[ticketOrder.status] || ticketOrder.status}
+                    {getStatusLabel(ticketOrder.status, ticketOrder.billed === true)}
                   </span>
                 </div>
 
                 <div className="space-y-4">
                   <p className="text-white/40 text-sm max-w-[280px] mx-auto leading-relaxed">
-                    {getInstructionText(ticketOrder.status)}
+                    {getInstructionText(ticketOrder.status, ticketOrder.billed === true)}
                   </p>
 
                   <button

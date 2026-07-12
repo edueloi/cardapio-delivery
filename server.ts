@@ -3853,6 +3853,21 @@ app.patch("/api/orders/:id/status", requireAuth, async (req, res) => {
   }
 });
 
+// Operador clicou em "chamar novamente" no Painel de Pedidos — repete o anúncio de
+// voz/som no Painel de TV pra pedidos prontos que o cliente não veio buscar.
+app.post("/api/orders/:id/reannounce", requireAuth, async (req, res) => {
+  const tenantOrder = await requireTenantFromOrder(req, res, req.params.id);
+  if (!tenantOrder) return;
+
+  const { order, tenant } = tenantOrder;
+  if (order.status !== "SHIPPED") {
+    return res.status(400).json({ error: "Só é possível chamar novamente um pedido pronto." });
+  }
+
+  io.to(`tenant-${tenant.id}`).emit("order-reannounced", order);
+  res.json({ ok: true });
+});
+
 // Cancela um pedido já concluído no Histórico. Não apaga o registro (preserva rastreabilidade
 // e não quebra o fechamento de caixa de dias já encerrados) — só muda pra CANCELLED, que já
 // é filtrado fora de todo relatório/receita. Restrito ao proprietário e exige confirmar a
@@ -4559,7 +4574,7 @@ app.post("/api/kitchen/:slug/login", async (req, res) => {
 
   if (name) {
     const staff = await prisma.kitchenStaff.findFirst({
-      where: { tenantId: tenant.id, name: String(name), active: true },
+      where: { tenantId: tenant.id, username: String(name), active: true },
     });
     if (
       !staff ||

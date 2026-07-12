@@ -66,13 +66,12 @@ if (typeof window !== "undefined" && window.speechSynthesis) {
   };
 }
 
-// Anuncia um pedido pronto: "Pedido João" (com nome) ou "Pedido 27" (sem nome).
-export function announceOrderReady(numberOrTicket: number, customerName?: string | null) {
+// Anuncia um pedido pronto: "Senha número 27, retirar no balcão" — sempre pelo número
+// da senha (não pelo nome do cliente), pra ficar fácil de identificar de longe.
+export function announceOrderReady(numberOrTicket: number) {
   if (typeof window === "undefined" || !window.speechSynthesis) return;
   try {
-    const text = customerName?.trim()
-      ? `Pedido ${customerName.trim()}`
-      : `Pedido ${numberOrTicket}`;
+    const text = `Senha número ${numberOrTicket}, retirar no balcão`;
 
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = "pt-BR";

@@ -218,6 +218,7 @@ export interface DisplayPanelConfig {
   showDelivery: boolean;  // pedidos com orderType === "DELIVERY"
   showPickup: boolean;    // pedidos com orderType === "TAKEAWAY" (retirada no balcão)
   showDineIn: boolean;    // pedidos com orderType === "DINE_IN" (mesa/salão)
+  voiceAnnouncement?: boolean; // fala em voz alta "Pedido nº X, retire no balcão" quando fica pronto (default: true)
 }
 
 export interface LoyaltyConfig {

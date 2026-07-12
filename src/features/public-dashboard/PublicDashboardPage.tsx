@@ -43,6 +43,7 @@ const DEFAULT_DISPLAY_CONFIG: DisplayPanelConfig = {
   showDelivery: false,
   showPickup: true,
   showDineIn: true,
+  voiceAnnouncement: true,
 };
 
 const READY_ANNOUNCEMENT_DURATION_MS = 10000;
@@ -75,10 +76,12 @@ function readyAnnouncementSubtitle(order: Order) {
 }
 
 // Só anunciamos por voz pedidos de balcão/comanda (têm senha numérica).
-// Mesa e delivery não têm "senha" para chamar em voz alta.
-function announceReadyOrder(order: Order) {
+// Mesa e delivery não têm "senha" para chamar em voz alta. `voiceEnabled` vem da
+// configuração do painel — o dono pode desligar a fala e manter só o som/visual.
+function announceReadyOrder(order: Order, voiceEnabled: boolean) {
+  if (!voiceEnabled) return;
   if (order.counterTicketNumber == null) return;
-  announceOrderReady(order.counterTicketNumber, order.customerName);
+  announceOrderReady(order.counterTicketNumber);
 }
 
 /* ─── sub-components ──────────────────────────────────────── */
@@ -340,17 +343,26 @@ export default function PublicDashboardPage() {
       upsertOrder(newOrder);
     };
 
+    // Operador pediu pra chamar de novo (cliente não apareceu/não ouviu da primeira vez) —
+    // ignora o "já anunciado" e força a fila de novo.
+    const handleReannounce = (order: Order) => {
+      if (!isDisplayOrderVisible(order.orderType, displayConfigRef.current)) return;
+      setReadyAnnouncementQueue((prev) => [...prev, order]);
+    };
+
     fetchTenant();
     fetchOrders();
 
     socket.on("order-status-updated", handleOrderStatusUpdated);
     socket.on("new-order", handleNewOrder);
+    socket.on("order-reannounced", handleReannounce);
 
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
 
     return () => {
       socket.off("order-status-updated", handleOrderStatusUpdated);
       socket.off("new-order", handleNewOrder);
+      socket.off("order-reannounced", handleReannounce);
       clearInterval(timer);
     };
   }, [slug]);
@@ -374,7 +386,7 @@ export default function PublicDashboardPage() {
     playKitchenReadySound();
     // pequeno atraso pra voz não sobrepor o som da campainha
     const voiceTimer = window.setTimeout(() => {
-      announceReadyOrder(activeReadyAnnouncement);
+      announceReadyOrder(activeReadyAnnouncement, displayConfig.voiceAnnouncement !== false);
     }, 900);
     const dismissTimer = window.setTimeout(() => {
       setActiveReadyAnnouncement(null);
