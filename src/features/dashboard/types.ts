@@ -25,7 +25,8 @@ export type DashboardTabId =
   | "suppliers"
   | "waiter"
   | "manual"
-  | "ifood";
+  | "ifood"
+  | "nfce";
 
 export type DashboardOrderTabId = "pending" | "preparing" | "shipped";
 
@@ -55,6 +56,7 @@ export const TAB_TO_PATH: Record<DashboardTabId, string> = {
   "waiter": "garcom",
   "manual": "manual",
   "ifood": "ifood",
+  "nfce": "notas-fiscais",
 };
 
 export const PATH_TO_TAB: Record<string, DashboardTabId> = Object.fromEntries(
@@ -86,7 +88,7 @@ export interface MyMembership {
 // All tab ids that can be restricted by permissions
 export const ALL_PERMISSION_TABS: DashboardTabId[] = [
   "overview", "pos", "waiter", "live-orders", "scheduled", "kds", "tables",
-  "history", "menu", "inventory", "production", "suppliers", "finance", "entries", "reports",
+  "history", "menu", "inventory", "production", "suppliers", "finance", "entries", "reports", "nfce",
   "customers", "loyalty", "promotions", "whatsapp",
   "profile", "staff", "downloads", "manual",
 ];

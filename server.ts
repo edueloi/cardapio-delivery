@@ -9798,6 +9798,52 @@ app.post(
   }
 );
 
+// GET /api/owner/tenants/:tenantId/nfce/list — histórico de notas fiscais emitidas (paginado)
+app.get(
+  "/api/owner/tenants/:tenantId/nfce/list",
+  requireAuth,
+  async (req, res) => {
+    const tenant = await requireTenantById(
+      req,
+      res,
+      req.params.tenantId,
+      "finance"
+    );
+    if (!tenant) return;
+
+    const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(String(req.query.pageSize ?? "20"), 10) || 20));
+    const status = typeof req.query.status === "string" ? req.query.status : undefined;
+
+    const where = {
+      tenantId: tenant.id,
+      nfceStatus: status ? status : { not: null },
+    } as any;
+
+    const [total, orders] = await Promise.all([
+      prisma.order.count({ where }),
+      prisma.order.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        select: {
+          id: true,
+          customerName: true,
+          total: true,
+          createdAt: true,
+          nfceStatus: true,
+          nfceKey: true,
+          nfceNumber: true,
+          nfceProtocol: true,
+        },
+      }),
+    ]);
+
+    res.json({ orders, total, page, pageSize });
+  }
+);
+
 // GET /api/owner/tenants/:tenantId/nfce/status/:orderId — status da NFC-e de um pedido
 app.get(
   "/api/owner/tenants/:tenantId/nfce/status/:orderId",
@@ -9823,6 +9869,77 @@ app.get(
     if (!order)
       return res.status(404).json({ error: "Pedido não encontrado." });
     res.json(order);
+  }
+);
+
+// GET /api/owner/tenants/:tenantId/nfce/danfe/:orderId — dados prontos pro DANFE (cupom fiscal com QR Code)
+app.get(
+  "/api/owner/tenants/:tenantId/nfce/danfe/:orderId",
+  requireAuth,
+  async (req, res) => {
+    const tenant = await requireTenantById(
+      req,
+      res,
+      req.params.tenantId,
+      "finance"
+    );
+    if (!tenant) return;
+
+    try {
+      const order = await prisma.order.findFirst({
+        where: { id: req.params.orderId, tenantId: tenant.id },
+      });
+      if (!order) return res.status(404).json({ error: "Pedido não encontrado." });
+      if (order.nfceStatus !== "AUTHORIZED" || !order.nfceKey || !order.nfceProtocol || !order.nfceXml)
+        return res.status(400).json({ error: "NFC-e não autorizada para este pedido." });
+      if (!tenant.fiscalConfig)
+        return res.status(400).json({ error: "Configuração fiscal não encontrada." });
+
+      const fiscal = JSON.parse(
+        tenant.fiscalConfig as string
+      ) as import("./src/types.js").FiscalConfig;
+      const { xml } = JSON.parse(order.nfceXml as string) as { xml: string };
+
+      let emitAddress = "";
+      try {
+        const parsed = tenant.address ? JSON.parse(tenant.address as string) : null;
+        if (parsed) {
+          const parts = [
+            `${parsed.street || ""}${parsed.number ? `, ${parsed.number}` : ""}`,
+            parsed.neighborhood || "",
+            `${fiscal.xMun || ""}${fiscal.uf ? ` - ${fiscal.uf}` : ""}`,
+          ].filter(Boolean);
+          emitAddress = parts.join(" · ");
+        }
+      } catch {
+        /* endereço inválido — segue sem endereço no DANFE */
+      }
+
+      const { buildDanfeData } = await import("./src/lib/danfe.js");
+      const { getUrlChave } = await import("./src/lib/fiscal.js");
+
+      const danfe = buildDanfeData({
+        fiscal,
+        emitName: tenant.name,
+        emitAddress,
+        numero: order.nfceNumber ?? 0,
+        serie: fiscal.serie || 1,
+        chave: order.nfceKey,
+        protocolo: order.nfceProtocol,
+        xmlAutorizado: xml,
+        consultaUrlBase: getUrlChave(fiscal.uf, fiscal.ambiente),
+        customerName: order.customerName || undefined,
+        customerCpf: order.customerCpf || undefined,
+      });
+
+      const QRCode = (await import("qrcode")).default;
+      const qrCodeDataUrl = await QRCode.toDataURL(danfe.qrCodeUrl, { margin: 1, width: 200 });
+
+      res.json({ ...danfe, qrCodeDataUrl });
+    } catch (err: any) {
+      console.error("[NFC-e] Erro ao montar DANFE:", err);
+      res.status(500).json({ error: err?.message ?? "Erro ao montar DANFE." });
+    }
   }
 );
 

@@ -25,6 +25,7 @@ import {
   KitchenKDSPanel,
   LoyaltyPanel,
   MenuManagement,
+  NfceHistoryPanel,
   OrderHistoryPanel,
   OrdersList,
   OverviewPanel,
@@ -199,6 +200,10 @@ export default function DashboardContent({
 
       {activeTab === "reports" && (
         <ReportsPanel slug={slug} tenant={tenant} />
+      )}
+
+      {activeTab === "nfce" && (
+        <NfceHistoryPanel slug={slug} tenant={tenant} />
       )}
 
       {activeTab === "downloads" && (

@@ -26,6 +26,14 @@ contextBridge.exposeInMainWorld("pdvDesktop", {
     }
     return result;
   },
+
+  printDanfe: async (data) => {
+    const result = await ipcRenderer.invoke("printer:print-danfe", data);
+    if (!result.ok) {
+      window.alert((result.error || "Falha ao imprimir o DANFE.") + "\n\nAperte F9 para configurar a impressora.");
+    }
+    return result;
+  },
 });
 
 // Botão flutuante pra sair do app — em modo kiosk (frame: false) não existe barra de

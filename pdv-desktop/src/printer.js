@@ -38,6 +38,22 @@ const CMD = {
   feed: (n) => "\n".repeat(n),
 };
 
+// Comandos GS ( k — impressão de QR Code nativa da impressora (ESC/POS 2D barcode),
+// suportada pela grande maioria das térmicas (Epson TM-T20, Bematech, Elgin, Tanca etc.).
+// Referência: especificação ESC/POS "Function 165: 2D symbol - QR Code".
+function qrCodeCommand(data, moduleSize = 6) {
+  const dataBuf = Buffer.from(data, "utf8");
+  const store = Buffer.concat([
+    Buffer.from([0x1d, 0x28, 0x6b, (dataBuf.length + 3) & 0xff, ((dataBuf.length + 3) >> 8) & 0xff, 0x31, 0x50, 0x30]),
+    dataBuf,
+  ]);
+  const model = Buffer.from([0x1d, 0x28, 0x6b, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00]); // modelo 2
+  const size = Buffer.from([0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x43, moduleSize]); // tamanho do módulo
+  const errorCorrection = Buffer.from([0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x45, 0x31]); // nível M
+  const print = Buffer.from([0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x51, 0x30]); // imprime o buffer
+  return Buffer.concat([model, size, errorCorrection, store, print]);
+}
+
 function fmtMoney(v) {
   return `R$ ${Number(v || 0).toFixed(2).replace(".", ",")}`;
 }
@@ -291,6 +307,102 @@ async function printReceipt(data, mainWindow) {
   await sendRawToPrinter(buffer, config.name);
 }
 
+function cpfMask(cpf) {
+  if (!cpf) return "";
+  const d = String(cpf).replace(/\D/g, "");
+  if (d.length !== 11) return cpf;
+  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+}
+
+// DANFE-NFC-e (cupom fiscal) em ESC/POS — mesmo padrão de buildEscPosBuffer, mas o
+// texto CP860 e o comando binário do QR Code são montados como Buffers separados e
+// concatenados no final, já que o QR Code não pode ser convertido junto com o texto.
+function buildDanfeEscPosBuffer(data) {
+  const config = getPrinterConfig();
+  const width = config.widthMm === 58 ? 58 : 80;
+  const cols = CHARS_PER_LINE[width];
+
+  let out = CMD.init + CMD.codepagePortuguese;
+  out += CMD.alignCenter + CMD.boldOn;
+  for (const line of wrapLine(data.emitName || "", cols)) out += line + "\n";
+  out += CMD.boldOff;
+
+  if (data.emitAddress) for (const line of wrapLine(data.emitAddress, cols)) out += line + "\n";
+
+  const cnpjFmt = String(data.emitCnpj || "").replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+  out += `CNPJ: ${cnpjFmt}  IE: ${data.emitIe}\n`;
+
+  out += CMD.boldOn;
+  out += "DANFE NFC-e - Documento Auxiliar da\n";
+  out += "Nota Fiscal de Consumidor Eletrônica\n";
+  out += CMD.boldOff;
+
+  if (data.ambiente === "homologacao") {
+    out += CMD.boldOn;
+    out += "EMITIDA EM AMBIENTE DE HOMOLOGAÇÃO\n";
+    out += "SEM VALOR FISCAL\n";
+    out += CMD.boldOff;
+  }
+
+  out += CMD.alignLeft;
+  out += "-".repeat(cols) + "\n";
+
+  for (const item of data.items || []) {
+    for (const line of wrapLine(item.name, cols)) out += line + "\n";
+    const qtyStr = `${item.quantity} ${item.unitCom} x ${fmtMoney(item.unitPrice)}`;
+    out += twoCol(qtyStr, fmtMoney(item.total), cols);
+  }
+
+  out += "-".repeat(cols) + "\n";
+  out += CMD.boldOn + CMD.sizeDouble;
+  out += twoCol("TOTAL", fmtMoney(data.total), Math.floor(cols / 2));
+  out += CMD.sizeNormal + CMD.boldOff;
+
+  out += `Pagamento: ${data.paymentMethod}\n`;
+  if (data.customerCpf) {
+    out += `CPF Consumidor: ${cpfMask(data.customerCpf)}\n`;
+  } else if (data.customerName) {
+    out += `Cliente: ${data.customerName}\n`;
+  }
+
+  out += "-".repeat(cols) + "\n";
+  const dataEmi = data.dhEmi ? new Date(data.dhEmi).toLocaleString("pt-BR") : "";
+  out += `NFC-e nº ${data.numero}  Série ${data.serie}\n`;
+  out += `Emissão: ${dataEmi}\n`;
+  for (const line of wrapLine(`Protocolo: ${data.protocolo}`, cols)) out += line + "\n";
+  out += "Chave de acesso:\n";
+  const chaveFmt = (String(data.chave).match(/.{1,4}/g) || []).join(" ");
+  for (const line of wrapLine(chaveFmt, cols)) out += line + "\n";
+
+  out += CMD.alignCenter + CMD.boldOn;
+  out += "Consulte pela Chave de Acesso em:\n";
+  out += CMD.boldOff;
+  for (const line of wrapLine(data.consultaUrl, cols)) out += line + "\n";
+  out += "\n";
+
+  const textBuffer = iconv.encode(out, "cp860");
+  const qrBuffer = data.qrCodeUrl ? qrCodeCommand(data.qrCodeUrl) : Buffer.alloc(0);
+
+  let footer = "\n" + CMD.alignCenter;
+  if (data.isSimplesNacional) {
+    footer += "Documento emitido por ME/EPP optante pelo\n";
+    footer += "Simples Nacional\n";
+  }
+  footer += CMD.feed(5) + CMD.cut;
+  const footerBuffer = iconv.encode(footer, "cp860");
+
+  return Buffer.concat([textBuffer, qrBuffer, footerBuffer]);
+}
+
+async function printDanfe(data) {
+  const config = getPrinterConfig();
+  if (!config.name) {
+    throw new Error("Nenhuma impressora configurada. Aperte F9 para escolher a impressora térmica.");
+  }
+  const buffer = buildDanfeEscPosBuffer(data);
+  await sendRawToPrinter(buffer, config.name);
+}
+
 function buildCashClosingEscPosBuffer(tenantName, summary) {
   const config = getPrinterConfig();
   const width = config.widthMm === 58 ? 58 : 80;
@@ -364,4 +476,4 @@ async function testPrint(mainWindow) {
   }, mainWindow);
 }
 
-module.exports = { printReceipt, printCashClosingReport, testPrint, getPrinterConfig, setPrinterConfig, listPrinters };
+module.exports = { printReceipt, printCashClosingReport, printDanfe, testPrint, getPrinterConfig, setPrinterConfig, listPrinters };

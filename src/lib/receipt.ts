@@ -1,4 +1,5 @@
 import { jsPDF } from "jspdf";
+import type { DanfeData } from "../types.js";
 
 export interface ReceiptItem {
   quantity: number;
@@ -409,6 +410,194 @@ export function downloadReceiptPdf(data: ReceiptData) {
 
 export function printReceiptPdf(data: ReceiptData) {
   const doc = buildReceiptPdf(data);
+  doc.autoPrint();
+  const blobUrl = doc.output("bloburl");
+  window.open(blobUrl as unknown as string, "_blank");
+}
+
+// ─── DANFE (cupom fiscal da NFC-e, com QR Code) ──────────────────────────────
+
+const PAYMENT_WIDTH_LIMIT = 999; // sem quebra especial — nomes de pagamento já vêm curtos do backend
+
+function cpfMask(cpf?: string): string {
+  if (!cpf) return "";
+  const d = cpf.replace(/\D/g, "");
+  if (d.length !== 11) return cpf;
+  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+}
+
+function estimateDanfeHeight(data: DanfeData, nameLines: string[], addressLines: string[]): number {
+  let y = 8;
+  y += nameLines.length * 5;
+  y += addressLines.length * 4;
+  y += 4; // CNPJ/IE
+  y += 5; // "DOCUMENTO AUXILIAR..."
+  y += 4; // ambiente homologação (se aplicável, aproximação segura somando sempre)
+  y += 1 + 5; // linha + espaço
+  for (const item of data.items) y += 8; // nome (pode quebrar) + linha qtd/valor — aproximado
+  y += 1 + 6; // linha + espaço
+  y += 6; // total
+  y += 4; // forma de pagamento
+  if (data.customerCpf || data.customerName) y += 4;
+  y += 1 + 5;
+  y += 4 * 3; // número/série/emissão
+  y += 4 * 2; // chave (quebrada em 2 linhas)
+  y += 4; // protocolo
+  y += 5; // "Consulte pela Chave de Acesso em"
+  y += 4; // url
+  y += 4 + 60; // "QRCODE" + imagem (60mm de lado é suficiente pra 200px)
+  y += 6; // rodapé
+  return y + 10;
+}
+
+export function buildDanfePdf(data: DanfeData, paperWidthMm?: 58 | 80): jsPDF {
+  const width = paperWidthMm === 58 ? 58 : 80;
+  const margin = width === 58 ? 3 : 5;
+  const contentWidth = width - margin * 2;
+
+  const measureDoc = new jsPDF({ unit: "mm", format: [width, 100] });
+  measureDoc.setFont("courier", "bold");
+  measureDoc.setFontSize(width === 58 ? 10 : 12);
+  const nameLines: string[] = measureDoc.splitTextToSize(data.emitName, contentWidth);
+  measureDoc.setFont("courier", "normal");
+  measureDoc.setFontSize(7);
+  const addressLines: string[] = data.emitAddress ? measureDoc.splitTextToSize(data.emitAddress, contentWidth) : [];
+
+  const doc = new jsPDF({ unit: "mm", format: [width, estimateDanfeHeight(data, nameLines, addressLines)] });
+  let y = 8;
+
+  doc.setFont("courier", "bold");
+  doc.setFontSize(width === 58 ? 10 : 12);
+  doc.text(nameLines, width / 2, y, { align: "center" });
+  y += nameLines.length * 5;
+
+  doc.setFont("courier", "normal");
+  doc.setFontSize(7);
+  if (addressLines.length) {
+    doc.text(addressLines, width / 2, y, { align: "center" });
+    y += addressLines.length * 4;
+  }
+
+  const cnpjFmt = data.emitCnpj.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+  doc.text(`CNPJ: ${cnpjFmt}  IE: ${data.emitIe}`, width / 2, y, { align: "center" });
+  y += 4;
+
+  doc.setFont("courier", "bold");
+  doc.text("DANFE NFC-e - Documento Auxiliar da", width / 2, y, { align: "center" });
+  y += 3.5;
+  doc.text("Nota Fiscal de Consumidor Eletrônica", width / 2, y, { align: "center" });
+  y += 4.5;
+  doc.setFont("courier", "normal");
+
+  if (data.ambiente === "homologacao") {
+    doc.setFont("courier", "bold");
+    doc.setFontSize(8);
+    doc.text("EMITIDA EM AMBIENTE DE HOMOLOGAÇÃO", width / 2, y, { align: "center" });
+    y += 3.5;
+    doc.text("SEM VALOR FISCAL", width / 2, y, { align: "center" });
+    y += 4.5;
+    doc.setFont("courier", "normal");
+    doc.setFontSize(7);
+  }
+
+  y += 1;
+  doc.setLineDashPattern([1, 1], 0);
+  doc.line(margin, y, width - margin, y);
+  y += 5;
+
+  doc.setFontSize(7);
+  for (const item of data.items) {
+    const nameLinesItem = doc.splitTextToSize(item.name, contentWidth);
+    doc.text(nameLinesItem, margin, y);
+    y += nameLinesItem.length * 3.5;
+    const qtyStr = `${item.quantity} ${item.unitCom} x ${fmtMoney(item.unitPrice)}`;
+    const totalStr = fmtMoney(item.total);
+    doc.text(qtyStr, margin, y);
+    doc.text(totalStr, width - margin, y, { align: "right" });
+    y += 4;
+  }
+
+  y += 1;
+  doc.line(margin, y, width - margin, y);
+  y += 6;
+
+  doc.setFont("courier", "bold");
+  doc.setFontSize(10);
+  doc.text("TOTAL", margin, y);
+  doc.text(fmtMoney(data.total), width - margin, y, { align: "right" });
+  y += 5;
+
+  doc.setFont("courier", "normal");
+  doc.setFontSize(7);
+  doc.text(`Pagamento: ${data.paymentMethod}`, margin, y, { maxWidth: PAYMENT_WIDTH_LIMIT });
+  y += 4;
+
+  if (data.customerCpf) {
+    doc.text(`CPF Consumidor: ${cpfMask(data.customerCpf)}`, margin, y);
+    y += 4;
+  } else if (data.customerName) {
+    doc.text(`Cliente: ${data.customerName}`, margin, y);
+    y += 4;
+  }
+
+  y += 1;
+  doc.line(margin, y, width - margin, y);
+  y += 5;
+
+  const dataEmi = data.dhEmi ? new Date(data.dhEmi).toLocaleString("pt-BR") : "";
+  doc.text(`NFC-e nº ${data.numero}  Série ${data.serie}`, margin, y);
+  y += 4;
+  doc.text(`Emissão: ${dataEmi}`, margin, y);
+  y += 4;
+  doc.text(`Protocolo: ${data.protocolo}`, margin, y, { maxWidth: contentWidth });
+  y += 4;
+
+  doc.text("Chave de acesso:", margin, y);
+  y += 4;
+  const chaveFmt = (data.chave.match(/.{1,4}/g) ?? []).join(" ");
+  const chaveLines = doc.splitTextToSize(chaveFmt, contentWidth);
+  doc.text(chaveLines, margin, y);
+  y += chaveLines.length * 4;
+
+  y += 1;
+  doc.setFont("courier", "bold");
+  doc.text("Consulte pela Chave de Acesso em:", width / 2, y, { align: "center" });
+  y += 4;
+  doc.setFont("courier", "normal");
+  const urlLines = doc.splitTextToSize(data.consultaUrl, contentWidth);
+  doc.text(urlLines, width / 2, y, { align: "center" });
+  y += urlLines.length * 3.5 + 3;
+
+  if (data.qrCodeDataUrl) {
+    const qrSize = width === 58 ? 40 : 50;
+    try {
+      doc.addImage(data.qrCodeDataUrl, "PNG", (width - qrSize) / 2, y, qrSize, qrSize);
+      y += qrSize + 4;
+    } catch {
+      /* imagem inválida — segue sem QR Code impresso, resto do cupom continua legível */
+    }
+  }
+
+  doc.line(margin, y, width - margin, y);
+  y += 5;
+  if (data.isSimplesNacional) {
+    doc.setFont("courier", "italic");
+    doc.setFontSize(7);
+    doc.text("Documento emitido por ME/EPP optante pelo", width / 2, y, { align: "center" });
+    y += 3.5;
+    doc.text("Simples Nacional", width / 2, y, { align: "center" });
+  }
+
+  return doc;
+}
+
+export function downloadDanfePdf(data: DanfeData, paperWidthMm?: 58 | 80) {
+  const doc = buildDanfePdf(data, paperWidthMm);
+  doc.save(`danfe-${data.numero}.pdf`);
+}
+
+export function printDanfePdf(data: DanfeData, paperWidthMm?: 58 | 80) {
+  const doc = buildDanfePdf(data, paperWidthMm);
   doc.autoPrint();
   const blobUrl = doc.output("bloburl");
   window.open(blobUrl as unknown as string, "_blank");

@@ -13,7 +13,8 @@ import type { Tenant, Product, ProductExtra, Order, PaymentConfig, PaymentMethod
 import { dineInOrderLabel, DEFAULT_PRINTING_CONFIG } from "../../../../types";
 import { apiJson } from "../../../../lib/api";
 import { useToast } from "../../../../components";
-import { downloadReceiptPdf, printReceiptPdf, printCashClosingReportPdf } from "../../../../lib/receipt";
+import { downloadReceiptPdf, printReceiptPdf, printCashClosingReportPdf, downloadDanfePdf, printDanfePdf } from "../../../../lib/receipt";
+import type { DanfeData } from "../../../../types";
 import socket from "../../../../lib/socket";
 
 const fmt = (n: number) =>
@@ -446,6 +447,33 @@ export default function PDVPanel({
     } catch (err: any) {
       setNfceStatus("rejected");
       setNfceMessage(err?.message ?? "Erro ao emitir NFC-e");
+    }
+  };
+
+  const fetchDanfeData = async (): Promise<DanfeData | null> => {
+    const order = lastOrderRef.current;
+    if (!order?.id) return null;
+    try {
+      return await apiJson<DanfeData>(`/api/owner/tenants/${tenant.id}/nfce/danfe/${order.id}`);
+    } catch (err: any) {
+      alert(err?.message ?? "Erro ao carregar dados da NFC-e.");
+      return null;
+    }
+  };
+
+  const handleDownloadDanfe = async () => {
+    const data = await fetchDanfeData();
+    if (data) downloadDanfePdf(data, tenant.receiptPaperWidth);
+  };
+
+  const handlePrintDanfe = async () => {
+    const data = await fetchDanfeData();
+    if (!data) return;
+    const desktop = (window as any).pdvDesktop;
+    if (desktop?.printDanfe) {
+      desktop.printDanfe(data);
+    } else {
+      printDanfePdf(data, tenant.receiptPaperWidth);
     }
   };
 
@@ -1557,9 +1585,27 @@ export default function PDVPanel({
               </div>
             )}
             {fiscalEnabled && nfceStatus === "authorized" && (
-              <div className="bg-green-600 text-white px-5 py-2.5 rounded-xl shadow-xl flex items-center gap-2 text-xs font-black">
-                <CheckCircle2 className="w-4 h-4" />
-                {nfceMessage}
+              <div className="bg-green-600 text-white px-5 py-2.5 rounded-xl shadow-xl flex flex-wrap items-center justify-center gap-2 text-xs font-black">
+                <span className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4" />
+                  {nfceMessage}
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={handleDownloadDanfe}
+                    className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition-colors"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Baixar DANFE
+                  </button>
+                  <button
+                    onClick={handlePrintDanfe}
+                    className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition-colors"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    Imprimir DANFE
+                  </button>
+                </div>
               </div>
             )}
             {fiscalEnabled && nfceStatus === "rejected" && (

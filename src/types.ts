@@ -166,6 +166,39 @@ export interface NfceResult {
   motivo?: string; // mensagem de erro/rejeição
 }
 
+export interface DanfeItem {
+  name: string;
+  quantity: number;
+  unitCom: string;
+  unitPrice: number;
+  total: number;
+}
+
+// Dados prontos pro cupom fiscal (DANFE-NFC-e), devolvidos por
+// GET /api/owner/tenants/:tenantId/nfce/danfe/:orderId
+export interface DanfeData {
+  emitName: string;
+  emitCnpj: string;
+  emitIe: string;
+  emitAddress: string;
+  ambiente: "homologacao" | "producao";
+  numero: number;
+  serie: number;
+  chave: string;
+  protocolo: string;
+  dhEmi: string;
+  dhRecbto?: string;
+  items: DanfeItem[];
+  total: number;
+  paymentMethod: string;
+  customerName?: string;
+  customerCpf?: string;
+  qrCodeUrl: string;
+  consultaUrl: string;
+  qrCodeDataUrl: string;
+  isSimplesNacional: boolean;
+}
+
 export interface Tenant {
   id: string;
   name: string;

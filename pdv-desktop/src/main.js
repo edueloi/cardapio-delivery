@@ -148,3 +148,13 @@ ipcMain.handle("printer:print-cash-closing", async (_event, { tenantName, summar
     return { ok: false, error: err.message || "Falha ao imprimir o fechamento." };
   }
 });
+
+ipcMain.handle("printer:print-danfe", async (_event, data) => {
+  try {
+    await printer.printDanfe(data);
+    return { ok: true };
+  } catch (err) {
+    console.error("[main] DANFE print failed:", err);
+    return { ok: false, error: err.message || "Falha ao imprimir o DANFE." };
+  }
+});

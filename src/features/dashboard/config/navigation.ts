@@ -6,6 +6,7 @@ import {
   Clock,
   Download,
   Factory,
+  FileText,
   Heart,
   History,
   LayoutDashboard,
@@ -57,6 +58,7 @@ export const DASHBOARD_NAVIGATION: DashboardNavigationGroup[] = [
       { id: "finance",   label: "Fluxo de Caixa",     tab: "finance",      icon: Wallet },
       { id: "entries",   label: "Entradas e Saídas",  tab: "entries",      icon: ArrowLeftRight },
       { id: "reports",   label: "Relatórios",         tab: "reports",      icon: BarChart3 },
+      { id: "nfce",      label: "Notas Fiscais",      tab: "nfce",         icon: FileText },
     ],
   },
   {

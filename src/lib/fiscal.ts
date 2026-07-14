@@ -331,7 +331,7 @@ export async function cancelarNfce(
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 // Tabela simplificada cUF (código IBGE da UF)
-function getCUF(uf: string): number {
+export function getCUF(uf: string): number {
   const map: Record<string, number> = {
     AC: 12, AL: 27, AP: 16, AM: 13, BA: 29, CE: 23, DF: 53, ES: 32,
     GO: 52, MA: 21, MT: 51, MS: 50, MG: 31, PA: 15, PB: 25, PR: 41,
@@ -341,7 +341,7 @@ function getCUF(uf: string): number {
   return map[uf.toUpperCase()] ?? 35;
 }
 
-function getUrlChave(uf: string, ambiente: "homologacao" | "producao"): string {
+export function getUrlChave(uf: string, ambiente: "homologacao" | "producao"): string {
   if (ambiente === "homologacao") {
     return "https://hom.sefaz.rs.gov.br/nfce/consulta"; // genérico homologação
   }
