@@ -65,6 +65,26 @@ function createWindow() {
     mainWindow.webContents.setZoomFactor(getZoomFactor());
   });
 
+  // Menu de botão direito — substitui os antigos botões flutuantes (✕, +/-), que
+  // ficavam sobrepostos ao conteúdo da página e colidiam visualmente com os controles
+  // do próprio site (ex: botão de configurações no canto superior direito). Em modo
+  // kiosk (frame: false) não há barra de menu do Windows, então este é o lugar natural
+  // pra reunir zoom, impressora e fechar sem ocupar espaço nenhum da tela.
+  mainWindow.webContents.on("context-menu", () => {
+    const zoomPercent = Math.round(getZoomFactor() * 100);
+    const contextMenu = Menu.buildFromTemplate([
+      { label: `Zoom: ${zoomPercent}%`, enabled: false },
+      { label: "Aumentar zoom (+)", click: () => setZoomFactor(getZoomFactor() + ZOOM_STEP) },
+      { label: "Diminuir zoom (−)", click: () => setZoomFactor(getZoomFactor() - ZOOM_STEP) },
+      { label: "Restaurar zoom padrão", click: () => setZoomFactor(1) },
+      { type: "separator" },
+      { label: "Configurar Impressora (F9)", click: () => openPrinterConfigWindow(mainWindow) },
+      { type: "separator" },
+      { label: "Fechar o App", click: () => confirmAndQuit() },
+    ]);
+    contextMenu.popup({ window: mainWindow });
+  });
+
   mainWindow.webContents.on("did-fail-load", (_event, _code, description) => {
     console.error("[main] Failed to load app:", description);
     setTimeout(() => mainWindow?.loadURL(APP_URL), 3000);
@@ -81,7 +101,7 @@ function createWindow() {
   });
 }
 
-// Usada tanto pelo atalho Ctrl+Shift+Q quanto pelo botão flutuante injetado no preload —
+// Usada tanto pelo atalho Ctrl+Shift+Q quanto pelo menu de botão direito (context-menu) —
 // mesmo fluxo de confirmação nos dois casos, pra ninguém fechar o PDV sem querer.
 async function confirmAndQuit() {
   const { response } = await dialog.showMessageBox(mainWindow, {

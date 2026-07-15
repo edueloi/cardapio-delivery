@@ -36,49 +36,7 @@ contextBridge.exposeInMainWorld("pdvDesktop", {
   },
 });
 
-// Botão flutuante pra sair do app — em modo kiosk (frame: false) não existe barra de
-// título nem X do Windows, então sem isso o único jeito de fechar seria saber de cor o
-// atalho Ctrl+Shift+Q. Injetado direto no DOM da página carregada (site real), não faz
-// parte do código do painel web.
-window.addEventListener("DOMContentLoaded", () => {
-  function makeButton(label, title, top) {
-    const btn = document.createElement("button");
-    btn.textContent = label;
-    btn.title = title;
-    Object.assign(btn.style, {
-      position: "fixed",
-      top,
-      right: "8px",
-      zIndex: "2147483647",
-      width: "28px",
-      height: "28px",
-      borderRadius: "50%",
-      border: "none",
-      background: "rgba(0,0,0,0.35)",
-      color: "#fff",
-      fontSize: "14px",
-      lineHeight: "28px",
-      textAlign: "center",
-      cursor: "pointer",
-      fontFamily: "sans-serif",
-      opacity: "0.55",
-      transition: "opacity 0.15s",
-    });
-    btn.addEventListener("mouseenter", () => { btn.style.opacity = "1"; });
-    btn.addEventListener("mouseleave", () => { btn.style.opacity = "0.55"; });
-    document.body.appendChild(btn);
-    return btn;
-  }
-
-  const closeBtn = makeButton("✕", "Fechar o app (Ctrl+Shift+Q)", "8px");
-  closeBtn.addEventListener("click", () => ipcRenderer.invoke("app:request-quit"));
-
-  // Zoom da tela — em modo kiosk o Ctrl+- do Chromium funciona, mas o operador raramente
-  // sabe do atalho; estes botões deixam visível e persistem o valor entre reinícios do app.
-  const zoomOutBtn = makeButton("−", "Diminuir o tamanho da tela", "40px");
-  const zoomInBtn = makeButton("+", "Aumentar o tamanho da tela", "72px");
-  zoomOutBtn.style.fontSize = "16px";
-  zoomInBtn.style.fontSize = "16px";
-  zoomOutBtn.addEventListener("click", () => ipcRenderer.invoke("zoom:set", "out"));
-  zoomInBtn.addEventListener("click", () => ipcRenderer.invoke("zoom:set", "in"));
-});
+// Fechar o app, ajustar zoom e configurar a impressora ficam no menu de botão direito
+// (ver main.js, Menu.buildFromTemplate + context-menu) — em modo kiosk (frame: false) não
+// há barra de título nem X do Windows, e botões flutuantes por cima da tela colidiam
+// visualmente com os controles do próprio site (ex: botão de configurações no canto).
