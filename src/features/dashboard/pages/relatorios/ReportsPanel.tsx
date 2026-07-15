@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   BarChart3, TrendingUp, Calendar, Download,
   ShoppingBag, CreditCard, Banknote, QrCode,
-  Receipt, Package, Clock, ArrowUpRight,
+  Receipt, Package, Clock, ArrowUpRight, Timer, Truck, AlertTriangle,
 } from "lucide-react";
 import {
   PageWrapper, SectionTitle, StatGrid, StatCard, ContentCard,
@@ -48,6 +48,25 @@ interface TopInventoryItem {
   quantity: number;
 }
 
+interface SlowestOrder {
+  id: string;
+  customerName: string;
+  counterTicketNumber: number | null;
+  orderType: string;
+  createdAt: string;
+  readyAt: string;
+  prepMinutes: number;
+  deliveryMinutes: number | null;
+}
+
+interface TimingReport {
+  avgPrepMinutes: number;
+  avgDeliveryMinutes: number;
+  ordersWithTiming: number;
+  hourly: { hour: number; avgPrepMinutes: number; count: number }[];
+  slowest: SlowestOrder[];
+}
+
 const MONTH_LABELS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
 const PAYMENT_LABELS: Record<string, { label: string; icon: React.ElementType; color: string }> = {
@@ -78,6 +97,7 @@ export default function ReportsPanel({ slug, tenant }: ReportsPanelProps) {
   const [dailyData, setDailyData] = useState<DailyData[]>([]);
   const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
   const [topInventory, setTopInventory] = useState<TopInventoryItem[]>([]);
+  const [timing, setTiming] = useState<TimingReport | null>(null);
   const [loading, setLoading] = useState(false);
 
   const buildDates = useCallback(() => {
@@ -110,16 +130,18 @@ export default function ReportsPanel({ slug, tenant }: ReportsPanelProps) {
     if (!from || !to) return;
     setLoading(true);
     try {
-      const [summRes, dailyRes, monthlyRes, topInvRes] = await Promise.all([
+      const [summRes, dailyRes, monthlyRes, topInvRes, timingRes] = await Promise.all([
         apiFetch(`/api/tenants/${slug}/reports/summary?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
         apiFetch(`/api/tenants/${slug}/reports/daily?days=${period === "month" ? 30 : period === "week" ? 7 : 1}`),
         apiFetch(`/api/tenants/${slug}/reports/monthly?year=${new Date().getFullYear()}`),
         apiFetch(`/api/tenants/${slug}/reports/top-inventory?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+        apiFetch(`/api/tenants/${slug}/reports/timing?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
       ]);
       if (summRes.ok) setSummary(await summRes.json());
       if (dailyRes.ok) setDailyData(await dailyRes.json());
       if (monthlyRes.ok) setMonthlyData(await monthlyRes.json());
       if (topInvRes.ok) setTopInventory(await topInvRes.json());
+      if (timingRes.ok) setTiming(await timingRes.json());
     } catch (e) {
       console.error(e);
     } finally {
@@ -133,6 +155,15 @@ export default function ReportsPanel({ slug, tenant }: ReportsPanelProps) {
   const maxHourlyTotal = summary ? Math.max(...summary.hourly.map((h) => h.total), 1) : 1;
   const maxMonthlyTotal = monthlyData.length > 0 ? Math.max(...monthlyData.map((m) => m.total), 1) : 1;
   const maxTopInventoryQty = topInventory.length > 0 ? Math.max(...topInventory.map((i) => i.quantity), 1) : 1;
+  const maxHourlyPrepMinutes = timing ? Math.max(...timing.hourly.map((h) => h.avgPrepMinutes), 1) : 1;
+
+  const fmtMinutes = (m: number) => {
+    if (m < 1) return "< 1 min";
+    if (m < 60) return `${Math.round(m)} min`;
+    const h = Math.floor(m / 60);
+    const rest = Math.round(m % 60);
+    return `${h}h${rest > 0 ? ` ${rest}min` : ""}`;
+  };
 
   const exportCSV = () => {
     if (!summary) return;
@@ -377,6 +408,82 @@ export default function ReportsPanel({ slug, tenant }: ReportsPanelProps) {
                 })}
               </div>
             </ContentCard>
+          )}
+
+          {/* Tempo de preparo e entrega */}
+          {timing && timing.ordersWithTiming > 0 && (
+            <>
+              <StatGrid cols={3}>
+                <StatCard title="Tempo Médio de Preparo" value={fmtMinutes(timing.avgPrepMinutes)} icon={Timer} color="warning" delay={0} />
+                <StatCard title="Tempo Médio de Entrega" value={timing.avgDeliveryMinutes > 0 ? fmtMinutes(timing.avgDeliveryMinutes) : "—"} icon={Truck} color="info" delay={0.1} />
+                <StatCard title="Pedidos com Tempo Registrado" value={timing.ordersWithTiming} icon={Clock} color="default" delay={0.2} />
+              </StatGrid>
+
+              <ContentCard>
+                <h3 className="text-sm font-black uppercase tracking-widest text-slate-700 mb-4 flex items-center gap-2">
+                  <Timer className="w-4 h-4" />
+                  Tempo Médio de Preparo por Hora
+                </h3>
+                <div className="flex items-end gap-1 h-24">
+                  {timing.hourly.map((h) => {
+                    const pct = h.count > 0 ? (h.avgPrepMinutes / maxHourlyPrepMinutes) * 100 : 0;
+                    return (
+                      <div key={h.hour} className="flex flex-col items-center gap-1 flex-1 group relative">
+                        {h.count > 0 && (
+                          <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[8px] font-black px-1.5 py-0.5 rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                            {fmtMinutes(h.avgPrepMinutes)} ({h.count})
+                          </div>
+                        )}
+                        <div
+                          className={`w-full rounded-t-md min-h-[2px] transition-colors ${h.count > 0 ? "bg-[#C9A227] hover:bg-[#E8B93A]" : "bg-slate-100"}`}
+                          style={{ height: `${Math.max(2, pct)}%` }}
+                        />
+                        <span className="text-[7px] text-slate-300 font-bold">{h.hour}h</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </ContentCard>
+
+              {timing.slowest.length > 0 && (
+                <ContentCard>
+                  <h3 className="text-sm font-black uppercase tracking-widest text-slate-700 mb-4 flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4" />
+                    Pedidos Mais Demorados no Preparo
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-[10px] uppercase tracking-widest text-slate-400 border-b border-slate-100">
+                          <th className="pb-2 pr-3 font-black">Pedido</th>
+                          <th className="pb-2 pr-3 font-black">Data / Hora</th>
+                          <th className="pb-2 pr-3 font-black">Tipo</th>
+                          <th className="pb-2 pr-3 font-black text-right">Preparo</th>
+                          <th className="pb-2 font-black text-right">Entrega</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {timing.slowest.map((o) => (
+                          <tr key={o.id} className="border-b border-slate-50 last:border-0">
+                            <td className="py-2 pr-3 font-bold text-slate-700">
+                              {o.counterTicketNumber != null ? `#${String(o.counterTicketNumber).padStart(2, "0")}` : o.customerName}
+                            </td>
+                            <td className="py-2 pr-3 text-slate-500">
+                              {new Date(o.createdAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                            </td>
+                            <td className="py-2 pr-3 text-slate-500">{ORDER_TYPE_LABELS[o.orderType] || o.orderType}</td>
+                            <td className="py-2 pr-3 text-right font-black text-[#C9A227]">{fmtMinutes(o.prepMinutes)}</td>
+                            <td className="py-2 text-right font-black text-slate-500">
+                              {o.deliveryMinutes != null ? fmtMinutes(o.deliveryMinutes) : "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </ContentCard>
+              )}
+            </>
           )}
 
           {/* Top products */}

@@ -739,6 +739,11 @@ model Order {
   serviceFeePercent Float?  @map("service_fee_percent") // percentual aplicado (snapshot da config no momento do pedido)
   total          Float
   tenantId      String   @map("tenant_id")
+  // Métricas de tempo — só preenchidos a partir da mudança que introduziu esses campos;
+  // pedidos criados antes disso não têm esse histórico (não existia captura de timestamp
+  // por status, só o updatedAt genérico, que é sobrescrito a cada transição).
+  readyAt       DateTime? @map("ready_at")     // quando ficou pronto na cozinha (kitchenReady=true) ou SHIPPED
+  deliveredAt   DateTime? @map("delivered_at") // quando o status virou DELIVERED
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 

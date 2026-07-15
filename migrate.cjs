@@ -1127,6 +1127,18 @@ const migrations = [
     check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'cash_registers' AND COLUMN_NAME = 'closed_by_email'",
     run: "ALTER TABLE cash_registers ADD COLUMN closed_by_email VARCHAR(191) NULL",
   },
+  // Métricas de tempo de preparo/entrega — só passam a existir a partir de agora,
+  // pedidos antigos não têm esse histórico (não havia captura de timestamp por status).
+  {
+    name: 'add_orders_ready_at',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'ready_at'",
+    run: "ALTER TABLE orders ADD COLUMN ready_at DATETIME(3) NULL",
+  },
+  {
+    name: 'add_orders_delivered_at',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'delivered_at'",
+    run: "ALTER TABLE orders ADD COLUMN delivered_at DATETIME(3) NULL",
+  },
 ];
 
 async function run() {

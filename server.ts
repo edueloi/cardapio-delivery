@@ -3227,6 +3227,17 @@ async function updateOrderStatus(
     });
     forceKitchenReady = !!hasKitchenItem;
   }
+
+  // Métricas de tempo de preparo/entrega — grava só na primeira vez que o pedido atinge
+  // cada marco (nunca sobrescreve se já tinha valor), pra não distorcer o tempo caso o
+  // pedido regrida de status e avance de novo.
+  const existingOrder = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { readyAt: true, deliveredAt: true },
+  });
+  const isNowReady = (status === "SHIPPED" || forceKitchenReady === true) && !existingOrder?.readyAt;
+  const isNowDelivered = status === "DELIVERED" && !existingOrder?.deliveredAt;
+
   const updatedOrder = await prisma.order.update({
     where: { id: orderId },
     data: {
@@ -3234,6 +3245,8 @@ async function updateOrderStatus(
       ...(forceKitchenReady !== undefined
         ? { kitchenReady: forceKitchenReady }
         : {}),
+      ...(isNowReady ? { readyAt: new Date() } : {}),
+      ...(isNowDelivered ? { deliveredAt: new Date() } : {}),
     },
     include: {
       tenant: true,
@@ -7598,6 +7611,107 @@ app.get("/api/tenants/:slug/reports/summary", requireAuth, async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Falha ao gerar relatório." });
+  }
+});
+
+// GET /api/tenants/:slug/reports/timing — tempo de preparo (criação → pronto) e tempo de
+// entrega (pronto → entregue). Só considera pedidos com readyAt/deliveredAt preenchidos —
+// pedidos criados antes da introdução desses campos não têm esse histórico e são ignorados
+// aqui (mas continuam contando nos outros relatórios).
+app.get("/api/tenants/:slug/reports/timing", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(
+    req,
+    res,
+    req.params.slug,
+    "reports"
+  );
+  if (!tenant) return;
+
+  try {
+    const { from, to } = req.query as Record<string, string>;
+    const dateFrom = from
+      ? new Date(from)
+      : new Date(new Date().setHours(0, 0, 0, 0));
+    const dateTo = to
+      ? new Date(to)
+      : new Date(new Date().setHours(23, 59, 59, 999));
+
+    const orders = await prisma.order.findMany({
+      where: {
+        tenantId: tenant.id,
+        status: { in: ["DELIVERED", "SHIPPED"] },
+        createdAt: { gte: dateFrom, lte: dateTo },
+        readyAt: { not: null },
+      },
+      select: {
+        id: true,
+        customerName: true,
+        counterTicketNumber: true,
+        orderType: true,
+        createdAt: true,
+        readyAt: true,
+        deliveredAt: true,
+      },
+    });
+
+    const prepMinutes = (o: (typeof orders)[number]) =>
+      (o.readyAt!.getTime() - o.createdAt.getTime()) / 60000;
+    const deliveryMinutes = (o: (typeof orders)[number]) =>
+      o.deliveredAt ? (o.deliveredAt.getTime() - o.readyAt!.getTime()) / 60000 : null;
+
+    const prepTimes = orders.map(prepMinutes);
+    const avgPrepMinutes =
+      prepTimes.length > 0 ? prepTimes.reduce((s, v) => s + v, 0) / prepTimes.length : 0;
+
+    const deliveryTimes = orders
+      .map(deliveryMinutes)
+      .filter((v): v is number => v !== null);
+    const avgDeliveryMinutes =
+      deliveryTimes.length > 0
+        ? deliveryTimes.reduce((s, v) => s + v, 0) / deliveryTimes.length
+        : 0;
+
+    // Distribuição do tempo médio de preparo por hora do dia (identifica picos de movimento)
+    const hourlyMap: Record<number, { totalMinutes: number; count: number }> = {};
+    for (const order of orders) {
+      const h = new Date(order.createdAt).getHours();
+      if (!hourlyMap[h]) hourlyMap[h] = { totalMinutes: 0, count: 0 };
+      hourlyMap[h].totalMinutes += prepMinutes(order);
+      hourlyMap[h].count++;
+    }
+    const hourly = Array.from({ length: 24 }, (_, h) => ({
+      hour: h,
+      avgPrepMinutes: hourlyMap[h] ? hourlyMap[h].totalMinutes / hourlyMap[h].count : 0,
+      count: hourlyMap[h]?.count || 0,
+    }));
+
+    // Pedidos mais demorados no preparo — com data/horário, pra investigar casos específicos
+    const slowest = orders
+      .map((o) => ({
+        id: o.id,
+        customerName: o.customerName,
+        counterTicketNumber: o.counterTicketNumber,
+        orderType: o.orderType,
+        createdAt: o.createdAt,
+        readyAt: o.readyAt,
+        prepMinutes: prepMinutes(o),
+        deliveryMinutes: deliveryMinutes(o),
+      }))
+      .sort((a, b) => b.prepMinutes - a.prepMinutes)
+      .slice(0, 15);
+
+    res.json({
+      avgPrepMinutes,
+      avgDeliveryMinutes,
+      ordersWithTiming: orders.length,
+      hourly,
+      slowest,
+      dateFrom,
+      dateTo,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao gerar relatório de tempo." });
   }
 });
 
