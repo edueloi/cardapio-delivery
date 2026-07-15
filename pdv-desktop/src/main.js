@@ -1,12 +1,29 @@
 const { app, BrowserWindow, ipcMain, Menu, globalShortcut, dialog } = require("electron");
 const path = require("path");
 const { autoUpdater } = require("electron-updater");
+const Store = require("electron-store");
 const printer = require("./printer");
 const { openPrinterConfigWindow } = require("./printer-config-window");
 
 // Mesmo domínio do painel web — o app desktop é só uma janela nativa em cima do mesmo
 // sistema, sem duplicar lógica de negócio. Login, PDV, tudo vem direto do servidor real.
 const APP_URL = "https://www.boxsys.com.br/login";
+
+const store = new Store();
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 1.5;
+const ZOOM_STEP = 0.1;
+
+function getZoomFactor() {
+  return store.get("zoomFactor", 1);
+}
+
+function setZoomFactor(factor) {
+  const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(factor * 100) / 100));
+  store.set("zoomFactor", clamped);
+  if (mainWindow) mainWindow.webContents.setZoomFactor(clamped);
+  return clamped;
+}
 
 let mainWindow = null;
 
@@ -40,6 +57,13 @@ function createWindow() {
   });
 
   mainWindow.loadURL(APP_URL);
+
+  // Reaplica o zoom salvo a cada carregamento — o zoomFactor de um webContents não
+  // sobrevive a navegações (login → PDV troca de URL), então sem isso o ajuste do
+  // operador seria perdido no primeiro reload.
+  mainWindow.webContents.on("did-finish-load", () => {
+    mainWindow.webContents.setZoomFactor(getZoomFactor());
+  });
 
   mainWindow.webContents.on("did-fail-load", (_event, _code, description) => {
     console.error("[main] Failed to load app:", description);
@@ -147,6 +171,15 @@ ipcMain.handle("printer:print-cash-closing", async (_event, { tenantName, summar
     console.error("[main] Cash closing print failed:", err);
     return { ok: false, error: err.message || "Falha ao imprimir o fechamento." };
   }
+});
+
+ipcMain.handle("zoom:get", () => getZoomFactor());
+
+ipcMain.handle("zoom:set", (_event, direction) => {
+  const current = getZoomFactor();
+  if (direction === "in") return setZoomFactor(current + ZOOM_STEP);
+  if (direction === "out") return setZoomFactor(current - ZOOM_STEP);
+  return setZoomFactor(1);
 });
 
 ipcMain.handle("printer:print-danfe", async (_event, data) => {

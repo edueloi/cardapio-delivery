@@ -19,7 +19,6 @@ import {
   Plus,
   QrCode,
   Ruler,
-  Settings,
   Smartphone,
   Store,
   Trash2,
@@ -34,7 +33,6 @@ import {
   FilterLineSegmented,
   Input,
   PageWrapper,
-  SectionTitle,
   Select,
   Switch,
   Textarea,
@@ -209,13 +207,8 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
 
   return (
     <PageWrapper>
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
-        <SectionTitle 
-          title="Configurações da Unidade" 
-          description="Gerencie as informações e regras do seu estabelecimento" 
-          icon={Settings} 
-        />
-        <div className="flex bg-slate-100 p-1 rounded-xl">
+      <div className="mb-8 -mx-4 px-4 sm:mx-0 sm:px-0 overflow-x-auto">
+        <div className="flex bg-slate-100 p-1 rounded-xl w-max min-w-full sm:w-fit sm:min-w-0">
           {[
             { id: "general", label: "Loja", icon: Store },
             { id: "hours", label: "Horários", icon: Clock3 },
@@ -224,16 +217,16 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
             { id: "maquinhas", label: "Maquinhas", icon: Smartphone },
             { id: "fiscal", label: "Fiscal", icon: FileText },
           ].map((tab) => (
-            <button 
+            <button
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all shrink-0 ${
                 activeTab === tab.id ? 'bg-white shadow-sm text-[#C9A227]' : 'text-slate-400 hover:text-slate-600'
               }`}
             >
               <tab.icon className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">{tab.label}</span>
+              <span>{tab.label}</span>
             </button>
           ))}
         </div>
