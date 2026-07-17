@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu, globalShortcut, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, Menu, dialog } = require("electron");
 const path = require("path");
 const { autoUpdater } = require("electron-updater");
 const Store = require("electron-store");
@@ -22,10 +22,53 @@ function setZoomFactor(factor) {
   const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(factor * 100) / 100));
   store.set("zoomFactor", clamped);
   if (mainWindow) mainWindow.webContents.setZoomFactor(clamped);
+  refreshAppMenu(); // atualiza o label "Zoom: N%" no menu Exibir
   return clamped;
 }
 
 let mainWindow = null;
+
+// Barra de menu nativa (PDV / Exibir) — janela normal do Windows, com borda e
+// redimensionável, em vez do antigo modo kiosk sem bordas. Zoom, recarregar, tela cheia,
+// configurar impressora e sair ficam aqui, sempre visíveis, sem sobrepor o conteúdo da
+// página nem depender de atalho/clique direito que o operador precisa descobrir sozinho.
+function buildAppMenu() {
+  const zoomPercent = Math.round(getZoomFactor() * 100);
+  return Menu.buildFromTemplate([
+    {
+      label: "PDV",
+      submenu: [
+        { label: "Recarregar", accelerator: "CmdOrCtrl+R", click: () => mainWindow?.reload() },
+        { label: "Sair", accelerator: "CmdOrCtrl+Q", click: () => confirmAndQuit() },
+      ],
+    },
+    {
+      label: "Exibir",
+      submenu: [
+        {
+          label: "Tela Cheia",
+          accelerator: "F11",
+          type: "checkbox",
+          checked: mainWindow?.isFullScreen() ?? false,
+          click: () => mainWindow?.setFullScreen(!mainWindow.isFullScreen()),
+        },
+        { type: "separator" },
+        { label: `Zoom: ${zoomPercent}%`, enabled: false },
+        { label: "Aumentar Zoom", accelerator: "CmdOrCtrl+=", click: () => setZoomFactor(getZoomFactor() + ZOOM_STEP) },
+        { label: "Diminuir Zoom", accelerator: "CmdOrCtrl+-", click: () => setZoomFactor(getZoomFactor() - ZOOM_STEP) },
+        { label: "Restaurar Zoom Padrão", accelerator: "CmdOrCtrl+0", click: () => setZoomFactor(1) },
+        { type: "separator" },
+        { label: "Configurar Impressora...", accelerator: "F9", click: () => openPrinterConfigWindow(mainWindow) },
+      ],
+    },
+  ]);
+}
+
+// Reconstrói o menu inteiro sempre que o zoom muda, só pra atualizar o label "Zoom: N%" —
+// o Electron não tem binding reativo de label, então é preciso remontar o template.
+function refreshAppMenu() {
+  Menu.setApplicationMenu(buildAppMenu());
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -34,11 +77,6 @@ function createWindow() {
     minWidth: 1024,
     minHeight: 640,
     show: false,
-    // Modo caixa/totem: ocupa a tela inteira, sem barra de título nem bordas do Windows.
-    // F9 abre a configuração da impressora, Ctrl+Shift+Q fecha o app (ver registerShortcuts).
-    frame: false,
-    kiosk: true,
-    autoHideMenuBar: true,
     icon: path.join(__dirname, "..", "assets", "icon.png"),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -50,9 +88,10 @@ function createWindow() {
     },
   });
 
-  Menu.setApplicationMenu(null);
+  refreshAppMenu();
 
   mainWindow.once("ready-to-show", () => {
+    mainWindow.maximize();
     mainWindow.show();
   });
 
@@ -63,26 +102,6 @@ function createWindow() {
   // operador seria perdido no primeiro reload.
   mainWindow.webContents.on("did-finish-load", () => {
     mainWindow.webContents.setZoomFactor(getZoomFactor());
-  });
-
-  // Menu de botão direito — substitui os antigos botões flutuantes (✕, +/-), que
-  // ficavam sobrepostos ao conteúdo da página e colidiam visualmente com os controles
-  // do próprio site (ex: botão de configurações no canto superior direito). Em modo
-  // kiosk (frame: false) não há barra de menu do Windows, então este é o lugar natural
-  // pra reunir zoom, impressora e fechar sem ocupar espaço nenhum da tela.
-  mainWindow.webContents.on("context-menu", () => {
-    const zoomPercent = Math.round(getZoomFactor() * 100);
-    const contextMenu = Menu.buildFromTemplate([
-      { label: `Zoom: ${zoomPercent}%`, enabled: false },
-      { label: "Aumentar zoom (+)", click: () => setZoomFactor(getZoomFactor() + ZOOM_STEP) },
-      { label: "Diminuir zoom (−)", click: () => setZoomFactor(getZoomFactor() - ZOOM_STEP) },
-      { label: "Restaurar zoom padrão", click: () => setZoomFactor(1) },
-      { type: "separator" },
-      { label: "Configurar Impressora (F9)", click: () => openPrinterConfigWindow(mainWindow) },
-      { type: "separator" },
-      { label: "Fechar o App", click: () => confirmAndQuit() },
-    ]);
-    contextMenu.popup({ window: mainWindow });
   });
 
   mainWindow.webContents.on("did-fail-load", (_event, _code, description) => {
@@ -101,8 +120,8 @@ function createWindow() {
   });
 }
 
-// Usada tanto pelo atalho Ctrl+Shift+Q quanto pelo menu de botão direito (context-menu) —
-// mesmo fluxo de confirmação nos dois casos, pra ninguém fechar o PDV sem querer.
+// Usada pelo item "Sair" do menu PDV — sempre com confirmação, pra ninguém fechar o
+// PDV sem querer no meio de uma venda.
 async function confirmAndQuit() {
   const { response } = await dialog.showMessageBox(mainWindow, {
     type: "question",
@@ -113,16 +132,6 @@ async function confirmAndQuit() {
     message: "Tem certeza que deseja fechar o aplicativo?",
   });
   if (response === 1) app.quit();
-}
-
-// Atalhos globais — necessários porque em modo kiosk (sem barra/menu) não existe outra
-// forma óbvia de acessar a configuração da impressora ou fechar o app.
-function registerShortcuts() {
-  globalShortcut.register("F9", () => {
-    openPrinterConfigWindow(mainWindow);
-  });
-
-  globalShortcut.register("CommandOrControl+Shift+Q", confirmAndQuit);
 }
 
 ipcMain.handle("app:request-quit", confirmAndQuit);
@@ -154,16 +163,11 @@ function setupAutoUpdate() {
 
 app.whenReady().then(() => {
   createWindow();
-  registerShortcuts();
   setupAutoUpdate();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
-});
-
-app.on("will-quit", () => {
-  globalShortcut.unregisterAll();
 });
 
 app.on("window-all-closed", () => {

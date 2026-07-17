@@ -3,9 +3,8 @@ const { contextBridge, ipcRenderer } = require("electron");
 // Expõe exatamente a API que o PDVPanel.tsx já espera em `window.pdvDesktop` —
 // veja src/features/dashboard/PDVPanel.tsx: `(window as any).pdvDesktop?.printReceipt`.
 // Nada além disso é exposto pro conteúdo web (contextIsolation ligado, sem nodeIntegration).
-// A configuração da impressora em si não fica no site — é a janela nativa aberta com F9
-// (ver printer-config-window.js), já que em modo kiosk não há como navegar até
-// Configurações do painel pra chegar lá.
+// A configuração da impressora em si não fica no site — é a janela nativa aberta pelo
+// menu Exibir → Configurar Impressora / F9 (ver printer-config-window.js).
 contextBridge.exposeInMainWorld("pdvDesktop", {
   isDesktopApp: true,
 
@@ -36,7 +35,6 @@ contextBridge.exposeInMainWorld("pdvDesktop", {
   },
 });
 
-// Fechar o app, ajustar zoom e configurar a impressora ficam no menu de botão direito
-// (ver main.js, Menu.buildFromTemplate + context-menu) — em modo kiosk (frame: false) não
-// há barra de título nem X do Windows, e botões flutuantes por cima da tela colidiam
-// visualmente com os controles do próprio site (ex: botão de configurações no canto).
+// Fechar o app, ajustar zoom, recarregar e configurar a impressora ficam na barra de
+// menu nativa (PDV / Exibir, ver main.js → buildAppMenu) — a janela agora é uma janela
+// normal do Windows, com essa barra sempre visível no topo.
