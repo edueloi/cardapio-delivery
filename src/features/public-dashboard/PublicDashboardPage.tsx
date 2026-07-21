@@ -40,6 +40,15 @@ const DEFAULT_DISPLAY_CONFIG: DisplayPanelConfig = {
   voiceName: null,
   carouselEnabled: true,
   carouselIntervalSeconds: 8,
+  minimalMode: false,
+  ticketCardSize: "normal",
+  cardStyle: "floating",
+};
+
+const TICKET_CARD_SIZES: Record<NonNullable<DisplayPanelConfig["ticketCardSize"]>, { code: number; name: number; label: number; padding: string; gap: number }> = {
+  normal: { code: 34, name: 17, label: 11, padding: "18px 20px", gap: 10 },
+  large: { code: 64, name: 20, label: 12, padding: "28px 32px", gap: 16 },
+  xlarge: { code: 96, name: 24, label: 13, padding: "40px 32px", gap: 20 },
 };
 
 const READY_ANNOUNCEMENT_DURATION_MS = 10000;
@@ -116,146 +125,392 @@ function buildTheme(mode: "dark" | "light"): PanelTheme {
 
 /* ─── sub-components ──────────────────────────────────────── */
 
-interface PreparingCardProps {
+type CardRole = "preparing" | "ready";
+
+interface OrderCardProps {
   order: Order;
+  role: CardRole;
   isFirst: boolean;
   theme: PanelTheme;
   accentColor: string;
+  size: DisplayPanelConfig["ticketCardSize"];
+  cardStyle: DisplayPanelConfig["cardStyle"];
+  minimal?: boolean;
 }
-function PreparingCard({ order, isFirst, theme, accentColor }: PreparingCardProps) {
-  return (
-    <motion.div
-      layout
-      key={order.id}
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ duration: 0.35 }}
-      style={{
-        background: isFirst
-          ? `linear-gradient(135deg, ${accentColor}30 0%, ${theme.cardBg} 100%)`
-          : theme.cardBg,
-        border: isFirst ? `1.5px solid ${accentColor}` : `1.5px solid ${theme.divider}`,
-        borderRadius: 16,
-        display: "flex",
-        alignItems: "center",
-        gap: 0,
-        padding: "18px 20px",
-        position: "relative",
-        backdropFilter: "blur(8px)",
-        boxShadow: isFirst ? `0 4px 32px 0 ${accentColor}30` : "0 2px 12px 0 rgba(0,0,0,0.15)",
-      }}
-    >
-      <span
-        style={{
-          fontSize: 34,
-          fontWeight: 900,
-          letterSpacing: "-1px",
-          color: theme.textPrimary,
-          minWidth: 110,
-          fontFamily: "'Inter', monospace",
-        }}
-      >
-        {orderCode(order)}
-      </span>
 
-      <div style={{ flex: 1, marginLeft: 16 }}>
-        <p style={{ fontWeight: 800, fontSize: 17, color: theme.textPrimary, margin: 0, lineHeight: 1.1 }}>
-          {order.customerName || "—"}
-        </p>
-        <p
+function OrderCard({ order, role, isFirst, theme, accentColor, size, cardStyle, minimal }: OrderCardProps) {
+  const s = TICKET_CARD_SIZES[size || "normal"];
+  const isReady = role === "ready";
+  const highlight = !isReady && isFirst; // "próximo da fila" só existe na coluna Em Preparo
+  const motionProps = {
+    layout: true as const,
+    key: order.id,
+    initial: { opacity: 0, y: 16 },
+    animate: { opacity: 1, y: 0 },
+    exit: { opacity: 0, scale: 0.95 },
+    transition: { duration: 0.35 },
+  };
+
+  if (minimal) {
+    if (cardStyle === "ticket") {
+      return (
+        <motion.div
+          {...motionProps}
           style={{
-            fontWeight: 700,
-            fontSize: 11,
-            color: theme.textMuted,
-            margin: "3px 0 0",
-            textTransform: "uppercase",
-            letterSpacing: "0.08em",
+            background: theme.cardBg,
+            border: `2px dashed ${isReady || highlight ? accentColor : theme.divider}`,
+            borderRadius: 10,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: s.padding,
+            position: "relative",
+            fontFamily: "'Courier New', monospace",
           }}
         >
-          {orderLocation(order)}
-        </p>
-      </div>
-    </motion.div>
-  );
-}
+          <span style={{ fontSize: s.code, fontWeight: 900, color: isReady ? accentColor : theme.textPrimary, fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>
+            {orderCode(order)}
+          </span>
+        </motion.div>
+      );
+    }
 
-interface ReadyCardProps {
-  order: Order;
-  theme: PanelTheme;
-  accentColor: string;
-}
-function ReadyCard({ order, theme, accentColor }: ReadyCardProps) {
-  return (
-    <motion.div
-      layout
-      key={order.id}
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ duration: 0.35 }}
-      style={{
-        background: theme.cardBg,
-        border: `1.5px solid ${accentColor}40`,
-        borderRadius: 16,
-        display: "flex",
-        alignItems: "center",
-        gap: 0,
-        padding: "18px 20px",
-        position: "relative",
-        backdropFilter: "blur(8px)",
-        boxShadow: "0 2px 12px 0 rgba(0,0,0,0.15)",
-      }}
-    >
-      <span
-        style={{
-          fontSize: 34,
-          fontWeight: 900,
-          letterSpacing: "-1px",
-          color: accentColor,
-          minWidth: 110,
-          fontFamily: "'Inter', monospace",
-        }}
-      >
-        {orderCode(order)}
-      </span>
-
-      <div style={{ flex: 1, marginLeft: 16 }}>
-        <p style={{ fontWeight: 800, fontSize: 17, color: theme.textPrimary, margin: 0, lineHeight: 1.1 }}>
-          {order.customerName || "—"}
-        </p>
-        <p
+    if (cardStyle === "scoreboard") {
+      return (
+        <motion.div
+          {...motionProps}
           style={{
-            fontWeight: 700,
-            fontSize: 11,
-            color: theme.textMuted,
-            margin: "3px 0 0",
-            textTransform: "uppercase",
-            letterSpacing: "0.08em",
+            background: "#000000",
+            border: `1px solid ${accentColor}50`,
+            borderRadius: 8,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: s.padding,
+            position: "relative",
+            boxShadow: `inset 0 0 30px ${accentColor}15, 0 0 24px ${accentColor}25`,
           }}
         >
-          {orderLocation(order)}
-        </p>
-      </div>
+          <span
+            style={{
+              fontSize: s.code,
+              fontWeight: 900,
+              letterSpacing: "0.05em",
+              color: accentColor,
+              fontFamily: "'Courier New', monospace",
+              fontVariantNumeric: "tabular-nums",
+              lineHeight: 1,
+              textShadow: `0 0 18px ${accentColor}, 0 0 36px ${accentColor}80`,
+            }}
+          >
+            {orderCode(order)}
+          </span>
+        </motion.div>
+      );
+    }
 
-      <div
+    if (cardStyle === "fastfood") {
+      return (
+        <motion.div
+          {...motionProps}
+          style={{
+            background: highlight ? `${accentColor}18` : theme.cardBg,
+            borderLeft: `6px solid ${accentColor}`,
+            borderRadius: 4,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: s.padding,
+            position: "relative",
+          }}
+        >
+          <span
+            style={{
+              fontSize: s.code,
+              fontWeight: 900,
+              letterSpacing: "-0.5px",
+              color: accentColor,
+              fontFamily: "'Arial Narrow', 'Inter', sans-serif",
+              fontVariantNumeric: "tabular-nums",
+              lineHeight: 1,
+            }}
+          >
+            {orderCode(order)}
+          </span>
+        </motion.div>
+      );
+    }
+
+    // floating (padrão)
+    return (
+      <motion.div
+        {...motionProps}
         style={{
+          background: highlight ? `linear-gradient(135deg, ${accentColor}30 0%, ${theme.cardBg} 100%)` : theme.cardBg,
+          border: highlight ? `1.5px solid ${accentColor}` : `1.5px solid ${accentColor}${isReady ? "60" : "30"}`,
+          borderRadius: 20,
           display: "flex",
           alignItems: "center",
-          gap: 5,
-          background: `${accentColor}20`,
-          border: `1px solid ${accentColor}50`,
-          borderRadius: 8,
-          padding: "5px 10px",
-          flexShrink: 0,
+          justifyContent: "center",
+          padding: s.padding,
+          position: "relative",
+          backdropFilter: "blur(8px)",
+          boxShadow: highlight ? `0 4px 32px 0 ${accentColor}30` : `0 2px 20px 0 ${accentColor}20`,
         }}
       >
-        <Bell style={{ width: 12, height: 12, color: accentColor }} />
-        <span style={{ fontWeight: 800, fontSize: 11, color: accentColor, textTransform: "uppercase", letterSpacing: "0.1em" }}>
-          Pronto
+        <span
+          style={{
+            fontSize: s.code,
+            fontWeight: 900,
+            letterSpacing: "-2px",
+            color: isReady ? accentColor : theme.textPrimary,
+            fontFamily: "'Inter', monospace",
+            fontVariantNumeric: "tabular-nums",
+            lineHeight: 1,
+          }}
+        >
+          {orderCode(order)}
         </span>
-      </div>
-    </motion.div>
+      </motion.div>
+    );
+  }
+
+  switch (cardStyle) {
+    case "ticket":
+      return (
+        <motion.div
+          {...motionProps}
+          style={{
+            background: theme.cardBg,
+            border: `2px dashed ${isReady ? accentColor : highlight ? accentColor : theme.divider}`,
+            borderRadius: 10,
+            display: "flex",
+            alignItems: "center",
+            padding: s.padding,
+            position: "relative",
+            fontFamily: "'Courier New', monospace",
+          }}
+        >
+          <span
+            style={{
+              fontSize: s.code,
+              fontWeight: 900,
+              color: isReady ? accentColor : theme.textPrimary,
+              minWidth: s.code * 3,
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {orderCode(order)}
+          </span>
+          <div style={{ flex: 1, marginLeft: 16, borderLeft: `1.5px dashed ${theme.divider}`, paddingLeft: 16 }}>
+            <p style={{ fontWeight: 700, fontSize: s.name, color: theme.textPrimary, margin: 0, lineHeight: 1.1 }}>
+              {order.customerName || "—"}
+            </p>
+            <p style={{ fontWeight: 600, fontSize: s.label, color: theme.textMuted, margin: "3px 0 0", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              {orderLocation(order)}
+            </p>
+          </div>
+          {isReady && (
+            <span style={{ fontSize: s.label, fontWeight: 900, color: accentColor, textTransform: "uppercase", letterSpacing: "0.1em", flexShrink: 0 }}>
+              ✓ Pronto
+            </span>
+          )}
+        </motion.div>
+      );
+
+    case "scoreboard":
+      return (
+        <motion.div
+          {...motionProps}
+          style={{
+            background: "#000000",
+            border: `1px solid ${accentColor}50`,
+            borderRadius: 8,
+            display: "flex",
+            alignItems: "center",
+            padding: s.padding,
+            position: "relative",
+            boxShadow: `inset 0 0 30px ${accentColor}15, 0 0 24px ${accentColor}25`,
+          }}
+        >
+          <span
+            style={{
+              fontSize: s.code,
+              fontWeight: 900,
+              letterSpacing: "0.05em",
+              color: accentColor,
+              minWidth: s.code * 3.4,
+              fontFamily: "'Courier New', monospace",
+              fontVariantNumeric: "tabular-nums",
+              textShadow: `0 0 18px ${accentColor}, 0 0 36px ${accentColor}80`,
+            }}
+          >
+            {orderCode(order)}
+          </span>
+          <div style={{ flex: 1, marginLeft: 16 }}>
+            <p style={{ fontWeight: 800, fontSize: s.name, color: "#e5e7eb", margin: 0, lineHeight: 1.1, textTransform: "uppercase" }}>
+              {order.customerName || "—"}
+            </p>
+            <p style={{ fontWeight: 700, fontSize: s.label, color: `${accentColor}90`, margin: "3px 0 0", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+              {orderLocation(order)}
+            </p>
+          </div>
+        </motion.div>
+      );
+
+    case "fastfood":
+      return (
+        <motion.div
+          {...motionProps}
+          style={{
+            background: highlight ? `${accentColor}18` : theme.cardBg,
+            borderLeft: `6px solid ${accentColor}`,
+            borderRadius: 4,
+            display: "flex",
+            alignItems: "center",
+            padding: `${parseInt(s.padding) * 0.55}px 18px`,
+            position: "relative",
+          }}
+        >
+          <span
+            style={{
+              fontSize: s.code * 0.72,
+              fontWeight: 900,
+              letterSpacing: "-0.5px",
+              color: accentColor,
+              minWidth: s.code * 2.2,
+              fontFamily: "'Arial Narrow', 'Inter', sans-serif",
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {orderCode(order)}
+          </span>
+          <p style={{ flex: 1, marginLeft: 14, fontWeight: 800, fontSize: s.name, color: theme.textPrimary, margin: "0 0 0 14px", textTransform: "uppercase", letterSpacing: "0.02em" }}>
+            {order.customerName || orderLocation(order)}
+          </p>
+          {isReady && <Bell style={{ width: s.label + 6, height: s.label + 6, color: accentColor, flexShrink: 0 }} />}
+        </motion.div>
+      );
+
+    case "floating":
+    default:
+      return (
+        <motion.div
+          {...motionProps}
+          style={{
+            background: highlight
+              ? `linear-gradient(135deg, ${accentColor}30 0%, ${theme.cardBg} 100%)`
+              : theme.cardBg,
+            border: highlight ? `1.5px solid ${accentColor}` : `1.5px solid ${isReady ? `${accentColor}40` : theme.divider}`,
+            borderRadius: 16,
+            display: "flex",
+            alignItems: "center",
+            padding: s.padding,
+            position: "relative",
+            backdropFilter: "blur(8px)",
+            boxShadow: highlight ? `0 4px 32px 0 ${accentColor}30` : "0 2px 12px 0 rgba(0,0,0,0.15)",
+          }}
+        >
+          <span
+            style={{
+              fontSize: s.code,
+              fontWeight: 900,
+              letterSpacing: "-1px",
+              color: isReady ? accentColor : theme.textPrimary,
+              minWidth: s.code * 3.2,
+              fontFamily: "'Inter', monospace",
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {orderCode(order)}
+          </span>
+
+          <div style={{ flex: 1, marginLeft: 16 }}>
+            <p style={{ fontWeight: 800, fontSize: s.name, color: theme.textPrimary, margin: 0, lineHeight: 1.1 }}>
+              {order.customerName || "—"}
+            </p>
+            <p
+              style={{
+                fontWeight: 700,
+                fontSize: s.label,
+                color: theme.textMuted,
+                margin: "3px 0 0",
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+              }}
+            >
+              {orderLocation(order)}
+            </p>
+          </div>
+
+          {isReady && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+                background: `${accentColor}20`,
+                border: `1px solid ${accentColor}50`,
+                borderRadius: 8,
+                padding: "5px 10px",
+                flexShrink: 0,
+              }}
+            >
+              <Bell style={{ width: 12, height: 12, color: accentColor }} />
+              <span style={{ fontWeight: 800, fontSize: 11, color: accentColor, textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                Pronto
+              </span>
+            </div>
+          )}
+        </motion.div>
+      );
+  }
+}
+
+// Layout "grade de senhas" — estilo painel físico de lanchonete/drive-thru: bloco inteiro
+// com fundo sólido colorido, números brancos empilhados numa lista vertical única.
+const GRID_NUMBER_SIZES: Record<NonNullable<DisplayPanelConfig["ticketCardSize"]>, number> = {
+  normal: 80,
+  large: 110,
+  xlarge: 150,
+};
+
+interface GridColumnProps {
+  orders: Order[];
+  accentColor: string;
+  size: DisplayPanelConfig["ticketCardSize"];
+}
+function GridColumn({ orders, accentColor, size }: GridColumnProps) {
+  // Poucos pedidos = mais espaço sobrando na coluna, então a fonte cresce pra preencher;
+  // muitos pedidos = precisa encolher pra caber sem cortar.
+  const baseSize = GRID_NUMBER_SIZES[size || "normal"];
+  const fontSize = orders.length <= 3 ? baseSize : orders.length <= 6 ? baseSize * 0.75 : baseSize * 0.55;
+  return (
+    <div style={{ background: accentColor, flex: 1, margin: "-16px -20px", padding: "24px 20px", display: "flex", flexDirection: "column", justifyContent: "center", gap: 10 }}>
+      <AnimatePresence mode="popLayout">
+        {orders.map((order) => (
+          <motion.div
+            layout
+            key={order.id}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25 }}
+            style={{
+              fontSize,
+              fontWeight: 900,
+              color: "#ffffff",
+              fontFamily: "'Arial Narrow', 'Inter', sans-serif",
+              fontVariantNumeric: "tabular-nums",
+              textAlign: "center",
+              lineHeight: 1,
+            }}
+          >
+            {orderCode(order).replace("#", "")}
+          </motion.div>
+        ))}
+      </AnimatePresence>
+    </div>
   );
 }
 
@@ -561,13 +816,33 @@ export default function PublicDashboardPage() {
                 position: "relative",
                 width: "min(92vw, 1400px)",
                 minHeight: "min(78vh, 760px)",
-                borderRadius: 36,
-                border: `1px solid ${readyColor}55`,
-                background: displayConfig.theme === "light"
-                  ? "linear-gradient(180deg, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.75) 100%)"
-                  : "linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)",
-                boxShadow: `0 30px 120px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08), 0 0 90px ${readyColor}25`,
-                backdropFilter: "blur(14px)",
+                borderRadius: displayConfig.cardStyle === "ticket" ? 10 : displayConfig.cardStyle === "fastfood" || displayConfig.cardStyle === "grid" ? 4 : displayConfig.cardStyle === "scoreboard" ? 8 : 36,
+                border:
+                  displayConfig.cardStyle === "ticket"
+                    ? `3px dashed #ffffff`
+                    : displayConfig.cardStyle === "fastfood" || displayConfig.cardStyle === "grid"
+                    ? "none"
+                    : displayConfig.cardStyle === "scoreboard"
+                    ? `1px solid ${readyColor}50`
+                    : `1px solid ${readyColor}55`,
+                borderLeft: displayConfig.cardStyle === "fastfood" ? `10px solid ${readyColor}` : undefined,
+                background:
+                  displayConfig.cardStyle === "grid"
+                    ? readyColor
+                    : displayConfig.cardStyle === "scoreboard"
+                    ? "#000000"
+                    : displayConfig.cardStyle === "fastfood"
+                    ? theme.cardBg
+                    : displayConfig.theme === "light"
+                    ? "linear-gradient(180deg, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.75) 100%)"
+                    : "linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)",
+                boxShadow:
+                  displayConfig.cardStyle === "grid"
+                    ? "0 30px 120px rgba(0,0,0,0.6)"
+                    : displayConfig.cardStyle === "scoreboard"
+                    ? `inset 0 0 80px ${readyColor}18, 0 0 60px ${readyColor}30`
+                    : `0 30px 120px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08), 0 0 90px ${readyColor}25`,
+                backdropFilter: displayConfig.cardStyle === "scoreboard" || displayConfig.cardStyle === "grid" ? undefined : "blur(14px)",
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
@@ -575,6 +850,7 @@ export default function PublicDashboardPage() {
                 textAlign: "center",
                 padding: "5vh 4vw",
                 gap: 20,
+                fontFamily: displayConfig.cardStyle === "ticket" || displayConfig.cardStyle === "scoreboard" ? "'Courier New', monospace" : undefined,
               }}
             >
               <div
@@ -584,9 +860,9 @@ export default function PublicDashboardPage() {
                   gap: 10,
                   padding: "10px 18px",
                   borderRadius: 999,
-                  border: `1px solid ${readyColor}40`,
-                  background: `${readyColor}18`,
-                  color: readyColor,
+                  border: `1px solid ${displayConfig.cardStyle === "grid" ? "#ffffff" : readyColor}40`,
+                  background: displayConfig.cardStyle === "grid" ? "rgba(255,255,255,0.15)" : `${readyColor}18`,
+                  color: displayConfig.cardStyle === "grid" ? "#ffffff" : readyColor,
                 }}
               >
                 <Bell style={{ width: 18, height: 18 }} />
@@ -601,34 +877,64 @@ export default function PublicDashboardPage() {
                   fontWeight: 800,
                   textTransform: "uppercase",
                   letterSpacing: "0.5em",
-                  color: theme.textMuted,
+                  color: displayConfig.cardStyle === "grid" ? "rgba(255,255,255,0.7)" : theme.textMuted,
                 }}
               >
                 {readyAnnouncementTitle(activeReadyAnnouncement)}
               </span>
 
               <span
-                style={{
-                  fontSize: "clamp(5rem, 17vw, 12rem)",
-                  lineHeight: 0.9,
-                  fontWeight: 900,
-                  letterSpacing: "-0.04em",
-                  background: `linear-gradient(180deg, ${theme.textPrimary} 0%, ${readyColor} 100%)`,
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text",
-                  filter: `drop-shadow(0 0 46px ${readyColor}90) drop-shadow(0 18px 40px rgba(0,0,0,0.5))`,
-                  fontVariantNumeric: "tabular-nums",
-                }}
+                style={
+                  displayConfig.cardStyle === "grid"
+                    ? {
+                        fontSize: "clamp(5rem, 17vw, 12rem)",
+                        lineHeight: 0.9,
+                        fontWeight: 900,
+                        letterSpacing: "-0.02em",
+                        color: "#ffffff",
+                        fontVariantNumeric: "tabular-nums",
+                      }
+                    : displayConfig.cardStyle === "scoreboard"
+                    ? {
+                        fontSize: "clamp(5rem, 17vw, 12rem)",
+                        lineHeight: 0.9,
+                        fontWeight: 900,
+                        letterSpacing: "0.05em",
+                        color: readyColor,
+                        textShadow: `0 0 40px ${readyColor}, 0 0 90px ${readyColor}90`,
+                        fontVariantNumeric: "tabular-nums",
+                      }
+                    : displayConfig.cardStyle === "ticket" || displayConfig.cardStyle === "fastfood"
+                    ? {
+                        fontSize: "clamp(5rem, 17vw, 12rem)",
+                        lineHeight: 0.9,
+                        fontWeight: 900,
+                        letterSpacing: "-0.02em",
+                        color: readyColor,
+                        fontVariantNumeric: "tabular-nums",
+                      }
+                    : {
+                        fontSize: "clamp(5rem, 17vw, 12rem)",
+                        lineHeight: 0.9,
+                        fontWeight: 900,
+                        letterSpacing: "-0.04em",
+                        background: `linear-gradient(180deg, ${theme.textPrimary} 0%, ${readyColor} 100%)`,
+                        WebkitBackgroundClip: "text",
+                        WebkitTextFillColor: "transparent",
+                        backgroundClip: "text",
+                        filter: `drop-shadow(0 0 46px ${readyColor}90) drop-shadow(0 18px 40px rgba(0,0,0,0.5))`,
+                        fontVariantNumeric: "tabular-nums",
+                      }
+                }
               >
                 {readyAnnouncementCode(activeReadyAnnouncement)}
               </span>
 
-              <span style={{ fontSize: "clamp(1rem, 2vw, 1.8rem)", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.18em", color: readyColor }}>
+              <span style={{ fontSize: "clamp(1rem, 2vw, 1.8rem)", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.18em", color: displayConfig.cardStyle === "grid" ? "#ffffff" : readyColor }}>
                 {readyAnnouncementSubtitle(activeReadyAnnouncement)}
               </span>
 
-              <span style={{ fontSize: "clamp(0.95rem, 1.45vw, 1.25rem)", fontWeight: 700, color: theme.textMuted }}>
+              <span style={{ fontSize: "clamp(0.95rem, 1.45vw, 1.25rem)", fontWeight: 700, color: displayConfig.cardStyle === "grid" ? "rgba(255,255,255,0.75)" : theme.textMuted }}>
                 {orderLocation(activeReadyAnnouncement)}
                 {activeReadyAnnouncement.customerName ? ` • ${activeReadyAnnouncement.customerName}` : ""}
               </span>
@@ -638,6 +944,7 @@ export default function PublicDashboardPage() {
       </AnimatePresence>
 
       {/* ── HEADER ─────────────────────────────────────────────── */}
+      {!displayConfig.minimalMode && (
       <header
         style={{
           background: theme.headerBg,
@@ -708,6 +1015,7 @@ export default function PublicDashboardPage() {
           </div>
         </div>
       </header>
+      )}
 
       {/* ── COLUNAS + CARROSSEL ────────────────────────────────── */}
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
@@ -734,22 +1042,34 @@ export default function PublicDashboardPage() {
             </div>
 
             <div style={{ flex: 1, padding: "16px 20px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
-              <AnimatePresence mode="popLayout">
-                {preparingOrders.length === 0 ? (
-                  <motion.div
-                    key="empty-prep"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    style={{ textAlign: "center", padding: "48px 24px", color: theme.textFaint, fontSize: 14, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.15em" }}
-                  >
-                    Nenhum pedido em preparo
-                  </motion.div>
-                ) : (
-                  preparingOrders.map((order, i) => (
-                    <PreparingCard key={order.id} order={order} isFirst={i === 0} theme={theme} accentColor={preparingColor} />
-                  ))
-                )}
-              </AnimatePresence>
+              {preparingOrders.length === 0 ? (
+                <motion.div
+                  key="empty-prep"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  style={{ textAlign: "center", padding: "48px 24px", color: theme.textFaint, fontSize: 14, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.15em" }}
+                >
+                  Nenhum pedido em preparo
+                </motion.div>
+              ) : displayConfig.cardStyle === "grid" ? (
+                <GridColumn orders={preparingOrders} accentColor={preparingColor} size={displayConfig.ticketCardSize} />
+              ) : (
+                <AnimatePresence mode="popLayout">
+                  {preparingOrders.map((order, i) => (
+                    <OrderCard
+                      key={order.id}
+                      order={order}
+                      role="preparing"
+                      isFirst={i === 0}
+                      theme={theme}
+                      accentColor={preparingColor}
+                      size={displayConfig.ticketCardSize}
+                      cardStyle={displayConfig.cardStyle}
+                      minimal={displayConfig.minimalMode}
+                    />
+                  ))}
+                </AnimatePresence>
+              )}
             </div>
           </div>
 
@@ -775,22 +1095,34 @@ export default function PublicDashboardPage() {
             </div>
 
             <div style={{ flex: 1, padding: "16px 20px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
-              <AnimatePresence mode="popLayout">
-                {readyOrders.length === 0 ? (
-                  <motion.div
-                    key="empty-ready"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    style={{ textAlign: "center", padding: "48px 24px", color: theme.textFaint, fontSize: 14, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.15em" }}
-                  >
-                    Nenhum pedido pronto
-                  </motion.div>
-                ) : (
-                  readyOrders.map((order) => (
-                    <ReadyCard key={order.id} order={order} theme={theme} accentColor={readyColor} />
-                  ))
-                )}
-              </AnimatePresence>
+              {readyOrders.length === 0 ? (
+                <motion.div
+                  key="empty-ready"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  style={{ textAlign: "center", padding: "48px 24px", color: theme.textFaint, fontSize: 14, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.15em" }}
+                >
+                  Nenhum pedido pronto
+                </motion.div>
+              ) : displayConfig.cardStyle === "grid" ? (
+                <GridColumn orders={readyOrders} accentColor={readyColor} size={displayConfig.ticketCardSize} />
+              ) : (
+                <AnimatePresence mode="popLayout">
+                  {readyOrders.map((order) => (
+                    <OrderCard
+                      key={order.id}
+                      order={order}
+                      role="ready"
+                      isFirst={false}
+                      theme={theme}
+                      accentColor={readyColor}
+                      size={displayConfig.ticketCardSize}
+                      cardStyle={displayConfig.cardStyle}
+                      minimal={displayConfig.minimalMode}
+                    />
+                  ))}
+                </AnimatePresence>
+              )}
             </div>
           </div>
         </div>
@@ -801,6 +1133,7 @@ export default function PublicDashboardPage() {
       </div>
 
       {/* ── FOOTER ─────────────────────────────────────────────── */}
+      {!displayConfig.minimalMode && (
       <footer
         style={{
           height: 46,
@@ -833,6 +1166,7 @@ export default function PublicDashboardPage() {
           </span>
         </div>
       </footer>
+      )}
     </div>
   );
 }

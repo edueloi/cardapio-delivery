@@ -328,28 +328,18 @@ function KanbanCard({ order, categoryMap, updateStatus, isExpanded, toggleOrder,
       <div className="space-y-0">
         {order.items?.map((item: any, idx: number) => {
           const isKitchen = item.product?.kitchenPrint === true;
-          const itemCategory = item.product?.categoryId
-            ? categoryMap[item.product.categoryId]
-            : "";
           return (
             <div
               key={idx}
               className={`py-2 ${idx > 0 ? "border-t border-dashed border-slate-200" : ""}`}
             >
               <div className="min-w-0">
-                {(isKitchen || itemCategory) && (
+                {isKitchen && (
                   <div className="flex flex-wrap items-center gap-1.5 mb-1">
-                    {itemCategory && (
-                      <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 tracking-wide">
-                        {itemCategory}
-                      </span>
-                    )}
-                    {isKitchen && (
-                      <span className="text-[8px] font-black uppercase px-1 py-0.5 rounded bg-orange-100 text-orange-600 tracking-wide flex items-center gap-0.5">
-                        <ChefHat className="w-2 h-2" />
-                        Cozinha
-                      </span>
-                    )}
+                    <span className="text-[8px] font-black uppercase px-1 py-0.5 rounded bg-orange-100 text-orange-600 tracking-wide flex items-center gap-0.5">
+                      <ChefHat className="w-2 h-2" />
+                      Cozinha
+                    </span>
                   </div>
                 )}
                 <div className="flex items-start justify-between gap-3">

@@ -21,7 +21,18 @@ const DEFAULT_DISPLAY_PANEL: DisplayPanelConfig = {
   voiceText: DEFAULT_VOICE_TEXT,
   carouselEnabled: true,
   carouselIntervalSeconds: 8,
+  minimalMode: false,
+  ticketCardSize: "normal",
+  cardStyle: "floating",
 };
+
+const CARD_STYLE_OPTIONS: { value: NonNullable<DisplayPanelConfig["cardStyle"]>; label: string; description: string }[] = [
+  { value: "floating", label: "Flutuante (padrão)", description: "Cards com sombra suave e cantos arredondados, estilo app de delivery moderno." },
+  { value: "ticket", label: "Ticket / Comanda", description: "Borda pontilhada tipo fichinha impressa, tipografia monoespaçada." },
+  { value: "scoreboard", label: "Placar luminoso", description: "Fundo bem escuro com números em efeito neon/glow, estilo placar de drive-thru." },
+  { value: "fastfood", label: "Fast-food", description: "Linhas compactas com faixa colorida na lateral, denso como painel de lanchonete." },
+  { value: "grid", label: "Grade de senhas", description: "Só os números em grade compacta, vários por linha — igual painel físico de lanchonete/drive-thru." },
+];
 
 interface DisplayPanelSettingsPanelProps {
   slug: string;
@@ -211,6 +222,69 @@ export default function DisplayPanelSettingsPanel({ slug, tenant }: DisplayPanel
                 <span className="text-xs font-mono text-slate-500">{config.readyColor ?? "#22c55e"}</span>
               </div>
             </div>
+          </div>
+        </ContentCard>
+
+        {/* Layout */}
+        <ContentCard padding="lg">
+          <div className="flex items-center gap-3 mb-1">
+            <Monitor className="w-4 h-4 text-slate-400" />
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Layout</p>
+          </div>
+          <p className="text-[10px] text-slate-400 mb-6">
+            Estilo visual do cartão de senha, tamanho da senha exibida e opção de tela minimalista, sem cabeçalho
+            nem rodapé.
+          </p>
+
+          <div className="mb-6">
+            <p className="ds-label mb-2">Estilo do cartão</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {CARD_STYLE_OPTIONS.map((opt) => {
+                const active = (config.cardStyle ?? "floating") === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setConfig({ ...config, cardStyle: opt.value })}
+                    className={`text-left rounded-2xl border p-4 transition-colors ${
+                      active ? "border-orange-400 bg-orange-50" : "border-slate-100 bg-slate-50 hover:border-slate-200"
+                    }`}
+                  >
+                    <p className={`text-xs font-black ${active ? "text-orange-600" : "text-slate-700"}`}>{opt.label}</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">{opt.description}</p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="max-w-xs mb-6">
+            <Select
+              label="Tamanho da senha"
+              value={config.ticketCardSize ?? "normal"}
+              onChange={(e) => setConfig({ ...config, ticketCardSize: e.target.value as DisplayPanelConfig["ticketCardSize"] })}
+              options={[
+                { value: "normal", label: "Normal" },
+                { value: "large", label: "Grande" },
+                { value: "xlarge", label: "Extra grande" },
+              ]}
+            />
+          </div>
+
+          <div className="flex items-center justify-between gap-4 bg-slate-50 border border-slate-100 rounded-2xl p-4">
+            <div>
+              <p className="text-xs font-black text-slate-700">Modo minimalista</p>
+              <p className="text-[11px] text-slate-400">
+                Esconde cabeçalho, rodapé, nome do cliente e a etiqueta "Pronto" — mostra só o número da senha,
+                bem grande, ocupando a tela inteira.
+              </p>
+            </div>
+            <Switch
+              checked={config.minimalMode === true}
+              onCheckedChange={(v) =>
+                setConfig({ ...config, minimalMode: v, ticketCardSize: v ? "xlarge" : config.ticketCardSize })
+              }
+            />
           </div>
         </ContentCard>
 

@@ -264,6 +264,12 @@ export interface DisplayPanelConfig {
   // Carrossel de propaganda
   carouselEnabled?: boolean;       // default: true — se false ou sem imagens ativas, colunas ocupam a tela inteira
   carouselIntervalSeconds?: number; // segundos que cada imagem fica visível — default: 8
+  // Layout
+  minimalMode?: boolean;          // default: false — esconde cabeçalho e rodapé, sobra só as colunas de senha
+  ticketCardSize?: "normal" | "large" | "xlarge"; // tamanho da senha nos cards das colunas — default: "normal"
+  cardStyle?: "floating" | "ticket" | "scoreboard" | "fastfood" | "grid"; // visual do card de senha — default: "floating" (comportamento atual)
+  // "grid" muda a estrutura da coluna inteira: em vez de um card por pedido, empilha os números
+  // em colunas compactas dentro do mesmo bloco — estilo painel de lanchonete/drive-thru físico.
 }
 
 // Uma imagem do carrossel de propaganda do Painel de Pedidos — tabela própria (não um
