@@ -215,8 +215,14 @@ export default function KitchenBoard({
       setTenant(data.tenant);
       setOrders(Array.isArray(data.orders) ? data.orders : []);
       socket.emit("join-tenant", data.tenant.id);
-    } catch {
-      setTenant(null);
+    } catch (err) {
+      // Falha passageira de rede (wifi caiu, servidor reiniciou um instante, etc.)
+      // não pode derrubar a tela inteira e jogar fora os pedidos já carregados --
+      // só mostramos a tela de erro se isso aconteceu no carregamento inicial
+      // (nunca tivemos um tenant). Depois disso, os retries automáticos
+      // (visibilitychange/focus/online) tentam de novo silenciosamente.
+      console.error("Falha ao buscar dados da cozinha:", err);
+      setTenant((prev) => prev ?? null);
     } finally {
       setLoading(false);
     }
@@ -251,9 +257,16 @@ export default function KitchenBoard({
     window.addEventListener("focus", handleVisibilityChange);
     window.addEventListener("online", handleVisibilityChange);
 
+    // Rede de segurança independente do socket/foco: tablet de cozinha costuma
+    // ficar com a tela sempre visível e ninguém troca de aba, então os gatilhos
+    // acima nunca disparam sozinhos. Revalida via fetch periodicamente pra
+    // corrigir qualquer estado desincronizado sem depender de ação humana.
+    const pollTimer = setInterval(fetchData, 30000);
+
     return () => {
       socket.off("new-order", handleNewOrder);
       socket.off("order-status-updated", handleOrderStatusUpdated);
+      clearInterval(pollTimer);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("focus", handleVisibilityChange);
       window.removeEventListener("online", handleVisibilityChange);

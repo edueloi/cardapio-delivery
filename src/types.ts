@@ -240,7 +240,7 @@ export interface PrintingConfig {
 }
 
 export const DEFAULT_PRINTING_CONFIG: PrintingConfig = {
-  autoPrintOnOrderCreate: false,
+  autoPrintOnOrderCreate: true,
   autoPrintEstablishmentCopy: true,
   autoPrintCashClosingReport: true,
 };

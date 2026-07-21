@@ -5939,20 +5939,24 @@ app.get("/api/tenants/:slug/cash/current", requireAuth, async (req, res) => {
       return res.json(null);
     }
 
-    const ordersSinceOpen = await prisma.order.aggregate({
-      where: {
-        tenantId: tenant.id,
-        status: "DELIVERED",
-        createdAt: { gte: currentCash.openedAt },
-        paymentMethod: "CASH",
-      },
-      _sum: { total: true },
+    // Esperado em dinheiro na gaveta = fundo de troco + tudo que entrou/saiu como CASH
+    // via CashMovement (SANGRIA/SUPRIMENTO inclusos). Usar CashMovement em vez de somar
+    // Order.total é o que garante bater com o que realmente foi lançado no caixa —
+    // ver commit que corrigiu o cálculo do fechamento (Order.status podia ficar
+    // desincronizado, ex: comanda cobrada mas não "limpa").
+    const cashMovements = await prisma.cashMovement.findMany({
+      where: { cashRegisterId: currentCash.id },
+      select: { type: true, amount: true },
     });
+    const cashDelta = cashMovements.reduce((sum, m) => {
+      if (m.type === "PAYMENT_CASH" || m.type === "SUPRIMENTO") return sum + m.amount;
+      if (m.type === "SANGRIA") return sum - m.amount;
+      return sum;
+    }, 0);
 
     res.json({
       ...currentCash,
-      expectedBalance:
-        currentCash.openingBalance + (ordersSinceOpen._sum.total || 0),
+      expectedBalance: currentCash.openingBalance + cashDelta,
     });
   } catch (error) {
     console.error(error);
@@ -6021,64 +6025,80 @@ app.post("/api/tenants/:slug/cash/close", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "No open cash register found" });
     }
 
-    const ordersSinceOpen = await prisma.order.aggregate({
-      where: {
-        tenantId: tenant.id,
-        status: "DELIVERED",
-        createdAt: { gte: currentCash.openedAt },
-        paymentMethod: "CASH",
-      },
-      _sum: { total: true },
+    // Base do fechamento é o CashMovement (o que de fato foi lançado no caixa), não
+    // Order.status — uma comanda pode ser cobrada (cria o movement de pagamento) e a
+    // Order original ficar presa em AWAITING_PAYMENT/PENDING se o operador não clicar
+    // em "limpar comanda" depois, o que fazia o fechamento ignorar essa venda inteira
+    // (esperado em dinheiro E resumo por forma de pagamento zerados, mesmo com vendas
+    // reais no turno). CashMovement é criado no momento exato da cobrança e nunca
+    // desincroniza dessa forma.
+    const allMovements = await prisma.cashMovement.findMany({
+      where: { cashRegisterId: currentCash.id },
+      select: { type: true, amount: true, description: true, orderId: true },
     });
 
-    const expectedBalance =
-      currentCash.openingBalance + (ordersSinceOpen._sum.total || 0);
+    const paymentMovements = allMovements.filter((m) => m.type.startsWith("PAYMENT_"));
+    const cashDelta = allMovements.reduce((sum, m) => {
+      if (m.type === "PAYMENT_CASH" || m.type === "SUPRIMENTO") return sum + m.amount;
+      if (m.type === "SANGRIA") return sum - m.amount;
+      return sum;
+    }, 0);
+    const expectedBalance = currentCash.openingBalance + cashDelta;
+
+    // PAYMENT_SPLIT é um único movement com o valor cheio (o detalhe por forma de
+    // pagamento fica em Order.paymentDetail, não no movement) — busca as orders desses
+    // movements pra decompor "Dividido" em CASH/DEBIT/CREDIT/etc reais no resumo.
+    const splitOrderIds = paymentMovements
+      .filter((m) => m.type === "PAYMENT_SPLIT" && m.orderId)
+      .map((m) => m.orderId as string);
+    const splitOrders = splitOrderIds.length
+      ? await prisma.order.findMany({
+          where: { id: { in: splitOrderIds } },
+          select: { id: true, paymentDetail: true },
+        })
+      : [];
+    const splitDetailByOrderId = new Map<string, string | null>(
+      splitOrders.map((o) => [o.id, o.paymentDetail])
+    );
 
     // Resumo de vendas do turno pra imprimir junto com o fechamento — o dono usa isso pra
     // bater caixa (total por forma de pagamento, qtd de pedidos, sangrias/suprimentos), sem
-    // precisar abrir o Fluxo de Caixa separado. SPLIT é detalhado à parte (paymentDetail
-    // guarda a divisão real por forma), senão a linha "Dividido" ficaria sem breakdown útil.
-    const deliveredOrders = await prisma.order.findMany({
-      where: {
-        tenantId: tenant.id,
-        status: "DELIVERED",
-        createdAt: { gte: currentCash.openedAt },
-      },
-      select: { paymentMethod: true, paymentDetail: true, total: true },
-    });
-
+    // precisar abrir o Fluxo de Caixa separado.
     const byMethod = new Map<string, { count: number; total: number }>();
     const addToMethod = (method: string, amount: number) => {
       const entry = byMethod.get(method) || { count: 0, total: 0 };
+      entry.count += 1;
       entry.total += amount;
       byMethod.set(method, entry);
     };
-    for (const order of deliveredOrders) {
-      if (order.paymentMethod === "SPLIT" && order.paymentDetail) {
+    for (const m of paymentMovements) {
+      if (m.type === "PAYMENT_SPLIT") {
+        const detailRaw = m.orderId ? splitDetailByOrderId.get(m.orderId) : null;
         let splits: Array<{ method: string; amount: number }> = [];
-        try { splits = JSON.parse(order.paymentDetail).splits || []; } catch {}
-        for (const split of splits) addToMethod(split.method, split.amount);
-      } else {
-        addToMethod(order.paymentMethod, order.total);
+        try { splits = detailRaw ? JSON.parse(detailRaw).splits || [] : []; } catch {}
+        if (splits.length > 0) {
+          for (const split of splits) addToMethod(split.method, split.amount);
+        } else {
+          addToMethod("SPLIT", m.amount);
+        }
+        continue;
       }
+      addToMethod(m.type.replace(/^PAYMENT_/, ""), m.amount);
     }
     const salesByMethod = Array.from(byMethod.entries()).map(([method, v]) => ({
       method,
       total: v.total,
     }));
 
-    const movementsSinceOpen = await prisma.cashMovement.findMany({
-      where: { cashRegisterId: currentCash.id, type: { in: ["SANGRIA", "SUPRIMENTO"] } },
-      select: { type: true, amount: true, description: true },
-    });
+    const movementsSinceOpen = allMovements.filter((m) => m.type === "SANGRIA" || m.type === "SUPRIMENTO");
 
     const closingSummary = {
       openedAt: currentCash.openedAt,
       closedAt: new Date(),
       openingBalance: currentCash.openingBalance,
       expectedBalance,
-      ordersCount: deliveredOrders.length,
-      grossTotal: deliveredOrders.reduce((sum, o) => sum + o.total, 0),
+      ordersCount: paymentMovements.length,
+      grossTotal: paymentMovements.reduce((sum, m) => sum + m.amount, 0),
       salesByMethod,
       movements: movementsSinceOpen,
     };
