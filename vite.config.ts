@@ -45,7 +45,11 @@ export default defineConfig(({mode}) => {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
           maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
           navigateFallback: '/index.html',
-          navigateFallbackDenylist: [/^\/api/, /^\/socket\.io/],
+          // Rotas de download direto de arquivo (APK, instalador .exe, uploads) precisam
+          // sair do controle do Service Worker — sem isso, navegar pra essas URLs no
+          // navegador (não via fetch/curl) é interceptado por navigateFallback e serve o
+          // index.html do SPA em vez de deixar o download acontecer de verdade.
+          navigateFallbackDenylist: [/^\/api/, /^\/socket\.io/, /^\/tv$/, /^\/tv-windows$/, /^\/downloads/, /^\/uploads/],
           // O SW novo assume controle imediatamente (sem esperar todas as abas antigas
           // fecharem) — evita usuários ficarem travados em uma versão desatualizada.
           skipWaiting: true,

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChefHat, Lock, User, Store, Phone, ArrowLeft, CheckCircle2, Download } from "lucide-react";
+import { ChefHat, Lock, User, Store, Phone, ArrowLeft, CheckCircle2, Download, Eye, EyeOff } from "lucide-react";
 import KitchenBoard from "./KitchenBoard";
 
 const TOKEN_KEY = "kitchen_global_token";
@@ -13,6 +13,7 @@ function KitchenGlobalLoginScreen({
 }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -69,12 +70,20 @@ function KitchenGlobalLoginScreen({
             <div className="relative">
               <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••"
-                className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pl-11 pr-4 text-white placeholder-white/20 focus:border-[#C9A227] outline-none text-center text-lg font-black tracking-widest"
+                className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pl-11 pr-11 text-white placeholder-white/20 focus:border-[#C9A227] outline-none text-center text-lg font-black tracking-widest"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60"
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
           {error && <p className="text-xs text-red-400 font-bold text-center">{error}</p>}

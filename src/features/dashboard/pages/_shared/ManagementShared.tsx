@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import {
   Button,
+  ConfirmModal,
   ContentCard,
   Input,
   Modal,
@@ -1227,6 +1228,8 @@ export function KitchenStaffCard({ tenantId }: { tenantId: string }) {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editPassword, setEditPassword] = useState("");
+  const [deleteConfirm, setDeleteConfirm] = useState<KitchenStaffMember | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchStaff = () => {
     apiJson<KitchenStaffMember[]>(`/api/admin/${tenantId}/kitchen/staff`)
@@ -1287,14 +1290,18 @@ export function KitchenStaffCard({ tenantId }: { tenantId: string }) {
     }
   };
 
-  const handleDelete = async (member: KitchenStaffMember) => {
-    if (!window.confirm(`Remover ${member.name} do acesso à cozinha?`)) return;
+  const handleDelete = async () => {
+    if (!deleteConfirm) return;
+    setDeleting(true);
     try {
-      await apiFetch(`/api/admin/${tenantId}/kitchen/staff/${member.id}`, { method: "DELETE" });
+      await apiFetch(`/api/admin/${tenantId}/kitchen/staff/${deleteConfirm.id}`, { method: "DELETE" });
       fetchStaff();
       toast.success("Funcionário removido.");
+      setDeleteConfirm(null);
     } catch (err: any) {
       toast.error(err.message || "Erro ao remover funcionário.");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -1384,13 +1391,24 @@ export function KitchenStaffCard({ tenantId }: { tenantId: string }) {
                   <button onClick={() => handleToggleActive(member)} className={`text-[10px] font-black uppercase ${member.active ? "text-amber-600 hover:text-amber-700" : "text-green-600 hover:text-green-700"}`}>
                     {member.active ? "Desativar" : "Ativar"}
                   </button>
-                  <button onClick={() => handleDelete(member)} className="text-[10px] font-black uppercase text-red-500 hover:text-red-600">Remover</button>
+                  <button onClick={() => setDeleteConfirm(member)} className="text-[10px] font-black uppercase text-red-500 hover:text-red-600">Remover</button>
                 </div>
               )}
             </div>
           ))}
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!deleteConfirm}
+        onClose={() => setDeleteConfirm(null)}
+        onConfirm={handleDelete}
+        title="Remover funcionário"
+        message={<>Remover <strong>{deleteConfirm?.name}</strong> do acesso à cozinha?</>}
+        confirmLabel="Remover"
+        variant="danger"
+        loading={deleting}
+      />
     </ContentCard>
   );
 }
@@ -1415,6 +1433,8 @@ export function TvDevicesCard({ slug }: { slug: string }) {
   const [pairing, setPairing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingLabel, setEditingLabel] = useState("");
+  const [unpairConfirm, setUnpairConfirm] = useState<TvDeviceRecord | null>(null);
+  const [unpairing, setUnpairing] = useState(false);
 
   const fetchDevices = () => {
     apiJson<TvDeviceRecord[]>(`/api/tenants/${slug}/tv-devices`)
@@ -1459,14 +1479,18 @@ export function TvDevicesCard({ slug }: { slug: string }) {
     }
   };
 
-  const handleUnpair = async (device: TvDeviceRecord) => {
-    if (!window.confirm(`Desvincular "${device.label || "esta TV"}"? O aparelho vai voltar a pedir um novo código de pareamento.`)) return;
+  const handleUnpair = async () => {
+    if (!unpairConfirm) return;
+    setUnpairing(true);
     try {
-      await apiFetch(`/api/tenants/${slug}/tv-devices/${device.id}`, { method: "DELETE" });
+      await apiFetch(`/api/tenants/${slug}/tv-devices/${unpairConfirm.id}`, { method: "DELETE" });
       fetchDevices();
       toast.success("TV desvinculada.");
+      setUnpairConfirm(null);
     } catch (err: any) {
       toast.error(err.message || "Erro ao desvincular.");
+    } finally {
+      setUnpairing(false);
     }
   };
 
@@ -1547,13 +1571,24 @@ export function TvDevicesCard({ slug }: { slug: string }) {
               ) : (
                 <div className="flex items-center gap-3 shrink-0">
                   <button onClick={() => { setEditingId(device.id); setEditingLabel(device.label || ""); }} className="text-[10px] font-black uppercase text-slate-400 hover:text-slate-600">Renomear</button>
-                  <button onClick={() => handleUnpair(device)} className="text-[10px] font-black uppercase text-red-500 hover:text-red-600">Desvincular</button>
+                  <button onClick={() => setUnpairConfirm(device)} className="text-[10px] font-black uppercase text-red-500 hover:text-red-600">Desvincular</button>
                 </div>
               )}
             </div>
           ))}
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!unpairConfirm}
+        onClose={() => setUnpairConfirm(null)}
+        onConfirm={handleUnpair}
+        title="Desvincular TV"
+        message={<>Desvincular <strong>{unpairConfirm?.label || "esta TV"}</strong>? O aparelho vai voltar a pedir um novo código de pareamento.</>}
+        confirmLabel="Desvincular"
+        variant="danger"
+        loading={unpairing}
+      />
     </ContentCard>
   );
 }
