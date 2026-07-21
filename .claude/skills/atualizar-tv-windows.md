@@ -73,12 +73,15 @@ cp "tv-windows-agent\dist\BoxSys-PainelTV-Windows-Setup.exe" "public\downloads\B
 ```
 
 Depois, no deploy pra VPS, copiar esse arquivo também via scp, já que
-`public/downloads/*.exe` está no `.gitignore` e não vai pelo git push normal:
+`public/downloads/*.exe` está no `.gitignore` e não vai pelo git push normal.
+**Atenção**: o servidor lê de `public/downloads/` (`process.cwd()/public/downloads`),
+**não** de `dist/downloads/` — já aconteceu de copiar pro lugar errado e a rota devolver
+404 mesmo com o arquivo presente no disco (em `dist/downloads/`).
 
 ```bash
 scp -i ~/.ssh/id_ed25519_vps -o BatchMode=yes \
   "public/downloads/BoxSys-PainelTV-Windows-Setup.exe" \
-  root@72.62.8.195:/var/www/develoi-cardapio/dist/downloads/BoxSys-PainelTV-Windows-Setup.exe
+  root@72.62.8.195:/var/www/develoi-cardapio/public/downloads/BoxSys-PainelTV-Windows-Setup.exe
 ```
 
 Confirmar que subiu certo:
