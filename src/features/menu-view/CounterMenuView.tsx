@@ -71,7 +71,10 @@ export default function CounterMenuView() {
   const [selectedExtras, setSelectedExtras] = useState<{ id: string, label: string, price: number }[]>([]);
   const [isOrdering, setIsOrdering] = useState(false);
 
-  const [ticketOrder, setTicketOrder] = useState<Order | null>(null);
+  // Lista (não um único pedido) — o cliente pode ter mais de uma senha em aberto ao
+  // mesmo tempo (ex: fez um pedido, saiu/atualizou a página, voltou e pediu de novo sem
+  // a primeira senha ter ficado pronta ainda). Cada uma fica visível até ser retirada.
+  const [ticketOrders, setTicketOrders] = useState<Order[]>([]);
   const [promotions, setPromotions] = useState<any[]>([]);
   const [promoIndex, setPromoIndex] = useState(0);
   const [showQR, setShowQR] = useState(false);
@@ -114,16 +117,21 @@ export default function CounterMenuView() {
       try { setCart(JSON.parse(savedCart)); } catch (e) { console.error("Failed to parse saved cart"); }
     }
 
-    // Se já existe uma senha de balcão salva, retoma a tela de acompanhamento em vez do check-in.
-    const savedTicket = localStorage.getItem(counterStorageKey);
-    if (savedTicket) {
+    // Se já existem senhas de balcão salvas, retoma a tela de acompanhamento em vez do
+    // check-in. Formato é uma lista — mas usuários que já tinham uma senha salva antes
+    // dessa mudança guardaram um objeto único `{orderId}`, não um array; o fallback abaixo
+    // cobre os dois formatos pra não perder a senha de quem já estava com um pedido em aberto.
+    const savedTickets = localStorage.getItem(counterStorageKey);
+    if (savedTickets) {
       try {
-        const { orderId } = JSON.parse(savedTicket);
-        if (orderId) {
-          fetchTicketOrder(orderId);
+        const parsed = JSON.parse(savedTickets);
+        const list: { orderId: string }[] = Array.isArray(parsed) ? parsed : [parsed];
+        const orderIds = list.map((t) => t.orderId).filter(Boolean);
+        if (orderIds.length > 0) {
+          fetchTicketOrders(orderIds);
         }
       } catch (e) {
-        console.error("Failed to parse saved counter order");
+        console.error("Failed to parse saved counter orders");
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -171,7 +179,16 @@ export default function CounterMenuView() {
     socket.emit("join-tenant", tenant.id);
 
     const handleOrderStatusUpdated = (updatedOrder: Order) => {
-      setTicketOrder(prev => (prev && updatedOrder.id === prev.id) ? updatedOrder : prev);
+      setTicketOrders(prev => {
+        if (!prev.some(o => o.id === updatedOrder.id)) return prev;
+        // Pedido retirado/cancelado sai da lista — o cliente não precisa mais acompanhá-lo.
+        if (["DELIVERED", "CANCELLED", "MERGED"].includes(updatedOrder.status)) {
+          const remaining = prev.filter(o => o.id !== updatedOrder.id);
+          removeStoredTicket(updatedOrder.id);
+          return remaining;
+        }
+        return prev.map(o => (o.id === updatedOrder.id ? updatedOrder : o));
+      });
     };
     socket.on("order-status-updated", handleOrderStatusUpdated);
 
@@ -180,22 +197,61 @@ export default function CounterMenuView() {
     };
   }, [tenant]);
 
-  const fetchTicketOrder = (orderId: string) => {
-    fetch(`/api/orders/counter/${slug}/${orderId}`)
-      .then(r => {
-        if (!r.ok) throw new Error("not found");
-        return r.json();
-      })
-      .then(data => {
-        setTicketOrder(data);
-        setStep("ticket");
-      })
-      .catch(() => {
-        // Pedido não encontrado (ex: limpo pelo admin) — libera para um novo atendimento.
-        localStorage.removeItem(counterStorageKey);
-        setTicketOrder(null);
-        setStep("checkin");
-      });
+  // Lê a lista de tickets salvos no formato atual (array); tolera o formato antigo
+  // (objeto único) de quem já tinha uma senha salva antes desta mudança.
+  const readStoredTickets = (): { orderId: string; counterTicketNumber?: number }[] => {
+    const raw = localStorage.getItem(counterStorageKey);
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [parsed];
+    } catch {
+      return [];
+    }
+  };
+
+  const addStoredTicket = (orderId: string, counterTicketNumber?: number) => {
+    const list = readStoredTickets();
+    localStorage.setItem(counterStorageKey, JSON.stringify([...list, { orderId, counterTicketNumber }]));
+  };
+
+  const removeStoredTicket = (orderId: string) => {
+    const list = readStoredTickets().filter((t) => t.orderId !== orderId);
+    if (list.length > 0) {
+      localStorage.setItem(counterStorageKey, JSON.stringify(list));
+    } else {
+      localStorage.removeItem(counterStorageKey);
+    }
+  };
+
+  // Busca o status atual de cada senha salva. Pedidos já finalizados (retirados/
+  // cancelados) saem da lista e do storage; os demais aparecem na tela de acompanhamento,
+  // uma senha por card, até cada um ficar pronto.
+  const fetchTicketOrders = async (orderIds: string[]) => {
+    const results = await Promise.all(
+      orderIds.map((orderId) =>
+        fetch(`/api/orders/counter/${slug}/${orderId}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null)
+      )
+    );
+    const active: Order[] = [];
+    for (let i = 0; i < results.length; i++) {
+      const order = results[i];
+      const orderId = orderIds[i];
+      if (!order || ["DELIVERED", "CANCELLED", "MERGED"].includes(order.status)) {
+        removeStoredTicket(orderId);
+      } else {
+        active.push(order);
+      }
+    }
+    if (active.length > 0) {
+      setTicketOrders(active);
+      setStep("ticket");
+    } else {
+      setTicketOrders([]);
+      setStep("checkin");
+    }
   };
 
   const total = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
@@ -298,11 +354,11 @@ export default function CounterMenuView() {
         const created = await res.json();
         setCart([]);
         localStorage.removeItem(cartStorageKey);
-        localStorage.setItem(counterStorageKey, JSON.stringify({
-          orderId: created.id,
-          counterTicketNumber: created.counterTicketNumber,
-        }));
-        setTicketOrder(created);
+        // Adiciona à lista em vez de sobrescrever — se já havia uma senha em aberto (ex:
+        // cliente fez "novo pedido" sem a anterior ter ficado pronta), as duas continuam
+        // visíveis até cada uma ser retirada.
+        addStoredTicket(created.id, created.counterTicketNumber);
+        setTicketOrders(prev => [...prev, created]);
         setStep("ticket");
       } else {
         showToast("Não foi possível enviar o pedido.");
@@ -317,9 +373,10 @@ export default function CounterMenuView() {
   const handleNewOrder = () => {
     // Mantém nome/telefone preenchidos — é a mesma pessoa no mesmo tablet/balcão,
     // já identificada, então pula direto pro cardápio sem passar pelo checkin de novo.
-    localStorage.removeItem(counterStorageKey);
+    // As senhas já em aberto NÃO são apagadas aqui — o cliente pode estar pedindo de novo
+    // justamente porque a senha anterior ainda não ficou pronta, e precisa continuar
+    // vendo as duas até cada uma ser retirada.
     localStorage.removeItem(cartStorageKey);
-    setTicketOrder(null);
     setCart([]);
     setStep(customer.phone ? "menu" : "checkin");
   };
@@ -424,68 +481,76 @@ export default function CounterMenuView() {
         )}
       </AnimatePresence>
 
-      {/* ── TICKET STEP (senha do balcão) ───────────────────────────────── */}
+      {/* ── TICKET STEP (senha(s) do balcão) ────────────────────────────── */}
       <AnimatePresence>
-        {step === "ticket" && ticketOrder && (
+        {step === "ticket" && ticketOrders.length > 0 && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="fixed inset-0 z-50 flex flex-col items-center justify-center p-8 bg-black/40 backdrop-blur-md"
+            className="fixed inset-0 z-50 flex flex-col items-center justify-center p-8 bg-black/40 backdrop-blur-md overflow-y-auto"
           >
-            <div className="w-full max-w-sm space-y-10 text-center relative z-10">
+            <div className="w-full max-w-sm space-y-8 text-center relative z-10 py-8">
               <div className="space-y-2">
                 <p className="text-amber-500/60 text-xs font-black tracking-widest uppercase">{tenant.name}</p>
-                <h1 className="text-xl font-serif text-white tracking-wide">Sua senha é</h1>
+                <h1 className="text-xl font-serif text-white tracking-wide">
+                  {ticketOrders.length > 1 ? "Suas senhas" : "Sua senha é"}
+                </h1>
               </div>
 
-              <motion.div
-                initial={{ scale: 0.7, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                className="mx-auto w-56 h-56 rounded-[2.5rem] border-2 border-amber-500/30 bg-amber-500/5 flex flex-col items-center justify-center gap-1 shadow-2xl shadow-amber-500/10"
+              {/* Mais de uma senha em aberto — ex: cliente pediu de novo antes da anterior
+                  ficar pronta. Cada card mostra status independente até ser retirado. */}
+              <div className="space-y-6">
+                {ticketOrders.map((order) => (
+                  <div key={order.id} className="space-y-5">
+                    <motion.div
+                      initial={{ scale: 0.7, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      className={`mx-auto flex flex-col items-center justify-center gap-1 shadow-2xl shadow-amber-500/10 rounded-[2.5rem] border-2 border-amber-500/30 bg-amber-500/5 ${
+                        ticketOrders.length > 1 ? "w-40 h-40" : "w-56 h-56"
+                      }`}
+                    >
+                      <span className="text-[10px] font-black text-amber-500/60 uppercase tracking-[0.3em]">Nº</span>
+                      <span className={`font-black text-amber-400 tracking-tighter tabular-nums ${ticketOrders.length > 1 ? "text-5xl" : "text-7xl"}`}>
+                        {order.counterTicketNumber ?? "—"}
+                      </span>
+                    </motion.div>
+
+                    <div className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-full mx-auto w-fit ${
+                      ["SHIPPED", "DELIVERED", "MERGED"].includes(order.status) ? "bg-green-500/10 border border-green-500/20" :
+                      order.status === "CANCELLED" ? "bg-red-500/10 border border-red-500/20" :
+                      "bg-white/5 border border-white/10"
+                    }`}>
+                      <motion.span
+                        animate={order.status === "PENDING" || order.status === "PREPARING" ? { scale: [1, 1.4, 1] } : {}}
+                        transition={{ repeat: Infinity, duration: 1.6 }}
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          ["SHIPPED", "DELIVERED", "MERGED"].includes(order.status) ? "bg-green-400" :
+                          order.status === "CANCELLED" ? "bg-red-400" : "bg-amber-400"
+                        }`}
+                      />
+                      <span className={`text-xs font-bold ${
+                        ["SHIPPED", "DELIVERED", "MERGED"].includes(order.status) ? "text-green-400" :
+                        order.status === "CANCELLED" ? "text-red-400" : "text-amber-300"
+                      }`}>
+                        {getStatusLabel(order.status, order.billed === true)}
+                      </span>
+                    </div>
+
+                    <p className="text-white/40 text-sm max-w-[280px] mx-auto leading-relaxed">
+                      {getInstructionText(order.status, order.billed === true)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                onClick={handleNewOrder}
+                className="mx-auto flex items-center gap-2 text-white/30 hover:text-amber-400 transition-all text-[11px] font-bold uppercase tracking-widest"
               >
-                <span className="text-[10px] font-black text-amber-500/60 uppercase tracking-[0.3em]">Nº</span>
-                <span className="text-7xl font-black text-amber-400 tracking-tighter tabular-nums">
-                  {ticketOrder.counterTicketNumber ?? "—"}
-                </span>
-              </motion.div>
-
-              <div className="space-y-3">
-                <div className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-full mx-auto w-fit ${
-                  ["SHIPPED", "DELIVERED", "MERGED"].includes(ticketOrder.status) ? "bg-green-500/10 border border-green-500/20" :
-                  ticketOrder.status === "CANCELLED" ? "bg-red-500/10 border border-red-500/20" :
-                  "bg-white/5 border border-white/10"
-                }`}>
-                  <motion.span
-                    animate={ticketOrder.status === "PENDING" || ticketOrder.status === "PREPARING" ? { scale: [1, 1.4, 1] } : {}}
-                    transition={{ repeat: Infinity, duration: 1.6 }}
-                    className={`w-1.5 h-1.5 rounded-full ${
-                      ["SHIPPED", "DELIVERED", "MERGED"].includes(ticketOrder.status) ? "bg-green-400" :
-                      ticketOrder.status === "CANCELLED" ? "bg-red-400" : "bg-amber-400"
-                    }`}
-                  />
-                  <span className={`text-xs font-bold ${
-                    ["SHIPPED", "DELIVERED", "MERGED"].includes(ticketOrder.status) ? "text-green-400" :
-                    ticketOrder.status === "CANCELLED" ? "text-red-400" : "text-amber-300"
-                  }`}>
-                    {getStatusLabel(ticketOrder.status, ticketOrder.billed === true)}
-                  </span>
-                </div>
-
-                <div className="space-y-4">
-                  <p className="text-white/40 text-sm max-w-[280px] mx-auto leading-relaxed">
-                    {getInstructionText(ticketOrder.status, ticketOrder.billed === true)}
-                  </p>
-
-                  <button
-                    onClick={handleNewOrder}
-                    className="mx-auto flex items-center gap-2 text-white/30 hover:text-amber-400 transition-all text-[11px] font-bold uppercase tracking-widest"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    Fazer novo pedido
-                  </button>
-                </div>{/* end space-y-4 */}
-              </div>{/* end space-y-3 */}
+                <RotateCcw className="w-3.5 h-3.5" />
+                Fazer novo pedido
+              </button>
             </div>{/* end w-full max-w-sm */}
           </motion.div>
         )}
