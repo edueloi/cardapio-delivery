@@ -378,6 +378,14 @@ app.get("/tv", (req, res) => {
     "BoxSys-PainelTV.apk"
   );
 });
+// URL curta pro instalador do agente Windows (PC/notebook ligado na TV via HDMI) —
+// mesmo padrão da rota /tv acima, só que pro instalador .exe em vez do APK.
+app.get("/tv-windows", (req, res) => {
+  res.download(
+    path.join(process.cwd(), "public", "downloads", "BoxSys-PainelTV-Windows-Setup.exe"),
+    "BoxSys-PainelTV-Windows-Setup.exe"
+  );
+});
 app.use(authMiddleware);
 registerProductionRoutes({
   app,
