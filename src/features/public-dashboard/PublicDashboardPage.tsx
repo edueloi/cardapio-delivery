@@ -3,13 +3,12 @@ import { useParams } from "react-router-dom";
 import socket from "../../lib/socket";
 import { playTvPanelReadySound } from "../../lib/notificationSound";
 import { announceOrderReady } from "../../lib/voiceAnnouncement";
-import type { DisplayPanelConfig, Order, Tenant } from "../../types";
+import type { DisplayPanelConfig, DisplayPanelImage, Order, Tenant } from "../../types";
 import { dineInOrderLabel } from "../../types";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ChefHat,
   ShoppingBag,
-  Clock,
   Bell,
   Globe,
   Utensils,
@@ -28,22 +27,19 @@ function orderLocation(order: Order) {
   return "Balcão";
 }
 
-function orderTime(iso: string) {
-  return new Date(iso).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function minutesAgo(iso: string) {
-  return Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
-}
-
 const DEFAULT_DISPLAY_CONFIG: DisplayPanelConfig = {
   showDelivery: false,
   showPickup: true,
   showDineIn: true,
   voiceAnnouncement: true,
+  theme: "dark",
+  preparingColor: "#f97316",
+  readyColor: "#22c55e",
+  showLogo: true,
+  readySoundFile: "/alerts/som_painel_cozinha.mp3",
+  voiceName: null,
+  carouselEnabled: true,
+  carouselIntervalSeconds: 8,
 };
 
 const READY_ANNOUNCEMENT_DURATION_MS = 10000;
@@ -78,10 +74,44 @@ function readyAnnouncementSubtitle(order: Order) {
 // Só anunciamos por voz pedidos de balcão/comanda (têm senha numérica).
 // Mesa e delivery não têm "senha" para chamar em voz alta. `voiceEnabled` vem da
 // configuração do painel — o dono pode desligar a fala e manter só o som/visual.
-function announceReadyOrder(order: Order, voiceEnabled: boolean) {
-  if (!voiceEnabled) return;
+function announceReadyOrder(order: Order, config: DisplayPanelConfig) {
+  if (config.voiceAnnouncement === false) return;
   if (order.counterTicketNumber == null) return;
-  announceOrderReady(order.counterTicketNumber);
+  announceOrderReady(order.counterTicketNumber, { voiceName: config.voiceName, text: config.voiceText });
+}
+
+/* ─── theme ───────────────────────────────────────────────── */
+interface PanelTheme {
+  bg: string;
+  headerBg: string;
+  cardBg: string;
+  divider: string;
+  textPrimary: string;
+  textMuted: string;
+  textFaint: string;
+}
+
+function buildTheme(mode: "dark" | "light"): PanelTheme {
+  if (mode === "light") {
+    return {
+      bg: "#f4f5f7",
+      headerBg: "rgba(255,255,255,0.92)",
+      cardBg: "rgba(255,255,255,0.9)",
+      divider: "rgba(15,23,42,0.08)",
+      textPrimary: "#0f172a",
+      textMuted: "rgba(15,23,42,0.45)",
+      textFaint: "rgba(15,23,42,0.28)",
+    };
+  }
+  return {
+    bg: "#000000",
+    headerBg: "rgba(0,0,0,0.95)",
+    cardBg: "rgba(15,23,42,0.75)",
+    divider: "rgba(255,255,255,0.06)",
+    textPrimary: "#ffffff",
+    textMuted: "rgba(255,255,255,0.35)",
+    textFaint: "rgba(255,255,255,0.15)",
+  };
 }
 
 /* ─── sub-components ──────────────────────────────────────── */
@@ -89,8 +119,10 @@ function announceReadyOrder(order: Order, voiceEnabled: boolean) {
 interface PreparingCardProps {
   order: Order;
   isFirst: boolean;
+  theme: PanelTheme;
+  accentColor: string;
 }
-function PreparingCard({ order, isFirst }: PreparingCardProps) {
+function PreparingCard({ order, isFirst, theme, accentColor }: PreparingCardProps) {
   return (
     <motion.div
       layout
@@ -101,9 +133,9 @@ function PreparingCard({ order, isFirst }: PreparingCardProps) {
       transition={{ duration: 0.35 }}
       style={{
         background: isFirst
-          ? "linear-gradient(135deg, rgba(234,88,12,0.18) 0%, rgba(30,41,59,0.85) 100%)"
-          : "rgba(15,23,42,0.75)",
-        border: isFirst ? "1.5px solid #ea580c" : "1.5px solid rgba(255,255,255,0.07)",
+          ? `linear-gradient(135deg, ${accentColor}30 0%, ${theme.cardBg} 100%)`
+          : theme.cardBg,
+        border: isFirst ? `1.5px solid ${accentColor}` : `1.5px solid ${theme.divider}`,
         borderRadius: 16,
         display: "flex",
         alignItems: "center",
@@ -111,18 +143,15 @@ function PreparingCard({ order, isFirst }: PreparingCardProps) {
         padding: "18px 20px",
         position: "relative",
         backdropFilter: "blur(8px)",
-        boxShadow: isFirst
-          ? "0 4px 32px 0 rgba(234,88,12,0.18)"
-          : "0 2px 12px 0 rgba(0,0,0,0.3)",
+        boxShadow: isFirst ? `0 4px 32px 0 ${accentColor}30` : "0 2px 12px 0 rgba(0,0,0,0.15)",
       }}
     >
-      {/* Code */}
       <span
         style={{
           fontSize: 34,
           fontWeight: 900,
           letterSpacing: "-1px",
-          color: "#fff",
+          color: theme.textPrimary,
           minWidth: 110,
           fontFamily: "'Inter', monospace",
         }}
@@ -130,24 +159,15 @@ function PreparingCard({ order, isFirst }: PreparingCardProps) {
         {orderCode(order)}
       </span>
 
-      {/* Name + location */}
       <div style={{ flex: 1, marginLeft: 16 }}>
-        <p
-          style={{
-            fontWeight: 800,
-            fontSize: 17,
-            color: "#fff",
-            margin: 0,
-            lineHeight: 1.1,
-          }}
-        >
+        <p style={{ fontWeight: 800, fontSize: 17, color: theme.textPrimary, margin: 0, lineHeight: 1.1 }}>
           {order.customerName || "—"}
         </p>
         <p
           style={{
             fontWeight: 700,
             fontSize: 11,
-            color: "rgba(255,255,255,0.35)",
+            color: theme.textMuted,
             margin: "3px 0 0",
             textTransform: "uppercase",
             letterSpacing: "0.08em",
@@ -162,8 +182,10 @@ function PreparingCard({ order, isFirst }: PreparingCardProps) {
 
 interface ReadyCardProps {
   order: Order;
+  theme: PanelTheme;
+  accentColor: string;
 }
-function ReadyCard({ order }: ReadyCardProps) {
+function ReadyCard({ order, theme, accentColor }: ReadyCardProps) {
   return (
     <motion.div
       layout
@@ -173,8 +195,8 @@ function ReadyCard({ order }: ReadyCardProps) {
       exit={{ opacity: 0, scale: 0.95 }}
       transition={{ duration: 0.35 }}
       style={{
-        background: "rgba(15,23,42,0.75)",
-        border: "1.5px solid rgba(34,197,94,0.25)",
+        background: theme.cardBg,
+        border: `1.5px solid ${accentColor}40`,
         borderRadius: 16,
         display: "flex",
         alignItems: "center",
@@ -182,16 +204,15 @@ function ReadyCard({ order }: ReadyCardProps) {
         padding: "18px 20px",
         position: "relative",
         backdropFilter: "blur(8px)",
-        boxShadow: "0 2px 12px 0 rgba(0,0,0,0.3)",
+        boxShadow: "0 2px 12px 0 rgba(0,0,0,0.15)",
       }}
     >
-      {/* Code */}
       <span
         style={{
           fontSize: 34,
           fontWeight: 900,
           letterSpacing: "-1px",
-          color: "#22c55e",
+          color: accentColor,
           minWidth: 110,
           fontFamily: "'Inter', monospace",
         }}
@@ -199,24 +220,15 @@ function ReadyCard({ order }: ReadyCardProps) {
         {orderCode(order)}
       </span>
 
-      {/* Name + location */}
       <div style={{ flex: 1, marginLeft: 16 }}>
-        <p
-          style={{
-            fontWeight: 800,
-            fontSize: 17,
-            color: "#fff",
-            margin: 0,
-            lineHeight: 1.1,
-          }}
-        >
+        <p style={{ fontWeight: 800, fontSize: 17, color: theme.textPrimary, margin: 0, lineHeight: 1.1 }}>
           {order.customerName || "—"}
         </p>
         <p
           style={{
             fontWeight: 700,
             fontSize: 11,
-            color: "rgba(255,255,255,0.35)",
+            color: theme.textMuted,
             margin: "3px 0 0",
             textTransform: "uppercase",
             letterSpacing: "0.08em",
@@ -226,33 +238,78 @@ function ReadyCard({ order }: ReadyCardProps) {
         </p>
       </div>
 
-      {/* Pronto badge */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
           gap: 5,
-          background: "rgba(34,197,94,0.12)",
-          border: "1px solid rgba(34,197,94,0.3)",
+          background: `${accentColor}20`,
+          border: `1px solid ${accentColor}50`,
           borderRadius: 8,
           padding: "5px 10px",
           flexShrink: 0,
         }}
       >
-        <Bell style={{ width: 12, height: 12, color: "#22c55e" }} />
-        <span
-          style={{
-            fontWeight: 800,
-            fontSize: 11,
-            color: "#22c55e",
-            textTransform: "uppercase",
-            letterSpacing: "0.1em",
-          }}
-        >
+        <Bell style={{ width: 12, height: 12, color: accentColor }} />
+        <span style={{ fontWeight: 800, fontSize: 11, color: accentColor, textTransform: "uppercase", letterSpacing: "0.1em" }}>
           Pronto
         </span>
       </div>
     </motion.div>
+  );
+}
+
+// Faixa de propaganda — alterna as imagens ativas a cada N segundos com fade. Se não
+// houver imagens, o chamador simplesmente não renderiza este componente (as colunas de
+// pedidos ocupam a tela inteira).
+interface PromoCarouselProps {
+  images: DisplayPanelImage[];
+  intervalSeconds: number;
+  theme: PanelTheme;
+}
+function PromoCarousel({ images, intervalSeconds, theme }: PromoCarouselProps) {
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    setIndex(0);
+  }, [images.length]);
+
+  useEffect(() => {
+    if (images.length <= 1) return;
+    const t = setInterval(() => setIndex((i) => (i + 1) % images.length), Math.max(2, intervalSeconds) * 1000);
+    return () => clearInterval(t);
+  }, [images.length, intervalSeconds]);
+
+  if (images.length === 0) return null;
+  const current = images[index];
+
+  return (
+    <div
+      style={{
+        width: 320,
+        flexShrink: 0,
+        borderLeft: `1px solid ${theme.divider}`,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+        position: "relative",
+        overflow: "hidden",
+      }}
+    >
+      <AnimatePresence mode="wait">
+        <motion.img
+          key={current.id}
+          src={current.imageUrl}
+          alt=""
+          initial={{ opacity: 0, scale: 0.96 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 1.04 }}
+          transition={{ duration: 0.6 }}
+          style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
+        />
+      </AnimatePresence>
+    </div>
   );
 }
 
@@ -261,6 +318,7 @@ export default function PublicDashboardPage() {
   const { slug } = useParams();
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [promoImages, setPromoImages] = useState<DisplayPanelImage[]>([]);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [readyAnnouncementQueue, setReadyAnnouncementQueue] = useState<Order[]>([]);
   const [activeReadyAnnouncement, setActiveReadyAnnouncement] = useState<Order | null>(null);
@@ -301,6 +359,10 @@ export default function PublicDashboardPage() {
     }
   }, [tenant?.displayPanelConfig]);
 
+  const theme = useMemo(() => buildTheme(displayConfig.theme === "light" ? "light" : "dark"), [displayConfig.theme]);
+  const preparingColor = displayConfig.preparingColor || DEFAULT_DISPLAY_CONFIG.preparingColor!;
+  const readyColor = displayConfig.readyColor || DEFAULT_DISPLAY_CONFIG.readyColor!;
+
   useEffect(() => {
     ordersRef.current = orders;
   }, [orders]);
@@ -335,6 +397,17 @@ export default function PublicDashboardPage() {
       }
     };
 
+    const fetchPromoImages = async () => {
+      if (!slug) return;
+      try {
+        const res = await fetch(`/api/tenants/${slug}/display-panel/images/public`);
+        const data = await res.json();
+        setPromoImages(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error("Failed to fetch promo images:", err);
+      }
+    };
+
     const upsertOrder = (incomingOrder: Order) => {
       setOrders((prev) => {
         const exists = prev.some((order) => order.id === incomingOrder.id);
@@ -364,6 +437,7 @@ export default function PublicDashboardPage() {
 
     fetchTenant();
     fetchOrders();
+    fetchPromoImages();
 
     socket.on("order-status-updated", handleOrderStatusUpdated);
     socket.on("new-order", handleNewOrder);
@@ -394,6 +468,8 @@ export default function PublicDashboardPage() {
     .filter((o) => o.status === "SHIPPED")
     .slice(0, 8);
 
+  const showCarousel = displayConfig.carouselEnabled !== false && promoImages.length > 0;
+
   useEffect(() => {
     if (activeReadyAnnouncement || readyAnnouncementQueue.length === 0) return;
     const [nextAnnouncement, ...remaining] = readyAnnouncementQueue;
@@ -404,10 +480,10 @@ export default function PublicDashboardPage() {
   useEffect(() => {
     if (!activeReadyAnnouncement) return;
 
-    playTvPanelReadySound();
+    playTvPanelReadySound(displayConfig.readySoundFile);
     // pequeno atraso pra voz não sobrepor o som da campainha
     const voiceTimer = window.setTimeout(() => {
-      announceReadyOrder(activeReadyAnnouncement, displayConfig.voiceAnnouncement !== false);
+      announceReadyOrder(activeReadyAnnouncement, displayConfig);
     }, 900);
     const dismissTimer = window.setTimeout(() => {
       setActiveReadyAnnouncement(null);
@@ -417,20 +493,13 @@ export default function PublicDashboardPage() {
       window.clearTimeout(voiceTimer);
       window.clearTimeout(dismissTimer);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeReadyAnnouncement]);
 
   /* ─── loading ─── */
   if (!tenant)
     return (
-      <div
-        style={{
-          minHeight: "100vh",
-          background: "#000000",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
+      <div style={{ minHeight: "100vh", background: "#000000", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div
           style={{
             width: 48,
@@ -445,24 +514,19 @@ export default function PublicDashboardPage() {
       </div>
     );
 
-  /* ─── colours ─── */
-  const BG = "#000000";
-  const SURFACE = "rgba(255,255,255,0.03)";
-  const DIVIDER = "rgba(255,255,255,0.06)";
-
   return (
     <div
       style={{
         minHeight: "100vh",
-        background: BG,
-        color: "#fff",
+        background: theme.bg,
+        color: theme.textPrimary,
         fontFamily: "'Inter', 'Segoe UI', sans-serif",
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
       }}
     >
-      {/* ── HEADER ─────────────────────────────────────────────── */}
+      {/* ── CHAMADA DE SENHA ──────────────────────────────────── */}
       <AnimatePresence>
         {activeReadyAnnouncement && (
           <motion.div
@@ -475,7 +539,7 @@ export default function PublicDashboardPage() {
               position: "fixed",
               inset: 0,
               zIndex: 200,
-              background: "#000000",
+              background: theme.bg,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -486,18 +550,23 @@ export default function PublicDashboardPage() {
               style={{
                 position: "absolute",
                 inset: 0,
-                background: "radial-gradient(circle at center, rgba(201,162,39,0.20) 0%, rgba(201,162,39,0) 60%)",
+                background: `radial-gradient(circle at center, ${readyColor}25 0%, ${readyColor}00 60%)`,
               }}
             />
-            <div
+            <motion.div
+              initial={{ scale: 0.9 }}
+              animate={{ scale: [1, 1.015, 1] }}
+              transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
               style={{
                 position: "relative",
                 width: "min(92vw, 1400px)",
                 minHeight: "min(78vh, 760px)",
                 borderRadius: 36,
-                border: "1px solid rgba(201,162,39,0.35)",
-                background: "linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)",
-                boxShadow: "0 30px 120px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08)",
+                border: `1px solid ${readyColor}55`,
+                background: displayConfig.theme === "light"
+                  ? "linear-gradient(180deg, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.75) 100%)"
+                  : "linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)",
+                boxShadow: `0 30px 120px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08), 0 0 90px ${readyColor}25`,
                 backdropFilter: "blur(14px)",
                 display: "flex",
                 flexDirection: "column",
@@ -515,20 +584,13 @@ export default function PublicDashboardPage() {
                   gap: 10,
                   padding: "10px 18px",
                   borderRadius: 999,
-                  border: "1px solid rgba(34,197,94,0.25)",
-                  background: "rgba(34,197,94,0.08)",
-                  color: "#86efac",
+                  border: `1px solid ${readyColor}40`,
+                  background: `${readyColor}18`,
+                  color: readyColor,
                 }}
               >
                 <Bell style={{ width: 18, height: 18 }} />
-                <span
-                  style={{
-                    fontSize: "clamp(0.8rem, 1.1vw, 1rem)",
-                    fontWeight: 900,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.24em",
-                  }}
-                >
+                <span style={{ fontSize: "clamp(0.8rem, 1.1vw, 1rem)", fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.24em" }}>
                   Pedido pronto
                 </span>
               </div>
@@ -539,7 +601,7 @@ export default function PublicDashboardPage() {
                   fontWeight: 800,
                   textTransform: "uppercase",
                   letterSpacing: "0.5em",
-                  color: "rgba(255,255,255,0.78)",
+                  color: theme.textMuted,
                 }}
               >
                 {readyAnnouncementTitle(activeReadyAnnouncement)}
@@ -551,47 +613,35 @@ export default function PublicDashboardPage() {
                   lineHeight: 0.9,
                   fontWeight: 900,
                   letterSpacing: "-0.04em",
-                  background: "linear-gradient(180deg, #ffffff 0%, #f3d98a 55%, #C9A227 100%)",
+                  background: `linear-gradient(180deg, ${theme.textPrimary} 0%, ${readyColor} 100%)`,
                   WebkitBackgroundClip: "text",
                   WebkitTextFillColor: "transparent",
                   backgroundClip: "text",
-                  filter: "drop-shadow(0 0 46px rgba(201,162,39,0.55)) drop-shadow(0 18px 40px rgba(0,0,0,0.5))",
+                  filter: `drop-shadow(0 0 46px ${readyColor}90) drop-shadow(0 18px 40px rgba(0,0,0,0.5))`,
                   fontVariantNumeric: "tabular-nums",
                 }}
               >
                 {readyAnnouncementCode(activeReadyAnnouncement)}
               </span>
 
-              <span
-                style={{
-                  fontSize: "clamp(1rem, 2vw, 1.8rem)",
-                  fontWeight: 800,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.18em",
-                  color: "#C9A227",
-                }}
-              >
+              <span style={{ fontSize: "clamp(1rem, 2vw, 1.8rem)", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.18em", color: readyColor }}>
                 {readyAnnouncementSubtitle(activeReadyAnnouncement)}
               </span>
 
-              <span
-                style={{
-                  fontSize: "clamp(0.95rem, 1.45vw, 1.25rem)",
-                  fontWeight: 700,
-                  color: "rgba(255,255,255,0.62)",
-                }}
-              >
+              <span style={{ fontSize: "clamp(0.95rem, 1.45vw, 1.25rem)", fontWeight: 700, color: theme.textMuted }}>
                 {orderLocation(activeReadyAnnouncement)}
                 {activeReadyAnnouncement.customerName ? ` • ${activeReadyAnnouncement.customerName}` : ""}
               </span>
-            </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ── HEADER ─────────────────────────────────────────────── */}
       <header
         style={{
-          background: "rgba(0,0,0,0.95)",
-          borderBottom: `1px solid ${DIVIDER}`,
+          background: theme.headerBg,
+          borderBottom: `1px solid ${theme.divider}`,
           padding: "0 28px",
           height: 76,
           display: "flex",
@@ -601,34 +651,29 @@ export default function PublicDashboardPage() {
           backdropFilter: "blur(20px)",
         }}
       >
-        {/* Left: logo + name */}
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          {tenant.logoUrl ? (
-            <img
-              src={tenant.logoUrl}
-              alt={tenant.name}
-              style={{
-                height: 52,
-                width: 52,
-                objectFit: "cover",
-                borderRadius: 12,
-                background: "#000",
-              }}
-            />
-          ) : (
-            <div
-              style={{
-                width: 52,
-                height: 52,
-                borderRadius: 12,
-                background: "rgba(234,88,12,0.15)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Utensils style={{ width: 26, height: 26, color: "#ea580c" }} />
-            </div>
+          {displayConfig.showLogo !== false && (
+            tenant.logoUrl ? (
+              <img
+                src={tenant.logoUrl}
+                alt={tenant.name}
+                style={{ height: 52, width: 52, objectFit: "cover", borderRadius: 12, background: theme.bg }}
+              />
+            ) : (
+              <div
+                style={{
+                  width: 52,
+                  height: 52,
+                  borderRadius: 12,
+                  background: `${preparingColor}25`,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Utensils style={{ width: 26, height: 26, color: preparingColor }} />
+              </div>
+            )
           )}
 
           <div>
@@ -639,270 +684,128 @@ export default function PublicDashboardPage() {
                 fontWeight: 900,
                 letterSpacing: "-0.5px",
                 textTransform: "uppercase",
-                color: "#fff",
+                color: theme.textPrimary,
                 lineHeight: 1,
               }}
             >
               {tenant.name}
             </h1>
-            <p
-              style={{
-                margin: "3px 0 0",
-                fontSize: 10,
-                fontWeight: 700,
-                textTransform: "uppercase",
-                letterSpacing: "0.22em",
-                color: "rgba(255,255,255,0.3)",
-              }}
-            >
+            <p style={{ margin: "3px 0 0", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.22em", color: theme.textMuted }}>
               Painel de Atendimento Digital
             </p>
           </div>
         </div>
 
-        {/* Right: clock */}
         <div style={{ textAlign: "right" }}>
-          <div
-            style={{
-              fontSize: 48,
-              fontWeight: 900,
-              letterSpacing: "-2px",
-              lineHeight: 1,
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            {currentTime.toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
+          <div style={{ fontSize: 48, fontWeight: 900, letterSpacing: "-2px", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
+            {currentTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
           </div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 5,
-              justifyContent: "flex-end",
-              marginTop: 2,
-            }}
-          >
-            <div
-              style={{
-                width: 7,
-                height: 7,
-                borderRadius: "50%",
-                background: "#22c55e",
-                boxShadow: "0 0 6px #22c55e",
-              }}
-            />
-            <span
-              style={{
-                fontSize: 10,
-                fontWeight: 800,
-                textTransform: "uppercase",
-                letterSpacing: "0.18em",
-                color: "#22c55e",
-              }}
-            >
+          <div style={{ display: "flex", alignItems: "center", gap: 5, justifyContent: "flex-end", marginTop: 2 }}>
+            <div style={{ width: 7, height: 7, borderRadius: "50%", background: readyColor, boxShadow: `0 0 6px ${readyColor}` }} />
+            <span style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.18em", color: readyColor }}>
               Tempo Real
             </span>
           </div>
         </div>
       </header>
 
-      {/* ── COLUMNS ────────────────────────────────────────────── */}
-      <div
-        style={{
-          flex: 1,
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 0,
-          overflow: "hidden",
-        }}
-      >
-        {/* ── EM PREPARO ─── */}
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            borderRight: `1px solid ${DIVIDER}`,
-            overflow: "hidden",
-          }}
-        >
-          {/* Column header */}
-          <div
-            style={{
-              padding: "16px 24px",
-              background: "rgba(234,88,12,0.08)",
-              borderBottom: "2px solid rgba(234,88,12,0.3)",
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              flexShrink: 0,
-            }}
-          >
+      {/* ── COLUNAS + CARROSSEL ────────────────────────────────── */}
+      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+        <div style={{ flex: 1, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0, overflow: "hidden" }}>
+          {/* ── EM PREPARO ─── */}
+          <div style={{ display: "flex", flexDirection: "column", borderRight: `1px solid ${theme.divider}`, overflow: "hidden" }}>
             <div
               style={{
-                width: 40,
-                height: 40,
-                borderRadius: 10,
-                background: "rgba(234,88,12,0.2)",
+                padding: "16px 24px",
+                background: `${preparingColor}14`,
+                borderBottom: `2px solid ${preparingColor}4d`,
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "center",
+                gap: 12,
+                flexShrink: 0,
               }}
             >
-              <ChefHat style={{ width: 20, height: 20, color: "#ea580c" }} />
+              <div style={{ width: 40, height: 40, borderRadius: 10, background: `${preparingColor}30`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <ChefHat style={{ width: 20, height: 20, color: preparingColor }} />
+              </div>
+              <h2 style={{ margin: 0, fontSize: 22, fontWeight: 900, textTransform: "uppercase", color: preparingColor, fontStyle: "italic", letterSpacing: "-0.3px" }}>
+                Em Preparo
+              </h2>
             </div>
-            <h2
-              style={{
-                margin: 0,
-                fontSize: 22,
-                fontWeight: 900,
-                textTransform: "uppercase",
-                color: "#f97316",
-                fontStyle: "italic",
-                letterSpacing: "-0.3px",
-              }}
-            >
-              Em Preparo
-            </h2>
+
+            <div style={{ flex: 1, padding: "16px 20px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
+              <AnimatePresence mode="popLayout">
+                {preparingOrders.length === 0 ? (
+                  <motion.div
+                    key="empty-prep"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    style={{ textAlign: "center", padding: "48px 24px", color: theme.textFaint, fontSize: 14, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.15em" }}
+                  >
+                    Nenhum pedido em preparo
+                  </motion.div>
+                ) : (
+                  preparingOrders.map((order, i) => (
+                    <PreparingCard key={order.id} order={order} isFirst={i === 0} theme={theme} accentColor={preparingColor} />
+                  ))
+                )}
+              </AnimatePresence>
+            </div>
           </div>
 
-          {/* Cards */}
-          <div
-            style={{
-              flex: 1,
-              padding: "16px 20px",
-              overflowY: "auto",
-              display: "flex",
-              flexDirection: "column",
-              gap: 10,
-            }}
-          >
-            <AnimatePresence mode="popLayout">
-              {preparingOrders.length === 0 ? (
-                <motion.div
-                  key="empty-prep"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  style={{
-                    textAlign: "center",
-                    padding: "48px 24px",
-                    color: "rgba(255,255,255,0.15)",
-                    fontSize: 14,
-                    fontWeight: 700,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.15em",
-                  }}
-                >
-                  Nenhum pedido em preparo
-                </motion.div>
-              ) : (
-                preparingOrders.map((order, i) => (
-                  <PreparingCard
-                    key={order.id}
-                    order={order}
-                    isFirst={i === 0}
-                  />
-                ))
-              )}
-            </AnimatePresence>
+          {/* ── PRONTO / RETIRE ─── */}
+          <div style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <div
+              style={{
+                padding: "16px 24px",
+                background: `${readyColor}12`,
+                borderBottom: `2px solid ${readyColor}40`,
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                flexShrink: 0,
+              }}
+            >
+              <div style={{ width: 40, height: 40, borderRadius: 10, background: `${readyColor}25`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <ShoppingBag style={{ width: 20, height: 20, color: readyColor }} />
+              </div>
+              <h2 style={{ margin: 0, fontSize: 22, fontWeight: 900, textTransform: "uppercase", color: readyColor, fontStyle: "italic", letterSpacing: "-0.3px" }}>
+                Pronto / Retire
+              </h2>
+            </div>
+
+            <div style={{ flex: 1, padding: "16px 20px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
+              <AnimatePresence mode="popLayout">
+                {readyOrders.length === 0 ? (
+                  <motion.div
+                    key="empty-ready"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    style={{ textAlign: "center", padding: "48px 24px", color: theme.textFaint, fontSize: 14, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.15em" }}
+                  >
+                    Nenhum pedido pronto
+                  </motion.div>
+                ) : (
+                  readyOrders.map((order) => (
+                    <ReadyCard key={order.id} order={order} theme={theme} accentColor={readyColor} />
+                  ))
+                )}
+              </AnimatePresence>
+            </div>
           </div>
         </div>
 
-        {/* ── PRONTO / RETIRE ─── */}
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            overflow: "hidden",
-          }}
-        >
-          {/* Column header */}
-          <div
-            style={{
-              padding: "16px 24px",
-              background: "rgba(34,197,94,0.07)",
-              borderBottom: "2px solid rgba(34,197,94,0.25)",
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              flexShrink: 0,
-            }}
-          >
-            <div
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: 10,
-                background: "rgba(34,197,94,0.15)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <ShoppingBag style={{ width: 20, height: 20, color: "#22c55e" }} />
-            </div>
-            <h2
-              style={{
-                margin: 0,
-                fontSize: 22,
-                fontWeight: 900,
-                textTransform: "uppercase",
-                color: "#22c55e",
-                fontStyle: "italic",
-                letterSpacing: "-0.3px",
-              }}
-            >
-              Pronto / Retire
-            </h2>
-          </div>
-
-          {/* Cards */}
-          <div
-            style={{
-              flex: 1,
-              padding: "16px 20px",
-              overflowY: "auto",
-              display: "flex",
-              flexDirection: "column",
-              gap: 10,
-            }}
-          >
-            <AnimatePresence mode="popLayout">
-              {readyOrders.length === 0 ? (
-                <motion.div
-                  key="empty-ready"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  style={{
-                    textAlign: "center",
-                    padding: "48px 24px",
-                    color: "rgba(255,255,255,0.15)",
-                    fontSize: 14,
-                    fontWeight: 700,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.15em",
-                  }}
-                >
-                  Nenhum pedido pronto
-                </motion.div>
-              ) : (
-                readyOrders.map((order, i) => (
-                  <ReadyCard key={order.id} order={order} />
-                ))
-              )}
-            </AnimatePresence>
-          </div>
-        </div>
+        {showCarousel && (
+          <PromoCarousel images={promoImages} intervalSeconds={displayConfig.carouselIntervalSeconds || 8} theme={theme} />
+        )}
       </div>
 
       {/* ── FOOTER ─────────────────────────────────────────────── */}
       <footer
         style={{
           height: 46,
-          background: "rgba(0,0,0,0.95)",
-          borderTop: `1px solid ${DIVIDER}`,
+          background: theme.headerBg,
+          borderTop: `1px solid ${theme.divider}`,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
@@ -910,56 +813,22 @@ export default function PublicDashboardPage() {
           flexShrink: 0,
         }}
       >
-        {/* Left: slogan */}
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span
-            style={{
-              fontSize: 11,
-              fontStyle: "italic",
-              color: "rgba(255,255,255,0.3)",
-              fontWeight: 600,
-            }}
-          >
+          <span style={{ fontSize: 11, fontStyle: "italic", color: theme.textMuted, fontWeight: 600 }}>
             {tenant.description ? `${tenant.name} — ${tenant.description}` : `${tenant.name} — Sabor que encanta, atendimento que acolhe.`}
           </span>
         </div>
 
-        {/* Center: status */}
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <div
-            style={{
-              width: 7,
-              height: 7,
-              borderRadius: "50%",
-              background: "#22c55e",
-              boxShadow: "0 0 6px #22c55e",
-            }}
-          />
-          <span
-            style={{
-              fontSize: 10,
-              fontWeight: 800,
-              textTransform: "uppercase",
-              letterSpacing: "0.18em",
-              color: "rgba(255,255,255,0.35)",
-            }}
-          >
+          <div style={{ width: 7, height: 7, borderRadius: "50%", background: readyColor, boxShadow: `0 0 6px ${readyColor}` }} />
+          <span style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.18em", color: theme.textMuted }}>
             Sistema de Filas Inteligente
           </span>
         </div>
 
-        {/* Right: domain */}
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <Globe style={{ width: 12, height: 12, color: "rgba(255,255,255,0.3)" }} />
-          <span
-            style={{
-              fontSize: 10,
-              fontWeight: 700,
-              color: "rgba(255,255,255,0.3)",
-              textTransform: "uppercase",
-              letterSpacing: "0.12em",
-            }}
-          >
+          <Globe style={{ width: 12, height: 12, color: theme.textMuted }} />
+          <span style={{ fontSize: 10, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.12em" }}>
             {tenant?.slug}
           </span>
         </div>

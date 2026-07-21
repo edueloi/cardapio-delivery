@@ -63,6 +63,7 @@ model Tenant {
   wppMessageLogs   WppMessageLog[]
   inviteTokens     InviteToken[]
   tvDevices        TvDevice[]
+  displayPanelImages DisplayPanelImage[]
 
   @@map("tenants")
 }
@@ -250,6 +251,23 @@ model TvDevice {
   @@index([tenantId])
   @@index([pairingCode])
   @@map("tv_devices")
+}
+
+// Imagens de propaganda do carrossel no Painel de Pedidos (/:slug/display) — tabela própria
+// em vez de array dentro de Tenant.displayPanelConfig, pra permitir reordenar e
+// ativar/desativar sem reescrever o JSON inteiro a cada mudança.
+model DisplayPanelImage {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  imageUrl  String   @map("image_url")
+  sortOrder Int      @default(0) @map("sort_order")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("display_panel_images")
 }
 
 model InviteToken {

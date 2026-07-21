@@ -17,6 +17,13 @@ export function listAvailableVoices(): SpeechSynthesisVoice[] {
     .filter((v) => v.lang.startsWith("pt"));
 }
 
+// Escolhe uma voz específica pelo nome exato (salvo em DisplayPanelConfig.voiceName) —
+// usada quando o admin escolheu manualmente uma voz em vez de deixar a seleção automática.
+function pickVoiceByName(name: string): SpeechSynthesisVoice | null {
+  if (typeof window === "undefined" || !window.speechSynthesis) return null;
+  return window.speechSynthesis.getVoices().find((v) => v.name === name) ?? null;
+}
+
 function pickVoice(): SpeechSynthesisVoice | null {
   if (typeof window === "undefined" || !window.speechSynthesis) return null;
   if (cachedVoice !== undefined) return cachedVoice;
@@ -66,12 +73,16 @@ if (typeof window !== "undefined" && window.speechSynthesis) {
   };
 }
 
-// Anuncia um pedido pronto: "Senha número 27, retirar no balcão" — sempre pelo número
-// da senha (não pelo nome do cliente), pra ficar fácil de identificar de longe.
-export function announceOrderReady(numberOrTicket: number) {
+export const DEFAULT_VOICE_TEXT = "Senha número {numero}, retirar no balcão";
+
+// Anuncia um pedido pronto — sempre pelo número da senha (não pelo nome do cliente), pra
+// ficar fácil de identificar de longe. `voiceName` e `text` vêm de DisplayPanelConfig,
+// configurados em Configurações > Config. Painel TV; sem eles, usa a seleção automática
+// de voz e o texto padrão.
+export function announceOrderReady(numberOrTicket: number, opts?: { voiceName?: string | null; text?: string }) {
   if (typeof window === "undefined" || !window.speechSynthesis) return;
   try {
-    const text = `Senha número ${numberOrTicket}, retirar no balcão`;
+    const text = (opts?.text || DEFAULT_VOICE_TEXT).replace("{numero}", String(numberOrTicket));
 
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = "pt-BR";
@@ -79,7 +90,7 @@ export function announceOrderReady(numberOrTicket: number) {
     utterance.pitch = 1.05;  // Ligeiramente mais agudo para soar mais natural
     utterance.volume = 1;
 
-    const voice = pickVoice();
+    const voice = (opts?.voiceName && pickVoiceByName(opts.voiceName)) || pickVoice();
     if (voice) utterance.voice = voice;
 
     // Cancela qualquer fala anterior antes de falar (evita sobreposição)

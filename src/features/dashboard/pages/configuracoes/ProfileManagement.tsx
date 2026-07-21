@@ -42,7 +42,6 @@ import { apiJson } from "../../../../lib/api";
 import {
   DeliveryConfig,
   DEFAULT_PRINTING_CONFIG,
-  DisplayPanelConfig,
   FiscalConfig,
   KmRange,
   PaymentConfig,
@@ -65,7 +64,6 @@ import {
   KitchenAccessRequestsCard,
   KitchenPasswordCard,
   KitchenStaffCard,
-  TvDevicesCard,
   KmRangeAdder,
   maskPhone,
   parseAddress,
@@ -128,12 +126,6 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
     try { return tenant?.fiscalConfig ? JSON.parse(tenant.fiscalConfig) : DEFAULT_FISCAL; } catch { return DEFAULT_FISCAL; }
   });
 
-  const DEFAULT_DISPLAY_PANEL: DisplayPanelConfig = { showDelivery: false, showPickup: true, showDineIn: true, voiceAnnouncement: true };
-  const [displayPanel, setDisplayPanel] = useState<DisplayPanelConfig>(() => {
-    try { return tenant?.displayPanelConfig ? { ...DEFAULT_DISPLAY_PANEL, ...JSON.parse(tenant.displayPanelConfig) } : DEFAULT_DISPLAY_PANEL; }
-    catch { return DEFAULT_DISPLAY_PANEL; }
-  });
-
   const [printing, setPrinting] = useState<PrintingConfig>(() => {
     try { return tenant?.printingConfig ? { ...DEFAULT_PRINTING_CONFIG, ...JSON.parse(tenant.printingConfig) } : DEFAULT_PRINTING_CONFIG; }
     catch { return DEFAULT_PRINTING_CONFIG; }
@@ -150,7 +142,6 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
       try { setPayments(tenant.paymentMethods ? JSON.parse(tenant.paymentMethods) : DEFAULT_PAYMENTS); } catch { setPayments(DEFAULT_PAYMENTS); }
       try { setStone(tenant.stoneConfig ? JSON.parse(tenant.stoneConfig) : DEFAULT_STONE); } catch { setStone(DEFAULT_STONE); }
       try { setFiscal(tenant.fiscalConfig ? JSON.parse(tenant.fiscalConfig) : DEFAULT_FISCAL); } catch { setFiscal(DEFAULT_FISCAL); }
-      try { setDisplayPanel(tenant.displayPanelConfig ? { ...DEFAULT_DISPLAY_PANEL, ...JSON.parse(tenant.displayPanelConfig) } : DEFAULT_DISPLAY_PANEL); } catch { setDisplayPanel(DEFAULT_DISPLAY_PANEL); }
     }
   }, [tenant]);
 
@@ -184,7 +175,6 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
           paymentMethods: JSON.stringify(payments),
           stoneConfig: JSON.stringify(stone),
           fiscalConfig: JSON.stringify(fiscal),
-          displayPanelConfig: JSON.stringify(displayPanel),
           printingConfig: JSON.stringify(printing),
           scheduleDays: JSON.stringify(scheduleDays),
         })
@@ -485,46 +475,17 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
             <ContentCard padding="lg">
               <div className="flex items-center gap-3 mb-1">
                 <Monitor className="w-4 h-4 text-slate-400" />
-                <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Painel TV</p>
+                <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Painel de Pedidos (TV)</p>
               </div>
-              <p className="text-[10px] text-slate-400 mb-6">
-                Escolha quais tipos de pedido aparecem na tela pública de acompanhamento (aquela que fica exposta pro cliente ver "seu pedido está pronto").
-                Delivery fica desativado por padrão, já que é entregue no endereço do cliente, não retirado no local.
+              <p className="text-[10px] text-slate-400">
+                Tipos de pedido exibidos, tema, cores, sons, voz, carrossel de propaganda e pareamento de TVs agora
+                ficam em uma página própria: menu lateral → <strong>Config. Painel TV</strong>.
               </p>
-              <div className="space-y-3">
-                {([
-                  { key: "showDineIn" as const, label: "Mesa / Salão", desc: "Pedidos feitos nas mesas do estabelecimento." },
-                  { key: "showPickup" as const, label: "Retirada no Balcão", desc: "Cliente busca o pedido presencialmente." },
-                  { key: "showDelivery" as const, label: "Delivery", desc: "Pedido é entregue no endereço do cliente — geralmente não faz sentido aparecer aqui." },
-                ]).map((opt) => (
-                  <div key={opt.key} className="flex items-center justify-between gap-4 bg-slate-50 border border-slate-100 rounded-2xl p-4">
-                    <div>
-                      <p className="text-xs font-black text-slate-700">{opt.label}</p>
-                      <p className="text-[11px] text-slate-400">{opt.desc}</p>
-                    </div>
-                    <Switch
-                      checked={displayPanel[opt.key]}
-                      onCheckedChange={(v) => setDisplayPanel({ ...displayPanel, [opt.key]: v })}
-                    />
-                  </div>
-                ))}
-                <div className="flex items-center justify-between gap-4 bg-slate-50 border border-slate-100 rounded-2xl p-4">
-                  <div>
-                    <p className="text-xs font-black text-slate-700">Anúncio por voz</p>
-                    <p className="text-[11px] text-slate-400">Fala em voz alta "Senha número X, retirar no balcão" quando o pedido fica pronto. Desligue se preferir só o som/aviso visual.</p>
-                  </div>
-                  <Switch
-                    checked={displayPanel.voiceAnnouncement !== false}
-                    onCheckedChange={(v) => setDisplayPanel({ ...displayPanel, voiceAnnouncement: v })}
-                  />
-                </div>
-              </div>
             </ContentCard>
 
             {tenant?.id && <KitchenPasswordCard tenantId={tenant.id} />}
             {tenant?.id && <KitchenAccessRequestsCard tenantId={tenant.id} onApproved={() => {}} />}
             {tenant?.id && <KitchenStaffCard tenantId={tenant.id} />}
-            {tenant?.slug && <TvDevicesCard slug={tenant.slug} />}
 
           </motion.div>
         )}

@@ -18,6 +18,7 @@ import {
   BundlesPanel,
   CashFlowPanel,
   CustomerCRMPanel,
+  DisplayPanelSettingsPanel,
   DownloadsPanel,
   EntradasSaidasPanel,
   IfoodPanel,
@@ -204,6 +205,10 @@ export default function DashboardContent({
 
       {activeTab === "nfce" && (
         <NfceHistoryPanel slug={slug} tenant={tenant} />
+      )}
+
+      {activeTab === "display-panel" && (
+        <DisplayPanelSettingsPanel slug={slug} tenant={tenant} />
       )}
 
       {activeTab === "downloads" && (

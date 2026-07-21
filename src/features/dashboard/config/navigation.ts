@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   Layers,
   MessageSquare,
+  Monitor,
   Package,
   Receipt,
   Settings,
@@ -35,6 +36,7 @@ export const DASHBOARD_NAVIGATION: DashboardNavigationGroup[] = [
       { id: "pos",       label: "PDV — Caixa",        tab: "pos",          icon: Receipt },
       { id: "waiter",    label: "Garçom",             tab: "waiter",       icon: UserCog },
       { id: "orders",    label: "Painel de Pedidos",  tab: "live-orders",  icon: Clock },
+      { id: "display-panel", label: "Config. Painel TV", tab: "display-panel", icon: Monitor },
       { id: "scheduled", label: "Agendamentos",       tab: "scheduled",    icon: CalendarDays },
 
       { id: "tables",    label: "Mesas e QR Code",    tab: "tables",       icon: ClipboardList },

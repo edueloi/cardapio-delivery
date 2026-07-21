@@ -252,6 +252,30 @@ export interface DisplayPanelConfig {
   showPickup: boolean;    // pedidos com orderType === "TAKEAWAY" (retirada no balcão)
   showDineIn: boolean;    // pedidos com orderType === "DINE_IN" (mesa/salão)
   voiceAnnouncement?: boolean; // fala em voz alta "Pedido nº X, retire no balcão" quando fica pronto (default: true)
+  // Visual
+  theme?: "dark" | "light"; // default: "dark" (comportamento atual)
+  preparingColor?: string;  // cor de destaque da coluna "Em Preparo" — hex, ex: "#ea580c"
+  readyColor?: string;      // cor de destaque da coluna "Pronto" — hex, ex: "#22c55e"
+  showLogo?: boolean;       // exibe o logo do tenant no cabeçalho (default: true)
+  // Som e voz
+  readySoundFile?: string;    // um dos arquivos em ALERT_SOUND_FILES (notificationSound.ts) — default: som_painel_cozinha.mp3
+  voiceName?: string | null;  // nome exato da SpeechSynthesisVoice escolhida — null/undefined = escolha automática
+  voiceText?: string;         // texto falado, com placeholder {numero} — default: "Senha número {numero}, retirar no balcão"
+  // Carrossel de propaganda
+  carouselEnabled?: boolean;       // default: true — se false ou sem imagens ativas, colunas ocupam a tela inteira
+  carouselIntervalSeconds?: number; // segundos que cada imagem fica visível — default: 8
+}
+
+// Uma imagem do carrossel de propaganda do Painel de Pedidos — tabela própria (não um
+// array dentro de DisplayPanelConfig) pra permitir reordenar/ativar-desativar sem reescrever
+// o JSON inteiro a cada mudança.
+export interface DisplayPanelImage {
+  id: string;
+  tenantId: string;
+  imageUrl: string;
+  sortOrder: number;
+  active: boolean;
+  createdAt: string;
 }
 
 export interface LoyaltyConfig {

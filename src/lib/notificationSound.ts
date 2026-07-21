@@ -20,9 +20,33 @@ const ALERT_FILES = {
 
 type AlertName = keyof typeof ALERT_FILES;
 
+// Todos os sons disponíveis no sistema, pro admin escolher qual toca quando a senha é
+// chamada no Painel de Pedidos (Configurações > Config. Painel TV). Rótulos amigáveis
+// pra exibir num dropdown com botão de "ouvir" antes de salvar.
+export const READY_SOUND_OPTIONS: { file: string; label: string }[] = [
+  { file: "/alerts/som_painel_cozinha.mp3", label: "Painel da Cozinha (padrão)" },
+  { file: "/alerts/som_campainha.mp3", label: "Campainha" },
+  { file: "/alerts/novo_pedido.mp3", label: "Novo Pedido" },
+  { file: "/alerts/saida_cozinha.mp3", label: "Saída da Cozinha" },
+  { file: "/alerts/estoque_baixo.mp3", label: "Estoque Baixo" },
+];
+
 function playAlertFile(name: AlertName) {
   try {
     const audio = new Audio(ALERT_FILES[name]);
+    audio.volume = 1;
+    audio.play().catch(() => playNotificationSound());
+  } catch {
+    playNotificationSound();
+  }
+}
+
+// Toca um som pelo caminho do arquivo (ex: um dos valores em READY_SOUND_OPTIONS) — usado
+// tanto no preview do painel de configurações quanto na chamada de senha real, que agora
+// usa o arquivo escolhido pelo admin em vez de um som fixo.
+export function playSoundFile(path: string) {
+  try {
+    const audio = new Audio(path);
     audio.volume = 1;
     audio.play().catch(() => playNotificationSound());
   } catch {
@@ -41,9 +65,14 @@ export function playKitchenReadySound() {
 }
 
 // Som de pedido pronto no Painel de TV (/:slug/display) — som próprio, diferente
-// do usado no dashboard administrativo.
-export function playTvPanelReadySound() {
-  playAlertFile("tvPanelReady");
+// do usado no dashboard administrativo. Aceita um arquivo customizado (escolhido pelo
+// admin em Configurações > Config. Painel TV); sem isso, usa o som padrão de sempre.
+export function playTvPanelReadySound(customFile?: string) {
+  if (customFile) {
+    playSoundFile(customFile);
+  } else {
+    playAlertFile("tvPanelReady");
+  }
 }
 
 // Som de alerta de estoque baixo.

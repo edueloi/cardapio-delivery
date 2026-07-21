@@ -10,6 +10,7 @@ export { default as CashFlowPanel } from "./financeiro";
 export { default as EntradasSaidasPanel } from "./entradas-saidas";
 export { default as ReportsPanel } from "./relatorios";
 export { default as NfceHistoryPanel } from "./nfce";
+export { default as DisplayPanelSettingsPanel } from "./painel-de-pedidos";
 export { default as CustomerCRMPanel } from "./clientes";
 export { default as LoyaltyPanel } from "./fidelidade";
 export { default as PromotionsPanel } from "./promocoes";

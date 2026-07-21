@@ -4595,6 +4595,114 @@ app.delete("/api/tenants/:slug/tv-devices/:id", requireAuth, async (req, res) =>
   }
 });
 
+// ── Carrossel de imagens do Painel de Pedidos ────────────────────────────────
+// Imagens de propaganda mostradas numa faixa dedicada ao lado das colunas de pedidos —
+// tabela própria (DisplayPanelImage) em vez de array dentro do JSON de config, pra
+// permitir reordenar/ativar-desativar sem reescrever o JSON inteiro a cada mudança.
+
+app.get("/api/tenants/:slug/display-panel/images", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "display-panel");
+  if (!tenant) return;
+
+  try {
+    const images = await prisma.displayPanelImage.findMany({
+      where: { tenantId: tenant.id },
+      orderBy: { sortOrder: "asc" },
+    });
+    res.json(images);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao listar imagens do carrossel." });
+  }
+});
+
+app.post("/api/tenants/:slug/display-panel/images", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "display-panel");
+  if (!tenant) return;
+
+  const imageUrl = String(req.body?.imageUrl || "").trim();
+  if (!imageUrl) return res.status(400).json({ error: "imageUrl é obrigatório." });
+
+  try {
+    const maxOrder = await prisma.displayPanelImage.aggregate({
+      where: { tenantId: tenant.id },
+      _max: { sortOrder: true },
+    });
+    const image = await prisma.displayPanelImage.create({
+      data: {
+        tenantId: tenant.id,
+        imageUrl,
+        sortOrder: (maxOrder._max.sortOrder ?? -1) + 1,
+      },
+    });
+    res.json(image);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao adicionar imagem." });
+  }
+});
+
+app.patch("/api/tenants/:slug/display-panel/images/:id", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "display-panel");
+  if (!tenant) return;
+
+  try {
+    const image = await prisma.displayPanelImage.findFirst({
+      where: { id: req.params.id, tenantId: tenant.id },
+    });
+    if (!image) return res.status(404).json({ error: "Imagem não encontrada." });
+
+    const { active, sortOrder } = req.body as { active?: boolean; sortOrder?: number };
+    const updated = await prisma.displayPanelImage.update({
+      where: { id: image.id },
+      data: {
+        ...(active !== undefined ? { active } : {}),
+        ...(sortOrder !== undefined ? { sortOrder } : {}),
+      },
+    });
+    res.json(updated);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao atualizar imagem." });
+  }
+});
+
+app.delete("/api/tenants/:slug/display-panel/images/:id", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "display-panel");
+  if (!tenant) return;
+
+  try {
+    const image = await prisma.displayPanelImage.findFirst({
+      where: { id: req.params.id, tenantId: tenant.id },
+    });
+    if (!image) return res.status(404).json({ error: "Imagem não encontrada." });
+
+    await prisma.displayPanelImage.delete({ where: { id: image.id } });
+    res.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao remover imagem." });
+  }
+});
+
+// Rota pública (sem auth) — usada pelo próprio Painel de Pedidos (/:slug/display) pra
+// buscar as imagens ativas do carrossel, na mesma tela que o cliente/TV acessa sem login.
+app.get("/api/tenants/:slug/display-panel/images/public", async (req, res) => {
+  try {
+    const tenant = await prisma.tenant.findUnique({ where: { slug: req.params.slug }, select: { id: true } });
+    if (!tenant) return res.status(404).json({ error: "Estabelecimento não encontrado." });
+
+    const images = await prisma.displayPanelImage.findMany({
+      where: { tenantId: tenant.id, active: true },
+      orderBy: { sortOrder: "asc" },
+    });
+    res.json(images);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Falha ao carregar imagens do carrossel." });
+  }
+});
+
 // ── Painel de Cozinha (login próprio, sem conta de usuário) ──────────────────
 // Pensado para um tablet/TV fixo na cozinha: o dono define uma senha em
 // Configurações, e quem abrir /cozinha/:slug digita essa senha uma vez —
