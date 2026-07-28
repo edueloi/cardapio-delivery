@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { useEffect } from "react";
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { AuthGuard, ToastProvider } from "./components";
 import MenuView from "./pages/MenuView";
@@ -36,10 +37,29 @@ function HomeOrKitchen() {
 
 function AnimatedRoutes() {
   const location = useLocation();
+  const navigate = useNavigate();
   const isDashboard = location.pathname.startsWith("/dashboard/");
   const routeKey = isDashboard
     ? location.pathname.split("/").slice(0, 3).join("/")
     : location.pathname;
+
+  // Ponte com o app desktop Electron (PDV): reporta qual tenant está aberto agora,
+  // pra o menu nativo "Navegar" saber montar a URL de destino (ver pdv-desktop/src/
+  // main.js → navigateTo), e escuta cliques desse menu pra trocar de rota sem recarregar
+  // a página inteira. Só existe window.pdvDesktop dentro do app desktop — no navegador
+  // normal, isso é um no-op.
+  useEffect(() => {
+    const desktop = (window as any).pdvDesktop;
+    if (!desktop) return;
+    const slug = isDashboard ? location.pathname.split("/")[2] : null;
+    desktop.reportCurrentSlug?.(slug);
+  }, [isDashboard, location.pathname]);
+
+  useEffect(() => {
+    const desktop = (window as any).pdvDesktop;
+    if (!desktop?.onNavigate) return;
+    return desktop.onNavigate((path: string) => navigate(path));
+  }, [navigate]);
 
   return (
     <>

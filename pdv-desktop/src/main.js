@@ -22,16 +22,140 @@ function setZoomFactor(factor) {
   const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(factor * 100) / 100));
   store.set("zoomFactor", clamped);
   if (mainWindow) mainWindow.webContents.setZoomFactor(clamped);
+  refreshAppMenu(); // atualiza o label "Zoom: N%" no menu Exibir
   return clamped;
 }
 
 let mainWindow = null;
+let currentSlug = null; // tenant aberto agora — reportado pelo renderer via nav:report-slug
 
-// Sem barra de menu nativa (PDV / Exibir) — o app fica com cara de programa de desktop
-// de verdade, sem aquela faixa cinza do Windows comendo espaço vertical. Todos os
-// atalhos que a barra oferecia continuam funcionando via before-input-event abaixo
-// (F11 tela cheia, F9 impressora, Ctrl+R recarregar, Ctrl+Q sair, Ctrl+/-/0 zoom) —
-// só o menu visual some, nenhuma funcionalidade é perdida.
+// Mesmos grupos/rotas do menu lateral do dashboard (ver
+// src/features/dashboard/config/navigation.ts e src/features/dashboard/types.ts →
+// TAB_TO_PATH) — duplicado aqui em JS puro porque o processo main não importa código
+// React/TS. Se um item novo for adicionado lá, replicar aqui também.
+const NAV_GROUPS = [
+  {
+    label: "Operação",
+    items: [
+      { label: "Visão Geral", path: "visao-geral" },
+      { label: "PDV — Caixa", path: "pdv" },
+      { label: "Garçom", path: "garcom" },
+      { label: "Painel de Pedidos", path: "pedidos" },
+      { label: "Config. Painel TV", path: "painel-de-pedidos" },
+      { label: "Agendamentos", path: "agendamentos" },
+      { label: "Mesas e QR Code", path: "mesas" },
+      { label: "Histórico", path: "historico" },
+    ],
+  },
+  {
+    label: "Catálogo & Estoque",
+    items: [
+      { label: "Cardápio", path: "cardapio" },
+      { label: "Estoque", path: "estoque" },
+      { label: "Produção", path: "producao" },
+      { label: "Fornecedores", path: "fornecedores" },
+    ],
+  },
+  {
+    label: "Financeiro",
+    items: [
+      { label: "Fluxo de Caixa", path: "financeiro" },
+      { label: "Entradas e Saídas", path: "entradas-saidas" },
+      { label: "Relatórios", path: "relatorios" },
+      { label: "Notas Fiscais", path: "notas-fiscais" },
+    ],
+  },
+  {
+    label: "Clientes & Marketing",
+    items: [
+      { label: "Clientes — CRM", path: "clientes" },
+      { label: "Fidelidade", path: "fidelidade" },
+      { label: "Promoções", path: "promocoes" },
+      { label: "Combos", path: "combos" },
+      { label: "WhatsApp", path: "whatsapp" },
+    ],
+  },
+  {
+    label: "Administração",
+    items: [
+      { label: "Configurações", path: "configuracoes" },
+      { label: "Equipe", path: "equipe" },
+      { label: "Downloads", path: "downloads" },
+      { label: "Manual e Ajuda", path: "manual" },
+    ],
+  },
+];
+
+function navigateTo(navPath) {
+  if (!mainWindow) return;
+  if (!currentSlug) {
+    // Ainda não sabemos o tenant (ex: operador está na tela de login) — não há pra onde
+    // navegar ainda, então só avisa em vez de montar uma URL quebrada.
+    dialog.showMessageBox(mainWindow, {
+      type: "info",
+      message: "Faça login primeiro para navegar pelo menu.",
+    });
+    return;
+  }
+  mainWindow.webContents.send("nav:go-to", `/dashboard/${currentSlug}/${navPath}`);
+}
+
+// Barra de menu nativa (PDV / Navegar / Exibir) — inclui um menu "Navegar" com todas as
+// telas do dashboard, agrupadas exatamente como no menu lateral do site (Operação,
+// Catálogo & Estoque, Financeiro, Clientes & Marketing, Administração). Clicar num item
+// manda o renderer trocar de rota (ver navigateTo acima e o listener nav:go-to no
+// App.tsx) sem recarregar a página inteira. Os atalhos de teclado abaixo continuam
+// funcionando em paralelo (F11 tela cheia, F9 impressora, Ctrl+R, Ctrl+Q, zoom).
+function buildAppMenu() {
+  const zoomPercent = Math.round(getZoomFactor() * 100);
+  return Menu.buildFromTemplate([
+    {
+      label: "PDV",
+      submenu: [
+        { label: "Recarregar", accelerator: "CmdOrCtrl+R", click: () => mainWindow?.reload() },
+        { label: "Sair", accelerator: "CmdOrCtrl+Q", click: () => confirmAndQuit() },
+      ],
+    },
+    {
+      label: "Navegar",
+      submenu: NAV_GROUPS.map((group) => ({
+        label: group.label,
+        submenu: group.items.map((item) => ({
+          label: item.label,
+          click: () => navigateTo(item.path),
+        })),
+      })),
+    },
+    {
+      label: "Exibir",
+      submenu: [
+        {
+          label: "Tela Cheia",
+          accelerator: "F11",
+          type: "checkbox",
+          checked: mainWindow?.isFullScreen() ?? false,
+          click: () => mainWindow?.setFullScreen(!mainWindow.isFullScreen()),
+        },
+        { type: "separator" },
+        { label: `Zoom: ${zoomPercent}%`, enabled: false },
+        { label: "Aumentar Zoom", accelerator: "CmdOrCtrl+=", click: () => setZoomFactor(getZoomFactor() + ZOOM_STEP) },
+        { label: "Diminuir Zoom", accelerator: "CmdOrCtrl+-", click: () => setZoomFactor(getZoomFactor() - ZOOM_STEP) },
+        { label: "Restaurar Zoom Padrão", accelerator: "CmdOrCtrl+0", click: () => setZoomFactor(1) },
+        { type: "separator" },
+        { label: "Configurar Impressora...", accelerator: "F9", click: () => openPrinterConfigWindow(mainWindow) },
+      ],
+    },
+  ]);
+}
+
+// Reconstrói o menu inteiro sempre que o zoom muda, só pra atualizar o label "Zoom: N%" —
+// o Electron não tem binding reativo de label, então é preciso remontar o template.
+function refreshAppMenu() {
+  Menu.setApplicationMenu(buildAppMenu());
+}
+
+// Atalhos de teclado equivalentes às ações do menu Exibir — continuam funcionando mesmo
+// com o menu nativo visível, pra quem já tinha o hábito de usar F11/F9/Ctrl+R direto.
 function registerShortcuts(win) {
   win.webContents.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown") return;
@@ -71,16 +195,6 @@ function createWindow() {
     show: false,
     icon: path.join(__dirname, "..", "assets", "icon.png"),
     backgroundColor: "#0A1628",
-    // Sem a faixa de menu nativa (PDV/Exibir) nem a barra de título separada do Windows —
-    // titleBarStyle "hidden" com overlay mantém só os botões de minimizar/maximizar/
-    // fechar (com a cor combinando com o app), integrados numa única faixa fina no topo,
-    // em vez de duas faixas cinzas empilhadas. Cara de app de desktop de verdade.
-    titleBarStyle: "hidden",
-    titleBarOverlay: {
-      color: "#0A1628",
-      symbolColor: "#94A3B8",
-      height: 36,
-    },
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -91,9 +205,7 @@ function createWindow() {
     },
   });
 
-  // Nenhum menu nativo — os mesmos atalhos (F11, F9, Ctrl+R, Ctrl+Q, zoom) continuam
-  // funcionando via before-input-event, registrado logo abaixo.
-  Menu.setApplicationMenu(null);
+  refreshAppMenu();
   registerShortcuts(mainWindow);
 
   mainWindow.once("ready-to-show", () => {
@@ -141,6 +253,12 @@ async function confirmAndQuit() {
 }
 
 ipcMain.handle("app:request-quit", confirmAndQuit);
+
+// Renderer avisa qual tenant (slug) está aberto — usado por navigateTo() pra montar a
+// URL de destino quando o operador clica um item do menu "Navegar".
+ipcMain.on("nav:report-slug", (_event, slug) => {
+  currentSlug = slug || null;
+});
 
 // Auto-update: checa no servidor (public/downloads/pdv-updates/ no VPS) se existe uma
 // versão nova, baixa em segundo plano e instala no próximo fechamento do app — assim uma

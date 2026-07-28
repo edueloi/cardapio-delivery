@@ -108,20 +108,9 @@ export default function DashboardShell({
     return () => document.removeEventListener("click", handler);
   }, [openTopGroupId]);
 
-  // Rodando dentro do app desktop Electron (PDV), sem barra de menu nativa — os botões
-  // de minimizar/maximizar/fechar da janela ficam sobrepostos (titleBarOverlay) numa
-  // faixa de 36px no topo, então o header e a sidebar precisam abrir espaço pra não
-  // ficarem escondidos atrás deles.
-  const isDesktopApp = typeof window !== "undefined" && !!(window as any).pdvDesktop?.isDesktopApp;
-
   return (
     <>
-      <div
-        className={cn(
-          "bg-[#F4F6FA] flex flex-col xl:flex-row font-sans relative overflow-hidden",
-          isDesktopApp ? "mt-9 h-[calc(100vh-2.25rem)] h-[calc(100dvh-2.25rem)]" : "h-screen h-[100dvh]"
-        )}
-      >
+      <div className="bg-[#F4F6FA] flex flex-col xl:flex-row font-sans relative h-screen h-[100dvh] overflow-hidden">
 
       {/* ══ MOBILE TOPBAR ══ */}
       <div className="xl:hidden shrink-0 z-40 bg-[#0A1628] border-b border-white/[0.07]">

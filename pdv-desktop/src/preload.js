@@ -8,6 +8,20 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("pdvDesktop", {
   isDesktopApp: true,
 
+  // Avisa o processo main qual tenant (slug) está aberto agora — usado pra montar os
+  // links do menu nativo (Navegar → Visão Geral, PDV, Cardápio...) apontando pro tenant
+  // certo. Chamado pelo App.tsx sempre que o slug na URL muda.
+  reportCurrentSlug: (slug) => ipcRenderer.send("nav:report-slug", slug),
+
+  // Recebe do processo main qual rota navegar quando o operador clica um item do menu
+  // nativo — o próprio App.tsx decide como navegar (React Router), sem recarregar a
+  // página inteira nem perder o estado da sessão/socket.
+  onNavigate: (callback) => {
+    const handler = (_event, path) => callback(path);
+    ipcRenderer.on("nav:go-to", handler);
+    return () => ipcRenderer.removeListener("nav:go-to", handler);
+  },
+
   printReceipt: async (data) => {
     const result = await ipcRenderer.invoke("printer:print-receipt", data);
     if (!result.ok) {
