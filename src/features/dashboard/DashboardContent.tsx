@@ -104,7 +104,7 @@ export default function DashboardContent({
   const preparingOrders = orders.filter((order) => order.status === "PREPARING").length;
   const shippedOrders = orders.filter((order) => order.status === "SHIPPED").length;
   const delayedOrders = orders.filter((order) => (order.status === "PENDING" || order.status === "PREPARING") && Date.now() - new Date(order.createdAt).getTime() > 30 * 60000).length;
-  const activeOrders = orders.filter((order) => order.status !== "DELIVERED" && order.status !== "CANCELLED");
+  const activeOrders = orders.filter((order) => order.status !== "DELIVERED" && order.status !== "CANCELLED" && order.status !== "MERGED");
 
   // If the active tab is not accessible, show the access denied screen
   if (!allowed(activeTab)) return <AccessDenied />;
@@ -183,7 +183,7 @@ export default function DashboardContent({
             </div>
             <Utensils className="w-24 h-24 sm:w-32 sm:h-32 absolute -right-6 -bottom-6 sm:-right-8 sm:-bottom-8 text-[#C9A227]/15 rotate-12" />
           </div>
-          <MenuManagement tenant={tenant} refresh={refreshTenant} />
+          <MenuManagement tenant={tenant} refresh={refreshTenant} membership={membership} />
         </div>
       )}
 

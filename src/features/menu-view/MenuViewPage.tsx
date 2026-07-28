@@ -44,6 +44,14 @@ const fmt = (n: number) =>
 
 const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 
+// Formata a escolha de uma etapa do combo pro resumo/nota do pedido — cobre os 3 casos:
+// sabor único, meio a meio, e múltiplas unidades com sabor independente (ex: "2 espetos").
+function formatSelectionChoice(s: BundleStepSelection): string {
+  if (s.flavorMode === "half") return `½ ${s.halfA?.productName} + ½ ${s.halfB?.productName}`;
+  if (s.multi && s.multi.length > 1) return s.multi.map((p) => p.productName).join(" + ");
+  return `${s.productName}${s.variantName ? ` (${s.variantName})` : ""}`;
+}
+
 function checkIsOpen(tenant: Tenant | null): boolean {
   if (!tenant) return false;
   if (tenant.isOpen === false) return false;
@@ -526,10 +534,7 @@ export default function MenuViewPage() {
         .filter((i) => (i as BundleCartItem).type === "bundle")
         .map((i) => {
           const bi = i as BundleCartItem;
-          const lines = bi.selections.map((s) => {
-            if (s.flavorMode === "half") return `${s.stepLabel}: ½ ${s.halfA?.productName} + ½ ${s.halfB?.productName}`;
-            return `${s.stepLabel}: ${s.productName}${s.variantName ? ` (${s.variantName})` : ""}`;
-          });
+          const lines = bi.selections.map((s) => `${s.stepLabel}: ${formatSelectionChoice(s)}`);
           return `[COMBO: ${bi.bundle.name}${bi.quantity > 1 ? ` x${bi.quantity}` : ""}]\n${lines.join("\n")}${bi.notes ? `\nObs: ${bi.notes}` : ""}`;
         })
         .join("\n\n");
@@ -543,14 +548,14 @@ export default function MenuViewPage() {
           // Enviar como item com productId do primeiro produto selecionado no combo
           const firstSel = bi.selections[0];
           if (!firstSel) return [];
-          const pid = firstSel.productId ?? firstSel.halfA?.productId;
+          const pid = firstSel.productId ?? firstSel.halfA?.productId ?? firstSel.multi?.[0]?.productId;
           if (!pid) return [];
           return [{
             productId: pid,
-            productVariantId: firstSel.variantId ?? firstSel.halfA?.variantId ?? null,
+            productVariantId: firstSel.variantId ?? firstSel.halfA?.variantId ?? firstSel.multi?.[0]?.variantId ?? null,
             quantity: bi.quantity,
             // Override de preço: preço do combo total / qty (o servidor recalcula pelo produto, mas anotamos no notes)
-            notes: `[COMBO: ${bi.bundle.name}] ${bi.selections.map(s => s.flavorMode === "half" ? `${s.stepLabel}: ½${s.halfA?.productName}+½${s.halfB?.productName}` : `${s.stepLabel}: ${s.productName}`).join(" | ")}${bi.notes ? ` | Obs: ${bi.notes}` : ""}`,
+            notes: `[COMBO: ${bi.bundle.name}] ${bi.selections.map(s => `${s.stepLabel}: ${formatSelectionChoice(s)}`).join(" | ")}${bi.notes ? ` | Obs: ${bi.notes}` : ""}`,
           }];
         });
 
@@ -2006,7 +2011,7 @@ function DesktopCart({ cart, total, deliveryFee, storeOpen, fmt, updateQty, remo
                         <X className="w-2.5 h-2.5" />
                       </button>
                     </div>
-                    <p className="text-[9px] text-white/30 font-medium mt-0.5 line-clamp-1">{bi.selections.map(s => s.flavorMode === "half" ? `½${s.halfA?.productName}+½${s.halfB?.productName}` : s.productName).join(" · ")}</p>
+                    <p className="text-[9px] text-white/30 font-medium mt-0.5 line-clamp-1">{bi.selections.map(s => formatSelectionChoice(s)).join(" · ")}</p>
                     <div className="flex items-center justify-between mt-1.5">
                       <div className="flex items-center gap-1 bg-white/10 rounded-md p-0.5">
                         <button onClick={() => updateQty(idx, -1)} className="w-4 h-4 rounded flex items-center justify-center text-white/50 hover:bg-white/10"><Minus className="w-2.5 h-2.5" /></button>
@@ -2115,9 +2120,7 @@ function CartPanel({ cart, total, deliveryFee, storeOpen, fmt, updateQty, remove
                       <div className="mt-1.5 space-y-0.5">
                         {bi.selections.map((s, si) => (
                           <p key={si} className="text-[11px] text-white/40 leading-relaxed line-clamp-1">
-                            {s.flavorMode === "half"
-                              ? `${s.stepLabel}: ½ ${s.halfA?.productName} + ½ ${s.halfB?.productName}`
-                              : `${s.stepLabel}: ${s.productName}${s.variantName ? ` (${s.variantName})` : ""}`}
+                            {s.stepLabel}: {formatSelectionChoice(s)}
                           </p>
                         ))}
                       </div>

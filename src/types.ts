@@ -728,6 +728,9 @@ export interface BundleStepSelection {
   // half: dois produtos
   halfA?: { productId: string; productName: string; variantId?: string; variantName?: string };
   halfB?: { productId: string; productName: string; variantId?: string; variantName?: string };
+  // single com qty > 1 (ex: "2 espetos tradicionais"): um sabor independente por unidade.
+  // productId/productName acima ficam com a 1ª unidade por compatibilidade; "multi" tem todas.
+  multi?: { productId: string; productName: string; variantId?: string; variantName?: string }[];
 }
 
 export interface BundleCartItem {

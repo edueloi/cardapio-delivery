@@ -35,6 +35,8 @@ contextBridge.exposeInMainWorld("pdvDesktop", {
   },
 });
 
-// Fechar o app, ajustar zoom, recarregar e configurar a impressora ficam na barra de
-// menu nativa (PDV / Exibir, ver main.js → buildAppMenu) — a janela agora é uma janela
-// normal do Windows, com essa barra sempre visível no topo.
+// Sem barra de menu nativa — fechar o app, ajustar zoom, recarregar, tela cheia e
+// configurar a impressora agora são só atalhos de teclado (ver main.js →
+// registerShortcuts). A faixa de 36px reservada pelos botões nativos de
+// minimizar/maximizar/fechar (titleBarOverlay) é a única coisa que o app web precisa
+// deixar livre no topo — ver isDesktopApp acima, usado por DashboardShell.tsx.

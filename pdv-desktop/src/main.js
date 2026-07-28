@@ -22,52 +22,44 @@ function setZoomFactor(factor) {
   const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(factor * 100) / 100));
   store.set("zoomFactor", clamped);
   if (mainWindow) mainWindow.webContents.setZoomFactor(clamped);
-  refreshAppMenu(); // atualiza o label "Zoom: N%" no menu Exibir
   return clamped;
 }
 
 let mainWindow = null;
 
-// Barra de menu nativa (PDV / Exibir) — janela normal do Windows, com borda e
-// redimensionável, em vez do antigo modo kiosk sem bordas. Zoom, recarregar, tela cheia,
-// configurar impressora e sair ficam aqui, sempre visíveis, sem sobrepor o conteúdo da
-// página nem depender de atalho/clique direito que o operador precisa descobrir sozinho.
-function buildAppMenu() {
-  const zoomPercent = Math.round(getZoomFactor() * 100);
-  return Menu.buildFromTemplate([
-    {
-      label: "PDV",
-      submenu: [
-        { label: "Recarregar", accelerator: "CmdOrCtrl+R", click: () => mainWindow?.reload() },
-        { label: "Sair", accelerator: "CmdOrCtrl+Q", click: () => confirmAndQuit() },
-      ],
-    },
-    {
-      label: "Exibir",
-      submenu: [
-        {
-          label: "Tela Cheia",
-          accelerator: "F11",
-          type: "checkbox",
-          checked: mainWindow?.isFullScreen() ?? false,
-          click: () => mainWindow?.setFullScreen(!mainWindow.isFullScreen()),
-        },
-        { type: "separator" },
-        { label: `Zoom: ${zoomPercent}%`, enabled: false },
-        { label: "Aumentar Zoom", accelerator: "CmdOrCtrl+=", click: () => setZoomFactor(getZoomFactor() + ZOOM_STEP) },
-        { label: "Diminuir Zoom", accelerator: "CmdOrCtrl+-", click: () => setZoomFactor(getZoomFactor() - ZOOM_STEP) },
-        { label: "Restaurar Zoom Padrão", accelerator: "CmdOrCtrl+0", click: () => setZoomFactor(1) },
-        { type: "separator" },
-        { label: "Configurar Impressora...", accelerator: "F9", click: () => openPrinterConfigWindow(mainWindow) },
-      ],
-    },
-  ]);
-}
+// Sem barra de menu nativa (PDV / Exibir) — o app fica com cara de programa de desktop
+// de verdade, sem aquela faixa cinza do Windows comendo espaço vertical. Todos os
+// atalhos que a barra oferecia continuam funcionando via before-input-event abaixo
+// (F11 tela cheia, F9 impressora, Ctrl+R recarregar, Ctrl+Q sair, Ctrl+/-/0 zoom) —
+// só o menu visual some, nenhuma funcionalidade é perdida.
+function registerShortcuts(win) {
+  win.webContents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown") return;
+    const ctrlOrCmd = input.control || input.meta;
 
-// Reconstrói o menu inteiro sempre que o zoom muda, só pra atualizar o label "Zoom: N%" —
-// o Electron não tem binding reativo de label, então é preciso remontar o template.
-function refreshAppMenu() {
-  Menu.setApplicationMenu(buildAppMenu());
+    if (input.key === "F11") {
+      win.setFullScreen(!win.isFullScreen());
+      event.preventDefault();
+    } else if (input.key === "F9") {
+      openPrinterConfigWindow(win);
+      event.preventDefault();
+    } else if (ctrlOrCmd && input.key.toLowerCase() === "r") {
+      win.reload();
+      event.preventDefault();
+    } else if (ctrlOrCmd && input.key.toLowerCase() === "q") {
+      confirmAndQuit();
+      event.preventDefault();
+    } else if (ctrlOrCmd && (input.key === "=" || input.key === "+")) {
+      setZoomFactor(getZoomFactor() + ZOOM_STEP);
+      event.preventDefault();
+    } else if (ctrlOrCmd && input.key === "-") {
+      setZoomFactor(getZoomFactor() - ZOOM_STEP);
+      event.preventDefault();
+    } else if (ctrlOrCmd && input.key === "0") {
+      setZoomFactor(1);
+      event.preventDefault();
+    }
+  });
 }
 
 function createWindow() {
@@ -78,6 +70,17 @@ function createWindow() {
     minHeight: 640,
     show: false,
     icon: path.join(__dirname, "..", "assets", "icon.png"),
+    backgroundColor: "#0A1628",
+    // Sem a faixa de menu nativa (PDV/Exibir) nem a barra de título separada do Windows —
+    // titleBarStyle "hidden" com overlay mantém só os botões de minimizar/maximizar/
+    // fechar (com a cor combinando com o app), integrados numa única faixa fina no topo,
+    // em vez de duas faixas cinzas empilhadas. Cara de app de desktop de verdade.
+    titleBarStyle: "hidden",
+    titleBarOverlay: {
+      color: "#0A1628",
+      symbolColor: "#94A3B8",
+      height: 36,
+    },
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -88,7 +91,10 @@ function createWindow() {
     },
   });
 
-  refreshAppMenu();
+  // Nenhum menu nativo — os mesmos atalhos (F11, F9, Ctrl+R, Ctrl+Q, zoom) continuam
+  // funcionando via before-input-event, registrado logo abaixo.
+  Menu.setApplicationMenu(null);
+  registerShortcuts(mainWindow);
 
   mainWindow.once("ready-to-show", () => {
     mainWindow.maximize();

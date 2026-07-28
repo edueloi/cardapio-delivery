@@ -43,6 +43,7 @@ const PERM_TABS = [
   { id: "promotions",  label: "Promoções",         group: "Marketing" },
   { id: "whatsapp",    label: "WhatsApp",          group: "Marketing" },
   { id: "downloads",   label: "Downloads",         group: "Administração" },
+  { id: "manual",      label: "Manual de Ajuda",   group: "Administração" },
 ] as const;
 
 const PERM_GROUPS = ["Operação", "Catálogo", "Financeiro", "Marketing", "Administração"];

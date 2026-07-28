@@ -42,6 +42,7 @@ function getUnitPrice(product: Product, step: BundleStep): number {
 
 export default function BundleModal({ bundle, categories, onClose, onAdd }: BundleModalProps) {
   const [stepIdx, setStepIdx] = useState(0);
+  const [unitIdx, setUnitIdx] = useState(0); // qual unidade (0..step.qty-1) está sendo escolhida, quando flavorMode === "single" e qty > 1
   const [selections, setSelections] = useState<(BundleStepSelection | null)[]>(
     bundle.steps.map(() => null)
   );
@@ -55,28 +56,48 @@ export default function BundleModal({ bundle, categories, onClose, onAdd }: Bund
     [currentStep, categories]
   );
   const currentSel = selections[stepIdx];
+  const unitsNeeded = currentStep?.flavorMode === "single" ? Math.max(1, currentStep.qty) : 1;
 
   const allDone = selections.every((s) => s !== null);
   const isLast = stepIdx === bundle.steps.length - 1;
 
   function selectSingle(product: Product) {
     const variant = getVariantForStep(product, currentStep);
+    const unitPick = {
+      productId: product.id,
+      productName: product.name,
+      variantId: variant?.id,
+      variantName: variant?.name,
+    };
+    const prevMulti = (currentSel as BundleStepSelection | null)?.multi ?? [];
+    const nextMulti = [...prevMulti];
+    nextMulti[unitIdx] = unitPick;
+
     const upd: BundleStepSelection = {
       stepId: currentStep.id,
       stepLabel: currentStep.label,
       flavorMode: "single",
       qty: currentStep.qty,
-      productId: product.id,
-      productName: product.name,
-      variantId: variant?.id,
-      variantName: variant?.name,
+      productId: nextMulti[0].productId,
+      productName: nextMulti[0].productName,
+      variantId: nextMulti[0].variantId,
+      variantName: nextMulti[0].variantName,
       unitPrice: getUnitPrice(product, currentStep),
+      multi: unitsNeeded > 1 ? nextMulti : undefined,
     };
     const next = [...selections];
     next[stepIdx] = upd;
     setSelections(next);
-    // auto-advance after short delay
+
+    // Se essa etapa pede mais de uma unidade (ex: "2 espetos"), pede o sabor da
+    // próxima unidade antes de avançar de etapa — sem isso a 2ª unidade nunca
+    // tinha sabor próprio, ficava sempre igual à 1ª.
     setTimeout(() => {
+      if (unitIdx < unitsNeeded - 1) {
+        setUnitIdx((u) => u + 1);
+        return;
+      }
+      setUnitIdx(0);
       if (stepIdx < bundle.steps.length - 1) setStepIdx((i) => i + 1);
       else setShowSummary(true);
     }, 280);
@@ -125,6 +146,7 @@ export default function BundleModal({ bundle, categories, onClose, onAdd }: Bund
 
   function goBack() {
     if (showSummary) { setShowSummary(false); return; }
+    if (unitIdx > 0) { setUnitIdx((u) => u - 1); return; }
     if (stepIdx > 0) setStepIdx((i) => i - 1);
     else onClose();
   }
@@ -172,6 +194,9 @@ export default function BundleModal({ bundle, categories, onClose, onAdd }: Bund
               </p>
               <h2 className="text-[15px] font-black text-slate-900 leading-tight truncate">
                 {showSummary ? bundle.name : currentStep?.label}
+                {!showSummary && unitsNeeded > 1 && (
+                  <span className="ml-1.5 font-bold text-slate-400">· {unitIdx + 1}/{unitsNeeded}</span>
+                )}
               </h2>
             </div>
             <motion.button
@@ -227,9 +252,34 @@ export default function BundleModal({ bundle, categories, onClose, onAdd }: Bund
 
                 {/* SINGLE MODE */}
                 {currentStep?.flavorMode === "single" && (
+                  <>
+                    {unitsNeeded > 1 && (
+                      <div className="px-5 pt-3 flex flex-wrap items-center gap-1.5">
+                        {Array.from({ length: unitsNeeded }, (_, u) => {
+                          const pick = (currentSel as BundleStepSelection | null)?.multi?.[u];
+                          const isCurrent = u === unitIdx;
+                          return (
+                            <span
+                              key={u}
+                              className={`text-[10px] font-black px-2.5 py-1 rounded-full border ${
+                                isCurrent
+                                  ? "border-amber-300 bg-amber-50 text-amber-700"
+                                  : pick
+                                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                  : "border-slate-200 bg-slate-50 text-slate-400"
+                              }`}
+                            >
+                              {u + 1}ª unidade{pick ? `: ${pick.productName}` : ""}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
                   <div className="px-4 py-3 grid grid-cols-1 gap-2">
                     {products.map((product) => {
-                      const selected = currentSel?.productId === product.id;
+                      const selected = unitsNeeded > 1
+                        ? (currentSel as BundleStepSelection | null)?.multi?.[unitIdx]?.productId === product.id
+                        : currentSel?.productId === product.id;
                       const variant = getVariantForStep(product, currentStep);
                       const price = getUnitPrice(product, currentStep);
                       return (
@@ -266,7 +316,7 @@ export default function BundleModal({ bundle, categories, onClose, onAdd }: Bund
                             )}
                           </div>
                           <div className="shrink-0 flex items-center gap-2">
-                            {currentStep.qty > 1 && (
+                            {unitsNeeded === 1 && currentStep.qty > 1 && (
                               <span className="text-[10px] text-slate-400 font-bold">{currentStep.qty}×</span>
                             )}
                             <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${selected ? "border-amber-400" : "border-slate-200"}`}>
@@ -284,6 +334,7 @@ export default function BundleModal({ bundle, categories, onClose, onAdd }: Bund
                       );
                     })}
                   </div>
+                  </>
                 )}
 
                 {/* HALF MODE */}
@@ -427,13 +478,25 @@ export default function BundleModal({ bundle, categories, onClose, onAdd }: Bund
                           <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{step.label}</p>
                           <motion.button
                             whileTap={{ scale: 0.9 }}
-                            onClick={() => { setShowSummary(false); setStepIdx(i); }}
+                            onClick={() => { setShowSummary(false); setStepIdx(i); setUnitIdx(0); }}
                             className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg bg-white border border-slate-200 text-slate-500 hover:text-slate-800 transition-colors"
                           >
                             Editar
                           </motion.button>
                         </div>
-                        {sel.flavorMode === "single" ? (
+                        {sel.flavorMode === "single" && sel.multi && sel.multi.length > 1 ? (
+                          <div className="space-y-1.5">
+                            {sel.multi.map((pick, u) => (
+                              <div key={u} className="flex items-center gap-2.5">
+                                <div className="w-2 h-2 rounded-full shrink-0" style={{ background: BRAND }} />
+                                <p className="text-sm font-bold text-slate-800">
+                                  {pick.productName}
+                                  {pick.variantName && <span className="font-normal text-slate-500"> · {pick.variantName}</span>}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        ) : sel.flavorMode === "single" ? (
                           <div className="flex items-center gap-2.5">
                             <div className="w-2 h-2 rounded-full shrink-0" style={{ background: BRAND }} />
                             <p className="text-sm font-bold text-slate-800">

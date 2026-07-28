@@ -3472,6 +3472,15 @@ async function updateOrderStatus(
     );
   }
 
+  // Avisa qualquer painel/dashboard aberto (Painel de Pedidos, PDV, outra aba) da
+  // mudança de status — sem isso um pedido cancelado pelo painel da Cozinha (que
+  // usa essa mesma função mas nunca emitia nada) ficava "preso" na coluna antiga
+  // do Painel de Pedidos até a próxima atualização manual da página.
+  io.to(`tenant-${updatedOrder.tenantId}`).emit(
+    "order-status-updated",
+    updatedOrder
+  );
+
   return updatedOrder;
 }
 
@@ -5351,16 +5360,28 @@ app.post(
       // esses pedidos contariam como vendas duplicadas nos relatórios (cada um com seu
       // próprio paymentMethod), ao lado da venda real. MERGED os tira das listas de
       // "mesa ocupada" sem nunca contar como receita.
-      await prisma.order.updateMany({
+      const ordersToClear = await prisma.order.findMany({
         where: {
           tenantId: tenant.id,
           tableId: tableId,
           status: { notIn: ["DELIVERED", "CANCELLED", "MERGED"] },
         },
-        data: { status: "MERGED" },
+        select: { id: true },
       });
 
+      const clearedOrders = await Promise.all(
+        ordersToClear.map((o) =>
+          prisma.order.update({ where: { id: o.id }, data: { status: "MERGED" } })
+        )
+      );
+
       io.to(`${tenant.id}-mesa-${tableId}`).emit("table-update");
+      // Também avisa qualquer painel/dashboard aberto (outra aba, outro dispositivo)
+      // de que esses pedidos saíram de AWAITING_PAYMENT — sem isso o alerta de
+      // "aguardando caixa há 5 minutos" continuava aparecendo lá mesmo já finalizado.
+      for (const o of clearedOrders) {
+        io.to(`tenant-${tenant.id}`).emit("order-status-updated", o);
+      }
       res.json({ ok: true });
     } catch (error) {
       console.error(error);
@@ -5386,14 +5407,25 @@ app.post(
     if (!tenant) return;
 
     try {
-      await prisma.order.updateMany({
+      const orderToClear = await prisma.order.findFirst({
         where: {
           id: req.params.orderId,
           tenantId: tenant.id,
           status: { notIn: ["DELIVERED", "CANCELLED", "MERGED"] },
         },
-        data: { status: "MERGED" },
       });
+
+      if (orderToClear) {
+        const clearedOrder = await prisma.order.update({
+          where: { id: orderToClear.id },
+          data: { status: "MERGED" },
+        });
+
+        // Avisa qualquer painel/dashboard aberto que esta comanda saiu de
+        // AWAITING_PAYMENT, senão o alerta de "aguardando caixa há 5 minutos"
+        // continua aparecendo lá mesmo já finalizada.
+        io.to(`tenant-${tenant.id}`).emit("order-status-updated", clearedOrder);
+      }
 
       io.to(`tenant-${tenant.id}`).emit("menu-updated", {
         tenantId: tenant.id,

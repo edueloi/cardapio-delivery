@@ -47,6 +47,7 @@ import {
 } from "../../../../components";
 import { apiFetch } from "../../../../lib/api";
 import { Tenant } from "../../../../types";
+import { canAccess, type MyMembership } from "../../types";
 import {
   ImageUploader,
   InventoryLinkField,
@@ -284,7 +285,8 @@ function SortableCategoryCard({
   );
 }
 
-export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, refresh: () => void }) {
+export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant | null, refresh: () => void, membership?: MyMembership | null }) {
+  const canManageInventory = canAccess(membership ?? null, "inventory");
   const toast = useToast();
   const [search, setSearch] = useState("");
   const [selectedCat, setSelectedCat] = useState<string>("all");
@@ -935,13 +937,15 @@ export function MenuManagement({ tenant, refresh }: { tenant: Tenant | null, ref
                 >
                   <span>📋</span> Duplicar no Catálogo
                 </button>
-                <button
-                  type="button"
-                  onClick={duplicateProductToInventory}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors border border-amber-100"
-                >
-                  <span>📦</span> Criar no Estoque
-                </button>
+                {canManageInventory && (
+                  <button
+                    type="button"
+                    onClick={duplicateProductToInventory}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors border border-amber-100"
+                  >
+                    <span>📦</span> Criar no Estoque
+                  </button>
+                )}
               </div>
             )}
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">

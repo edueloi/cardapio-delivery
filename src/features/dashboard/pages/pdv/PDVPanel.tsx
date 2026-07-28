@@ -20,11 +20,23 @@ import socket from "../../../../lib/socket";
 const fmt = (n: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
 
-const maskCpf = (v: string) =>
-  v.replace(/\D/g, "").slice(0, 11)
+// Aceita CPF (11 dígitos, pessoa física) ou CNPJ (14 dígitos, pessoa jurídica) —
+// formata como CPF enquanto o usuário digita até 11 dígitos, e vira máscara de
+// CNPJ automaticamente a partir do 12º dígito.
+const maskCpfCnpj = (v: string) => {
+  const d = v.replace(/\D/g, "").slice(0, 14);
+  if (d.length <= 11) {
+    return d
+      .replace(/(\d{3})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+  }
+  return d
+    .replace(/(\d{2})(\d)/, "$1.$2")
     .replace(/(\d{3})(\d)/, "$1.$2")
-    .replace(/(\d{3})(\d)/, "$1.$2")
-    .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+    .replace(/(\d{3})(\d)/, "$1/$2")
+    .replace(/(\d{4})(\d{1,2})$/, "$1-$2");
+};
 
 const maskPhone = (v: string) => {
   const d = v.replace(/\D/g, "").slice(0, 11);
@@ -67,6 +79,9 @@ interface PaymentSplitEntry {
   amount: number;
   cardBrand?: string;
   installments?: number;
+  /** Só presente quando o split veio da divisão por item — nome da pessoa e itens que ela está pagando, pra conferência visual antes de finalizar. */
+  personLabel?: string;
+  personItems?: string;
 }
 
 interface PDVPanelProps {
@@ -142,6 +157,9 @@ export default function PDVPanel({
   const [productModalEditIndex, setProductModalEditIndex] = useState<number | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
+  // Painel de produtos dentro da própria tela de pagamento — pra dar pra adicionar item
+  // esquecido sem sair do checkout e perder a divisão por pessoa já montada.
+  const [showAddItemsPanel, setShowAddItemsPanel] = useState(false);
   const [showComandaModal, setShowComandaModal] = useState(false);
   const [comandaNumber, setComandaNumber] = useState("");
   const [nextTicket, setNextTicket] = useState<number | null>(null);
@@ -187,6 +205,12 @@ export default function PDVPanel({
   const [paymentSplits, setPaymentSplits] = useState<PaymentSplitEntry[]>([]);
   const [isSplitMode, setIsSplitMode] = useState(false);
   const [groupSplitCount, setGroupSplitCount] = useState("2");
+  // Divisão por item — em vez de dividir o valor igualmente, cada item do pedido é
+  // marcado com uma "pessoa" (índice em splitPersonLabels); o que não for marcado é
+  // dividido em partes iguais entre todas as pessoas na hora de gerar os splits.
+  const [splitByItem, setSplitByItem] = useState(false);
+  const [splitPersonLabels, setSplitPersonLabels] = useState<string[]>(["Pessoa 1", "Pessoa 2"]);
+  const [itemPersonAssignment, setItemPersonAssignment] = useState<Record<string, number | null>>({});
   const [detailActionId, setDetailActionId] = useState<string | null>(null);
 
   // Stone terminal flow
@@ -243,7 +267,7 @@ export default function PDVPanel({
     setLinkedCustomer(customer);
     setCustomerName(customer.name);
     setCustomerPhone(customer.phone);
-    if (customer.cpf) setCustomerCpf(maskCpf(customer.cpf));
+    if (customer.cpf) setCustomerCpf(maskCpfCnpj(customer.cpf));
     setCustomerSearchOpen(false);
     setCustomerSearchTerm("");
   };
@@ -727,6 +751,31 @@ export default function PDVPanel({
 
   const subtotal = existingContextSubtotal + cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
 
+  // Linhas cobráveis do pedido, com uma chave de linha estável — usada pra divisão por
+  // item (itemPersonAssignment). Itens do carrinho não têm id próprio (só existem no
+  // banco após o checkout), então a chave usa o índice na lista combinada.
+  const billableLines = useMemo(
+    () => [
+      ...existingContextItems.map((item) => ({
+        lineKey: `existing-${item.id}`,
+        quantity: item.quantity,
+        price: item.price,
+        name: item.product?.name || "",
+        notes: (item as any).notes as string | undefined,
+        total: item.price * item.quantity,
+      })),
+      ...cart.map((item, idx) => ({
+        lineKey: `cart-${idx}`,
+        quantity: item.quantity,
+        price: item.price,
+        name: item.product?.name || "",
+        notes: item.notes,
+        total: item.price * item.quantity,
+      })),
+    ],
+    [existingContextItems, cart]
+  );
+
   const discountAmount = useMemo(() => {
     const v = parseFloat(discountValue || "0");
     if (!v) return 0;
@@ -1038,6 +1087,96 @@ export default function PDVPanel({
     toast.success(`Divisão gerada para ${count} pessoas.`);
   };
 
+  // Quanto cada pessoa deve pagar, considerando os itens marcados pra ela + uma fração
+  // igual dos itens não marcados (ninguém escolheu de quem é) — em centavos exatos, com
+  // o resto de arredondamento absorvido pela primeira pessoa, igual à divisão por grupo.
+  // Também devolve os nomes dos itens de cada pessoa, pra mostrar na linha do split e o
+  // operador conferir visualmente antes de finalizar (ex: "só comprei uma Coca").
+  const computePersonAmounts = (personCount: number) => {
+    const perPersonCents = Array.from({ length: personCount }, () => 0);
+    const perPersonItems: string[][] = Array.from({ length: personCount }, () => []);
+    const unassignedLines: typeof billableLines = [];
+    for (const line of billableLines) {
+      const personIdx = itemPersonAssignment[line.lineKey];
+      if (personIdx != null && personIdx < personCount) {
+        perPersonCents[personIdx] += Math.round(line.total * 100);
+        perPersonItems[personIdx].push(`${line.quantity}x ${line.name}`);
+      } else {
+        unassignedLines.push(line);
+      }
+    }
+    const unassignedTotalCents = unassignedLines.reduce((acc, l) => acc + Math.round(l.total * 100), 0);
+    if (unassignedTotalCents > 0) {
+      const share = splitValueByCount(unassignedTotalCents / 100, personCount);
+      share.forEach((amount, idx) => {
+        perPersonCents[idx] += Math.round(amount * 100);
+        if (unassignedLines.length > 0) perPersonItems[idx].push("parte dos itens não marcados");
+      });
+    }
+    return {
+      amounts: perPersonCents.map((cents) => cents / 100),
+      items: perPersonItems.map((names) => names.join(", ")),
+    };
+  };
+
+  const handleGenerateItemSplit = () => {
+    if (paymentMethod === "STONE") {
+      toast.warning("A divisão por item não está disponível para maquininha Stone.");
+      return;
+    }
+    const personCount = splitPersonLabels.length;
+    if (personCount < 2) {
+      toast.warning("Adicione pelo menos 2 pessoas para dividir por item.");
+      return;
+    }
+    const { amounts, items } = computePersonAmounts(personCount);
+    // Aplica a mesma taxa de maquininha proporcionalmente, igual à divisão por grupo,
+    // pra que a soma dos splits ainda bata com finalTotal (incluindo taxa) no final.
+    const method = paymentMethod as SplitPaymentMethod;
+    const nextBrand = getNormalizedBrandForMethod(method, cardBrand);
+    const nextInstallments = getNormalizedInstallmentsForMethod(method, nextBrand, installments) || 1;
+    const rate = getFeeInfoForMethod(method, nextBrand, nextInstallments, 1).rate;
+    const grossFactor = 1 / Math.max(0.01, 1 - rate);
+
+    setPaymentSplits(
+      amounts.map((amount, index) => ({
+        id: `person-${Date.now()}-${index}`,
+        method,
+        amount: roundMoney(amount * grossFactor),
+        cardBrand: nextBrand,
+        installments: method === "CREDIT" ? nextInstallments : undefined,
+        personLabel: splitPersonLabels[index],
+        personItems: items[index] || undefined,
+      }))
+    );
+    setIsSplitMode(true);
+    toast.success(`Divisão por item gerada para ${personCount} pessoas.`);
+  };
+
+  const handleAddSplitPerson = () => {
+    setSplitPersonLabels((prev) => [...prev, `Pessoa ${prev.length + 1}`]);
+  };
+
+  const handleRemoveSplitPerson = (index: number) => {
+    setSplitPersonLabels((prev) => prev.filter((_, i) => i !== index));
+    setItemPersonAssignment((prev) => {
+      const next: Record<string, number | null> = {};
+      for (const [lineKey, personIdx] of Object.entries(prev)) {
+        if (personIdx == null) { next[lineKey] = null; continue; }
+        if (personIdx === index) { next[lineKey] = null; continue; }
+        next[lineKey] = personIdx > index ? personIdx - 1 : personIdx;
+      }
+      return next;
+    });
+  };
+
+  const handleAssignItemToPerson = (lineKey: string, personIndex: number) => {
+    setItemPersonAssignment((prev) => ({
+      ...prev,
+      [lineKey]: prev[lineKey] === personIndex ? null : personIndex,
+    }));
+  };
+
   // Cleanup stone polling on unmount
   useEffect(() => () => { if (stonePollRef.current) clearInterval(stonePollRef.current); }, []);
 
@@ -1262,7 +1401,9 @@ export default function PDVPanel({
         clearCart();
         setShowCheckout(false);
         setShowSuccess(true);
-        setTimeout(() => setShowSuccess(false), 3000);
+        // Com fiscal habilitado, deixa o aviso aberto até fechar manualmente — 3s não dá
+        // tempo de digitar/conferir o CPF-CNPJ e emitir a NFC-e antes de sumir sozinho.
+        if (!fiscalEnabled) setTimeout(() => setShowSuccess(false), 3000);
         onOrderCreated?.();
       } catch (err) {
         console.error(err);
@@ -1276,7 +1417,7 @@ export default function PDVPanel({
     const orderData = {
       customerName: customerName || currentContextLabel || "Venda PDV",
       customerPhone: customerPhone || "00000000000",
-      customerCpf: customerCpf.replace(/\D/g, "").length === 11 ? customerCpf.replace(/\D/g, "") : undefined,
+      customerCpf: [11, 14].includes(customerCpf.replace(/\D/g, "").length) ? customerCpf.replace(/\D/g, "") : undefined,
       orderType: selectedTableId || selectedComandaId ? "DINE_IN" : "TAKEAWAY",
       tableId: selectedTableId || undefined,
       paymentMethod: useSplit ? "SPLIT" : isStone ? `STONE_${stonePaymentType.toUpperCase()}` : paymentMethod,
@@ -1331,7 +1472,7 @@ export default function PDVPanel({
       clearCart();
       setShowCheckout(false);
       setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 3000);
+      if (!fiscalEnabled) setTimeout(() => setShowSuccess(false), 3000);
       onOrderCreated?.();
     } catch (err) {
       console.error(err);
@@ -1409,7 +1550,7 @@ export default function PDVPanel({
               clearCart();
               setShowCheckout(false);
               setShowSuccess(true);
-              setTimeout(() => setShowSuccess(false), 3000);
+              if (!fiscalEnabled) setTimeout(() => setShowSuccess(false), 3000);
               onOrderCreated?.();
             }, 1500);
           } else if (poll.status === "failed" || poll.status === "canceled" || attempts > 36) {
@@ -1566,6 +1707,15 @@ export default function PDVPanel({
                   <Printer className="w-3.5 h-3.5" />
                   Imprimir
                 </button>
+                {fiscalEnabled && (
+                  <button
+                    onClick={() => setShowSuccess(false)}
+                    title="Fechar"
+                    className="flex items-center justify-center w-7 h-7 bg-white/15 hover:bg-white/25 rounded-lg transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             </div>
             {/* Botão NFC-e — aparece apenas se fiscal estiver habilitado */}
@@ -2198,10 +2348,10 @@ export default function PDVPanel({
               <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-white/30" />
               <input
                 type="text"
-                placeholder="CPF na nota (opcional — Nota Fiscal Paulista)"
+                placeholder="CPF ou CNPJ na nota (opcional)"
                 value={customerCpf}
-                maxLength={14}
-                onChange={(e) => setCustomerCpf(maskCpf(e.target.value))}
+                maxLength={18}
+                onChange={(e) => setCustomerCpf(maskCpfCnpj(e.target.value))}
                 className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-8 pr-3 text-xs text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
               />
             </div>
@@ -2901,36 +3051,23 @@ export default function PDVPanel({
           )}
       </AnimatePresence>
 
-      {/* ── Checkout Modal ── */}
+      {/* ── Tela de Pagamento — tela cheia, não modal flutuante, pra ter espaço de sobra
+          pros controles (Cancelar, Finalizar, Voltar, Adicionar mais itens) ── */}
       <AnimatePresence>
         {showCheckout && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-6"
+            className="fixed inset-0 z-[100] bg-[#0D1B3E] flex flex-col"
           >
-            <motion.div
-              initial={{ scale: 0.97, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.97, opacity: 0 }}
-              className="bg-[#0D1B3E] w-full h-full sm:w-[90vw] sm:h-[85vh] max-w-6xl rounded-[1.5rem] shadow-2xl border border-white/5 overflow-hidden flex flex-col relative"
-            >
               {/* Header — título e botão cancelar sempre visíveis, fora da área de conteúdo,
                   pra nunca competir por espaço com "Dividir Pagamento" ou outros controles. */}
               <div className="flex items-center justify-between px-5 py-3 border-b border-white/5 shrink-0">
                 <span className="text-[10px] font-black uppercase text-white/30 tracking-[0.2em]">Pagamento</span>
-                <button
-                  onClick={() => { setShowCheckout(false); setShowCartDrawer(true); }}
-                  title="Cancelar pagamento e voltar ao carrinho"
-                  className="flex items-center gap-1.5 pl-3 pr-3.5 py-1.5 rounded-full bg-red-500/15 hover:bg-red-500/25 border border-red-500/20 text-red-300 hover:text-red-200 transition-colors"
-                >
-                  <X className="w-3.5 h-3.5" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">Cancelar</span>
-                </button>
               </div>
 
               <div className="flex-1 flex flex-col md:flex-row min-h-0">
               {/* Left: Summary */}
-              <div className="w-full md:w-64 bg-black/20 p-4 flex flex-col border-r border-white/5 overflow-y-auto custom-scrollbar shrink-0">
+              <div className="w-full md:w-80 lg:w-96 bg-black/20 p-4 flex flex-col border-r border-white/5 overflow-y-auto custom-scrollbar shrink-0">
                 <button
                   onClick={() => { setShowCheckout(false); setShowCartDrawer(true); }}
                   className="flex items-center gap-2 text-white/40 hover:text-white transition-colors mb-3 group"
@@ -2939,25 +3076,178 @@ export default function PDVPanel({
                   <span className="text-[10px] font-black uppercase tracking-widest">Voltar ao Carrinho</span>
                 </button>
 
+                <button
+                  onClick={() => setShowAddItemsPanel((v) => !v)}
+                  className={`flex items-center justify-center gap-1.5 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-colors mb-3 ${
+                    showAddItemsPanel
+                      ? "bg-[#C9A227] border-[#C9A227] text-black"
+                      : "bg-white/5 border-white/10 text-white/60 hover:bg-white/10"
+                  }`}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  {showAddItemsPanel ? "Fechar produtos" : "Adicionar mais itens"}
+                </button>
+
                 <p className="text-[10px] font-black uppercase text-white/40 tracking-[0.2em] mb-1">Resumo</p>
                 <h3 className="text-base font-black text-white mb-3 truncate">
                   {currentContextLabel || customerName || "Venda Balcão"}
                 </h3>
 
-                <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar pr-1">
-                  {[...existingContextItems, ...cart.map((item) => ({
-                    id: `new-${item.product.id}`,
-                    quantity: item.quantity,
-                    price: item.price,
-                    notes: item.notes,
-                    product: item.product,
-                  }))].map((item) => (
-                    <div key={item.id} className="flex justify-between text-xs border-b border-white/5 pb-2">
-                      <span className="text-white/70 truncate mr-2">
-                        {item.quantity}x {item.product?.name}
-                        {item.notes && <span className="text-[10px] italic text-white/30 block">{item.notes}</span>}
-                      </span>
-                      <span className="font-black text-white whitespace-nowrap">{fmt(item.price * item.quantity)}</span>
+                {/* Cliente / CPF-CNPJ na nota — mesmo estado usado no carrinho, só que
+                    acessível aqui também, pra não precisar voltar pra vincular ou
+                    corrigir o documento antes de finalizar e emitir a NF. */}
+                <div className="relative mb-3 space-y-1.5">
+                  {linkedCustomer ? (
+                    <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-2.5 py-2">
+                      <div className="w-6 h-6 rounded-full bg-[#C9A227]/20 text-[#C9A227] flex items-center justify-center shrink-0 text-[10px] font-black uppercase">
+                        {linkedCustomer.name.charAt(0)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] font-bold text-white truncate">{linkedCustomer.name}</p>
+                        <p className="text-[9px] text-white/40 truncate">{linkedCustomer.phone}</p>
+                      </div>
+                      <button
+                        onClick={handleClearLinkedCustomer}
+                        className="shrink-0 w-5 h-5 rounded-md flex items-center justify-center text-white/30 hover:text-white hover:bg-white/10 transition-colors"
+                        title="Remover cliente"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setCustomerSearchOpen(true)}
+                      className="w-full flex items-center gap-2 bg-white/5 border border-white/10 hover:border-[#C9A227]/50 rounded-lg px-2.5 py-2 transition-colors text-left"
+                    >
+                      <User className="w-3 h-3 text-white/40 shrink-0" />
+                      <span className="text-[11px] font-bold text-white/50 flex-1">Cliente (opcional)</span>
+                      <ChevronRight className="w-3 h-3 text-white/30" />
+                    </button>
+                  )}
+                  {fiscalEnabled && (
+                    <div className="relative">
+                      <Hash className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-white/30" />
+                      <input
+                        type="text"
+                        placeholder="CPF ou CNPJ na nota (opcional)"
+                        value={customerCpf}
+                        maxLength={18}
+                        onChange={(e) => setCustomerCpf(maskCpfCnpj(e.target.value))}
+                        className="w-full bg-white/5 border border-white/10 rounded-lg py-1.5 pl-7 pr-2.5 text-[11px] text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
+                      />
+                    </div>
+                  )}
+
+                  {/* Popover de busca/cadastro de cliente — cópia do que já existe no
+                      carrinho, pois aquele fica escondido atrás desta tela em tela cheia. */}
+                  {customerSearchOpen && (
+                    <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-[#111d3d] border border-white/10 rounded-xl shadow-2xl overflow-hidden">
+                      <div className="p-2.5 border-b border-white/5">
+                        <div className="relative">
+                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30" />
+                          <input
+                            autoFocus
+                            type="text"
+                            placeholder="Buscar por nome, telefone ou CPF..."
+                            value={customerSearchTerm}
+                            onChange={(e) => setCustomerSearchTerm(e.target.value)}
+                            className="w-full bg-white/5 border border-white/10 rounded-lg py-2 pl-8 pr-3 text-xs text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
+                          />
+                        </div>
+                      </div>
+                      <div className="max-h-52 overflow-y-auto custom-scrollbar">
+                        {customerSearchLoading && (
+                          <p className="px-3 py-3 text-[10px] text-white/30 text-center">Buscando...</p>
+                        )}
+                        {!customerSearchLoading && customerSearchTerm.trim().length >= 2 && customerSearchResults.length === 0 && (
+                          <p className="px-3 py-3 text-[10px] text-white/30 text-center">Nenhum cliente encontrado — pode cadastrar digitando nome e telefone abaixo.</p>
+                        )}
+                        {customerSearchResults.map((c) => (
+                          <button
+                            key={c.id}
+                            onClick={() => handleSelectCustomer(c)}
+                            className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/5 transition-colors text-left"
+                          >
+                            <div className="w-6 h-6 rounded-full bg-[#C9A227]/20 text-[#C9A227] flex items-center justify-center shrink-0 text-[10px] font-black uppercase">
+                              {c.name.charAt(0)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[11px] font-bold text-white truncate">{c.name}</p>
+                              <p className="text-[9px] text-white/40 truncate">{c.phone}</p>
+                            </div>
+                            {tenant.loyaltyConfig?.enabled && (
+                              <span className="text-[9px] font-black text-[#C9A227] shrink-0">{c.loyaltyPoints} pts</span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="p-2 border-t border-white/5 grid grid-cols-2 gap-1.5">
+                        <input
+                          type="text"
+                          placeholder="Nome"
+                          value={customerName}
+                          onChange={(e) => setCustomerName(e.target.value)}
+                          className="bg-white/5 border border-white/10 rounded-lg py-1.5 px-2.5 text-[11px] text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
+                        />
+                        <div className="relative">
+                          <input
+                            type="tel"
+                            placeholder="(00) 00000-0000"
+                            value={customerPhone}
+                            onChange={(e) => setCustomerPhone(maskPhone(e.target.value))}
+                            className={`w-full bg-white/5 border rounded-lg py-1.5 px-2.5 text-[11px] text-white placeholder-white/20 focus:outline-none transition-colors ${
+                              customerPhone && !isPhoneComplete(customerPhone)
+                                ? "border-red-500/50 focus:border-red-500"
+                                : "border-white/10 focus:border-[#C9A227]"
+                            }`}
+                          />
+                          {customerPhone && !isPhoneComplete(customerPhone) && (
+                            <p className="text-[9px] text-red-400 mt-0.5 ml-1">Telefone incompleto</p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => setCustomerSearchOpen(false)}
+                          disabled={!!customerPhone && !isPhoneComplete(customerPhone)}
+                          className="col-span-2 mt-0.5 bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-40 disabled:cursor-not-allowed text-black text-[10px] font-black uppercase tracking-widest py-2 rounded-lg transition-colors"
+                        >
+                          {customerName || customerPhone ? "Usar estes dados" : "Fechar"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
+                  {billableLines.map((line) => (
+                    <div key={line.lineKey} className="border-b border-white/5 pb-2">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-white/70 truncate mr-2">
+                          {line.quantity}x {line.name}
+                          {line.notes && <span className="text-[10px] italic text-white/30 block">{line.notes}</span>}
+                        </span>
+                        <span className="font-black text-white whitespace-nowrap">{fmt(line.total)}</span>
+                      </div>
+                      {isSplitMode && splitByItem && (
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {splitPersonLabels.map((label, personIdx) => {
+                            const active = itemPersonAssignment[line.lineKey] === personIdx;
+                            return (
+                              <button
+                                key={personIdx}
+                                type="button"
+                                onClick={() => handleAssignItemToPerson(line.lineKey, personIdx)}
+                                className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full border transition-colors ${
+                                  active
+                                    ? "bg-[#C9A227] border-[#C9A227] text-black"
+                                    : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -3006,6 +3296,65 @@ export default function PDVPanel({
                 </button>
               </div>
 
+              {/* Middle: Adicionar mais itens — mesma grade de produtos do PDV, embutida
+                  aqui pra não precisar sair da tela de pagamento (e perder a divisão por
+                  pessoa já montada) só pra lançar um item esquecido. */}
+              {showAddItemsPanel && (
+                <div className="w-full md:w-72 lg:w-80 bg-[#0A1425] border-r border-white/5 flex flex-col shrink-0 min-h-0">
+                  <div className="p-3 border-b border-white/5 shrink-0">
+                    <input
+                      type="text"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      placeholder="Buscar produto..."
+                      className="w-full bg-black/20 border border-white/10 rounded-lg py-2 px-3 text-[12px] text-white placeholder:text-white/30 outline-none focus:border-[#C9A227]"
+                    />
+                  </div>
+                  <div className="flex-1 overflow-y-auto custom-scrollbar p-2.5 space-y-1.5">
+                    {filteredProducts.length === 0 ? (
+                      <p className="text-center text-[11px] text-white/30 py-8">Nenhum produto encontrado</p>
+                    ) : (
+                      filteredProducts.map((product) => {
+                        const inCart = cart.find((i) => i.product.id === product.id);
+                        return (
+                          <button
+                            key={product.id}
+                            type="button"
+                            onClick={() => {
+                              if (hasProductCustomizations(product)) {
+                                openProductOptions(product);
+                              } else {
+                                addToCart(product);
+                              }
+                            }}
+                            className={`w-full flex items-center gap-3 px-2.5 py-2.5 rounded-xl border text-left transition-colors ${
+                              inCart ? "bg-[#C9A227]/10 border-[#C9A227]/40" : "bg-white/5 border-white/10 hover:bg-white/10"
+                            }`}
+                          >
+                            <div className="w-11 h-11 bg-white/5 rounded-lg overflow-hidden relative flex items-center justify-center shrink-0">
+                              {product.imageUrl ? (
+                                <img src={product.imageUrl} className="w-full h-full object-cover" alt={product.name} />
+                              ) : (
+                                <Utensils className="w-5 h-5 text-white/20" />
+                              )}
+                              {inCart && (
+                                <div className="absolute top-0.5 left-0.5 min-w-[15px] h-[15px] px-1 bg-[#C9A227] text-black text-[9px] font-black rounded-full flex items-center justify-center shadow">
+                                  {inCart.quantity}
+                                </div>
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[12px] font-bold text-white truncate">{product.name}</p>
+                              <p className="text-[10px] text-white/40">{fmt(product.price)}</p>
+                            </div>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Right: Payment */}
               <div className="flex-1 flex flex-col min-h-0 min-w-0">
               <div className="overflow-y-auto min-h-0 p-4 sm:p-5 custom-scrollbar">
@@ -3018,7 +3367,10 @@ export default function PDVPanel({
                         <button
                           onClick={() => {
                             setIsSplitMode((v) => !v);
-                            if (isSplitMode) setPaymentSplits([]);
+                            if (isSplitMode) {
+                              setPaymentSplits([]);
+                              setItemPersonAssignment({});
+                            }
                           }}
                           className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wide transition-colors ${
                             isSplitMode ? "bg-[#C9A227] text-black" : "bg-white/5 text-white/40 hover:bg-white/10"
@@ -3032,6 +3384,25 @@ export default function PDVPanel({
 
                     {isSplitMode && (
                       <div className="space-y-1.5 bg-white/[0.03] border border-white/10 rounded-xl p-2.5">
+                        <div className="grid grid-cols-2 gap-1.5 p-0.5 bg-black/20 rounded-lg">
+                          <button
+                            type="button"
+                            onClick={() => setSplitByItem(false)}
+                            className={`py-1.5 rounded-md text-[9px] font-black uppercase tracking-wide transition-colors ${!splitByItem ? "bg-[#C9A227] text-black" : "text-white/40 hover:text-white"}`}
+                          >
+                            Valor igual
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSplitByItem(true)}
+                            className={`py-1.5 rounded-md text-[9px] font-black uppercase tracking-wide transition-colors ${splitByItem ? "bg-[#C9A227] text-black" : "text-white/40 hover:text-white"}`}
+                          >
+                            Por item
+                          </button>
+                        </div>
+
+                        {!splitByItem ? (
+                          <>
                         <div className="grid grid-cols-[1fr_auto] gap-2 items-end">
                           <div>
                             <p className="text-[9px] font-black uppercase text-white/30 mb-1">Divisão por grupo</p>
@@ -3054,6 +3425,41 @@ export default function PDVPanel({
                         <p className="text-[9px] text-white/35">
                           Se sobrar centavos, o ajuste fica na primeira pessoa.
                         </p>
+                          </>
+                        ) : (
+                          <>
+                        <div className="space-y-1.5">
+                          <p className="text-[9px] font-black uppercase text-white/30">Pessoas</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {splitPersonLabels.map((label, idx) => (
+                              <span key={idx} className="flex items-center gap-1 bg-black/20 border border-white/10 rounded-full pl-2.5 pr-1 py-1">
+                                <span className="text-[10px] font-black text-white">{label}</span>
+                                {splitPersonLabels.length > 2 && (
+                                  <button onClick={() => handleRemoveSplitPerson(idx)} className="text-white/30 hover:text-red-400 transition-colors">
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </span>
+                            ))}
+                            <button
+                              onClick={handleAddSplitPerson}
+                              className="flex items-center gap-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full px-2.5 py-1 text-[10px] font-black text-white/60 hover:text-white transition-colors"
+                            >
+                              <Plus className="w-3 h-3" /> Pessoa
+                            </button>
+                          </div>
+                          <p className="text-[9px] text-white/35">
+                            Toque nas pessoas ao lado de cada item no Resumo pra marcar de quem é. Itens sem marcação são divididos igualmente entre todos.
+                          </p>
+                          <button
+                            onClick={handleGenerateItemSplit}
+                            className="w-full h-[38px] rounded-lg bg-[#C9A227] text-black text-[10px] font-black uppercase tracking-wide hover:bg-[#E8B93A] transition-colors"
+                          >
+                            Gerar divisão por item
+                          </button>
+                        </div>
+                          </>
+                        )}
                         {paymentSplits.length === 0 ? (
                           <p className="text-[10px] text-white/30 text-center py-2">Gere a divisão por grupo ou escolha a forma abaixo e clique em "Adicionar Forma".</p>
                         ) : (
@@ -3061,6 +3467,12 @@ export default function PDVPanel({
                             return (
               <div key={split.id} className="flex items-start gap-2 bg-white/5 rounded-lg px-2.5 py-2">
                                 <div className="flex-1 min-w-0 space-y-1.5">
+                                  {split.personLabel && (
+                                    <div className="flex items-baseline gap-1.5">
+                                      <span className="text-[10px] font-black text-[#C9A227] uppercase shrink-0">{split.personLabel}:</span>
+                                      <span className="text-[10px] text-white/50 truncate">{split.personItems || "sem itens marcados"}</span>
+                                    </div>
+                                  )}
                                   <div className="grid grid-cols-4 gap-1">
                                     {PAYMENT_METHODS.filter((method) => method.id !== "STONE").map((method) => {
                                       const Icon = method.icon;
@@ -3470,33 +3882,42 @@ export default function PDVPanel({
                         </span>
                       </div>
                     )}
-                    <button
-                      disabled={
-                        isProcessing ||
-                        (isSplitMode && !splitCanFinalize) ||
-                        (!isSplitMode && paymentMethod === "CASH" && digitsToNumber(amountReceived) < finalTotal)
-                      }
-                      onClick={handleCheckout}
-                      className="w-full bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-3 rounded-xl transition-all shadow-lg shadow-[#C9A227]/25 flex items-center justify-center gap-2.5 uppercase tracking-widest text-xs"
-                    >
-                      {isProcessing ? (
-                        <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                      ) : isSplitMode && splitOverpaidAmount > 0 ? (
-                        <>Excedente {fmt(splitOverpaidAmount)}</>
-                      ) : isSplitMode && splitRemaining > 0 ? (
-                        <>Falta {fmt(splitRemaining)}</>
-                      ) : (
-                        <>
-                          {paymentMethod === "STONE" ? "Enviar para Maquininha" : "Finalizar Venda"}
-                          {paymentMethod === "STONE" ? <Smartphone className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
-                        </>
-                      )}
-                    </button>
+                    <div className="flex items-stretch gap-2">
+                      <button
+                        onClick={() => { setShowCheckout(false); setShowCartDrawer(true); }}
+                        title="Cancelar pagamento e voltar ao carrinho"
+                        className="shrink-0 basis-1/3 bg-red-500/15 hover:bg-red-500/25 border border-red-500/20 text-red-300 hover:text-red-200 font-black py-3 rounded-xl transition-all flex items-center justify-center gap-2.5 uppercase tracking-widest text-xs"
+                      >
+                        <X className="w-4 h-4" />
+                        Cancelar Compra
+                      </button>
+                      <button
+                        disabled={
+                          isProcessing ||
+                          (isSplitMode && !splitCanFinalize) ||
+                          (!isSplitMode && paymentMethod === "CASH" && digitsToNumber(amountReceived) < finalTotal)
+                        }
+                        onClick={handleCheckout}
+                        className="flex-1 bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-3 rounded-xl transition-all shadow-lg shadow-[#C9A227]/25 flex items-center justify-center gap-2.5 uppercase tracking-widest text-xs"
+                      >
+                        {isProcessing ? (
+                          <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                        ) : isSplitMode && splitOverpaidAmount > 0 ? (
+                          <>Excedente {fmt(splitOverpaidAmount)}</>
+                        ) : isSplitMode && splitRemaining > 0 ? (
+                          <>Falta {fmt(splitRemaining)}</>
+                        ) : (
+                          <>
+                            {paymentMethod === "STONE" ? "Enviar para Maquininha" : "Finalizar Venda"}
+                            {paymentMethod === "STONE" ? <Smartphone className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 ) : null}
               </div>
               </div>
-            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

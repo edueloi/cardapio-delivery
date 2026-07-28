@@ -102,7 +102,7 @@ export interface NfceOrderData {
   total: number;
   paymentMethod: string; // CASH | PIX | CREDIT | DEBIT | VR | STONE_*
   customerName?: string;
-  customerCpf?: string; // opcional — CPF do consumidor
+  customerCpf?: string; // opcional — CPF (11 dígitos) ou CNPJ (14 dígitos) do destinatário
   emitName: string;     // razão social / nome do estabelecimento emitente
   emitAddress: {
     street: string;
@@ -133,8 +133,12 @@ export async function emitirNfce(
   const dhEmi = now.toISOString().replace("Z", "-03:00");
   const cnpjClean = fiscal.cnpj.replace(/\D/g, "");
   const ieClean = fiscal.ie.replace(/\D/g, "");
-  const cpfDigits = order.customerCpf?.replace(/\D/g, "") ?? "";
-  const cpfClean = cpfDigits.length === 11 ? cpfDigits : "";
+  // Documento do destinatário — aceita CPF (11 dígitos, pessoa física) ou CNPJ
+  // (14 dígitos, pessoa jurídica); qualquer outro tamanho é ignorado (documento inválido).
+  const destDocDigits = order.customerCpf?.replace(/\D/g, "") ?? "";
+  const destDocClean =
+    destDocDigits.length === 11 || destDocDigits.length === 14 ? destDocDigits : "";
+  const destIsCnpj = destDocClean.length === 14;
   const { tPag, xPag } = mapPaymentCode(order.paymentMethod);
 
   const det = order.items.map((item, i) => {
@@ -218,8 +222,19 @@ export async function emitirNfce(
             xPais: "Brasil",
           },
         },
-        // Destinatário — CPF do consumidor para Nota Fiscal Paulista (opcional)
-        ...(cpfClean ? { dest: { CNPJCPF: cpfClean, xNome: order.customerName?.slice(0, 60) || undefined } } : {}),
+        // Destinatário — CPF (Nota Fiscal Paulista) ou CNPJ (compra em nome de empresa),
+        // ambos opcionais. Para CNPJ, indIEDest=9 declara "não contribuinte" — não temos
+        // captura de Inscrição Estadual do destinatário no PDV, então esse é o valor
+        // seguro pra não travar a autorização por falta de IE.
+        ...(destDocClean
+          ? {
+              dest: {
+                CNPJCPF: destDocClean,
+                xNome: order.customerName?.slice(0, 60) || undefined,
+                ...(destIsCnpj ? { indIEDest: 9 } : {}),
+              },
+            }
+          : {}),
         // Itens
         det,
         // Totais

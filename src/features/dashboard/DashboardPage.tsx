@@ -360,6 +360,7 @@ export default function DashboardPage() {
         navigationAlerts={{ inventory: inventoryAlertCount }}
         navigationOrderCounts={liveOrderCounts}
         headerBadges={liveOrdersHeaderBadges}
+        accountName={membership?.name || (account as any)?.name || null}
         isMobileMenuOpen={isMobileMenuOpen}
         onToggleMobileMenu={() => setIsMobileMenuOpen((current) => !current)}
         onCloseMobileMenu={() => setIsMobileMenuOpen(false)}

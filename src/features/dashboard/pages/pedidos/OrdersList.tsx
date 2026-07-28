@@ -324,48 +324,62 @@ function KanbanCard({ order, categoryMap, updateStatus, isExpanded, toggleOrder,
         </div>
       </div>
 
-      {/* Items list */}
-      <div className="space-y-0">
-        {order.items?.map((item: any, idx: number) => {
-          const isKitchen = item.product?.kitchenPrint === true;
-          return (
-            <div
-              key={idx}
-              className={`py-2 ${idx > 0 ? "border-t border-dashed border-slate-200" : ""}`}
-            >
-              <div className="min-w-0">
-                {isKitchen && (
-                  <div className="flex flex-wrap items-center gap-1.5 mb-1">
-                    <span className="text-[8px] font-black uppercase px-1 py-0.5 rounded bg-orange-100 text-orange-600 tracking-wide flex items-center gap-0.5">
-                      <ChefHat className="w-2 h-2" />
-                      Cozinha
-                    </span>
-                  </div>
-                )}
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-bold text-slate-700 leading-tight">
-                      {item.quantity}x {item.product?.name}
-                    </p>
-                    {item.productVariant?.name && (
-                      <p className="text-[10px] font-black uppercase text-[#C9A227] mt-0.5">· {item.productVariant.name}</p>
-                    )}
-                    {item.notes && (
-                      <div className="mt-1 bg-amber-50 border border-amber-200 text-amber-800 text-[9px] font-bold px-2 py-1 rounded-lg flex items-start gap-1">
-                        <Utensils className="w-2.5 h-2.5 mt-0.5 shrink-0" />
-                        <span>{item.notes}</span>
-                      </div>
-                    )}
-                  </div>
-                  <span className="text-[10px] font-black text-slate-400 tabular-nums shrink-0 pt-0.5">
-                    {fmt(item.price * item.quantity)}
-                  </span>
+      {/* Items list — agrupados por destino: Cozinha (precisa preparo) e Balcão (o resto) */}
+      {(() => {
+        const renderItem = (item: any, idx: number) => (
+          <div
+            key={idx}
+            className={`py-2 ${idx > 0 ? "border-t border-dashed border-slate-200" : ""}`}
+          >
+            <div className="min-w-0">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-slate-700 leading-tight">
+                    {item.quantity}x {item.product?.name}
+                  </p>
+                  {item.productVariant?.name && (
+                    <p className="text-[10px] font-black uppercase text-[#C9A227] mt-0.5">· {item.productVariant.name}</p>
+                  )}
+                  {item.notes && (
+                    <div className="mt-1 bg-amber-50 border border-amber-200 text-amber-800 text-[9px] font-bold px-2 py-1 rounded-lg flex items-start gap-1">
+                      <Utensils className="w-2.5 h-2.5 mt-0.5 shrink-0" />
+                      <span>{item.notes}</span>
+                    </div>
+                  )}
                 </div>
+                <span className="text-[10px] font-black text-slate-400 tabular-nums shrink-0 pt-0.5">
+                  {fmt(item.price * item.quantity)}
+                </span>
               </div>
             </div>
-          );
-        })}
-      </div>
+          </div>
+        );
+
+        const kitchenItems = order.items?.filter((item: any) => item.product?.kitchenPrint === true) || [];
+        const counterItems = order.items?.filter((item: any) => item.product?.kitchenPrint !== true) || [];
+
+        return (
+          <div className="space-y-3">
+            {kitchenItems.length > 0 && (
+              <div>
+                <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-orange-100 text-orange-600 tracking-widest flex items-center gap-0.5 w-fit mb-1">
+                  <ChefHat className="w-2.5 h-2.5" />
+                  Cozinha
+                </span>
+                <div className="space-y-0">{kitchenItems.map(renderItem)}</div>
+              </div>
+            )}
+            {counterItems.length > 0 && (
+              <div>
+                <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 tracking-widest flex items-center gap-0.5 w-fit mb-1">
+                  Balcão
+                </span>
+                <div className="space-y-0">{counterItems.map(renderItem)}</div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       <div className="h-px bg-slate-100 w-full" />
 
