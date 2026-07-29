@@ -521,6 +521,14 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
     }
     let selectionGroup: string | null = null;
     if (prodForm.selectionGroupEnabled) {
+      // Os dois mecanismos resolvem "escolher o sabor" de formas diferentes — variação
+      // já cria um preço por opção, grupo de seleção mantém preço fixo do produto e
+      // reaproveita outra categoria. Juntos, o cliente escolhe a mesma coisa duas vezes
+      // (foi exatamente o bug visto em produção no "1 espeto tradicional").
+      if (hasVariants) {
+        toast.error("Este produto já tem variações — remova-as antes de ativar \"Cliente escolhe itens\", ou desative o grupo de seleção. Os dois juntos fazem o cliente escolher o sabor duas vezes.");
+        return;
+      }
       const qty = parseInt(prodForm.selectionGroupQty, 10);
       if (!qty || qty < 1) {
         toast.error("Informe quantos itens o cliente deve escolher.");
@@ -1249,11 +1257,20 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
           {/* Grupo de seleção embutido — escolher N itens de uma categoria/lista, sem
               mudar o preço fixo do produto (ex: "2 espetos tradicionais" R$29 deixa
               escolher os 2 sabores dentre os espetos já cadastrados, sem duplicar
-              como variação e sem somar preço próprio de cada item escolhido). */}
+              como variação e sem somar preço próprio de cada item escolhido).
+              Incompatível com variações — as duas coisas resolvem "escolher o sabor";
+              juntas, o cliente escolhe a mesma coisa duas vezes (bug visto em produção
+              no "1 espeto tradicional", cadastrado com variações E grupo ao mesmo tempo). */}
           <div>
-            <label className="flex items-center gap-2 cursor-pointer mb-2">
+            {prodForm.variants.length > 0 && (
+              <p className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2">
+                Este produto já tem variações — não é possível usar as duas formas de escolha juntas.
+              </p>
+            )}
+            <label className={`flex items-center gap-2 mb-2 ${prodForm.variants.length > 0 ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}>
               <input
                 type="checkbox"
+                disabled={prodForm.variants.length > 0}
                 checked={prodForm.selectionGroupEnabled}
                 onChange={e => setProdForm(f => ({ ...f, selectionGroupEnabled: e.target.checked }))}
                 className="w-4 h-4 rounded accent-amber-500"
@@ -1412,11 +1429,16 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
             </div>
           </details>
 
-          {/* Variantes */}
+          {/* Variantes — desabilitado quando o grupo de seleção está ativo (os dois juntos
+              fazem o cliente escolher o sabor duas vezes, ver nota acima). */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">Tamanhos / Variantes</span>
-              <button onClick={addVariantField} className="text-xs font-black text-[#C9A227] hover:underline">+ Adicionar</button>
+              {prodForm.selectionGroupEnabled ? (
+                <span className="text-[10px] font-bold text-slate-400">Desative "Cliente escolhe itens" para usar variações</span>
+              ) : (
+                <button onClick={addVariantField} className="text-xs font-black text-[#C9A227] hover:underline">+ Adicionar</button>
+              )}
             </div>
             <div className="space-y-3">
               {prodForm.variants.map((v, idx) => (
