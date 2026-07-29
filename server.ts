@@ -3897,6 +3897,15 @@ app.patch("/api/orders/:id/status", requireAuth, async (req, res) => {
       status,
       kitchenReady
     );
+    // Sem isso, só a aba que fez a chamada via toque via a mudança (pela resposta HTTP
+    // direta) — qualquer outra aba/painel aberto (ex: outro operador no Painel de
+    // Pedidos) continuava mostrando o pedido no status antigo até dar F5. Isso incluía
+    // cancelamentos: um pedido cancelado ainda em "Pendentes" ficava visível lá até
+    // recarregar a página, mesmo já cancelado no banco.
+    io.to(`tenant-${updatedOrder.tenantId}`).emit(
+      "order-status-updated",
+      updatedOrder
+    );
     res.json(updatedOrder);
   } catch (error) {
     console.error(error);
@@ -5552,6 +5561,7 @@ app.post("/api/products", requireAuth, async (req, res) => {
     pdvOnly,
     kitchenPrint,
     extras,
+    selectionGroup,
     scheduleRule,
     recipeId,
   } = req.body;
@@ -5586,6 +5596,11 @@ app.post("/api/products", requireAuth, async (req, res) => {
           ? typeof extras === "string"
             ? extras
             : JSON.stringify(extras)
+          : null,
+        selectionGroup: selectionGroup
+          ? typeof selectionGroup === "string"
+            ? selectionGroup
+            : JSON.stringify(selectionGroup)
           : null,
         scheduleRule: scheduleRule
           ? typeof scheduleRule === "string"
@@ -5682,6 +5697,7 @@ app.patch("/api/products/:id", requireAuth, async (req, res) => {
     pdvOnly,
     kitchenPrint,
     extras,
+    selectionGroup,
     scheduleRule,
     recipeId,
   } = req.body;
@@ -5705,6 +5721,14 @@ app.patch("/api/products/:id", requireAuth, async (req, res) => {
               ? typeof extras === "string"
                 ? extras
                 : JSON.stringify(extras)
+              : undefined,
+          selectionGroup:
+            selectionGroup !== undefined
+              ? selectionGroup
+                ? typeof selectionGroup === "string"
+                  ? selectionGroup
+                  : JSON.stringify(selectionGroup)
+                : null
               : undefined,
           scheduleRule:
             scheduleRule !== undefined

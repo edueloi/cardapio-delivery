@@ -115,6 +115,16 @@ function AwaitingPaymentAlert({
       }, ALERT_DELAY_MS);
       timerMap.current.set(order.id, timer);
     });
+
+    // Fecha o alerta sozinho se o pedido mostrado nele já saiu de AWAITING_PAYMENT (ex:
+    // caixa fechou a venda em outra aba) — sem isso o modal ficava "congelado" na tela
+    // com os dados de quando o timer disparou, mesmo o pedido já tendo sumido de todas
+    // as colunas do painel.
+    setAlertOrder((prev) => {
+      if (!prev) return prev;
+      const current = orders.find((o) => o.id === prev.id);
+      return current && current.status === 'AWAITING_PAYMENT' ? prev : null;
+    });
   }, [orders]);
 
   if (!alertOrder) return null;

@@ -9,10 +9,12 @@ import {
   Cake,
   Ticket,
   RotateCcw,
+  Check,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import socket from "../../lib/socket";
 import type { Tenant, Product, ProductVariant, Order } from "../../types";
+import SelectionGroupPicker, { parseSelectionGroup, getSelectionGroupOptions, formatSelectionGroupNote } from "./SelectionGroupPicker";
 import { COUNTER_ORDER_TABLE_ID } from "../../types";
 
 const fmt = (n: number) =>
@@ -69,6 +71,11 @@ export default function CounterMenuView() {
   const [qty, setQty] = useState(1);
   const [notes, setNotes] = useState("");
   const [selectedExtras, setSelectedExtras] = useState<{ id: string, label: string, price: number }[]>([]);
+  // Itens escolhidos do grupo de seleção embutido (ex: os 2 sabores de "2 espetos
+  // tradicionais") — preço fixo do produto, a escolha aqui só define quais sabores
+  // aparecem na observação do pedido, nunca soma valor.
+  const [selectedGroupItemIds, setSelectedGroupItemIds] = useState<string[]>([]);
+  const [showGroupPicker, setShowGroupPicker] = useState(false);
   const [isOrdering, setIsOrdering] = useState(false);
 
   // Lista (não um único pedido) — o cliente pode ter mais de uma senha em aberto ao
@@ -146,6 +153,16 @@ export default function CounterMenuView() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cart, slug]);
+
+  // Produto tem grupo de seleção embutido (ex: "2 espetos tradicionais") e ainda não
+  // foi escolhido — abre o picker passo a passo automaticamente ao abrir o produto.
+  useEffect(() => {
+    const sg = parseSelectionGroup(selectedProduct);
+    if (sg && selectedGroupItemIds.length !== sg.qty) {
+      setShowGroupPicker(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProduct]);
 
   // Busca cliente pelo telefone (rota pública, sem autenticação). Se existir, pula
   // direto pro cardápio; se não existir, pede nome+aniversário pra completar o cadastro.
@@ -299,6 +316,7 @@ export default function CounterMenuView() {
       setSelectedProduct(found);
       setSelectedVariant(found.variants && found.variants.length > 0 ? found.variants[0] : null);
       setSelectedExtras([]);
+      setSelectedGroupItemIds([]);
       setQty(1);
       setNotes("");
     }
@@ -851,7 +869,7 @@ export default function CounterMenuView() {
                         <motion.button
                           key={p.id}
                           whileTap={{ scale: 0.97 }}
-                          onClick={() => { setSelectedProduct(p); setSelectedVariant(p.variants && p.variants.length > 0 ? p.variants[0] : null); setSelectedExtras([]); setQty(1); setNotes(""); }}
+                          onClick={() => { setSelectedProduct(p); setSelectedVariant(p.variants && p.variants.length > 0 ? p.variants[0] : null); setSelectedExtras([]); setSelectedGroupItemIds([]); setQty(1); setNotes(""); }}
                           className="group text-left bg-[#161d27] border border-white/[0.06] rounded-2xl overflow-hidden hover:border-amber-500/30 transition-all active:bg-[#1c2532]"
                         >
                           <div className="aspect-[4/3] overflow-hidden bg-white/5 flex items-center justify-center">
@@ -891,7 +909,7 @@ export default function CounterMenuView() {
                           key={p.id}
                           whileHover={{ y: -4, scale: 1.01 }}
                           whileTap={{ scale: 0.97 }}
-                          onClick={() => { setSelectedProduct(p); setSelectedVariant(p.variants && p.variants.length > 0 ? p.variants[0] : null); setSelectedExtras([]); setQty(1); setNotes(""); }}
+                          onClick={() => { setSelectedProduct(p); setSelectedVariant(p.variants && p.variants.length > 0 ? p.variants[0] : null); setSelectedExtras([]); setSelectedGroupItemIds([]); setQty(1); setNotes(""); }}
                           className="group flex flex-col rounded-3xl bg-[#161d27] border border-white/[0.06] hover:bg-[#1c2532] hover:border-[#C9A227]/30 transition-all cursor-pointer overflow-hidden"
                         >
                           <div className="aspect-[4/3] overflow-hidden bg-white/5 shrink-0 flex items-center justify-center">
@@ -1033,6 +1051,7 @@ export default function CounterMenuView() {
                         setQty(1);
                         setNotes("");
                         setSelectedExtras([]);
+      setSelectedGroupItemIds([]);
                       }}
                       className="absolute top-6 left-6 w-10 h-10 rounded-full bg-white/10 backdrop-blur-xl flex items-center justify-center text-white lg:bg-black/40 lg:border lg:border-white/10"
                     >
@@ -1137,6 +1156,38 @@ export default function CounterMenuView() {
                           ) : null;
                         })()}
 
+                        {(() => {
+                          const sg = parseSelectionGroup(selectedProduct);
+                          if (!sg) return null;
+                          const options = getSelectionGroupOptions(tenant, sg);
+                          if (options.length === 0) return null;
+                          const isComplete = selectedGroupItemIds.length === sg.qty;
+                          return (
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <h4 className="text-sm font-bold text-zinc-900 lg:text-amber-500 lg:uppercase lg:tracking-[0.2em]">{sg.label || `Escolha ${sg.qty} ${sg.qty > 1 ? "itens" : "item"}`}</h4>
+                                <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${isComplete ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-500 lg:bg-white/10 lg:text-white/60'}`}>{selectedGroupItemIds.length}/{sg.qty}</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setShowGroupPicker(true)}
+                                className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border text-left transition-all ${
+                                  isComplete
+                                    ? 'bg-amber-500/10 border-amber-500 lg:bg-amber-500/20'
+                                    : 'bg-zinc-50 border-zinc-200 lg:bg-white/5 lg:border-white/10 hover:border-amber-400'
+                                }`}
+                              >
+                                <span className="text-sm font-bold text-zinc-900 lg:text-white truncate">
+                                  {isComplete
+                                    ? selectedGroupItemIds.map(id => options.find(p => p.id === id)?.name).filter(Boolean).join(' + ')
+                                    : 'Toque para escolher'}
+                                </span>
+                                <ChevronRight className="w-4 h-4 text-zinc-400 shrink-0" />
+                              </button>
+                            </div>
+                          );
+                        })()}
+
                         <div className="space-y-3">
                           <p className="text-sm font-bold text-zinc-900 lg:text-white/30 lg:uppercase lg:tracking-widest">Observações</p>
                           <textarea
@@ -1172,42 +1223,79 @@ export default function CounterMenuView() {
 
                     {/* Bottom Action Bar */}
                     <div className="sticky bottom-0 p-4 bg-white border-t border-zinc-100 lg:p-12 lg:bg-zinc-900/50 lg:border-none">
-                      <button
-                        onClick={() => {
-                          const extrasLabel = selectedExtras.length > 0
-                            ? selectedExtras.map(e => e.price > 0 ? `${e.label} (+${fmt(e.price)})` : e.label).join(', ')
-                            : '';
-                          const extrasPrice = selectedExtras.reduce((s, e) => s + e.price, 0);
-                          const fullNotes = [extrasLabel, notes].filter(Boolean).join(' | ');
-                          const basePrice = selectedVariant ? selectedVariant.price : selectedProduct.price;
-                          const displayName = selectedVariant ? `${selectedProduct.name} — ${selectedVariant.name}` : selectedProduct.name;
-                          setCart([...cart, {
-                            productId: selectedProduct.id,
-                            variantId: selectedVariant?.id,
-                            name: displayName,
-                            price: basePrice + extrasPrice,
-                            quantity: qty,
-                            notes: fullNotes
-                          }]);
-                          setSelectedProduct(null);
-                          setSelectedVariant(null);
-                          setQty(1);
-                          setNotes("");
-                          setSelectedExtras([]);
-                        }}
-                        className="w-full h-14 rounded-xl bg-gradient-to-r from-[#C9A227] to-[#A8841C] text-black font-bold text-sm shadow-lg active:scale-[0.98] transition-all flex items-center justify-between px-6 lg:h-16 lg:rounded-2xl lg:px-10 lg:text-xs lg:uppercase lg:tracking-[0.2em]"
-                      >
-                        <div className="flex items-center gap-3">
-                          <ShoppingBag className="w-5 h-5" />
-                          <span>Adicionar</span>
-                        </div>
-                        <span className="text-base font-black">{fmt(((selectedVariant ? selectedVariant.price : selectedProduct.price) + selectedExtras.reduce((s, e) => s + e.price, 0)) * qty)}</span>
-                      </button>
+                      {(() => {
+                        const sg = parseSelectionGroup(selectedProduct);
+                        const selectionIncomplete = !!sg && selectedGroupItemIds.length !== sg.qty;
+                        return (
+                          <>
+                            {selectionIncomplete && (
+                              <button
+                                onClick={() => setShowGroupPicker(true)}
+                                className="w-full text-center text-xs font-bold text-red-500 mb-2 underline"
+                              >
+                                Escolha {sg!.qty} {sg!.qty > 1 ? "itens" : "item"} para continuar ({selectedGroupItemIds.length}/{sg!.qty})
+                              </button>
+                            )}
+                            <button
+                              disabled={selectionIncomplete}
+                              onClick={() => {
+                                const extrasLabel = selectedExtras.length > 0
+                                  ? selectedExtras.map(e => e.price > 0 ? `${e.label} (+${fmt(e.price)})` : e.label).join(', ')
+                                  : '';
+                                const extrasPrice = selectedExtras.reduce((s, e) => s + e.price, 0);
+                                const groupOptions = sg ? getSelectionGroupOptions(tenant, sg) : [];
+                                const groupLabel = sg ? formatSelectionGroupNote(sg, selectedGroupItemIds, groupOptions) : '';
+                                const fullNotes = [groupLabel, extrasLabel, notes].filter(Boolean).join(' | ');
+                                const basePrice = selectedVariant ? selectedVariant.price : selectedProduct.price;
+                                const displayName = selectedVariant ? `${selectedProduct.name} — ${selectedVariant.name}` : selectedProduct.name;
+                                setCart([...cart, {
+                                  productId: selectedProduct.id,
+                                  variantId: selectedVariant?.id,
+                                  name: displayName,
+                                  price: basePrice + extrasPrice,
+                                  quantity: qty,
+                                  notes: fullNotes
+                                }]);
+                                setSelectedProduct(null);
+                                setSelectedVariant(null);
+                                setQty(1);
+                                setNotes("");
+                                setSelectedExtras([]);
+                                setSelectedGroupItemIds([]);
+                              }}
+                              className="w-full h-14 rounded-xl bg-gradient-to-r from-[#C9A227] to-[#A8841C] text-black font-bold text-sm shadow-lg active:scale-[0.98] transition-all flex items-center justify-between px-6 lg:h-16 lg:rounded-2xl lg:px-10 lg:text-xs lg:uppercase lg:tracking-[0.2em] disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              <div className="flex items-center gap-3">
+                                <ShoppingBag className="w-5 h-5" />
+                                <span>Adicionar</span>
+                              </div>
+                              <span className="text-base font-black">{fmt(((selectedVariant ? selectedVariant.price : selectedProduct.price) + selectedExtras.reduce((s, e) => s + e.price, 0)) * qty)}</span>
+                            </button>
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                 </motion.div>
               )}
             </AnimatePresence>
+            {/* Grupo de seleção embutido — fluxo passo a passo (ex: "2 espetos") */}
+            {showGroupPicker && selectedProduct && (() => {
+              const sg = parseSelectionGroup(selectedProduct);
+              if (!sg) return null;
+              const options = getSelectionGroupOptions(tenant, sg);
+              return (
+                <SelectionGroupPicker
+                  group={sg}
+                  options={options}
+                  onConfirm={(ids) => { setSelectedGroupItemIds(ids); setShowGroupPicker(false); }}
+                  onCancel={() => {
+                    setShowGroupPicker(false);
+                    if (selectedGroupItemIds.length === 0) setSelectedProduct(null);
+                  }}
+                />
+              );
+            })()}
             {/* Toast Feedback */}
             <AnimatePresence>
               {toast && (

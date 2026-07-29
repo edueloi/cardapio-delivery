@@ -1155,6 +1155,16 @@ const migrations = [
       CONSTRAINT display_panel_images_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE ON UPDATE CASCADE
     ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
   },
+  // Grupo de seleção embutido no produto — ex: "2 espetos tradicionais" (preço fixo)
+  // deixa o cliente escolher 2 sabores de uma categoria já existente (ex: "Espetos
+  // Tradicionais"), reaproveitando foto/nome/descrição de lá, sem duplicar como
+  // variação e sem que a escolha altere o preço (o preço é sempre o do produto pai).
+  // JSON: { sourceType: "category"|"products", categoryId?, productIds?, qty, label? }
+  {
+    name: 'add_products_selection_group',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'selection_group'",
+    run: "ALTER TABLE products ADD COLUMN selection_group TEXT NULL",
+  },
 ];
 
 async function run() {

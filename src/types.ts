@@ -398,6 +398,20 @@ export interface ProductExtra {
   imageUrl?: string;
 }
 
+// Grupo de seleção embutido no produto — ex: "2 espetos tradicionais" (preço fixo)
+// deixa o cliente escolher `qty` itens de uma categoria já existente (ou de uma lista
+// manual de produtos), reaproveitando nome/foto/descrição de lá. Diferente de extras
+// (adicionais opcionais com preço próprio) e diferente de combo/bundle (entidade
+// separada com nome e preço dela mesma): aqui a escolha NUNCA muda o preço — o preço
+// cobrado é sempre o do produto pai.
+export interface ProductSelectionGroup {
+  sourceType: "category" | "products";
+  categoryId?: string;   // se sourceType === "category"
+  productIds?: string[]; // se sourceType === "products"
+  qty: number;            // quantos itens o cliente deve escolher
+  label?: string;         // rótulo mostrado ao cliente, ex: "Escolha os 2 sabores"
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -413,6 +427,7 @@ export interface Product {
   inventoryItem?: InventoryItem | null;
   variants?: ProductVariant[];
   extras?: string | null; // JSON: ProductExtra[]
+  selectionGroup?: string | null; // JSON: ProductSelectionGroup
   scheduleRule?: string | null; // JSON: ProductScheduleRule
   // Fiscal NFC-e
   ncm?: string | null;

@@ -676,6 +676,7 @@ model Product {
   sortOrder   Int      @default(0) @map("sort_order")
   autoDisableWhenOutOfStock Boolean @default(false) @map("auto_disable_when_out_of_stock")
   extras      String?  @db.Text // JSON: ProductExtra[]
+  selectionGroup String? @map("selection_group") @db.Text // JSON: ProductSelectionGroup — escolha N itens de uma categoria, embutido no preço fixo do produto
   scheduleRule String? @map("schedule_rule") @db.Text // JSON: ProductScheduleRule
   // Dados fiscais NFC-e
   ncm         String?  // Nomenclatura Comum do Mercosul (8 dígitos)

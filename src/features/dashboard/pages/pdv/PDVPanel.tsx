@@ -16,6 +16,7 @@ import { useToast } from "../../../../components";
 import { downloadReceiptPdf, printReceiptPdf, printCashClosingReportPdf, downloadDanfePdf, printDanfePdf } from "../../../../lib/receipt";
 import type { DanfeData } from "../../../../types";
 import socket from "../../../../lib/socket";
+import SelectionGroupPicker, { parseSelectionGroup, getSelectionGroupOptions, formatSelectionGroupNote } from "../../../menu-view/SelectionGroupPicker";
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
@@ -69,6 +70,10 @@ interface CartItem {
   price: number; // allows manual override
   productVariantId?: string;
   selectedExtras?: ProductExtra[];
+  // IDs escolhidos do grupo de seleção embutido no produto (ex: os 2 sabores de
+  // "2 espetos tradicionais") — guardado à parte pra poder reabrir e editar a
+  // escolha depois, já que `notes` só guarda o texto formatado, não os IDs.
+  selectedGroupItemIds?: string[];
 }
 
 type SplitPaymentMethod = "CASH" | "DEBIT" | "CREDIT" | "PIX" | "VR";
@@ -154,6 +159,10 @@ export default function PDVPanel({
   const [productModalNotes, setProductModalNotes] = useState("");
   const [productModalVariantId, setProductModalVariantId] = useState<string>("");
   const [productModalSelectedExtras, setProductModalSelectedExtras] = useState<ProductExtra[]>([]);
+  // Itens escolhidos do grupo de seleção embutido no produto (ex: os 2 sabores de
+  // "2 espetos tradicionais") — preço fixo, só define o que aparece na observação.
+  const [productModalGroupItemIds, setProductModalGroupItemIds] = useState<string[]>([]);
+  const [showGroupPicker, setShowGroupPicker] = useState(false);
   const [productModalEditIndex, setProductModalEditIndex] = useState<number | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
@@ -883,7 +892,7 @@ export default function PDVPanel({
   }, []);
 
   const hasProductCustomizations = useCallback((product: Product) => {
-    return (product.variants?.length || 0) > 0 || parseProductExtras(product).length > 0;
+    return (product.variants?.length || 0) > 0 || parseProductExtras(product).length > 0 || !!parseSelectionGroup(product);
   }, [parseProductExtras]);
 
   const buildCartNotes = useCallback((selectedExtras: ProductExtra[], notes: string) => {
@@ -914,7 +923,11 @@ export default function PDVPanel({
       (product.variants && product.variants.length > 0 ? product.variants[0].id : "")
     );
     setProductModalSelectedExtras(editingItem?.selectedExtras || []);
+    const groupItemIds = editingItem?.selectedGroupItemIds || [];
+    setProductModalGroupItemIds(groupItemIds);
     setProductModalEditIndex(editIndex);
+    const sg = parseSelectionGroup(product);
+    if (sg && groupItemIds.length !== sg.qty) setShowGroupPicker(true);
   }, [cart]);
 
   const closeProductOptions = useCallback(() => {
@@ -922,6 +935,7 @@ export default function PDVPanel({
     setProductModalNotes("");
     setProductModalVariantId("");
     setProductModalSelectedExtras([]);
+    setProductModalGroupItemIds([]);
     setProductModalEditIndex(null);
   }, []);
 
@@ -4154,6 +4168,42 @@ export default function PDVPanel({
                   </div>
                 )}
 
+                {(() => {
+                  const sg = parseSelectionGroup(productOptionsModal);
+                  if (!sg) return null;
+                  const options = getSelectionGroupOptions(tenant, sg);
+                  if (options.length === 0) return null;
+                  const isComplete = productModalGroupItemIds.length === sg.qty;
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                          {sg.label || `Escolha ${sg.qty} ${sg.qty > 1 ? "itens" : "item"}`}
+                        </label>
+                        <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${isComplete ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+                          {productModalGroupItemIds.length}/{sg.qty}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowGroupPicker(true)}
+                        className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border text-left transition-all ${
+                          isComplete
+                            ? "bg-amber-50 border-[#C9A227]"
+                            : "bg-white border-slate-200 hover:border-[#C9A227]/50 hover:bg-slate-50"
+                        }`}
+                      >
+                        <span className="text-sm font-bold text-slate-700 truncate">
+                          {isComplete
+                            ? productModalGroupItemIds.map((id) => options.find((p) => p.id === id)?.name).filter(Boolean).join(" + ")
+                            : "Toque para escolher"}
+                        </span>
+                        <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                      </button>
+                    </div>
+                  );
+                })()}
+
                 <div className="space-y-3">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
                     Observações e Adicionais
@@ -4175,28 +4225,43 @@ export default function PDVPanel({
                   Cancelar
                 </button>
                 <button
+                  disabled={(() => {
+                    const sg = parseSelectionGroup(productOptionsModal);
+                    return !!sg && productModalGroupItemIds.length !== sg.qty;
+                  })()}
                   onClick={() => {
+                    const sg = parseSelectionGroup(productOptionsModal);
+                    const groupOptions = sg ? getSelectionGroupOptions(tenant, sg) : [];
+                    const groupLabel = sg ? formatSelectionGroupNote(sg, productModalGroupItemIds, groupOptions) : "";
+                    const notesWithGroup = [groupLabel, productModalNotes.trim()].filter(Boolean).join(" | ");
                     if (productModalEditIndex !== null && productOptionsModal) {
                       setCart(prev => {
                         const newCart = [...prev];
-                        const notes = buildCartNotes(productModalSelectedExtras, productModalNotes);
+                        const notes = buildCartNotes(productModalSelectedExtras, notesWithGroup);
                         const price = getCartItemPrice(productOptionsModal, productModalVariantId || undefined, productModalSelectedExtras);
                         newCart[productModalEditIndex] = {
                           ...newCart[productModalEditIndex],
                           notes,
-                          customNotes: productModalNotes.trim(),
+                          customNotes: notesWithGroup,
                           productVariantId: productModalVariantId || undefined,
                           price,
                           selectedExtras: productModalSelectedExtras,
+                          selectedGroupItemIds: productModalGroupItemIds,
                         };
                         return newCart;
                       });
                     } else {
-                      addToCart(productOptionsModal!, productModalVariantId || undefined, productModalNotes, productModalSelectedExtras);
+                      addToCart(productOptionsModal!, productModalVariantId || undefined, notesWithGroup, productModalSelectedExtras);
+                      setCart(prev => {
+                        const newCart = [...prev];
+                        const lastIndex = newCart.length - 1;
+                        if (lastIndex >= 0) newCart[lastIndex] = { ...newCart[lastIndex], selectedGroupItemIds: productModalGroupItemIds };
+                        return newCart;
+                      });
                     }
                     closeProductOptions();
                   }}
-                  className="flex-[2] bg-[#C9A227] hover:bg-[#b58f20] text-white font-black py-2 text-sm rounded-lg transition-all active:scale-[0.98] shadow-md shadow-[#C9A227]/20"
+                  className="flex-[2] bg-[#C9A227] hover:bg-[#b58f20] text-white font-black py-2 text-sm rounded-lg transition-all active:scale-[0.98] shadow-md shadow-[#C9A227]/20 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {productModalEditIndex !== null ? "Salvar" : "Adicionar"}
                 </button>
@@ -4205,6 +4270,20 @@ export default function PDVPanel({
           </motion.div>
         )}
       </AnimatePresence>
+      {/* Grupo de seleção embutido — fluxo passo a passo (ex: "2 espetos") */}
+      {showGroupPicker && productOptionsModal && (() => {
+        const sg = parseSelectionGroup(productOptionsModal);
+        if (!sg) return null;
+        const options = getSelectionGroupOptions(tenant, sg);
+        return (
+          <SelectionGroupPicker
+            group={sg}
+            options={options}
+            onConfirm={(ids) => { setProductModalGroupItemIds(ids); setShowGroupPicker(false); }}
+            onCancel={() => setShowGroupPicker(false)}
+          />
+        );
+      })()}
     </div>
   );
 }

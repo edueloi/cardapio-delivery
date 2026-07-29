@@ -32,6 +32,7 @@ import { motion, AnimatePresence } from "motion/react";
 import socket from "../../lib/socket";
 import type { Tenant, Product, Order, ProductVariant, ProductBundle, BundleCartItem, BundleStepSelection } from "../../types";
 import BundleModal from "./BundleModal";
+import SelectionGroupPicker, { parseSelectionGroup, getSelectionGroupOptions, formatSelectionGroupNote } from "./SelectionGroupPicker";
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 const BRAND = "#C9A227";
@@ -296,6 +297,10 @@ export default function MenuViewPage() {
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
   const [productNotes, setProductNotes] = useState("");
   const [productQty, setProductQty] = useState(1);
+  // Itens escolhidos do grupo de seleção embutido no produto (ex: os 2 sabores de
+  // "2 espetos tradicionais") — preço fixo, só define o que aparece na observação.
+  const [selectedGroupItemIds, setSelectedGroupItemIds] = useState<string[]>([]);
+  const [showGroupPicker, setShowGroupPicker] = useState(false);
   const [panel, setPanel] = useState<"none" | "cart" | "orders" | "info">("none");
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [checkoutStep, setCheckoutStep] = useState<"info" | "payment" | "review">("info");
@@ -490,12 +495,21 @@ export default function MenuViewPage() {
     setSelectedProduct(product);
     setSelectedVariant(product.variants?.length ? product.variants[0] : null);
     setProductNotes(""); setProductQty(1);
+    setSelectedGroupItemIds([]);
+    const sg = parseSelectionGroup(product);
+    if (sg) setShowGroupPicker(true);
   };
 
   const addToCart = () => {
     if (!selectedProduct) return;
-    setCart((prev) => [...prev, { product: selectedProduct, variant: selectedVariant ?? undefined, quantity: productQty, notes: productNotes }]);
+    const sg = parseSelectionGroup(selectedProduct);
+    if (sg && selectedGroupItemIds.length !== sg.qty) { setShowGroupPicker(true); return; }
+    const groupOptions = sg ? getSelectionGroupOptions(tenant, sg) : [];
+    const groupLabel = sg ? formatSelectionGroupNote(sg, selectedGroupItemIds, groupOptions) : "";
+    const fullNotes = [groupLabel, productNotes].filter(Boolean).join(" | ");
+    setCart((prev) => [...prev, { product: selectedProduct, variant: selectedVariant ?? undefined, quantity: productQty, notes: fullNotes }]);
     setSelectedProduct(null);
+    setSelectedGroupItemIds([]);
   };
 
   const updateQty = (idx: number, delta: number) =>
@@ -1238,6 +1252,40 @@ export default function MenuViewPage() {
                     </div>
                   )}
 
+                  {/* Grupo de seleção embutido — ex: "2 espetos tradicionais" */}
+                  {(() => {
+                    const sg = parseSelectionGroup(selectedProduct);
+                    if (!sg) return null;
+                    const options = getSelectionGroupOptions(tenant, sg);
+                    if (options.length === 0) return null;
+                    const isComplete = selectedGroupItemIds.length === sg.qty;
+                    return (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{sg.label || `Escolha ${sg.qty} ${sg.qty > 1 ? "itens" : "item"}`}</p>
+                          <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${isComplete ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+                            {selectedGroupItemIds.length}/{sg.qty}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowGroupPicker(true)}
+                          className={`w-full flex items-center justify-between gap-2 px-4 py-3 rounded-2xl border-2 text-left transition-all ${
+                            isComplete ? "shadow-md" : "border-slate-100 bg-slate-50 hover:border-slate-200"
+                          }`}
+                          style={isComplete ? { borderColor: BRAND, background: BRAND_LIGHT } : {}}
+                        >
+                          <span className="text-sm font-bold text-slate-800 truncate">
+                            {isComplete
+                              ? selectedGroupItemIds.map((id) => options.find((p) => p.id === id)?.name).filter(Boolean).join(" + ")
+                              : "Toque para escolher"}
+                          </span>
+                          <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                        </button>
+                      </div>
+                    );
+                  })()}
+
                   {/* Notes */}
                   <div className="space-y-2">
                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Alguma observação?</p>
@@ -1286,6 +1334,18 @@ export default function MenuViewPage() {
 
               {/* Add to cart CTA */}
               <div className="p-4 pb-6 bg-white border-t border-slate-50 shrink-0">
+                {(() => {
+                  const sg = parseSelectionGroup(selectedProduct);
+                  if (!sg || selectedGroupItemIds.length === sg.qty) return null;
+                  return (
+                    <button
+                      onClick={() => setShowGroupPicker(true)}
+                      className="w-full text-center text-xs font-bold text-red-500 mb-2 underline"
+                    >
+                      Escolha {sg.qty} {sg.qty > 1 ? "itens" : "item"} para continuar ({selectedGroupItemIds.length}/{sg.qty})
+                    </button>
+                  );
+                })()}
                 <motion.button
                   whileTap={{ scale: 0.97 }}
                   whileHover={{ scale: 1.01 }}
@@ -1317,6 +1377,24 @@ export default function MenuViewPage() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Grupo de seleção embutido — fluxo passo a passo (ex: "2 espetos") */}
+      {showGroupPicker && selectedProduct && (() => {
+        const sg = parseSelectionGroup(selectedProduct);
+        if (!sg) return null;
+        const options = getSelectionGroupOptions(tenant, sg);
+        return (
+          <SelectionGroupPicker
+            group={sg}
+            options={options}
+            onConfirm={(ids) => { setSelectedGroupItemIds(ids); setShowGroupPicker(false); }}
+            onCancel={() => {
+              setShowGroupPicker(false);
+              if (selectedGroupItemIds.length === 0) setSelectedProduct(null);
+            }}
+          />
+        );
+      })()}
 
       {/* ── SLIDE PANELS ──────────────────────────────────────────────────────── */}
       <AnimatePresence>

@@ -322,6 +322,13 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
     scheduleRuleEndDate: "",
     variants: [] as { _key: string, name: string, price: string, description: string, inventoryItemId: string, imageUrl: string }[],
     extras: [] as { id: string, label: string, price: string }[],
+    // Grupo de seleção embutido — escolher N itens de uma categoria/lista, preço fixo do produto
+    selectionGroupEnabled: false,
+    selectionGroupSourceType: "category" as "category" | "products",
+    selectionGroupCategoryId: "",
+    selectionGroupProductIds: [] as string[],
+    selectionGroupQty: "1",
+    selectionGroupLabel: "",
     // Fiscal NFC-e
     ncm: "", cfop: "5102", csosn: "400", unitCom: "UN", origem: 0, aliqIcms: 0,
   });
@@ -384,7 +391,7 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
 
   const openNewProduct = (categoryId: string) => {
     setEditingProduct(null);
-    setProdForm({ name: "", description: "", price: "", imageUrl: "", inventoryItemId: "", recipeId: "", available: true, pdvOnly: false, kitchenPrint: false, autoDisableWhenOutOfStock: false, scheduleRuleEnabled: false, scheduleRuleType: "weekday", scheduleRuleWeekdays: [], scheduleRuleStartTime: "", scheduleRuleEndTime: "", scheduleRuleStartDate: "", scheduleRuleEndDate: "", variants: [], extras: [], ncm: "", cfop: "5102", csosn: "400", unitCom: "UN", origem: 0, aliqIcms: 0 });
+    setProdForm({ name: "", description: "", price: "", imageUrl: "", inventoryItemId: "", recipeId: "", available: true, pdvOnly: false, kitchenPrint: false, autoDisableWhenOutOfStock: false, scheduleRuleEnabled: false, scheduleRuleType: "weekday", scheduleRuleWeekdays: [], scheduleRuleStartTime: "", scheduleRuleEndTime: "", scheduleRuleStartDate: "", scheduleRuleEndDate: "", variants: [], extras: [], selectionGroupEnabled: false, selectionGroupSourceType: "category", selectionGroupCategoryId: "", selectionGroupProductIds: [], selectionGroupQty: "1", selectionGroupLabel: "", ncm: "", cfop: "5102", csosn: "400", unitCom: "UN", origem: 0, aliqIcms: 0 });
     setExtraInput({ label: "", price: "" });
     setRecipeIngredients([]);
     setProdModal({ open: true, categoryId });
@@ -416,6 +423,23 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
         scheduleRuleEndDate = rule.endDate || "";
       }
     } catch {}
+    let selectionGroupEnabled = false;
+    let selectionGroupSourceType: "category" | "products" = "category";
+    let selectionGroupCategoryId = "";
+    let selectionGroupProductIds: string[] = [];
+    let selectionGroupQty = "1";
+    let selectionGroupLabel = "";
+    try {
+      if (prod.selectionGroup) {
+        const sg = JSON.parse(prod.selectionGroup);
+        selectionGroupEnabled = true;
+        selectionGroupSourceType = sg.sourceType === "products" ? "products" : "category";
+        selectionGroupCategoryId = sg.categoryId || "";
+        selectionGroupProductIds = sg.productIds || [];
+        selectionGroupQty = String(sg.qty ?? 1);
+        selectionGroupLabel = sg.label || "";
+      }
+    } catch {}
     setProdForm({
       name: prod.name, description: prod.description || "", price: String(prod.price),
       imageUrl: prod.imageUrl || "", inventoryItemId: prod.inventoryItemId || "", recipeId: prod.recipeId || "",
@@ -432,6 +456,7 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
       scheduleRuleEndDate,
       variants: prod.variants?.map((v: any) => ({ _key: v.id || crypto.randomUUID(), name: v.name, price: String(v.price), description: v.description || "", inventoryItemId: v.inventoryItemId || "", imageUrl: v.imageUrl || "" })) || [],
       extras: parsedExtras,
+      selectionGroupEnabled, selectionGroupSourceType, selectionGroupCategoryId, selectionGroupProductIds, selectionGroupQty, selectionGroupLabel,
       ncm: prod.ncm || "", cfop: prod.cfop || "5102", csosn: prod.csosn || "400",
       unitCom: prod.unitCom || "UN", origem: prod.origem ?? 0, aliqIcms: prod.aliqIcms ?? 0,
     });
@@ -494,12 +519,36 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
       }
       scheduleRule = JSON.stringify(rule);
     }
+    let selectionGroup: string | null = null;
+    if (prodForm.selectionGroupEnabled) {
+      const qty = parseInt(prodForm.selectionGroupQty, 10);
+      if (!qty || qty < 1) {
+        toast.error("Informe quantos itens o cliente deve escolher.");
+        return;
+      }
+      if (prodForm.selectionGroupSourceType === "category" && !prodForm.selectionGroupCategoryId) {
+        toast.error("Selecione a categoria de onde vêm as opções.");
+        return;
+      }
+      if (prodForm.selectionGroupSourceType === "products" && prodForm.selectionGroupProductIds.length === 0) {
+        toast.error("Selecione ao menos um item para a seleção.");
+        return;
+      }
+      selectionGroup = JSON.stringify({
+        sourceType: prodForm.selectionGroupSourceType,
+        categoryId: prodForm.selectionGroupSourceType === "category" ? prodForm.selectionGroupCategoryId : undefined,
+        productIds: prodForm.selectionGroupSourceType === "products" ? prodForm.selectionGroupProductIds : undefined,
+        qty,
+        label: prodForm.selectionGroupLabel || undefined,
+      });
+    }
     const res = await apiFetch(url, {
       method: editingProduct ? 'PATCH' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ...prodForm,
         extras: JSON.stringify(prodForm.extras.map(e => ({ id: e.id, label: e.label, price: parseFloat(e.price) || 0 }))),
+        selectionGroup,
         scheduleRule,
         categoryId: prodModal.categoryId,
         tenantId: tenant?.id
@@ -1193,6 +1242,103 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
                     <button onClick={() => setProdForm(prev => ({ ...prev, extras: prev.extras.filter(e => e.id !== ex.id) }))} className="hover:text-red-500 ml-0.5">×</button>
                   </span>
                 ))}
+              </div>
+            )}
+          </div>
+
+          {/* Grupo de seleção embutido — escolher N itens de uma categoria/lista, sem
+              mudar o preço fixo do produto (ex: "2 espetos tradicionais" R$29 deixa
+              escolher os 2 sabores dentre os espetos já cadastrados, sem duplicar
+              como variação e sem somar preço próprio de cada item escolhido). */}
+          <div>
+            <label className="flex items-center gap-2 cursor-pointer mb-2">
+              <input
+                type="checkbox"
+                checked={prodForm.selectionGroupEnabled}
+                onChange={e => setProdForm(f => ({ ...f, selectionGroupEnabled: e.target.checked }))}
+                className="w-4 h-4 rounded accent-amber-500"
+              />
+              <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">Cliente escolhe itens (preço fixo)</span>
+            </label>
+            <p className="text-xs text-slate-400 mb-3">Ex: "2 espetos tradicionais" — o cliente escolhe 2 sabores de uma categoria já cadastrada, sem alterar o preço do produto.</p>
+            {prodForm.selectionGroupEnabled && (
+              <div className="p-4 bg-amber-50/50 rounded-2xl border border-amber-100 space-y-3">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setProdForm(f => ({ ...f, selectionGroupSourceType: "category" }))}
+                    className={`flex-1 px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wide transition-colors ${prodForm.selectionGroupSourceType === "category" ? "bg-[#0D1B3E] text-white" : "bg-white border border-slate-200 text-slate-500"}`}
+                  >Categoria inteira</button>
+                  <button
+                    type="button"
+                    onClick={() => setProdForm(f => ({ ...f, selectionGroupSourceType: "products" }))}
+                    className={`flex-1 px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wide transition-colors ${prodForm.selectionGroupSourceType === "products" ? "bg-[#0D1B3E] text-white" : "bg-white border border-slate-200 text-slate-500"}`}
+                  >Itens específicos</button>
+                </div>
+
+                {prodForm.selectionGroupSourceType === "category" ? (
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Categoria de onde vêm as opções</label>
+                    <select
+                      value={prodForm.selectionGroupCategoryId}
+                      onChange={e => setProdForm(f => ({ ...f, selectionGroupCategoryId: e.target.value }))}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
+                    >
+                      <option value="">Selecione...</option>
+                      {localCategories.filter(c => c.id !== prodModal.categoryId).map(c => (
+                        <option key={c.id} value={c.id}>{c.name} ({c.products?.length || 0} itens)</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Selecione os itens que entram como opção</label>
+                    <div className="max-h-48 overflow-y-auto space-y-1 bg-white rounded-xl border border-slate-200 p-2">
+                      {localCategories.flatMap(c => c.products || []).map((p: any) => {
+                        const checked = prodForm.selectionGroupProductIds.includes(p.id);
+                        return (
+                          <label key={p.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => setProdForm(f => ({
+                                ...f,
+                                selectionGroupProductIds: checked
+                                  ? f.selectionGroupProductIds.filter(id => id !== p.id)
+                                  : [...f.selectionGroupProductIds, p.id],
+                              }))}
+                              className="w-3.5 h-3.5 rounded accent-amber-500"
+                            />
+                            <span className="text-xs font-bold text-slate-700">{p.name}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Quantos itens o cliente escolhe</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={prodForm.selectionGroupQty}
+                      onChange={e => setProdForm(f => ({ ...f, selectionGroupQty: e.target.value.replace(/\D/g, "") }))}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Rótulo (opcional)</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Escolha os sabores"
+                      value={prodForm.selectionGroupLabel}
+                      onChange={e => setProdForm(f => ({ ...f, selectionGroupLabel: e.target.value }))}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
+                    />
+                  </div>
+                </div>
               </div>
             )}
           </div>
