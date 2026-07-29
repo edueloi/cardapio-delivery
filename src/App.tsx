@@ -61,6 +61,20 @@ function AnimatedRoutes() {
     return desktop.onNavigate((path: string) => navigate(path));
   }, [navigate]);
 
+  // Preferência "esconder menu do sistema" (controlada pelo menu nativo Exibir do app
+  // desktop, já que o menu nativo passa a cobrir a navegação e a barra/sidebar do
+  // próprio site fica redundante). Grava em localStorage + dispara um evento customizado
+  // pro DashboardShell reagir na hora, mesmo já montado (o evento "storage" nativo só
+  // dispara em outras abas, nunca na mesma aba que gravou).
+  useEffect(() => {
+    const desktop = (window as any).pdvDesktop;
+    if (!desktop?.onSetHideSystemMenu) return;
+    return desktop.onSetHideSystemMenu((hidden: boolean) => {
+      try { window.localStorage.setItem("boxsys_hide_system_nav", hidden ? "1" : "0"); } catch {}
+      window.dispatchEvent(new CustomEvent("boxsys:hide-system-nav-changed", { detail: hidden }));
+    });
+  }, []);
+
   return (
     <>
       <AnimatePresence mode="wait">

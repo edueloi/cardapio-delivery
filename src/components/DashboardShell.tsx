@@ -1,7 +1,8 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { type LucideIcon, LogOut, Menu, Monitor, Utensils, X, ShieldCheck, ChefHat, ExternalLink, PanelLeftClose, PanelLeftOpen, PanelTopClose, Settings2, AlertTriangle, ChevronDown } from "lucide-react";
+import { type LucideIcon, LogOut, Menu, Monitor, Utensils, X, ShieldCheck, ChefHat, ExternalLink, PanelLeftClose, PanelLeftOpen, PanelTopClose, Settings2, AlertTriangle, ChevronDown, MoreHorizontal } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 import DashboardAccountMenu from "./DashboardAccountMenu";
 
@@ -91,6 +92,28 @@ export default function DashboardShell({
   });
   const isTopbarLayout = layoutMode === "topbar";
   const [openTopGroupId, setOpenTopGroupId] = useState<string | null>(null);
+  // Posição do dropdown aberto (calculada a partir do botão clicado) — o dropdown é
+  // renderizado via portal direto no <body>, fora da barra de navegação, porque essa
+  // barra tem overflow-x-auto (pra rolar quando há muitas categorias) e um dropdown
+  // "position: absolute" dentro dela fica recortado pela altura do header em vez de
+  // flutuar por cima do conteúdo da página.
+  const [topGroupMenuPos, setTopGroupMenuPos] = useState<{ left: number; top: number } | null>(null);
+  const topGroupButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  // "Esconder menu do sistema" — controlada de fora (menu nativo do app desktop Electron,
+  // ver Exibir → Esconder menu do sistema em pdv-desktop/src/main.js), não por um botão
+  // daqui. Some com a sidebar/barra de categorias inteira quando ativa. Fora do Electron
+  // isso nunca é ligado (não existe UI no site pra ativar sozinho), então o padrão "false"
+  // é seguro.
+  const [hideSystemNav, setHideSystemNav] = useState(() => {
+    try { return window.localStorage.getItem("boxsys_hide_system_nav") === "1"; } catch { return false; }
+  });
+
+  useEffect(() => {
+    const handler = (e: Event) => setHideSystemNav(!!(e as CustomEvent).detail);
+    window.addEventListener("boxsys:hide-system-nav-changed", handler);
+    return () => window.removeEventListener("boxsys:hide-system-nav-changed", handler);
+  }, []);
 
   useEffect(() => {
     try { window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, isCollapsed ? "1" : "0"); } catch {}
@@ -169,8 +192,10 @@ export default function DashboardShell({
 
       {/* ══ SIDEBAR ══ — só no modo lateral; no modo topo (isTopbarLayout) a navegação
           inteira vira a barra de categorias dentro do header, mais abaixo. No mobile,
-          o menu sempre usa a sidebar deslizante independente da preferência de desktop. */}
-      {(!isTopbarLayout || isMobileMenuOpen) && (
+          o menu sempre usa a sidebar deslizante independente da preferência de desktop.
+          hideSystemNav (app desktop) esconde a sidebar completamente, mesmo no mobile —
+          quem ligou essa opção já tem o menu nativo do Windows cobrindo a navegação. */}
+      {!hideSystemNav && (!isTopbarLayout || isMobileMenuOpen) && (
       <aside className={cn(
         "fixed inset-y-0 left-0 z-50 w-[82vw] max-w-[300px] bg-[#0A1628] text-slate-300 flex flex-col",
         "transition-[transform,width] duration-300 ease-in-out",
@@ -391,6 +416,57 @@ export default function DashboardShell({
       {/* ══ CONTEÚDO PRINCIPAL ══ */}
       <main className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
 
+        {/* ══ FAIXA MÍNIMA DE NAVEGAÇÃO — modo topo + tela sem header (ex: PDV) ══
+            No modo lateral, a sidebar continua visível mesmo com hideHeader, então
+            sempre existe como sair da tela. No modo topo não existe sidebar — sem esta
+            faixa, hideHeader prendia o operador na tela (ex: PDV) sem nenhum jeito de
+            trocar de aba. Fica bem fina pra não roubar o espaço vertical que hideHeader
+            existe pra garantir. */}
+        {hideHeader && isTopbarLayout && (
+          <div className="hidden xl:flex items-center gap-2 h-8 px-3 bg-[#0A1628] shrink-0 overflow-x-auto">
+            <div className="w-5 h-5 rounded bg-white flex items-center justify-center shrink-0 p-0.5">
+              <img src={logoSrc} alt="Logo" className="w-full h-full object-contain" />
+            </div>
+            {navigationGroups.map((group) => (
+              <TopGroupDropdown
+                key={group.id}
+                buttonRef={(el) => { topGroupButtonRefs.current[group.id] = el; }}
+                label={group.label}
+                icon={group.items[0]?.icon}
+                isOpen={openTopGroupId === group.id}
+                isActive={group.items.some((i) => i.tab === activeTab)}
+                menuPos={topGroupMenuPos}
+                compact
+                onToggle={() => {
+                  const btn = topGroupButtonRefs.current[group.id];
+                  if (btn) {
+                    const rect = btn.getBoundingClientRect();
+                    setTopGroupMenuPos({ left: rect.left, top: rect.bottom + 4 });
+                  }
+                  setOpenTopGroupId((v) => (v === group.id ? null : group.id));
+                }}
+              >
+                {group.items.map((item) => {
+                  const isActive = activeTab === item.tab;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => { onSelectTab(item.tab); setOpenTopGroupId(null); }}
+                      className={cn(
+                        "w-full flex items-center gap-2.5 px-3 py-2 text-left text-[12px] font-semibold transition-colors",
+                        isActive ? "bg-[#C9A227]/10 text-[#0A1628]" : "text-slate-600 hover:bg-slate-50"
+                      )}
+                    >
+                      <item.icon className={cn("w-3.5 h-3.5 shrink-0", isActive ? "text-[#C9A227]" : "text-slate-400")} />
+                      <span className="flex-1 truncate">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </TopGroupDropdown>
+            ))}
+          </div>
+        )}
+
         {/* ══ DESKTOP TOPBAR ══ */}
           {!hideHeader && (
         <header className={cn(
@@ -398,139 +474,130 @@ export default function DashboardShell({
           isLiveOrdersTab ? "px-4 lg:px-5" : "px-6 lg:px-8"
         )}>
 
-          {/* Esquerda — no modo lateral, breadcrumb da aba ativa; no modo topo, a
-              navegação inteira vira categorias com dropdown, tipo barra de menu de
-              app desktop (Arquivo/Editar/Exibir), mas com ícone + rótulo de cada grupo. */}
-          {isTopbarLayout ? (
-            <nav className="flex items-center gap-1 h-full min-w-0 overflow-x-auto">
-              {navigationGroups.map((group) => {
-                const groupHasActive = group.items.some((i) => i.tab === activeTab);
-                const isOpen = openTopGroupId === group.id;
-                return (
-                  <div key={group.id} className="relative h-full flex items-center" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      onClick={() => setOpenTopGroupId((v) => (v === group.id ? null : group.id))}
-                      className={cn(
-                        "flex items-center gap-1.5 px-3 h-9 rounded-lg text-[12px] font-bold transition-colors whitespace-nowrap",
-                        groupHasActive || isOpen ? "bg-[#0A1628] text-white" : "text-slate-500 hover:bg-slate-100"
-                      )}
-                    >
-                      {group.label}
-                      <ChevronDown className={cn("w-3 h-3 transition-transform", isOpen && "rotate-180")} />
-                    </button>
-                    <AnimatePresence>
-                      {isOpen && (
-                        <motion.div
-                          initial={{ opacity: 0, y: -6 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -6 }}
-                          transition={{ duration: 0.15 }}
-                          className="absolute left-0 top-full mt-1 w-56 bg-white rounded-xl shadow-2xl border border-slate-200/80 py-1.5 z-50"
-                        >
-                          {group.items.map((item) => {
-                            const isActive = activeTab === item.tab;
-                            const alertCount = navigationAlerts?.[item.tab] || 0;
-                            return (
-                              <button
-                                key={item.id}
-                                onClick={() => { onSelectTab(item.tab); setOpenTopGroupId(null); }}
-                                className={cn(
-                                  "w-full flex items-center gap-2.5 px-3 py-2 text-left text-[12px] font-semibold transition-colors",
-                                  isActive ? "bg-[#C9A227]/10 text-[#0A1628]" : "text-slate-600 hover:bg-slate-50"
-                                )}
-                              >
-                                <item.icon className={cn("w-3.5 h-3.5 shrink-0", isActive ? "text-[#C9A227]" : "text-slate-400")} />
-                                <span className="flex-1 truncate">{item.label}</span>
-                                {alertCount > 0 && (
-                                  <span className="shrink-0 min-w-[16px] h-[16px] px-1 rounded-full bg-amber-400 text-[#0A1628] text-[9px] font-black flex items-center justify-center">
-                                    {alertCount > 9 ? "9+" : alertCount}
-                                  </span>
-                                )}
-                              </button>
-                            );
-                          })}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                );
-              })}
-
-              {/* Categoria "Mais" — reúne o que no menu lateral fica fora dos grupos
-                  principais: painéis externos (TV/Cozinha) e os atalhos do rodapé
-                  (Ver Cardápio, Super Admin, Sair), pra nada do menu de hoje sumir. */}
-              <div className="relative h-full flex items-center" onClick={(e) => e.stopPropagation()}>
-                <button
-                  onClick={() => setOpenTopGroupId((v) => (v === "__more__" ? null : "__more__"))}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 h-9 rounded-lg text-[12px] font-bold transition-colors whitespace-nowrap",
-                    openTopGroupId === "__more__" ? "bg-[#0A1628] text-white" : "text-slate-500 hover:bg-slate-100"
-                  )}
-                >
-                  Mais
-                  <ChevronDown className={cn("w-3 h-3 transition-transform", openTopGroupId === "__more__" && "rotate-180")} />
-                </button>
-                <AnimatePresence>
-                  {openTopGroupId === "__more__" && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -6 }}
-                      transition={{ duration: 0.15 }}
-                      className="absolute left-0 top-full mt-1 w-56 bg-white rounded-xl shadow-2xl border border-slate-200/80 py-1.5 z-50"
-                    >
-                      <p className="px-3 pt-1 pb-1.5 text-[9px] font-black uppercase tracking-[0.2em] text-slate-300">Painéis</p>
-                      <a
-                        href={`/${slug}/display`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[12px] font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
-                      >
-                        <Monitor className="w-3.5 h-3.5 shrink-0 text-slate-400" />
-                        <span className="flex-1">Painel TV</span>
-                        <ExternalLink className="w-3 h-3 text-slate-300" />
-                      </a>
-                      <a
-                        href={`/cozinha/${slug}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[12px] font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
-                      >
-                        <ChefHat className="w-3.5 h-3.5 shrink-0 text-slate-400" />
-                        <span className="flex-1">Painel Cozinha</span>
-                        <ExternalLink className="w-3 h-3 text-slate-300" />
-                      </a>
-                      <div className="my-1 border-t border-slate-100" />
-                      <Link
-                        to={`/${slug}`}
-                        onClick={() => setOpenTopGroupId(null)}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[12px] font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
-                      >
-                        <Utensils className="w-3.5 h-3.5 shrink-0 text-slate-400" />
-                        Ver Cardápio
-                      </Link>
-                      {isSuperAdmin && (
-                        <Link
-                          to="/superadmin"
-                          onClick={() => setOpenTopGroupId(null)}
-                          className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[12px] font-semibold text-amber-600 hover:bg-amber-50 transition-colors"
-                        >
-                          <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
-                          Super Admin
-                        </Link>
-                      )}
-                      {onLogout && (
+          {/* Esquerda — no modo lateral, breadcrumb da aba ativa; no modo topo, o logo
+              seguido das categorias com dropdown, tipo barra de menu de app desktop
+              (Arquivo/Editar/Exibir), com ícone + rótulo de cada grupo. Os dropdowns
+              são renderizados via portal (ver TopGroupDropdown mais abaixo) porque a
+              barra tem overflow-x-auto e um "position: absolute" comum ficaria
+              recortado pela altura do header em vez de flutuar por cima da página. */}
+          {isTopbarLayout && !hideSystemNav ? (
+            <nav className="flex items-center gap-3 h-full min-w-0">
+              <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center shrink-0 p-1">
+                <img src={logoSrc} alt="Logo" className="w-full h-full object-contain" />
+              </div>
+              <div className="flex items-center gap-1 h-full min-w-0 overflow-x-auto">
+                {navigationGroups.map((group) => (
+                  <TopGroupDropdown
+                    key={group.id}
+                    buttonRef={(el) => { topGroupButtonRefs.current[group.id] = el; }}
+                    label={group.label}
+                    icon={group.items[0]?.icon}
+                    isOpen={openTopGroupId === group.id}
+                    isActive={group.items.some((i) => i.tab === activeTab)}
+                    menuPos={topGroupMenuPos}
+                    onToggle={() => {
+                      const btn = topGroupButtonRefs.current[group.id];
+                      if (btn) {
+                        const rect = btn.getBoundingClientRect();
+                        setTopGroupMenuPos({ left: rect.left, top: rect.bottom + 4 });
+                      }
+                      setOpenTopGroupId((v) => (v === group.id ? null : group.id));
+                    }}
+                  >
+                    {group.items.map((item) => {
+                      const isActive = activeTab === item.tab;
+                      const alertCount = navigationAlerts?.[item.tab] || 0;
+                      return (
                         <button
-                          onClick={() => { setOpenTopGroupId(null); onLogout(); }}
-                          className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[12px] font-semibold text-red-500 hover:bg-red-50 transition-colors"
+                          key={item.id}
+                          onClick={() => { onSelectTab(item.tab); setOpenTopGroupId(null); }}
+                          className={cn(
+                            "w-full flex items-center gap-2.5 px-3 py-2 text-left text-[12px] font-semibold transition-colors",
+                            isActive ? "bg-[#C9A227]/10 text-[#0A1628]" : "text-slate-600 hover:bg-slate-50"
+                          )}
                         >
-                          <LogOut className="w-3.5 h-3.5 shrink-0" />
-                          Sair
+                          <item.icon className={cn("w-3.5 h-3.5 shrink-0", isActive ? "text-[#C9A227]" : "text-slate-400")} />
+                          <span className="flex-1 truncate">{item.label}</span>
+                          {alertCount > 0 && (
+                            <span className="shrink-0 min-w-[16px] h-[16px] px-1 rounded-full bg-amber-400 text-[#0A1628] text-[9px] font-black flex items-center justify-center">
+                              {alertCount > 9 ? "9+" : alertCount}
+                            </span>
+                          )}
                         </button>
-                      )}
-                    </motion.div>
+                      );
+                    })}
+                  </TopGroupDropdown>
+                ))}
+
+                {/* Categoria "Mais" — reúne o que no menu lateral fica fora dos grupos
+                    principais: painéis externos (TV/Cozinha) e os atalhos do rodapé
+                    (Ver Cardápio, Super Admin, Sair), pra nada do menu de hoje sumir. */}
+                <TopGroupDropdown
+                  buttonRef={(el) => { topGroupButtonRefs.current.__more__ = el; }}
+                  label="Mais"
+                  icon={MoreHorizontal}
+                  isOpen={openTopGroupId === "__more__"}
+                  isActive={false}
+                  menuPos={topGroupMenuPos}
+                  onToggle={() => {
+                    const btn = topGroupButtonRefs.current.__more__;
+                    if (btn) {
+                      const rect = btn.getBoundingClientRect();
+                      setTopGroupMenuPos({ left: rect.left, top: rect.bottom + 4 });
+                    }
+                    setOpenTopGroupId((v) => (v === "__more__" ? null : "__more__"));
+                  }}
+                >
+                  <p className="px-3 pt-1 pb-1.5 text-[9px] font-black uppercase tracking-[0.2em] text-slate-300">Painéis</p>
+                  <a
+                    href={`/${slug}/display`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[12px] font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+                  >
+                    <Monitor className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                    <span className="flex-1">Painel TV</span>
+                    <ExternalLink className="w-3 h-3 text-slate-300" />
+                  </a>
+                  <a
+                    href={`/cozinha/${slug}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[12px] font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+                  >
+                    <ChefHat className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                    <span className="flex-1">Painel Cozinha</span>
+                    <ExternalLink className="w-3 h-3 text-slate-300" />
+                  </a>
+                  <div className="my-1 border-t border-slate-100" />
+                  <Link
+                    to={`/${slug}`}
+                    onClick={() => setOpenTopGroupId(null)}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[12px] font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+                  >
+                    <Utensils className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                    Ver Cardápio
+                  </Link>
+                  {isSuperAdmin && (
+                    <Link
+                      to="/superadmin"
+                      onClick={() => setOpenTopGroupId(null)}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[12px] font-semibold text-amber-600 hover:bg-amber-50 transition-colors"
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                      Super Admin
+                    </Link>
                   )}
-                </AnimatePresence>
+                  {onLogout && (
+                    <button
+                      onClick={() => { setOpenTopGroupId(null); onLogout(); }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[12px] font-semibold text-red-500 hover:bg-red-50 transition-colors"
+                    >
+                      <LogOut className="w-3.5 h-3.5 shrink-0" />
+                      Sair
+                    </button>
+                  )}
+                </TopGroupDropdown>
               </div>
             </nav>
           ) : (
@@ -621,5 +688,69 @@ export default function DashboardShell({
         onSelectTab={onSelectTab}
       />
     </>
+  );
+}
+
+// Cada categoria do menu de topo usa este wrapper pra abrir seu dropdown via portal
+// direto no <body>, na posição calculada do botão (ver onToggle em DashboardShell) —
+// precisa ser um componente de módulo (não aninhado dentro de DashboardShell), senão
+// o React recria sua identidade a cada render do pai e remonta a árvore inteira à toa.
+function TopGroupDropdown({
+  buttonRef,
+  label,
+  icon: Icon,
+  isOpen,
+  isActive,
+  onToggle,
+  menuPos,
+  compact = false,
+  children,
+}: {
+  buttonRef: (el: HTMLButtonElement | null) => void;
+  label: string;
+  icon?: LucideIcon;
+  isOpen: boolean;
+  isActive: boolean;
+  onToggle: () => void;
+  menuPos: { left: number; top: number } | null;
+  /** Versão mini pra faixa fina de navegação usada em telas com hideHeader (ex: PDV) —
+      texto claro (fundo escuro) em vez do estilo padrão de fundo branco. */
+  compact?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div className="h-full flex items-center" onClick={(e) => e.stopPropagation()}>
+      <button
+        ref={buttonRef}
+        onClick={onToggle}
+        className={cn(
+          "flex items-center gap-1.5 rounded-lg font-bold transition-colors whitespace-nowrap",
+          compact ? "px-2 h-6 text-[10px]" : "px-3 h-9 text-[12px]",
+          compact
+            ? (isActive || isOpen ? "bg-white/15 text-white" : "text-white/50 hover:bg-white/10")
+            : (isActive || isOpen ? "bg-[#0A1628] text-white" : "text-slate-500 hover:bg-slate-100")
+        )}
+      >
+        {Icon && <Icon className={compact ? "w-3 h-3 shrink-0" : "w-3.5 h-3.5 shrink-0"} />}
+        {label}
+        <ChevronDown className={cn(compact ? "w-2.5 h-2.5" : "w-3 h-3", "transition-transform", isOpen && "rotate-180")} />
+      </button>
+      {isOpen && menuPos && createPortal(
+        <AnimatePresence>
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.15 }}
+            onClick={(e) => e.stopPropagation()}
+            style={{ position: "fixed", left: menuPos.left, top: menuPos.top }}
+            className="w-56 bg-white rounded-xl shadow-2xl border border-slate-200/80 py-1.5 z-[100]"
+          >
+            {children}
+          </motion.div>
+        </AnimatePresence>,
+        document.body
+      )}
+    </div>
   );
 }

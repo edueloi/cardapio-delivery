@@ -100,12 +100,23 @@ function navigateTo(navPath) {
   mainWindow.webContents.send("nav:go-to", `/dashboard/${currentSlug}/${navPath}`);
 }
 
-// Barra de menu nativa (PDV / Navegar / Exibir) — inclui um menu "Navegar" com todas as
-// telas do dashboard, agrupadas exatamente como no menu lateral do site (Operação,
-// Catálogo & Estoque, Financeiro, Clientes & Marketing, Administração). Clicar num item
-// manda o renderer trocar de rota (ver navigateTo acima e o listener nav:go-to no
-// App.tsx) sem recarregar a página inteira. Os atalhos de teclado abaixo continuam
-// funcionando em paralelo (F11 tela cheia, F9 impressora, Ctrl+R, Ctrl+Q, zoom).
+function getHideSystemMenu() {
+  return store.get("hideSystemMenu", false);
+}
+
+function setHideSystemMenu(value) {
+  store.set("hideSystemMenu", value);
+  if (mainWindow) mainWindow.webContents.send("nav:set-hide-system-menu", value);
+  refreshAppMenu(); // atualiza o "check" do item no menu Exibir
+}
+
+// Barra de menu nativa (PDV / <categorias> / Exibir) — cada categoria do dashboard
+// (Operação, Catálogo & Estoque, Financeiro, Clientes & Marketing, Administração) é seu
+// próprio menu de topo, lado a lado com PDV e Exibir — não um item dentro de um menu
+// "Navegar" só. Clicar num item manda o renderer trocar de rota (ver navigateTo acima e
+// o listener nav:go-to no App.tsx) sem recarregar a página inteira. Os atalhos de
+// teclado abaixo continuam funcionando em paralelo (F11 tela cheia, F9 impressora,
+// Ctrl+R, Ctrl+Q, zoom).
 function buildAppMenu() {
   const zoomPercent = Math.round(getZoomFactor() * 100);
   return Menu.buildFromTemplate([
@@ -116,16 +127,13 @@ function buildAppMenu() {
         { label: "Sair", accelerator: "CmdOrCtrl+Q", click: () => confirmAndQuit() },
       ],
     },
-    {
-      label: "Navegar",
-      submenu: NAV_GROUPS.map((group) => ({
-        label: group.label,
-        submenu: group.items.map((item) => ({
-          label: item.label,
-          click: () => navigateTo(item.path),
-        })),
+    ...NAV_GROUPS.map((group) => ({
+      label: group.label,
+      submenu: group.items.map((item) => ({
+        label: item.label,
+        click: () => navigateTo(item.path),
       })),
-    },
+    })),
     {
       label: "Exibir",
       submenu: [
@@ -143,6 +151,17 @@ function buildAppMenu() {
         { label: "Restaurar Zoom Padrão", accelerator: "CmdOrCtrl+0", click: () => setZoomFactor(1) },
         { type: "separator" },
         { label: "Configurar Impressora...", accelerator: "F9", click: () => openPrinterConfigWindow(mainWindow) },
+        { type: "separator" },
+        {
+          label: "Esconder menu do sistema (lateral/topo)",
+          type: "checkbox",
+          checked: getHideSystemMenu(),
+          // Controla a navegação do próprio site (sidebar ou barra de categorias do
+          // dashboard) — não tem relação com esta barra de menu nativa do Windows, que
+          // continua sempre visível. Útil quando o menu nativo já cobre a navegação e o
+          // menu do site fica redundante, competindo por espaço em telas menores.
+          click: (menuItem) => setHideSystemMenu(menuItem.checked),
+        },
       ],
     },
   ]);
@@ -215,11 +234,12 @@ function createWindow() {
 
   mainWindow.loadURL(APP_URL);
 
-  // Reaplica o zoom salvo a cada carregamento — o zoomFactor de um webContents não
-  // sobrevive a navegações (login → PDV troca de URL), então sem isso o ajuste do
-  // operador seria perdido no primeiro reload.
+  // Reaplica o zoom e a preferência de esconder o menu do sistema a cada carregamento —
+  // nenhum dos dois sobrevive a navegações (login → dashboard troca de URL/recarrega o
+  // React do zero), então sem isso o ajuste do operador seria perdido no primeiro reload.
   mainWindow.webContents.on("did-finish-load", () => {
     mainWindow.webContents.setZoomFactor(getZoomFactor());
+    mainWindow.webContents.send("nav:set-hide-system-menu", getHideSystemMenu());
   });
 
   mainWindow.webContents.on("did-fail-load", (_event, _code, description) => {
