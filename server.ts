@@ -8150,14 +8150,28 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
 
     let counterTicketNumber: number | null = null;
     if (isCounterComanda) {
-      if (
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+      const requested =
         Number.isInteger(Number(requestedCounterTicketNumber)) &&
         Number(requestedCounterTicketNumber) > 0
-      ) {
-        counterTicketNumber = Number(requestedCounterTicketNumber);
+          ? Number(requestedCounterTicketNumber)
+          : null;
+      // O número sugerido pelo cliente (buscado quando o modal "Nova Comanda" abriu)
+      // pode ter ficado desatualizado se outra comanda foi criada nesse meio tempo —
+      // confiar cegamente nele já causou duas comandas com a mesma "Senha ##" no
+      // mesmo dia (uma delas pronta pra retirar, outra recém-criada e já aguardando
+      // cobrança), fazendo o alerta de cobrança parecer se referir ao pedido errado.
+      // Sempre validamos contra o banco antes de aceitar, e recalculamos se colidir.
+      const collision = requested
+        ? await prisma.order.findFirst({
+            where: { tenantId: tenant.id, counterTicketNumber: requested, createdAt: { gte: startOfDay } },
+            select: { id: true },
+          })
+        : null;
+      if (requested && !collision) {
+        counterTicketNumber = requested;
       } else {
-        const startOfDay = new Date();
-        startOfDay.setHours(0, 0, 0, 0);
         const lastTicket = await prisma.order.findFirst({
           where: {
             tenantId: tenant.id,

@@ -165,8 +165,8 @@ function AwaitingPaymentAlert({
               <Bell className="w-5 h-5 text-white" />
             </div>
             <div>
-              <p className="text-sm font-black text-white">Pedido aguardando caixa</p>
-              <p className="text-[11px] text-white/80 font-bold">Já faz mais de 5 minutos — foi entregue?</p>
+              <p className="text-sm font-black text-white">Pedido aguardando cobrança</p>
+              <p className="text-[11px] text-white/80 font-bold">Já foi entregue há mais de 5 minutos — feche a comanda no PDV.</p>
             </div>
             <button onClick={() => setAlertOrder(null)} className="ml-auto p-1.5 rounded-xl hover:bg-white/20 text-white transition-colors">
               <X className="w-4 h-4" />
@@ -243,13 +243,16 @@ function AwaitingPaymentAlert({
             </button>
             <button
               onClick={() => {
-                updateStatus(alertOrder.id, 'DELIVERED');
+                // Não muda o status do pedido — ele já está AWAITING_PAYMENT (o que já
+                // significa "entregue, esperando ser cobrado"). Marcar como DELIVERED
+                // aqui duplicava a venda nos relatórios quando a comanda fosse fechada/
+                // faturada de verdade depois no PDV. Este botão só some com o alerta.
                 setAlertOrder(null);
               }}
               className="flex-1 py-3 rounded-2xl bg-emerald-500 text-[11px] font-black uppercase tracking-widest text-white hover:bg-emerald-600 active:scale-95 transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/30"
             >
               <CheckCircle2 className="w-3.5 h-3.5" />
-              Já foi entregue
+              Ciente
             </button>
           </div>
         </motion.div>
