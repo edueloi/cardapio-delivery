@@ -38,10 +38,13 @@ const PERM_TABS = [
   { id: "finance",     label: "Fluxo de Caixa",    group: "Financeiro" },
   { id: "entries",     label: "Entradas e Saídas", group: "Financeiro" },
   { id: "reports",     label: "Relatórios",        group: "Financeiro" },
+  { id: "nfce",        label: "Notas Fiscais",     group: "Financeiro" },
   { id: "customers",   label: "Clientes CRM",      group: "Marketing" },
   { id: "loyalty",     label: "Fidelidade",        group: "Marketing" },
   { id: "promotions",  label: "Promoções",         group: "Marketing" },
+  { id: "bundles",     label: "Combos",            group: "Marketing" },
   { id: "whatsapp",    label: "WhatsApp",          group: "Marketing" },
+  { id: "display-panel", label: "Config. Painel TV", group: "Administração" },
   { id: "downloads",   label: "Downloads",         group: "Administração" },
   { id: "manual",      label: "Manual de Ajuda",   group: "Administração" },
 ] as const;
