@@ -602,7 +602,7 @@ function ArtesanalColumn({ orders, textColor, size }: ArtesanalColumnProps) {
       <AnimatePresence mode="popLayout">
         {orders.map((order) => {
           const firstName = orderFirstName(order);
-          const number = orderCode(order).replace("#", "");
+          const code = orderCode(order);
           return (
             <motion.div
               layout
@@ -624,7 +624,7 @@ function ArtesanalColumn({ orders, textColor, size }: ArtesanalColumnProps) {
                 textOverflow: "ellipsis",
               }}
             >
-              {firstName ? `${firstName.toUpperCase()} ${number}` : number}
+              {firstName ? `${code} - ${firstName}` : code}
             </motion.div>
           );
         })}
@@ -1260,6 +1260,7 @@ export default function PublicDashboardPage() {
 
             <div style={{ flex: 1, padding: "16px 20px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
               {preparingOrders.length === 0 ? (
+                isArtesanal ? null : (
                 <motion.div
                   key="empty-prep"
                   initial={{ opacity: 0 }}
@@ -1268,6 +1269,7 @@ export default function PublicDashboardPage() {
                 >
                   Nenhum pedido em preparo
                 </motion.div>
+                )
               ) : displayConfig.cardStyle === "grid" ? (
                 <GridColumn orders={preparingOrders} accentColor={preparingColor} size={displayConfig.ticketCardSize} />
               ) : displayConfig.cardStyle === "artesanal" ? (
@@ -1325,6 +1327,7 @@ export default function PublicDashboardPage() {
 
             <div style={{ flex: 1, padding: "16px 20px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
               {readyOrders.length === 0 ? (
+                isArtesanal ? null : (
                 <motion.div
                   key="empty-ready"
                   initial={{ opacity: 0 }}
@@ -1333,6 +1336,7 @@ export default function PublicDashboardPage() {
                 >
                   Nenhum pedido pronto
                 </motion.div>
+                )
               ) : displayConfig.cardStyle === "grid" ? (
                 <GridColumn orders={readyOrders} accentColor={readyColor} size={displayConfig.ticketCardSize} />
               ) : displayConfig.cardStyle === "artesanal" ? (
