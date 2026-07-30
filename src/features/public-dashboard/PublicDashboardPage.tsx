@@ -933,7 +933,7 @@ export default function PublicDashboardPage() {
   return (
     <div
       style={{
-        minHeight: "100vh",
+        height: "100vh",
         background: theme.bg,
         color: theme.textPrimary,
         fontFamily: "'Inter', 'Segoe UI', sans-serif",
