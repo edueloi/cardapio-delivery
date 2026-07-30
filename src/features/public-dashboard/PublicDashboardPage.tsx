@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import socket from "../../lib/socket";
-import { playTvPanelReadySound } from "../../lib/notificationSound";
-import { announceOrderReady } from "../../lib/voiceAnnouncement";
+import { playTvPanelReadySound, primeAudioContext } from "../../lib/notificationSound";
+import { announceOrderReady, primeSpeechSynthesis } from "../../lib/voiceAnnouncement";
 import type { DisplayPanelConfig, DisplayPanelImage, Order, Tenant } from "../../types";
 import { dineInOrderLabel } from "../../types";
 import { motion, AnimatePresence } from "motion/react";
@@ -721,6 +721,7 @@ export default function PublicDashboardPage() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [readyAnnouncementQueue, setReadyAnnouncementQueue] = useState<Order[]>([]);
   const [activeReadyAnnouncement, setActiveReadyAnnouncement] = useState<Order | null>(null);
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
   const ordersRef = useRef<Order[]>([]);
   const displayConfigRef = useRef<DisplayPanelConfig>(DEFAULT_DISPLAY_CONFIG);
   const announcedReadyIdsRef = useRef<Set<string>>(new Set());
@@ -778,6 +779,26 @@ export default function PublicDashboardPage() {
     link.href = "https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&display=swap";
     document.head.appendChild(link);
   }, [displayConfig.cardStyle]);
+
+  // O Painel de TV normalmente fica aberto numa tela sem ninguém tocar — e o navegador só
+  // libera som/voz depois de um gesto real (clique/toque) NESSA aba especificamente. Sem
+  // isso, "Chamar novamente" feito no painel de pedidos (outra aba/dispositivo) nunca produz
+  // som aqui, mesmo funcionando o resto do fluxo. Um único clique/toque em qualquer lugar
+  // da tela do painel destrava o resto da sessão.
+  useEffect(() => {
+    if (audioUnlocked) return;
+    const unlock = () => {
+      primeAudioContext();
+      primeSpeechSynthesis();
+      setAudioUnlocked(true);
+    };
+    window.addEventListener("pointerdown", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, [audioUnlocked]);
 
   useEffect(() => {
     ordersRef.current = orders;
@@ -942,6 +963,34 @@ export default function PublicDashboardPage() {
         overflow: "hidden",
       }}
     >
+      {/* ── AVISO PRA DESTRAVAR SOM/VOZ ────────────────────────
+          Navegador só libera áudio/fala nesta aba depois de 1 clique/toque real
+          nela — some sozinho assim que o gesto acontece (ver useEffect acima). */}
+      {!audioUnlocked && (
+        <div
+          style={{
+            position: "fixed",
+            top: 14,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 300,
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            background: "rgba(0,0,0,0.82)",
+            color: "#ffffff",
+            padding: "10px 20px",
+            borderRadius: 999,
+            fontSize: 13,
+            fontWeight: 700,
+            boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+          }}
+        >
+          <Bell style={{ width: 16, height: 16 }} />
+          Toque na tela para ativar o som e a voz das chamadas
+        </div>
+      )}
+
       {/* ── CHAMADA DE SENHA ──────────────────────────────────── */}
       <AnimatePresence>
         {activeReadyAnnouncement && isArtesanal && (

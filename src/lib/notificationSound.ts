@@ -9,6 +9,16 @@ function getAudioContext(): AudioContext | null {
   return audioCtx;
 }
 
+// Chrome/Edge bloqueiam áudio (e speechSynthesis) em qualquer aba que nunca recebeu um
+// gesto do usuário (clique/toque) — comum no Painel de TV, que fica numa aba/tela aberta
+// sem ninguém interagir. Chame isso dentro de um handler de clique/toque real pra "destravar"
+// o AudioContext pro resto da sessão daquela aba.
+export function primeAudioContext() {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  if (ctx.state === "suspended") void ctx.resume();
+}
+
 // Arquivos de áudio reais em public/alerts/. Cada evento novo só precisa
 // de uma entrada aqui — cai pro beep sintetizado se o arquivo faltar/falhar.
 const ALERT_FILES = {

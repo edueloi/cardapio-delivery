@@ -75,6 +75,21 @@ if (typeof window !== "undefined" && window.speechSynthesis) {
 
 export const DEFAULT_VOICE_TEXT = "Senha número {numero}, {nome}, retirar no balcão";
 
+// Alguns navegadores só liberam speechSynthesis.speak() depois de um gesto real do usuário
+// na aba (clique/toque) — no Painel de TV, que fica aberto sozinho sem interação, isso
+// silencia a voz até alguém tocar na tela. Chame isso dentro de um handler de clique real
+// pra "destravar" a fala pro resto da sessão daquela aba (fala em volume 0, imperceptível).
+export function primeSpeechSynthesis() {
+  if (typeof window === "undefined" || !window.speechSynthesis) return;
+  try {
+    const utterance = new SpeechSynthesisUtterance(" ");
+    utterance.volume = 0;
+    window.speechSynthesis.speak(utterance);
+  } catch {
+    // ignora silenciosamente
+  }
+}
+
 // Anuncia um pedido pronto pelo número da senha e, quando disponível, pelo primeiro
 // nome do cliente (ex: "Senha número 007, Felipe, retirar no balcão") — o dono pode
 // incluir {nome} no texto customizado em Configurações > Config. Painel TV; se o texto
