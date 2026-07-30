@@ -85,6 +85,30 @@ function orderSenhaLabel(order: Order): string {
   return `#${order.id.slice(-4).toUpperCase()}`;
 }
 
+// Pedidos cujo alerta já foi reconhecido ("Ciente") persistem aqui — sem isso, o
+// alerta rearmava a cada F5/reconexão mesmo depois do operador já ter visto e
+// confirmado, porque o único estado "já vi isso" vivia em memória do componente.
+// Guardado em localStorage (não no banco) porque é só uma preferência de "não me
+// pergunte de novo sobre ESTE pedido", não algo que precise sincronizar entre telas.
+const DISMISSED_KEY = "boxsys_awaiting_payment_dismissed";
+function getDismissedIds(): Set<string> {
+  try {
+    const raw = window.localStorage.getItem(DISMISSED_KEY);
+    return new Set(raw ? JSON.parse(raw) : []);
+  } catch {
+    return new Set();
+  }
+}
+function addDismissedId(id: string) {
+  try {
+    const ids = getDismissedIds();
+    ids.add(id);
+    // Cap de 200 entradas — evita crescer pra sempre; pedidos velhos já saíram de
+    // AWAITING_PAYMENT (fechados no PDV) muito antes de essa lista encher.
+    window.localStorage.setItem(DISMISSED_KEY, JSON.stringify([...ids].slice(-200)));
+  } catch {}
+}
+
 function AwaitingPaymentAlert({
   orders,
   updateStatus,
@@ -108,6 +132,7 @@ function AwaitingPaymentAlert({
         timerMap.current.delete(id);
       }
     });
+    const dismissed = getDismissedIds();
     // Cria timer para novos pedidos em AWAITING_PAYMENT — a contagem parte de quando o
     // pedido REALMENTE entrou nesse status (updatedAt), não de quando esta tela foi
     // aberta/recarregada. Sem isso, um pedido esquecido em AWAITING_PAYMENT há dias
@@ -115,6 +140,7 @@ function AwaitingPaymentAlert({
     // a cada F5/reconexão, disparando o alerta como se fosse recém-chegado.
     orders.forEach((order) => {
       if (order.status !== 'AWAITING_PAYMENT') return;
+      if (dismissed.has(order.id)) return;
       if (timerMap.current.has(order.id)) return;
       const statusSince = order.updatedAt ? new Date(order.updatedAt).getTime() : Date.now();
       const elapsed = Date.now() - statusSince;
@@ -246,7 +272,10 @@ function AwaitingPaymentAlert({
                 // Não muda o status do pedido — ele já está AWAITING_PAYMENT (o que já
                 // significa "entregue, esperando ser cobrado"). Marcar como DELIVERED
                 // aqui duplicava a venda nos relatórios quando a comanda fosse fechada/
-                // faturada de verdade depois no PDV. Este botão só some com o alerta.
+                // faturada de verdade depois no PDV. Este botão só some com o alerta,
+                // e nunca mais pergunta de novo sobre ESTE pedido (addDismissedId) —
+                // sem isso, o alerta rearmava a cada F5/reconexão mesmo já confirmado.
+                if (alertOrder) addDismissedId(alertOrder.id);
                 setAlertOrder(null);
               }}
               className="flex-1 py-3 rounded-2xl bg-emerald-500 text-[11px] font-black uppercase tracking-widest text-white hover:bg-emerald-600 active:scale-95 transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/30"
