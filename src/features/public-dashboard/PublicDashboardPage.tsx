@@ -21,6 +21,12 @@ function orderCode(order: Order) {
   return `#${order.id.slice(-4).toUpperCase()}`;
 }
 
+// Primeiro nome do cliente, pra caber nos cards mais compactos sem estourar largura
+// (ex: "Maria Eduarda Santos" -> "Maria"). Mesa/delivery sem nome cadastrado não mostra nada.
+function orderFirstName(order: Order): string {
+  return (order.customerName || "").trim().split(/\s+/)[0] || "";
+}
+
 function orderLocation(order: Order) {
   if (order.orderType === "DINE_IN") return dineInOrderLabel(order);
   if (order.orderType === "DELIVERY") return "Delivery";
@@ -86,7 +92,7 @@ function readyAnnouncementSubtitle(order: Order) {
 function announceReadyOrder(order: Order, config: DisplayPanelConfig) {
   if (config.voiceAnnouncement === false) return;
   if (order.counterTicketNumber == null) return;
-  announceOrderReady(order.counterTicketNumber, { voiceName: config.voiceName, text: config.voiceText });
+  announceOrderReady(order.counterTicketNumber, { voiceName: config.voiceName, text: config.voiceText, customerName: order.customerName });
 }
 
 /* ─── theme ───────────────────────────────────────────────── */
@@ -152,6 +158,8 @@ function OrderCard({ order, role, isFirst, theme, accentColor, size, cardStyle, 
   };
 
   if (minimal) {
+    const firstName = orderFirstName(order);
+
     if (cardStyle === "ticket") {
       return (
         <motion.div
@@ -161,6 +169,7 @@ function OrderCard({ order, role, isFirst, theme, accentColor, size, cardStyle, 
             border: `2px dashed ${isReady || highlight ? accentColor : theme.divider}`,
             borderRadius: 10,
             display: "flex",
+            flexDirection: "column",
             alignItems: "center",
             justifyContent: "center",
             padding: s.padding,
@@ -171,6 +180,11 @@ function OrderCard({ order, role, isFirst, theme, accentColor, size, cardStyle, 
           <span style={{ fontSize: s.code, fontWeight: 900, color: isReady ? accentColor : theme.textPrimary, fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>
             {orderCode(order)}
           </span>
+          {firstName && (
+            <span style={{ fontSize: s.label, fontWeight: 700, color: theme.textMuted, marginTop: 4, textTransform: "uppercase" }}>
+              {firstName}
+            </span>
+          )}
         </motion.div>
       );
     }
@@ -184,6 +198,7 @@ function OrderCard({ order, role, isFirst, theme, accentColor, size, cardStyle, 
             border: `1px solid ${accentColor}50`,
             borderRadius: 8,
             display: "flex",
+            flexDirection: "column",
             alignItems: "center",
             justifyContent: "center",
             padding: s.padding,
@@ -205,6 +220,11 @@ function OrderCard({ order, role, isFirst, theme, accentColor, size, cardStyle, 
           >
             {orderCode(order)}
           </span>
+          {firstName && (
+            <span style={{ fontSize: s.label, fontWeight: 700, color: `${accentColor}CC`, marginTop: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              {firstName}
+            </span>
+          )}
         </motion.div>
       );
     }
@@ -218,6 +238,7 @@ function OrderCard({ order, role, isFirst, theme, accentColor, size, cardStyle, 
             borderLeft: `6px solid ${accentColor}`,
             borderRadius: 4,
             display: "flex",
+            flexDirection: "column",
             alignItems: "center",
             justifyContent: "center",
             padding: s.padding,
@@ -237,6 +258,11 @@ function OrderCard({ order, role, isFirst, theme, accentColor, size, cardStyle, 
           >
             {orderCode(order)}
           </span>
+          {firstName && (
+            <span style={{ fontSize: s.label, fontWeight: 700, color: theme.textMuted, marginTop: 4, textTransform: "uppercase" }}>
+              {firstName}
+            </span>
+          )}
         </motion.div>
       );
     }
@@ -250,6 +276,7 @@ function OrderCard({ order, role, isFirst, theme, accentColor, size, cardStyle, 
           border: highlight ? `1.5px solid ${accentColor}` : `1.5px solid ${accentColor}${isReady ? "60" : "30"}`,
           borderRadius: 20,
           display: "flex",
+          flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
           padding: s.padding,
@@ -271,6 +298,11 @@ function OrderCard({ order, role, isFirst, theme, accentColor, size, cardStyle, 
         >
           {orderCode(order)}
         </span>
+        {firstName && (
+          <span style={{ fontSize: s.label, fontWeight: 700, color: theme.textMuted, marginTop: 4, textTransform: "uppercase" }}>
+            {firstName}
+          </span>
+        )}
       </motion.div>
     );
   }
@@ -488,27 +520,37 @@ function GridColumn({ orders, accentColor, size }: GridColumnProps) {
   return (
     <div style={{ background: accentColor, flex: 1, margin: "-16px -20px", padding: "24px 20px", display: "flex", flexDirection: "column", justifyContent: "center", gap: 10 }}>
       <AnimatePresence mode="popLayout">
-        {orders.map((order) => (
-          <motion.div
-            layout
-            key={order.id}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.25 }}
-            style={{
-              fontSize,
-              fontWeight: 900,
-              color: "#ffffff",
-              fontFamily: "'Arial Narrow', 'Inter', sans-serif",
-              fontVariantNumeric: "tabular-nums",
-              textAlign: "center",
-              lineHeight: 1,
-            }}
-          >
-            {orderCode(order).replace("#", "")}
-          </motion.div>
-        ))}
+        {orders.map((order) => {
+          const firstName = orderFirstName(order);
+          return (
+            <motion.div
+              layout
+              key={order.id}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25 }}
+              style={{ textAlign: "center", lineHeight: 1 }}
+            >
+              <div
+                style={{
+                  fontSize,
+                  fontWeight: 900,
+                  color: "#ffffff",
+                  fontFamily: "'Arial Narrow', 'Inter', sans-serif",
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                {orderCode(order).replace("#", "")}
+              </div>
+              {firstName && (
+                <div style={{ fontSize: fontSize * 0.22, fontWeight: 700, color: "rgba(255,255,255,0.8)", textTransform: "uppercase", marginTop: 2 }}>
+                  {firstName}
+                </div>
+              )}
+            </motion.div>
+          );
+        })}
       </AnimatePresence>
     </div>
   );

@@ -338,10 +338,19 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
   useEffect(() => {
     if (tenant) {
       setLocalCategories(tenant.categories || []);
+      // Sem permissão de Estoque, o servidor responde 403 (não um array) — sem checar
+      // res.ok isso virava `setInventoryItems({error: "..."})`, quebrando o .map() do
+      // seletor "Vincular ao estoque" em silêncio: parecia que não existia nenhum
+      // insumo, quando na verdade era a permissão que faltava (nunca avisava o dono).
       apiFetch(`/api/tenants/${tenant.slug}/inventory`)
-        .then(res => res.json())
-        .then(data => setInventoryItems(data))
-        .catch(() => {});
+        .then(res => res.ok ? res.json() : Promise.reject(res))
+        .then(data => setInventoryItems(Array.isArray(data) ? data : []))
+        .catch((err) => {
+          setInventoryItems([]);
+          if (err?.status === 403 && canManageInventory === false) {
+            toast.error("Sem permissão de Estoque — peça ao proprietário para liberar em Equipe > permissões.");
+          }
+        });
       apiFetch(`/api/tenants/${tenant.slug}/inventory/categories`)
         .then(res => res.json())
         .then(data => setInventoryCategories(Array.isArray(data) ? data : []))

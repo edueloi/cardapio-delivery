@@ -208,7 +208,7 @@ export default function DashboardContent({
       )}
 
       {activeTab === "display-panel" && (
-        <DisplayPanelSettingsPanel slug={slug} tenant={tenant} />
+        <DisplayPanelSettingsPanel slug={slug} tenant={tenant} refresh={refreshTenant} />
       )}
 
       {activeTab === "downloads" && (

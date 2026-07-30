@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Monitor, Image as ImageIcon, Volume2, Mic, Palette, Play, Trash2, GripVertical } from "lucide-react";
-import { PageWrapper, SectionTitle, ContentCard, Button, Select, Switch } from "../../../../components";
+import { PageWrapper, SectionTitle, ContentCard, Button, Select, Switch, useToast } from "../../../../components";
 import { ImageUploader, TvDevicesCard } from "../_shared/ManagementShared";
 import { apiFetch, apiJson } from "../../../../lib/api";
 import { playSoundFile, READY_SOUND_OPTIONS } from "../../../../lib/notificationSound";
@@ -37,9 +37,13 @@ const CARD_STYLE_OPTIONS: { value: NonNullable<DisplayPanelConfig["cardStyle"]>;
 interface DisplayPanelSettingsPanelProps {
   slug: string;
   tenant: Tenant;
+  /** Recarrega o tenant após salvar — sem isso, a tela continuava mostrando a config
+      antiga até um F5 manual, mesmo o salvamento já tendo persistido no banco. */
+  refresh?: () => void;
 }
 
-export default function DisplayPanelSettingsPanel({ slug, tenant }: DisplayPanelSettingsPanelProps) {
+export default function DisplayPanelSettingsPanel({ slug, tenant, refresh }: DisplayPanelSettingsPanelProps) {
+  const toast = useToast();
   const [config, setConfig] = useState<DisplayPanelConfig>(() => {
     try {
       return tenant.displayPanelConfig
@@ -95,8 +99,11 @@ export default function DisplayPanelSettingsPanel({ slug, tenant }: DisplayPanel
         method: "PATCH",
         body: JSON.stringify({ displayPanelConfig: JSON.stringify(config) }),
       });
+      refresh?.();
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
+    } catch (err: any) {
+      toast.error(err?.message || "Falha ao salvar configurações do Painel TV.");
     } finally {
       setSaving(false);
     }
@@ -126,7 +133,7 @@ export default function DisplayPanelSettingsPanel({ slug, tenant }: DisplayPanel
   };
 
   const previewSound = () => playSoundFile(config.readySoundFile || DEFAULT_DISPLAY_PANEL.readySoundFile!);
-  const previewVoice = () => announceOrderReady(42, { voiceName: config.voiceName, text: config.voiceText });
+  const previewVoice = () => announceOrderReady(42, { voiceName: config.voiceName, text: config.voiceText, customerName: "Felipe" });
 
   return (
     <PageWrapper>
@@ -351,7 +358,9 @@ export default function DisplayPanelSettingsPanel({ slug, tenant }: DisplayPanel
                   className="ds-input w-full"
                 />
                 <p className="text-[10px] text-slate-400">
-                  Use <code className="bg-slate-100 px-1 rounded">{"{numero}"}</code> onde a senha deve ser falada.
+                  Use <code className="bg-slate-100 px-1 rounded">{"{numero}"}</code> onde a senha deve ser falada
+                  e <code className="bg-slate-100 px-1 rounded">{"{nome}"}</code> onde o nome do cliente deve ser
+                  falado (some sozinho da frase se o pedido não tiver nome cadastrado).
                 </p>
               </div>
             </>

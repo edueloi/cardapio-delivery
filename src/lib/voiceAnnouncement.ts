@@ -73,16 +73,18 @@ if (typeof window !== "undefined" && window.speechSynthesis) {
   };
 }
 
-export const DEFAULT_VOICE_TEXT = "Senha número {numero}, retirar no balcão";
+export const DEFAULT_VOICE_TEXT = "Senha número {numero}, {nome}, retirar no balcão";
 
-// Anuncia um pedido pronto — sempre pelo número da senha (não pelo nome do cliente), pra
-// ficar fácil de identificar de longe. `voiceName` e `text` vêm de DisplayPanelConfig,
-// configurados em Configurações > Config. Painel TV; sem eles, usa a seleção automática
-// de voz e o texto padrão.
-export function announceOrderReady(numberOrTicket: number, opts?: { voiceName?: string | null; text?: string }) {
+// Anuncia um pedido pronto pelo número da senha e, quando disponível, pelo primeiro
+// nome do cliente (ex: "Senha número 007, Felipe, retirar no balcão") — o dono pode
+// incluir {nome} no texto customizado em Configurações > Config. Painel TV; se o texto
+// não tiver {nome} ou o pedido não tiver nome cadastrado, nada muda (comportamento antigo).
+export function announceOrderReady(numberOrTicket: number, opts?: { voiceName?: string | null; text?: string; customerName?: string | null }) {
   if (typeof window === "undefined" || !window.speechSynthesis) return;
   try {
-    const text = (opts?.text || DEFAULT_VOICE_TEXT).replace("{numero}", String(numberOrTicket));
+    const firstName = (opts?.customerName || "").trim().split(/\s+/)[0] || "";
+    let text = (opts?.text || DEFAULT_VOICE_TEXT).replace("{numero}", String(numberOrTicket));
+    text = firstName ? text.replace("{nome}", firstName) : text.replace(/,?\s*\{nome\}/, "");
 
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = "pt-BR";

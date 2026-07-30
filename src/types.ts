@@ -603,6 +603,8 @@ export interface Order {
   total: number;
   tenantId: string;
   createdAt: string;
+  updatedAt?: string; // atualizado a cada mudança de status — usado pra saber há quanto tempo o pedido está no status atual
+  readyAt?: string | null; // quando ficou pronto na cozinha/SHIPPED — usado pra saber há quanto tempo está aguardando retirada
   items: OrderItem[];
   operatorName?: string | null;
   customerId?: string | null;

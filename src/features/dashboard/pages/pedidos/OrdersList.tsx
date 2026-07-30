@@ -12,12 +12,14 @@ import { CSS } from "@dnd-kit/utilities";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import {
+  AlertTriangle,
   Bell,
   CheckCircle2,
   ChefHat,
   Clock,
   Eye,
   FileText,
+  Package,
   Phone,
   Utensils,
   X,
@@ -25,6 +27,7 @@ import {
 import { PaymentBadge, useToast } from "../../../../components";
 import { apiFetch } from "../../../../lib/api";
 import { Order, dineInOrderLabel } from "../../../../types";
+import { playOrderDelayedSound } from "../../../../lib/notificationSound";
 
 function maskPhone(value: string | null | undefined): string {
   if (!value) return "";
@@ -105,14 +108,21 @@ function AwaitingPaymentAlert({
         timerMap.current.delete(id);
       }
     });
-    // Cria timer para novos pedidos em AWAITING_PAYMENT
+    // Cria timer para novos pedidos em AWAITING_PAYMENT — a contagem parte de quando o
+    // pedido REALMENTE entrou nesse status (updatedAt), não de quando esta tela foi
+    // aberta/recarregada. Sem isso, um pedido esquecido em AWAITING_PAYMENT há dias
+    // (ex: comanda de balcão que nunca foi fechada) rearmava um timer novo de 5 minutos
+    // a cada F5/reconexão, disparando o alerta como se fosse recém-chegado.
     orders.forEach((order) => {
       if (order.status !== 'AWAITING_PAYMENT') return;
       if (timerMap.current.has(order.id)) return;
+      const statusSince = order.updatedAt ? new Date(order.updatedAt).getTime() : Date.now();
+      const elapsed = Date.now() - statusSince;
+      const remaining = Math.max(0, ALERT_DELAY_MS - elapsed);
       const timer = setTimeout(() => {
         setAlertOrder((prev) => prev ?? order);
         timerMap.current.delete(order.id);
-      }, ALERT_DELAY_MS);
+      }, remaining);
       timerMap.current.set(order.id, timer);
     });
 
@@ -248,6 +258,106 @@ function AwaitingPaymentAlert({
   );
 }
 
+
+const PREPARING_DELAY_MS = 30 * 60 * 1000; // 30 minutos em preparo = atrasado
+const SHIPPED_DELAY_MS = 15 * 60 * 1000;   // 15 minutos pronto sem retirar = atrasado
+
+type DelayedAlertEntry = { orderId: string; kind: 'preparing' | 'shipped'; label: string; timestamp: number };
+
+// ─── Alerta de atraso (som + card, sem travar a tela) ─────────────────────────
+// Diferente do AwaitingPaymentAlert (modal bloqueante — exige resposta), este é
+// só um aviso: o operador continua trabalhando normalmente, só fica sabendo que
+// um pedido em preparo passou de 30min, ou um pedido pronto passou de 15min sem
+// ser retirado. Dispara uma vez por pedido (não repete a cada re-render).
+function DelayedOrdersAlert({ orders }: { orders: Order[] }) {
+  const [alerts, setAlerts] = useState<DelayedAlertEntry[]>([]);
+  const timerMap = React.useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const firedRef = React.useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const activeKeys = new Set<string>();
+
+    orders.forEach((order) => {
+      if (order.status === 'PREPARING') {
+        const key = `preparing-${order.id}`;
+        activeKeys.add(key);
+        if (timerMap.current.has(key) || firedRef.current.has(key)) return;
+        const since = order.updatedAt ? new Date(order.updatedAt).getTime() : new Date(order.createdAt).getTime();
+        const remaining = Math.max(0, PREPARING_DELAY_MS - (Date.now() - since));
+        const timer = setTimeout(() => {
+          firedRef.current.add(key);
+          timerMap.current.delete(key);
+          playOrderDelayedSound();
+          setAlerts((prev) => [{ orderId: order.id, kind: 'preparing', label: orderSenhaLabel(order), timestamp: Date.now() }, ...prev]);
+        }, remaining);
+        timerMap.current.set(key, timer);
+      }
+
+      if (order.status === 'SHIPPED') {
+        const key = `shipped-${order.id}`;
+        activeKeys.add(key);
+        if (timerMap.current.has(key) || firedRef.current.has(key)) return;
+        const since = order.readyAt ? new Date(order.readyAt).getTime() : (order.updatedAt ? new Date(order.updatedAt).getTime() : new Date(order.createdAt).getTime());
+        const remaining = Math.max(0, SHIPPED_DELAY_MS - (Date.now() - since));
+        const timer = setTimeout(() => {
+          firedRef.current.add(key);
+          timerMap.current.delete(key);
+          playOrderDelayedSound();
+          setAlerts((prev) => [{ orderId: order.id, kind: 'shipped', label: orderSenhaLabel(order), timestamp: Date.now() }, ...prev]);
+        }, remaining);
+        timerMap.current.set(key, timer);
+      }
+    });
+
+    // Limpa timers/estado "já disparado" de pedidos que saíram do status monitorado
+    // (ex: pedido em preparo foi marcado como pronto, ou pedido pronto foi retirado) —
+    // assim, se ele voltar a esse status depois, o alerta pode disparar de novo.
+    timerMap.current.forEach((timer, key) => {
+      if (!activeKeys.has(key)) {
+        clearTimeout(timer);
+        timerMap.current.delete(key);
+      }
+    });
+    firedRef.current.forEach((key) => {
+      if (!activeKeys.has(key)) firedRef.current.delete(key);
+    });
+    setAlerts((prev) => prev.filter((a) => activeKeys.has(`${a.kind}-${a.orderId}`)));
+  }, [orders]);
+
+  if (alerts.length === 0) return null;
+
+  return (
+    <div className="fixed bottom-4 right-4 z-[150] flex flex-col-reverse gap-2 max-w-xs w-full pointer-events-none">
+      <AnimatePresence>
+        {alerts.map((alert) => (
+          <motion.div
+            key={`${alert.kind}-${alert.orderId}`}
+            initial={{ opacity: 0, x: 80, scale: 0.9 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.5, transition: { duration: 0.15 } }}
+            className="pointer-events-auto bg-red-500 text-white p-3.5 rounded-2xl shadow-2xl ring-4 ring-red-500/20 flex items-center gap-3"
+          >
+            <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+              <AlertTriangle className="w-4.5 h-4.5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-widest text-white/80">
+                {alert.kind === 'preparing' ? 'Atrasado — 30min em preparo' : 'Não retirado — 15min pronto'}
+              </p>
+              <p className="text-sm font-black leading-tight truncate">{alert.label}</p>
+            </div>
+            <button
+              onClick={() => setAlerts((prev) => prev.filter((a) => !(a.kind === alert.kind && a.orderId === alert.orderId)))}
+              className="p-1 hover:bg-white/20 rounded-lg transition-colors shrink-0"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </motion.div>
+        ))}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 function KanbanCard({ order, categoryMap, updateStatus, isExpanded, toggleOrder, isOverlay }: { order: Order, categoryMap: any, updateStatus: any, isExpanded: boolean, toggleOrder: () => void, isOverlay?: boolean }) {
   const isDelayed = Date.now() - new Date(order.createdAt).getTime() > 30 * 60000 && order.status !== 'DELIVERED' && order.status !== 'CANCELLED';
@@ -587,7 +697,8 @@ export function OrdersList({
     <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd} collisionDetection={closestCenter}>
       <div className="flex flex-col h-full space-y-3 min-h-0">
         <AwaitingPaymentAlert orders={filteredOrders} updateStatus={updateStatus} categoryMap={categoryMap} />
-        
+        <DelayedOrdersAlert orders={filteredOrders} />
+
         {/* Kanban Board */}
         <div className="flex-1 min-h-0 grid gap-4 pb-3 overflow-hidden grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
           <KanbanColumn id="PENDING" title="Pendentes" count={pendingOrders.length} orders={pendingOrders} borderColor="border-amber-400" textColor="text-amber-500" />

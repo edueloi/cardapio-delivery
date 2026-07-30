@@ -16,6 +16,7 @@ const ALERT_FILES = {
   kitchenReady: "/alerts/som_campainha.mp3",
   tvPanelReady: "/alerts/som_painel_cozinha.mp3",
   lowStock: "/alerts/estoque_baixo.mp3",
+  orderDelayed: "/alerts/error_atraso.mp3",
 } as const;
 
 type AlertName = keyof typeof ALERT_FILES;
@@ -78,6 +79,12 @@ export function playTvPanelReadySound(customFile?: string) {
 // Som de alerta de estoque baixo.
 export function playLowStockSound() {
   playAlertFile("lowStock");
+}
+
+// Som de pedido atrasado — em preparo há mais de 30min, ou pronto sem retirada há
+// um tempo (Painel de Pedidos).
+export function playOrderDelayedSound() {
+  playAlertFile("orderDelayed");
 }
 
 // Beep sintetizado (dois tons curtos) — não depende de nenhum arquivo de áudio externo.

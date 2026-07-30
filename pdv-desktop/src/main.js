@@ -248,9 +248,15 @@ function createWindow() {
   });
 
   // Links externos (ex: WhatsApp, PDF em nova aba) abrem no navegador padrão do sistema,
-  // não dentro do app — o app é só pro PDV em si.
+  // não dentro do app — o app é só pro PDV em si. "Ver Cardápio" (/:slug, sem /dashboard/
+  // ou /pdv/ no caminho) também vai pro navegador, mesmo sendo o mesmo domínio: é a
+  // loja pública, sem link de volta pro painel — se abrisse numa 2ª janela do próprio
+  // Electron, o operador podia achar que travou (mesmo bug que o "Ver Cardápio" causava
+  // navegando na mesma janela, só que numa janela nova em vez da atual).
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (!url.startsWith("https://www.boxsys.com.br") && !url.startsWith("https://boxsys.com.br")) {
+    const isBoxsysDomain = url.startsWith("https://www.boxsys.com.br") || url.startsWith("https://boxsys.com.br");
+    const isPublicMenuPage = isBoxsysDomain && !/\/(dashboard|pdv|cozinha|superadmin|login)(\/|$)/.test(new URL(url).pathname);
+    if (!isBoxsysDomain || isPublicMenuPage) {
       require("electron").shell.openExternal(url);
       return { action: "deny" };
     }

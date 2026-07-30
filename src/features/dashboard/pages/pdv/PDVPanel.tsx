@@ -763,7 +763,8 @@ export default function PDVPanel({
   // Linhas cobráveis do pedido, com uma chave de linha estável — usada pra divisão por
   // item (itemPersonAssignment). Itens do carrinho não têm id próprio (só existem no
   // banco após o checkout), então a chave usa o índice na lista combinada.
-  const billableLines = useMemo(
+  // Uma linha por PEDIDO (comportamento normal: "2x Espeto Carne" numa linha só).
+  const billableLinesGrouped = useMemo(
     () => [
       ...existingContextItems.map((item) => ({
         lineKey: `existing-${item.id}`,
@@ -784,6 +785,38 @@ export default function PDVPanel({
     ],
     [existingContextItems, cart]
   );
+
+  // Uma entrada por UNIDADE — "2x Espeto Carne" vira duas entradas independentes (uma
+  // por espeto), cada uma com sua própria lineKey, pra dar pra marcar 1 espeto pra uma
+  // pessoa e o outro pra outra. Só usada dentro da divisão de pagamento por item —
+  // fora dela o resumo continua agrupado (billableLinesGrouped), como sempre foi.
+  const billableLinesByUnit = useMemo(
+    () => [
+      ...existingContextItems.flatMap((item) =>
+        Array.from({ length: item.quantity }, (_unused, unitIdx) => ({
+          lineKey: `existing-${item.id}-${unitIdx}`,
+          quantity: 1,
+          price: item.price,
+          name: item.product?.name || "",
+          notes: (item as any).notes as string | undefined,
+          total: item.price,
+        }))
+      ),
+      ...cart.flatMap((item, idx) =>
+        Array.from({ length: item.quantity }, (_unused, unitIdx) => ({
+          lineKey: `cart-${idx}-${unitIdx}`,
+          quantity: 1,
+          price: item.price,
+          name: item.product?.name || "",
+          notes: item.notes,
+          total: item.price,
+        }))
+      ),
+    ],
+    [existingContextItems, cart]
+  );
+
+  const billableLines = isSplitMode && splitByItem ? billableLinesByUnit : billableLinesGrouped;
 
   const discountAmount = useMemo(() => {
     const v = parseFloat(discountValue || "0");
@@ -1374,6 +1407,10 @@ export default function PDVPanel({
   };
 
   const handleCheckout = async () => {
+    // Sem essa trava, um F2/Enter repetido ou duplo clique em "Finalizar" antes da
+    // primeira chamada terminar disparava uma segunda venda inteira (e um segundo
+    // recibo impresso) — isProcessing era setado mas nunca checado aqui no início.
+    if (isProcessing) return;
     if (checkoutItems.length === 0 || (cashRequired && !currentCash)) return;
     if (isSplitMode && !splitCanFinalize) return;
     if (!isSplitMode && paymentMethod === "CASH" && digitsToNumber(amountReceived) < finalTotal) return;
@@ -3083,7 +3120,15 @@ export default function PDVPanel({
               {/* Left: Summary */}
               <div className="w-full md:w-80 lg:w-96 bg-black/20 p-4 flex flex-col border-r border-white/5 overflow-y-auto custom-scrollbar shrink-0">
                 <button
-                  onClick={() => { setShowCheckout(false); setShowCartDrawer(true); }}
+                  onClick={() => {
+                    // isClosingAccount fica true quando o pagamento foi aberto direto do
+                    // "Fechar Conta" numa comanda (handleGoToCheckoutFromDetails) e nunca era
+                    // resetado ao voltar — o botão "Adicionar Itens" do carrinho fica escondido
+                    // pra sempre (só "Pagar"), mesmo a comanda ainda podendo receber mais itens.
+                    setIsClosingAccount(false);
+                    setShowCheckout(false);
+                    setShowCartDrawer(true);
+                  }}
                   className="flex items-center gap-2 text-white/40 hover:text-white transition-colors mb-3 group"
                 >
                   <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
