@@ -947,22 +947,37 @@ export default function PublicDashboardPage() {
         {activeReadyAnnouncement && isArtesanal && (
           <motion.div
             key={`ready-announcement-artesanal-${activeReadyAnnouncement.id}`}
-            initial={{ opacity: 0, scale: 0.9, y: -20 }}
-            animate={{ opacity: 1, scale: [1, 1.02, 1], y: 0 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            transition={{ duration: 0.4, scale: { duration: 2, repeat: Infinity, ease: "easeInOut" } }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
             style={{
               position: "fixed",
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
+              inset: 0,
               zIndex: 200,
+              background: "rgba(0,0,0,0.6)",
+              backdropFilter: "blur(4px)",
               display: "flex",
-              flexDirection: "column",
               alignItems: "center",
-              gap: 20,
+              justifyContent: "center",
             }}
           >
+            {/* Wrapper próprio só pra animação de escala/posição — misturar um
+                transform manual (translate de centralização) no MESMO elemento que
+                a Framer Motion anima via scale fazia o transform manual ser
+                sobrescrito pela lib assim que a animação rodava, jogando o card
+                pro canto em vez de ficar centralizado. */}
+            <motion.div
+              initial={{ scale: 0.9, y: -20 }}
+              animate={{ scale: [1, 1.02, 1], y: 0 }}
+              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 20,
+              }}
+            >
             <div
               style={{
                 display: "flex",
@@ -1013,6 +1028,7 @@ export default function PublicDashboardPage() {
                 {readyAnnouncementSubtitle(activeReadyAnnouncement)}
               </span>
             </div>
+            </motion.div>
           </motion.div>
         )}
         {activeReadyAnnouncement && !isArtesanal && (

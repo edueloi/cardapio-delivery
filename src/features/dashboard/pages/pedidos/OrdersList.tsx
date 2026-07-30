@@ -16,7 +16,6 @@ import {
   Bell,
   CheckCircle2,
   ChefHat,
-  Clock,
   Eye,
   FileText,
   Package,
@@ -73,223 +72,12 @@ const STATUS_MAP = {
 
 const fmt = (n: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
 
-// ─── Alerta de entrega pendente ───────────────────────────────────────────────
-// Monitora pedidos em AWAITING_PAYMENT e dispara um modal após 5 min pedindo
-// ao operador para confirmar se o pedido já foi entregue ao cliente.
-const ALERT_DELAY_MS = 5 * 60 * 1000; // 5 minutos
-
 function orderSenhaLabel(order: Order): string {
   if (order.counterTicketNumber != null)
     return `Senha ${String(order.counterTicketNumber).padStart(2, '0')}`;
   if (order.tableId) return `Mesa ${order.tableId}`;
   return `#${order.id.slice(-4).toUpperCase()}`;
 }
-
-// Pedidos cujo alerta já foi reconhecido ("Ciente") persistem aqui — sem isso, o
-// alerta rearmava a cada F5/reconexão mesmo depois do operador já ter visto e
-// confirmado, porque o único estado "já vi isso" vivia em memória do componente.
-// Guardado em localStorage (não no banco) porque é só uma preferência de "não me
-// pergunte de novo sobre ESTE pedido", não algo que precise sincronizar entre telas.
-const DISMISSED_KEY = "boxsys_awaiting_payment_dismissed";
-function getDismissedIds(): Set<string> {
-  try {
-    const raw = window.localStorage.getItem(DISMISSED_KEY);
-    return new Set(raw ? JSON.parse(raw) : []);
-  } catch {
-    return new Set();
-  }
-}
-function addDismissedId(id: string) {
-  try {
-    const ids = getDismissedIds();
-    ids.add(id);
-    // Cap de 200 entradas — evita crescer pra sempre; pedidos velhos já saíram de
-    // AWAITING_PAYMENT (fechados no PDV) muito antes de essa lista encher.
-    window.localStorage.setItem(DISMISSED_KEY, JSON.stringify([...ids].slice(-200)));
-  } catch {}
-}
-
-function AwaitingPaymentAlert({
-  orders,
-  updateStatus,
-  categoryMap,
-}: {
-  orders: Order[];
-  updateStatus: (id: string, status: string) => void;
-  categoryMap: Record<string, string>;
-}) {
-  const [alertOrder, setAlertOrder] = useState<Order | null>(null);
-  const timerMap = React.useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-
-  useEffect(() => {
-    const awaitingIds = new Set(
-      orders.filter((o) => o.status === 'AWAITING_PAYMENT').map((o) => o.id)
-    );
-    // Cancela timers de pedidos que saíram do estado
-    timerMap.current.forEach((timer, id) => {
-      if (!awaitingIds.has(id)) {
-        clearTimeout(timer);
-        timerMap.current.delete(id);
-      }
-    });
-    const dismissed = getDismissedIds();
-    // Cria timer para novos pedidos em AWAITING_PAYMENT — a contagem parte de quando o
-    // pedido REALMENTE entrou nesse status (updatedAt), não de quando esta tela foi
-    // aberta/recarregada. Sem isso, um pedido esquecido em AWAITING_PAYMENT há dias
-    // (ex: comanda de balcão que nunca foi fechada) rearmava um timer novo de 5 minutos
-    // a cada F5/reconexão, disparando o alerta como se fosse recém-chegado.
-    orders.forEach((order) => {
-      if (order.status !== 'AWAITING_PAYMENT') return;
-      if (dismissed.has(order.id)) return;
-      if (timerMap.current.has(order.id)) return;
-      const statusSince = order.updatedAt ? new Date(order.updatedAt).getTime() : Date.now();
-      const elapsed = Date.now() - statusSince;
-      const remaining = Math.max(0, ALERT_DELAY_MS - elapsed);
-      const timer = setTimeout(() => {
-        setAlertOrder((prev) => prev ?? order);
-        timerMap.current.delete(order.id);
-      }, remaining);
-      timerMap.current.set(order.id, timer);
-    });
-
-    // Fecha o alerta sozinho se o pedido mostrado nele já saiu de AWAITING_PAYMENT (ex:
-    // caixa fechou a venda em outra aba) — sem isso o modal ficava "congelado" na tela
-    // com os dados de quando o timer disparou, mesmo o pedido já tendo sumido de todas
-    // as colunas do painel.
-    setAlertOrder((prev) => {
-      if (!prev) return prev;
-      const current = orders.find((o) => o.id === prev.id);
-      return current && current.status === 'AWAITING_PAYMENT' ? prev : null;
-    });
-  }, [orders]);
-
-  if (!alertOrder) return null;
-
-  const readyTime = new Date(alertOrder.createdAt).toLocaleTimeString([], {
-    hour: '2-digit', minute: '2-digit',
-  });
-
-  return (
-    <AnimatePresence>
-      <motion.div
-        key="delivery-alert"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-        onClick={(e) => { if (e.target === e.currentTarget) setAlertOrder(null); }}
-      >
-        <motion.div
-          initial={{ scale: 0.92, y: 20 }}
-          animate={{ scale: 1, y: 0 }}
-          exit={{ scale: 0.92, y: 20 }}
-          className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden"
-        >
-          {/* Header laranja */}
-          <div className="bg-amber-500 px-5 py-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center shrink-0 animate-pulse">
-              <Bell className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <p className="text-sm font-black text-white">Pedido aguardando cobrança</p>
-              <p className="text-[11px] text-white/80 font-bold">Já foi entregue há mais de 5 minutos — feche a comanda no PDV.</p>
-            </div>
-            <button onClick={() => setAlertOrder(null)} className="ml-auto p-1.5 rounded-xl hover:bg-white/20 text-white transition-colors">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
-          {/* Detalhes do pedido */}
-          <div className="px-5 py-4 space-y-3">
-            {/* Senha + hora pronto */}
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-14 h-14 rounded-2xl bg-[#0D1B3E] flex flex-col items-center justify-center leading-none shrink-0">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-white/50">
-                    {alertOrder.counterTicketNumber != null ? 'Senha' : alertOrder.tableId ? 'Mesa' : 'Pedido'}
-                  </span>
-                  <span className="text-xl font-black text-white tabular-nums">
-                    {alertOrder.counterTicketNumber != null
-                      ? String(alertOrder.counterTicketNumber).padStart(2, '0')
-                      : (alertOrder.tableId ?? alertOrder.id.slice(-4).toUpperCase())}
-                  </span>
-                </div>
-                <div>
-                  {alertOrder.customerName && (
-                    <p className="text-sm font-black text-slate-800">{alertOrder.customerName}</p>
-                  )}
-                  <p className="text-xs text-slate-400 font-bold">{orderSenhaLabel(alertOrder)}</p>
-                </div>
-              </div>
-              <div className="text-right shrink-0">
-                <p className="text-lg font-black text-slate-800">{fmt(alertOrder.total)}</p>
-                <p className="text-[10px] text-slate-400 font-bold flex items-center gap-1 justify-end mt-0.5">
-                  <Clock className="w-3 h-3" /> Pronto às {readyTime}
-                </p>
-              </div>
-            </div>
-
-            {/* Itens do pedido */}
-            <div className="bg-slate-50 rounded-2xl p-3 space-y-1.5 max-h-40 overflow-y-auto">
-              {alertOrder.items?.slice(0, 6).map((item, idx) => {
-                const catName = item.product?.categoryId ? categoryMap[item.product.categoryId] : undefined;
-                return (
-                  <div key={idx} className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      {catName && (
-                        <span className="text-[8px] font-black uppercase px-1 py-0.5 rounded bg-slate-200 text-slate-500 shrink-0">
-                          {catName}
-                        </span>
-                      )}
-                      <span className="text-xs font-bold text-slate-700 truncate">
-                        {item.quantity}x {item.product?.name}
-                      </span>
-                    </div>
-                    <span className="text-[11px] font-black text-slate-400 shrink-0 tabular-nums">
-                      {fmt(item.price * item.quantity)}
-                    </span>
-                  </div>
-                );
-              })}
-              {(alertOrder.items?.length ?? 0) > 6 && (
-                <p className="text-[10px] text-slate-400 font-bold text-center">
-                  +{(alertOrder.items?.length ?? 0) - 6} item(s)
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Botões de ação */}
-          <div className="px-5 pb-5 flex gap-2">
-            <button
-              onClick={() => setAlertOrder(null)}
-              className="flex-1 py-3 rounded-2xl border-2 border-slate-200 text-[11px] font-black uppercase tracking-widest text-slate-500 hover:bg-slate-50 transition-colors"
-            >
-              Fechar
-            </button>
-            <button
-              onClick={() => {
-                // Não muda o status do pedido — ele já está AWAITING_PAYMENT (o que já
-                // significa "entregue, esperando ser cobrado"). Marcar como DELIVERED
-                // aqui duplicava a venda nos relatórios quando a comanda fosse fechada/
-                // faturada de verdade depois no PDV. Este botão só some com o alerta,
-                // e nunca mais pergunta de novo sobre ESTE pedido (addDismissedId) —
-                // sem isso, o alerta rearmava a cada F5/reconexão mesmo já confirmado.
-                if (alertOrder) addDismissedId(alertOrder.id);
-                setAlertOrder(null);
-              }}
-              className="flex-1 py-3 rounded-2xl bg-emerald-500 text-[11px] font-black uppercase tracking-widest text-white hover:bg-emerald-600 active:scale-95 transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/30"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              Ciente
-            </button>
-          </div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
-  );
-}
-
 
 const PREPARING_DELAY_MS = 30 * 60 * 1000; // 30 minutos em preparo = atrasado
 const SHIPPED_DELAY_MS = 15 * 60 * 1000;   // 15 minutos pronto sem retirar = atrasado
@@ -728,7 +516,6 @@ export function OrdersList({
   return (
     <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd} collisionDetection={closestCenter}>
       <div className="flex flex-col h-full space-y-3 min-h-0">
-        <AwaitingPaymentAlert orders={filteredOrders} updateStatus={updateStatus} categoryMap={categoryMap} />
         <DelayedOrdersAlert orders={filteredOrders} />
 
         {/* Kanban Board */}
