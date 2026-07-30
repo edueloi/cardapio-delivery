@@ -49,11 +49,33 @@ function orderLocation(order: Order) {
 // Paleta fixa do estilo "Artesanal" — identidade visual própria (bege + marrom escuro),
 // igual à referência de padaria/lanchonete artesanal. Ao contrário dos outros 5 estilos,
 // não usa preparingColor/readyColor configuráveis do tenant — o visual é sempre este.
-const ARTESANAL_PALETTE = {
+const ARTESANAL_DEFAULTS = {
   cream: "#F7F0E4",
   brown: "#3E2415",
-  brownMid: "#5A3722",
 };
+
+// Clareia um hex por um fator (0-1) — usado pra derivar o "brownMid" (raios decorativos)
+// a partir da cor marrom escolhida, sem precisar de um terceiro seletor de cor na tela
+// de configuração.
+function lightenHex(hex: string, factor: number): string {
+  const clean = hex.replace("#", "");
+  if (clean.length !== 6) return hex;
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  const mix = (c: number) => Math.round(c + (255 - c) * factor);
+  return `#${[mix(r), mix(g), mix(b)].map((c) => c.toString(16).padStart(2, "0")).join("")}`;
+}
+
+// Paleta do estilo "Artesanal" — bege + marrom fixos por padrão (identidade visual
+// própria, diferente das cores configuráveis preparingColor/readyColor dos outros 5
+// estilos), mas o dono pode trocar as duas cores em Config. Painel TV e restaurar o
+// padrão a qualquer momento.
+function getArtesanalPalette(config: DisplayPanelConfig) {
+  const cream = config.artesanalCreamColor || ARTESANAL_DEFAULTS.cream;
+  const brown = config.artesanalBrownColor || ARTESANAL_DEFAULTS.brown;
+  return { cream, brown, brownMid: lightenHex(brown, 0.25) };
+}
 
 const DEFAULT_DISPLAY_CONFIG: DisplayPanelConfig = {
   showDelivery: false,
@@ -582,17 +604,20 @@ function GridColumn({ orders, accentColor, size }: GridColumnProps) {
 // 01"), estilo caderno de padaria/lanchonete artesanal. Sem nome cadastrado, mostra só
 // o número. Fonte Fredoka (ver useEffect que injeta o link do Google Fonts).
 const ARTESANAL_NUMBER_SIZES: Record<NonNullable<DisplayPanelConfig["ticketCardSize"]>, number> = {
-  normal: 42,
-  large: 56,
-  xlarge: 72,
+  normal: 56,
+  large: 72,
+  xlarge: 92,
 };
 interface ArtesanalColumnProps {
   orders: Order[];
   textColor: string;
   size: DisplayPanelConfig["ticketCardSize"];
+  sizePx?: number | null;
 }
-function ArtesanalColumn({ orders, textColor, size }: ArtesanalColumnProps) {
-  const baseSize = ARTESANAL_NUMBER_SIZES[size || "normal"];
+function ArtesanalColumn({ orders, textColor, size, sizePx }: ArtesanalColumnProps) {
+  // ticketCardSizePx (campo "Tamanho personalizado (px)" na Config. Painel TV) sempre
+  // sobrepõe o preset Normal/Grande/Extra Grande quando o dono preenche um valor.
+  const baseSize = sizePx && sizePx > 0 ? sizePx : ARTESANAL_NUMBER_SIZES[size || "normal"];
   // vw como teto do clamp() faz o nome encolher sozinho em telas estreitas ou nomes
   // longos (ex: "Alexandre 007"), em vez de cortar/estourar a coluna como um px fixo faria.
   const scale = orders.length <= 4 ? 1 : orders.length <= 8 ? 0.75 : 0.55;
@@ -737,6 +762,7 @@ export default function PublicDashboardPage() {
   const preparingColor = displayConfig.preparingColor || DEFAULT_DISPLAY_CONFIG.preparingColor!;
   const readyColor = displayConfig.readyColor || DEFAULT_DISPLAY_CONFIG.readyColor!;
   const isArtesanal = displayConfig.cardStyle === "artesanal";
+  const ARTESANAL_PALETTE = useMemo(() => getArtesanalPalette(displayConfig), [displayConfig.artesanalCreamColor, displayConfig.artesanalBrownColor]);
 
   // Fonte do estilo "Artesanal" — Fredoka (Google Fonts, gratuita), usada no lugar da
   // Cooper Black pedida como referência: mesmo visual arredondado/"gordinho", sem
@@ -1273,7 +1299,7 @@ export default function PublicDashboardPage() {
               ) : displayConfig.cardStyle === "grid" ? (
                 <GridColumn orders={preparingOrders} accentColor={preparingColor} size={displayConfig.ticketCardSize} />
               ) : displayConfig.cardStyle === "artesanal" ? (
-                <ArtesanalColumn orders={preparingOrders} textColor={ARTESANAL_PALETTE.brown} size={displayConfig.ticketCardSize} />
+                <ArtesanalColumn orders={preparingOrders} textColor={ARTESANAL_PALETTE.brown} size={displayConfig.ticketCardSize} sizePx={displayConfig.ticketCardSizePx} />
               ) : (
                 <AnimatePresence mode="popLayout">
                   {preparingOrders.map((order, i) => (
@@ -1340,7 +1366,7 @@ export default function PublicDashboardPage() {
               ) : displayConfig.cardStyle === "grid" ? (
                 <GridColumn orders={readyOrders} accentColor={readyColor} size={displayConfig.ticketCardSize} />
               ) : displayConfig.cardStyle === "artesanal" ? (
-                <ArtesanalColumn orders={readyOrders} textColor="#ffffff" size={displayConfig.ticketCardSize} />
+                <ArtesanalColumn orders={readyOrders} textColor="#ffffff" size={displayConfig.ticketCardSize} sizePx={displayConfig.ticketCardSizePx} />
               ) : (
                 <AnimatePresence mode="popLayout">
                   {readyOrders.map((order) => (
@@ -1369,7 +1395,7 @@ export default function PublicDashboardPage() {
 
       {/* ── FOOTER "ARTESANAL" — QR code do balcão, mesmo padrão de URL usado em
           Mesas e QR Code (Table Management), pra abrir o cardápio digital ─────── */}
-      {isArtesanal && !displayConfig.minimalMode && (
+      {isArtesanal && !displayConfig.minimalMode && displayConfig.artesanalShowQrFooter !== false && (
         <footer
           style={{
             background: ARTESANAL_PALETTE.brown,
@@ -1395,9 +1421,9 @@ export default function PublicDashboardPage() {
             </div>
           </div>
           <img
-            src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(`${window.location.origin}/${tenant.slug}/balcao`)}`}
+            src={`https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${encodeURIComponent(`${window.location.origin}/${tenant.slug}/balcao`)}`}
             alt="QR Code do cardápio"
-            style={{ width: 100, height: 100, borderRadius: 10, background: "#ffffff", padding: 6, flexShrink: 0 }}
+            style={{ width: 140, height: 140, borderRadius: 12, background: "#ffffff", padding: 8, flexShrink: 0 }}
           />
         </footer>
       )}

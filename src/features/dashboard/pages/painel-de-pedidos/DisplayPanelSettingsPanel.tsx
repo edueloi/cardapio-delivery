@@ -23,8 +23,17 @@ const DEFAULT_DISPLAY_PANEL: DisplayPanelConfig = {
   carouselIntervalSeconds: 8,
   minimalMode: false,
   ticketCardSize: "normal",
+  ticketCardSizePx: null,
   cardStyle: "floating",
+  artesanalCreamColor: null,
+  artesanalBrownColor: null,
+  artesanalShowQrFooter: true,
 };
+
+// Cores padrão do estilo Artesanal — usadas pra popular o seletor de cor (que precisa
+// de um valor sempre, mesmo quando o dono nunca customizou) e pro botão "Restaurar padrão".
+const ARTESANAL_DEFAULT_CREAM = "#F7F0E4";
+const ARTESANAL_DEFAULT_BROWN = "#3E2415";
 
 const CARD_STYLE_OPTIONS: { value: NonNullable<DisplayPanelConfig["cardStyle"]>; label: string; description: string }[] = [
   { value: "floating", label: "Flutuante (padrão)", description: "Cards com sombra suave e cantos arredondados, estilo app de delivery moderno." },
@@ -266,18 +275,74 @@ export default function DisplayPanelSettingsPanel({ slug, tenant, refresh }: Dis
             </div>
           </div>
 
-          <div className="max-w-xs mb-6">
-            <Select
-              label="Tamanho da senha"
-              value={config.ticketCardSize ?? "normal"}
-              onChange={(e) => setConfig({ ...config, ticketCardSize: e.target.value as DisplayPanelConfig["ticketCardSize"] })}
-              options={[
-                { value: "normal", label: "Normal" },
-                { value: "large", label: "Grande" },
-                { value: "xlarge", label: "Extra grande" },
-              ]}
-            />
+          <div className="flex flex-wrap gap-4 mb-6">
+            <div className="max-w-xs">
+              <Select
+                label="Tamanho da senha"
+                value={config.ticketCardSize ?? "normal"}
+                onChange={(e) => setConfig({ ...config, ticketCardSize: e.target.value as DisplayPanelConfig["ticketCardSize"] })}
+                options={[
+                  { value: "normal", label: "Normal" },
+                  { value: "large", label: "Grande" },
+                  { value: "xlarge", label: "Extra grande" },
+                ]}
+              />
+            </div>
+            <div className="max-w-[180px]">
+              <label className="ds-label block mb-1.5">Tamanho personalizado (px)</label>
+              <input
+                type="number"
+                min={0}
+                placeholder="Ex: 80"
+                value={config.ticketCardSizePx ?? ""}
+                onChange={(e) => setConfig({ ...config, ticketCardSizePx: e.target.value ? Number(e.target.value) : null })}
+                className="ds-input w-full"
+              />
+              <p className="text-[10px] text-slate-400 mt-1">Preenchido, sobrepõe o tamanho acima.</p>
+            </div>
           </div>
+
+          {(config.cardStyle ?? "floating") === "artesanal" && (
+            <div className="mb-6 p-4 bg-amber-50/60 rounded-2xl border border-amber-100 space-y-4">
+              <p className="text-xs font-black uppercase tracking-widest text-amber-700">Cores do estilo Artesanal</p>
+              <div className="flex flex-wrap items-end gap-4">
+                <div>
+                  <label className="ds-label block mb-1.5">Cor clara (coluna Preparando)</label>
+                  <input
+                    type="color"
+                    value={config.artesanalCreamColor || ARTESANAL_DEFAULT_CREAM}
+                    onChange={(e) => setConfig({ ...config, artesanalCreamColor: e.target.value })}
+                    className="w-16 h-10 rounded-lg border border-slate-200 cursor-pointer"
+                  />
+                </div>
+                <div>
+                  <label className="ds-label block mb-1.5">Cor escura (coluna Prontos)</label>
+                  <input
+                    type="color"
+                    value={config.artesanalBrownColor || ARTESANAL_DEFAULT_BROWN}
+                    onChange={(e) => setConfig({ ...config, artesanalBrownColor: e.target.value })}
+                    className="w-16 h-10 rounded-lg border border-slate-200 cursor-pointer"
+                  />
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => setConfig({ ...config, artesanalCreamColor: null, artesanalBrownColor: null })}
+                >
+                  Restaurar cor padrão
+                </Button>
+              </div>
+              <div className="flex items-center justify-between gap-4 bg-white border border-amber-100 rounded-xl p-3.5">
+                <div>
+                  <p className="text-xs font-black text-slate-700">Mostrar QR Code do cardápio no rodapé</p>
+                  <p className="text-[11px] text-slate-400">"Acesse nosso cardápio digital" com o QR Code do balcão.</p>
+                </div>
+                <Switch
+                  checked={config.artesanalShowQrFooter !== false}
+                  onCheckedChange={(v) => setConfig({ ...config, artesanalShowQrFooter: v })}
+                />
+              </div>
+            </div>
+          )}
 
           <div className="flex items-center justify-between gap-4 bg-slate-50 border border-slate-100 rounded-2xl p-4">
             <div>

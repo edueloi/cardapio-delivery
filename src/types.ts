@@ -267,9 +267,15 @@ export interface DisplayPanelConfig {
   // Layout
   minimalMode?: boolean;          // default: false — esconde cabeçalho e rodapé, sobra só as colunas de senha
   ticketCardSize?: "normal" | "large" | "xlarge"; // tamanho da senha nos cards das colunas — default: "normal"
+  ticketCardSizePx?: number | null; // tamanho customizado em pixels da senha — quando definido, sobrepõe ticketCardSize (todos os estilos)
   cardStyle?: "floating" | "ticket" | "scoreboard" | "fastfood" | "grid" | "artesanal"; // visual do card de senha — default: "floating" (comportamento atual)
   // "grid" muda a estrutura da coluna inteira: em vez de um card por pedido, empilha os números
   // em colunas compactas dentro do mesmo bloco — estilo painel de lanchonete/drive-thru físico.
+  // Estilo "Artesanal" — paleta própria (bege/marrom por padrão), diferente de
+  // preparingColor/readyColor usados pelos outros 5 estilos. undefined = usa o padrão.
+  artesanalCreamColor?: string | null;
+  artesanalBrownColor?: string | null;
+  artesanalShowQrFooter?: boolean; // default: true — mostra a faixa "Acesse nosso cardápio" com QR Code
 }
 
 // Uma imagem do carrossel de propaganda do Painel de Pedidos — tabela própria (não um
