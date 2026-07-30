@@ -12,6 +12,7 @@ import {
   Bell,
   Globe,
   Utensils,
+  Smartphone,
 } from "lucide-react";
 
 /* ─── helpers ─────────────────────────────────────────────── */
@@ -27,11 +28,32 @@ function orderFirstName(order: Order): string {
   return (order.customerName || "").trim().split(/\s+/)[0] || "";
 }
 
+// Três tracinhos decorativos ao lado do número chamado — o mesmo detalhe "raios" da
+// referência visual do estilo Artesanal (tipo emoji ✨ desenhado à mão, não um ícone padrão).
+function RayBurst({ color, flip = false }: { color: string; flip?: boolean }) {
+  return (
+    <svg width="28" height="48" viewBox="0 0 28 48" style={{ transform: flip ? "scaleX(-1)" : undefined, flexShrink: 0 }}>
+      <line x1="2" y1="8" x2="14" y2="14" stroke={color} strokeWidth="2.5" strokeLinecap="round" />
+      <line x1="0" y1="24" x2="16" y2="24" stroke={color} strokeWidth="2.5" strokeLinecap="round" />
+      <line x1="2" y1="40" x2="14" y2="34" stroke={color} strokeWidth="2.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function orderLocation(order: Order) {
   if (order.orderType === "DINE_IN") return dineInOrderLabel(order);
   if (order.orderType === "DELIVERY") return "Delivery";
   return "Balcão";
 }
+
+// Paleta fixa do estilo "Artesanal" — identidade visual própria (bege + marrom escuro),
+// igual à referência de padaria/lanchonete artesanal. Ao contrário dos outros 5 estilos,
+// não usa preparingColor/readyColor configuráveis do tenant — o visual é sempre este.
+const ARTESANAL_PALETTE = {
+  cream: "#F7F0E4",
+  brown: "#3E2415",
+  brownMid: "#5A3722",
+};
 
 const DEFAULT_DISPLAY_CONFIG: DisplayPanelConfig = {
   showDelivery: false,
@@ -556,6 +578,61 @@ function GridColumn({ orders, accentColor, size }: GridColumnProps) {
   );
 }
 
+// Layout "Artesanal" — lista compacta "NOME número" numa linha por pedido (ex: "EDU
+// 01"), estilo caderno de padaria/lanchonete artesanal. Sem nome cadastrado, mostra só
+// o número. Fonte Fredoka (ver useEffect que injeta o link do Google Fonts).
+const ARTESANAL_NUMBER_SIZES: Record<NonNullable<DisplayPanelConfig["ticketCardSize"]>, number> = {
+  normal: 42,
+  large: 56,
+  xlarge: 72,
+};
+interface ArtesanalColumnProps {
+  orders: Order[];
+  textColor: string;
+  size: DisplayPanelConfig["ticketCardSize"];
+}
+function ArtesanalColumn({ orders, textColor, size }: ArtesanalColumnProps) {
+  const baseSize = ARTESANAL_NUMBER_SIZES[size || "normal"];
+  // vw como teto do clamp() faz o nome encolher sozinho em telas estreitas ou nomes
+  // longos (ex: "Alexandre 007"), em vez de cortar/estourar a coluna como um px fixo faria.
+  const scale = orders.length <= 4 ? 1 : orders.length <= 8 ? 0.75 : 0.55;
+  const fontSize = `clamp(1rem, ${(baseSize / 16) * scale}vw, ${baseSize * scale}px)`;
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: baseSize * scale * 0.35, padding: "8px 16px" }}>
+      <AnimatePresence mode="popLayout">
+        {orders.map((order) => {
+          const firstName = orderFirstName(order);
+          const number = orderCode(order).replace("#", "");
+          return (
+            <motion.div
+              layout
+              key={order.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25 }}
+              style={{
+                fontSize,
+                fontWeight: 700,
+                color: textColor,
+                fontFamily: "'Fredoka', 'Arial Rounded MT Bold', sans-serif",
+                textAlign: "center",
+                lineHeight: 1.1,
+                fontVariantNumeric: "tabular-nums",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {firstName ? `${firstName.toUpperCase()} ${number}` : number}
+            </motion.div>
+          );
+        })}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 // Faixa de propaganda — alterna as imagens ativas a cada N segundos com fade. Se não
 // houver imagens, o chamador simplesmente não renderiza este componente (as colunas de
 // pedidos ocupam a tela inteira).
@@ -659,6 +736,22 @@ export default function PublicDashboardPage() {
   const theme = useMemo(() => buildTheme(displayConfig.theme === "light" ? "light" : "dark"), [displayConfig.theme]);
   const preparingColor = displayConfig.preparingColor || DEFAULT_DISPLAY_CONFIG.preparingColor!;
   const readyColor = displayConfig.readyColor || DEFAULT_DISPLAY_CONFIG.readyColor!;
+  const isArtesanal = displayConfig.cardStyle === "artesanal";
+
+  // Fonte do estilo "Artesanal" — Fredoka (Google Fonts, gratuita), usada no lugar da
+  // Cooper Black pedida como referência: mesmo visual arredondado/"gordinho", sem
+  // depender de licenciamento nem de instalar fonte no computador que roda a TV.
+  // Só carrega quando o estilo é usado, pra não pesar o painel em quem usa outro estilo.
+  useEffect(() => {
+    if (displayConfig.cardStyle !== "artesanal") return;
+    const id = "artesanal-font-link";
+    if (document.getElementById(id)) return;
+    const link = document.createElement("link");
+    link.id = id;
+    link.rel = "stylesheet";
+    link.href = "https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&display=swap";
+    document.head.appendChild(link);
+  }, [displayConfig.cardStyle]);
 
   useEffect(() => {
     ordersRef.current = orders;
@@ -825,7 +918,78 @@ export default function PublicDashboardPage() {
     >
       {/* ── CHAMADA DE SENHA ──────────────────────────────────── */}
       <AnimatePresence>
-        {activeReadyAnnouncement && (
+        {activeReadyAnnouncement && isArtesanal && (
+          <motion.div
+            key={`ready-announcement-artesanal-${activeReadyAnnouncement.id}`}
+            initial={{ opacity: 0, scale: 0.9, y: -20 }}
+            animate={{ opacity: 1, scale: [1, 1.02, 1], y: 0 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            transition={{ duration: 0.4, scale: { duration: 2, repeat: Infinity, ease: "easeInOut" } }}
+            style={{
+              position: "fixed",
+              top: "50%",
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+              zIndex: 200,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 20,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "clamp(12px, 2.5vw, 32px)",
+                background: ARTESANAL_PALETTE.cream,
+                border: `3px solid ${ARTESANAL_PALETTE.brown}`,
+                borderRadius: 999,
+                padding: "clamp(16px, 3vw, 32px) clamp(28px, 5vw, 64px)",
+                boxShadow: "0 30px 90px rgba(0,0,0,0.45)",
+                maxWidth: "88vw",
+              }}
+            >
+              <RayBurst color={ARTESANAL_PALETTE.brownMid} />
+              <span
+                style={{
+                  // vw como teto do clamp encolhe sozinho pra nomes longos não estourarem
+                  // a largura da tela — só usar px fixo aqui já causou corte real em teste.
+                  fontSize: "clamp(2rem, 7vw, 6rem)",
+                  fontWeight: 700,
+                  color: ARTESANAL_PALETTE.brown,
+                  fontFamily: "'Fredoka', 'Arial Rounded MT Bold', sans-serif",
+                  textTransform: "uppercase",
+                  lineHeight: 1,
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                {activeReadyAnnouncement.customerName
+                  ? `${orderFirstName(activeReadyAnnouncement).toUpperCase()} ${orderCode(activeReadyAnnouncement).replace("#", "")}`
+                  : orderCode(activeReadyAnnouncement).replace("#", "")}
+              </span>
+              <RayBurst color={ARTESANAL_PALETTE.brownMid} flip />
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                background: ARTESANAL_PALETTE.brown,
+                borderRadius: 999,
+                padding: "14px 32px",
+              }}
+            >
+              <Bell style={{ width: 22, height: 22, color: ARTESANAL_PALETTE.cream }} />
+              <span style={{ fontSize: "clamp(1rem, 2vw, 1.5rem)", fontWeight: 700, color: ARTESANAL_PALETTE.cream, fontFamily: "'Fredoka', 'Arial Rounded MT Bold', sans-serif" }}>
+                {readyAnnouncementSubtitle(activeReadyAnnouncement)}
+              </span>
+            </div>
+          </motion.div>
+        )}
+        {activeReadyAnnouncement && !isArtesanal && (
           <motion.div
             key={`ready-announcement-${activeReadyAnnouncement.id}`}
             initial={{ opacity: 0, scale: 0.98 }}
@@ -985,8 +1149,9 @@ export default function PublicDashboardPage() {
         )}
       </AnimatePresence>
 
-      {/* ── HEADER ─────────────────────────────────────────────── */}
-      {!displayConfig.minimalMode && (
+      {/* ── HEADER — o estilo Artesanal não tem cabeçalho, PREPARANDO/PRONTOS já
+          ocupam o topo da tela (ver referência visual) ─────────────────────── */}
+      {!isArtesanal && !displayConfig.minimalMode && (
       <header
         style={{
           background: theme.headerBg,
@@ -1063,25 +1228,35 @@ export default function PublicDashboardPage() {
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         <div style={{ flex: 1, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0, overflow: "hidden" }}>
           {/* ── EM PREPARO ─── */}
-          <div style={{ display: "flex", flexDirection: "column", borderRight: `1px solid ${theme.divider}`, overflow: "hidden" }}>
+          <div style={{ display: "flex", flexDirection: "column", borderRight: isArtesanal ? "none" : `1px solid ${theme.divider}`, overflow: "hidden", background: isArtesanal ? ARTESANAL_PALETTE.cream : undefined }}>
             <div
               style={{
-                padding: "16px 24px",
-                background: `${preparingColor}14`,
-                borderBottom: `2px solid ${preparingColor}4d`,
+                padding: isArtesanal ? "28px 24px 14px" : "16px 24px",
+                background: isArtesanal ? "transparent" : `${preparingColor}14`,
+                borderBottom: isArtesanal ? "none" : `2px solid ${preparingColor}4d`,
                 display: "flex",
                 alignItems: "center",
+                justifyContent: isArtesanal ? "center" : "flex-start",
                 gap: 12,
                 flexShrink: 0,
               }}
             >
-              <div style={{ width: 40, height: 40, borderRadius: 10, background: `${preparingColor}30`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <ChefHat style={{ width: 20, height: 20, color: preparingColor }} />
-              </div>
-              <h2 style={{ margin: 0, fontSize: 22, fontWeight: 900, textTransform: "uppercase", color: preparingColor, fontStyle: "italic", letterSpacing: "-0.3px" }}>
-                Em Preparo
+              {!isArtesanal && (
+                <div style={{ width: 40, height: 40, borderRadius: 10, background: `${preparingColor}30`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <ChefHat style={{ width: 20, height: 20, color: preparingColor }} />
+                </div>
+              )}
+              <h2
+                style={
+                  isArtesanal
+                    ? { margin: 0, fontSize: "clamp(1.6rem, 3.2vw, 2.6rem)", fontWeight: 700, textTransform: "uppercase", color: ARTESANAL_PALETTE.brown, fontFamily: "'Fredoka', 'Arial Rounded MT Bold', sans-serif" }
+                    : { margin: 0, fontSize: 22, fontWeight: 900, textTransform: "uppercase", color: preparingColor, fontStyle: "italic", letterSpacing: "-0.3px" }
+                }
+              >
+                {isArtesanal ? "Preparando" : "Em Preparo"}
               </h2>
             </div>
+            {isArtesanal && <div style={{ height: 1, background: `${ARTESANAL_PALETTE.brown}30`, margin: "0 auto", width: "60%" }} />}
 
             <div style={{ flex: 1, padding: "16px 20px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
               {preparingOrders.length === 0 ? (
@@ -1095,6 +1270,8 @@ export default function PublicDashboardPage() {
                 </motion.div>
               ) : displayConfig.cardStyle === "grid" ? (
                 <GridColumn orders={preparingOrders} accentColor={preparingColor} size={displayConfig.ticketCardSize} />
+              ) : displayConfig.cardStyle === "artesanal" ? (
+                <ArtesanalColumn orders={preparingOrders} textColor={ARTESANAL_PALETTE.brown} size={displayConfig.ticketCardSize} />
               ) : (
                 <AnimatePresence mode="popLayout">
                   {preparingOrders.map((order, i) => (
@@ -1116,25 +1293,35 @@ export default function PublicDashboardPage() {
           </div>
 
           {/* ── PRONTO / RETIRE ─── */}
-          <div style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          <div style={{ display: "flex", flexDirection: "column", overflow: "hidden", background: isArtesanal ? ARTESANAL_PALETTE.brown : undefined }}>
             <div
               style={{
-                padding: "16px 24px",
-                background: `${readyColor}12`,
-                borderBottom: `2px solid ${readyColor}40`,
+                padding: isArtesanal ? "28px 24px 14px" : "16px 24px",
+                background: isArtesanal ? "transparent" : `${readyColor}12`,
+                borderBottom: isArtesanal ? "none" : `2px solid ${readyColor}40`,
                 display: "flex",
                 alignItems: "center",
+                justifyContent: isArtesanal ? "center" : "flex-start",
                 gap: 12,
                 flexShrink: 0,
               }}
             >
-              <div style={{ width: 40, height: 40, borderRadius: 10, background: `${readyColor}25`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <ShoppingBag style={{ width: 20, height: 20, color: readyColor }} />
-              </div>
-              <h2 style={{ margin: 0, fontSize: 22, fontWeight: 900, textTransform: "uppercase", color: readyColor, fontStyle: "italic", letterSpacing: "-0.3px" }}>
-                Pronto / Retire
+              {!isArtesanal && (
+                <div style={{ width: 40, height: 40, borderRadius: 10, background: `${readyColor}25`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <ShoppingBag style={{ width: 20, height: 20, color: readyColor }} />
+                </div>
+              )}
+              <h2
+                style={
+                  isArtesanal
+                    ? { margin: 0, fontSize: "clamp(1.6rem, 3.2vw, 2.6rem)", fontWeight: 700, textTransform: "uppercase", color: "#ffffff", fontFamily: "'Fredoka', 'Arial Rounded MT Bold', sans-serif" }
+                    : { margin: 0, fontSize: 22, fontWeight: 900, textTransform: "uppercase", color: readyColor, fontStyle: "italic", letterSpacing: "-0.3px" }
+                }
+              >
+                {isArtesanal ? "Prontos" : "Pronto / Retire"}
               </h2>
             </div>
+            {isArtesanal && <div style={{ height: 1, background: "rgba(255,255,255,0.25)", margin: "0 auto", width: "60%" }} />}
 
             <div style={{ flex: 1, padding: "16px 20px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
               {readyOrders.length === 0 ? (
@@ -1148,6 +1335,8 @@ export default function PublicDashboardPage() {
                 </motion.div>
               ) : displayConfig.cardStyle === "grid" ? (
                 <GridColumn orders={readyOrders} accentColor={readyColor} size={displayConfig.ticketCardSize} />
+              ) : displayConfig.cardStyle === "artesanal" ? (
+                <ArtesanalColumn orders={readyOrders} textColor="#ffffff" size={displayConfig.ticketCardSize} />
               ) : (
                 <AnimatePresence mode="popLayout">
                   {readyOrders.map((order) => (
@@ -1174,8 +1363,43 @@ export default function PublicDashboardPage() {
         )}
       </div>
 
+      {/* ── FOOTER "ARTESANAL" — QR code do balcão, mesmo padrão de URL usado em
+          Mesas e QR Code (Table Management), pra abrir o cardápio digital ─────── */}
+      {isArtesanal && !displayConfig.minimalMode && (
+        <footer
+          style={{
+            background: ARTESANAL_PALETTE.brown,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "22px 40px",
+            gap: 28,
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+            <div style={{ width: 56, height: 56, borderRadius: "50%", background: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <Smartphone style={{ width: 28, height: 28, color: "#ffffff" }} />
+            </div>
+            <div>
+              <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#ffffff", fontFamily: "'Fredoka', 'Arial Rounded MT Bold', sans-serif", letterSpacing: "0.02em" }}>
+                Acesse nosso cardápio digital
+              </p>
+              <p style={{ margin: "4px 0 0", fontSize: 15, color: "rgba(255,255,255,0.85)", fontWeight: 600 }}>
+                Escaneie o QR Code ao lado e confira nosso cardápio completo!
+              </p>
+            </div>
+          </div>
+          <img
+            src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(`${window.location.origin}/${tenant.slug}/balcao`)}`}
+            alt="QR Code do cardápio"
+            style={{ width: 100, height: 100, borderRadius: 10, background: "#ffffff", padding: 6, flexShrink: 0 }}
+          />
+        </footer>
+      )}
+
       {/* ── FOOTER ─────────────────────────────────────────────── */}
-      {!displayConfig.minimalMode && (
+      {!isArtesanal && !displayConfig.minimalMode && (
       <footer
         style={{
           height: 46,

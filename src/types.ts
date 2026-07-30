@@ -267,7 +267,7 @@ export interface DisplayPanelConfig {
   // Layout
   minimalMode?: boolean;          // default: false — esconde cabeçalho e rodapé, sobra só as colunas de senha
   ticketCardSize?: "normal" | "large" | "xlarge"; // tamanho da senha nos cards das colunas — default: "normal"
-  cardStyle?: "floating" | "ticket" | "scoreboard" | "fastfood" | "grid"; // visual do card de senha — default: "floating" (comportamento atual)
+  cardStyle?: "floating" | "ticket" | "scoreboard" | "fastfood" | "grid" | "artesanal"; // visual do card de senha — default: "floating" (comportamento atual)
   // "grid" muda a estrutura da coluna inteira: em vez de um card por pedido, empilha os números
   // em colunas compactas dentro do mesmo bloco — estilo painel de lanchonete/drive-thru físico.
 }

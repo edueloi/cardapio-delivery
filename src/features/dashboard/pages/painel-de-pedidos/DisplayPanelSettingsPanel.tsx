@@ -32,6 +32,7 @@ const CARD_STYLE_OPTIONS: { value: NonNullable<DisplayPanelConfig["cardStyle"]>;
   { value: "scoreboard", label: "Placar luminoso", description: "Fundo bem escuro com números em efeito neon/glow, estilo placar de drive-thru." },
   { value: "fastfood", label: "Fast-food", description: "Linhas compactas com faixa colorida na lateral, denso como painel de lanchonete." },
   { value: "grid", label: "Grade de senhas", description: "Só os números em grade compacta, vários por linha — igual painel físico de lanchonete/drive-thru." },
+  { value: "artesanal", label: "Artesanal", description: "Colunas bicolor com nome e senha juntos (ex: \"Felipe 007\"), fonte arredondada e QR Code do cardápio no rodapé — estilo padaria/lanchonete artesanal." },
 ];
 
 interface DisplayPanelSettingsPanelProps {
