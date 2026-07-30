@@ -111,6 +111,7 @@ export default function DisplayPanelSettingsPanel({ slug, tenant, refresh }: Dis
       });
       refresh?.();
       setSaved(true);
+      toast.success("Configurações do Painel TV salvas com sucesso!");
       setTimeout(() => setSaved(false), 3000);
     } catch (err: any) {
       toast.error(err?.message || "Falha ao salvar configurações do Painel TV.");
