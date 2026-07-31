@@ -1,6 +1,16 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
+/* A fonte era importada mas nunca aplicada em lugar nenhum — o sistema inteiro
+   rodava no fallback do Preflight (ui-sans-serif/system-ui), sem nenhuma regra
+   usando "Plus Jakarta Sans" de fato. */
+html {
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
 /* O Preflight do Tailwind v4 zera o cursor de <button> para "default" (seguindo o
    comportamento nativo do browser), o que faz o sistema inteiro parecer "sem cursor"
    de mãozinha em nada clicável. Restaura o pointer em todo elemento interativo. */

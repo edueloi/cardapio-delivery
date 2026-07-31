@@ -5,6 +5,14 @@ const Store = require("electron-store");
 const printer = require("./printer");
 const { openPrinterConfigWindow } = require("./printer-config-window");
 
+// Placas de vídeo integradas antigas (Intel HD Graphics etc.) com driver desatualizado
+// costumam ter bug conhecido de renderização de texto via GPU no Chromium/Electron —
+// letras saem serrilhadas/pixeladas em vez de suavizadas. Precisa vir antes de
+// app.whenReady(); desliga só a aceleração de GPU, sem afetar nada de lógica do app.
+app.commandLine.appendSwitch("disable-gpu");
+app.commandLine.appendSwitch("disable-gpu-compositing");
+app.commandLine.appendSwitch("disable-software-rasterizer");
+
 // Mesmo domínio do painel web — o app desktop é só uma janela nativa em cima do mesmo
 // sistema, sem duplicar lógica de negócio. Login, PDV, tudo vem direto do servidor real.
 const APP_URL = "https://www.boxsys.com.br/login";
