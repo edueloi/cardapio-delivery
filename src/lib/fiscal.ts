@@ -9,9 +9,70 @@ import type { FiscalConfig, NfceResult } from "../types.js";
 import path from "path";
 import os from "os";
 import fs from "fs";
+import forge from "node-forge";
 
 // Cache de instâncias inicializadas por tenantId
 const wizardCache = new Map<string, NFeWizard>();
+
+export interface ParsedCertInfo {
+  titularCnpj: string | null;
+  titularCpf: string | null;
+  validFrom: Date;
+  validTo: Date;
+}
+
+/**
+ * Abre um certificado A1 (.pfx/.p12) e extrai CNPJ/CPF do titular e validade —
+ * usado pra validar senha e conferir o CNPJ ANTES de gravar o certificado, em vez
+ * de só descobrir problema (senha errada, cert vencido, CNPJ diferente) na hora de
+ * emitir uma nota de verdade. Lança erro com mensagem amigável se algo não bater.
+ */
+export function parseCertificate(certBase64: string, password: string): ParsedCertInfo {
+  let pfx;
+  try {
+    const der = forge.util.decode64(certBase64);
+    const asn1 = forge.asn1.fromDer(der);
+    pfx = forge.pkcs12.pkcs12FromAsn1(asn1, password);
+  } catch {
+    throw new Error("Senha do certificado incorreta ou arquivo inválido.");
+  }
+
+  const certBags = pfx.getBags({ bagType: forge.pki.oids.certBag })[forge.pki.oids.certBag];
+  if (!certBags || certBags.length === 0) {
+    throw new Error("Certificado inválido: nenhum certificado X.509 encontrado no arquivo.");
+  }
+  const allCerts = certBags.map((b) => b.cert).filter((c): c is forge.pki.Certificate => !!c);
+
+  // O certificado do titular é o único que não é "issuer" de nenhum outro do pacote
+  // (a cadeia intermediária/raiz sempre é emissora de alguém; a ponta, de ninguém).
+  const issuerNames = new Set(
+    allCerts.map((c) => c.issuer.attributes.map((a) => `${a.shortName}=${a.value}`).join(","))
+  );
+  const isIssuerOfSomeone = (c: forge.pki.Certificate) => {
+    const subjectName = c.subject.attributes.map((a) => `${a.shortName}=${a.value}`).join(",");
+    return issuerNames.has(subjectName);
+  };
+  const leaf = allCerts.find((c) => !isIssuerOfSomeone(c)) || allCerts[0];
+
+  const keyBags = pfx.getBags({ bagType: forge.pki.oids.pkcs8ShroudedKeyBag })[forge.pki.oids.pkcs8ShroudedKeyBag];
+  if (!keyBags || keyBags.length === 0 || !keyBags[0].key) {
+    throw new Error("Certificado inválido: chave privada não encontrada no arquivo.");
+  }
+
+  // CPF/CNPJ do titular embutido no CN (padrão ICP-Brasil): e-CPF traz "CN=NOME:CPF"
+  // (11 dígitos) e e-CNPJ traz "CN=NOME:CPF:CNPJ" — nunca usar "OU" pra isso, pois costuma
+  // trazer o CNPJ da Autoridade Certificadora, não o do titular.
+  const cn = leaf.subject.getField("CN")?.value || "";
+  const cpfMatch = cn.match(/:(\d{11})(?::|$)/);
+  const cnpjMatch = cn.match(/:(\d{14})(?::|$)/);
+
+  return {
+    titularCnpj: cnpjMatch ? cnpjMatch[1] : null,
+    titularCpf: cpfMatch ? cpfMatch[1] : null,
+    validFrom: leaf.validity.notBefore,
+    validTo: leaf.validity.notAfter,
+  };
+}
 
 function getTempDir(tenantId: string): string {
   const dir = path.join(os.tmpdir(), "boxsys-nfce", tenantId);

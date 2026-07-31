@@ -1877,6 +1877,50 @@ app.patch("/api/owner/tenants/:tenantId", requireAuth, async (req, res) => {
     requireCashRegister,
     receiptPaperWidth,
   } = req.body;
+
+  // Valida o certificado A1 ANTES de gravar, quando um novo certBase64 vier na config
+  // fiscal — sem isso, senha errada/certificado vencido/CNPJ diferente só apareciam na
+  // hora de emitir uma nota de verdade no PDV, tarde demais pro dono corrigir.
+  if (fiscalConfig !== undefined && fiscalConfig !== null && fiscalConfig !== "null") {
+    try {
+      const parsedFiscal =
+        typeof fiscalConfig === "string" ? JSON.parse(fiscalConfig) : fiscalConfig;
+      if (parsedFiscal?.certBase64 && parsedFiscal?.certPassword) {
+        const { parseCertificate } = await import("./src/lib/fiscal.js");
+        let certInfo;
+        try {
+          certInfo = parseCertificate(parsedFiscal.certBase64, parsedFiscal.certPassword);
+        } catch (e: any) {
+          return res.status(422).json({ error: e?.message || "Certificado inválido." });
+        }
+
+        if (certInfo.validTo.getTime() < Date.now()) {
+          return res.status(422).json({
+            error: `Certificado vencido em ${certInfo.validTo.toLocaleDateString("pt-BR")}. Envie um certificado A1 válido.`,
+          });
+        }
+
+        const cnpjDigits = String(parsedFiscal.cnpj || "").replace(/\D/g, "");
+        if (cnpjDigits.length === 14) {
+          if (certInfo.titularCpf && !certInfo.titularCnpj) {
+            return res.status(422).json({
+              error:
+                "Este é um certificado e-CPF (pessoa física), mas o cadastro fiscal usa CNPJ. Envie um certificado e-CNPJ da empresa.",
+            });
+          }
+          if (certInfo.titularCnpj && certInfo.titularCnpj !== cnpjDigits) {
+            return res.status(422).json({
+              error: "O CNPJ do certificado não corresponde ao CNPJ cadastrado na configuração fiscal.",
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[Fiscal] Erro ao validar certificado:", err);
+      return res.status(422).json({ error: "Não foi possível validar o certificado enviado." });
+    }
+  }
+
   try {
     const updated = await prisma.tenant.update({
       where: { id: tenant.id },
