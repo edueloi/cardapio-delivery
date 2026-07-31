@@ -21,6 +21,14 @@ import SelectionGroupPicker, { parseSelectionGroup, getSelectionGroupOptions, fo
 const fmt = (n: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
 
+// Compartilhado entre TODAS as instâncias de PDVPanel montadas na mesma aba/janela —
+// a tela dedicada (/pdv/:slug) e a aba "PDV" do Dashboard podem estar abertas ao mesmo
+// tempo, e cada uma recebe o mesmo evento "order-created" pelo socket. Um Set por
+// componente (useRef) não via a outra instância imprimir, então o mesmo pedido saía
+// duas vezes — uma por instância. Módulo compartilhado resolve isso pra qualquer
+// combinação de telas abertas no mesmo processo.
+const globalAutoPrintedOrderIds = new Set<string>();
+
 // Aceita CPF (11 dígitos, pessoa física) ou CNPJ (14 dígitos, pessoa jurídica) —
 // formata como CPF enquanto o usuário digita até 11 dígitos, e vira máscara de
 // CNPJ automaticamente a partir do 12º dígito.
@@ -351,10 +359,10 @@ export default function PDVPanel({
 
   // Toda venda/lançamento criado a partir DESTA aba já imprime na hora, logo depois da
   // chamada HTTP ter sucesso (ver handleCheckout/handleCreateComanda/handleLaunchOrder) —
-  // sem precisar do socket. Esse Set evita imprimir de novo quando o "order-created" desse
-  // mesmo pedido chega de volta pelo socket (toda aba do tenant recebe o evento, inclusive
-  // quem acabou de criar o pedido).
-  const autoPrintedOrderIds = useRef<Set<string>>(new Set());
+  // sem precisar do socket. O Set global evita imprimir de novo quando o "order-created"
+  // desse mesmo pedido chega de volta pelo socket (toda aba do tenant recebe o evento,
+  // inclusive quem acabou de criar o pedido, e inclusive outras instâncias de PDVPanel
+  // abertas ao mesmo tempo — ver comentário no módulo).
 
   // Pedidos criados por QUALQUER origem (QR Code da mesa/comanda pelo cliente, delivery
   // público, ou outra aba do PDV/garçom) chegam aqui em tempo real — é o que garante que o
@@ -362,8 +370,8 @@ export default function PDVPanel({
   useEffect(() => {
     if (!printingConfig.autoPrintOnOrderCreate) return;
     const handler = (order: any) => {
-      if (!order?.id || autoPrintedOrderIds.current.has(order.id)) return;
-      autoPrintedOrderIds.current.add(order.id);
+      if (!order?.id || globalAutoPrintedOrderIds.has(order.id)) return;
+      globalAutoPrintedOrderIds.add(order.id);
       printOrderAuto(order);
     };
     socket.on("order-created", handler);
@@ -1348,7 +1356,7 @@ export default function PDVPanel({
 
       if (createdOrder?.id) {
         if (printingConfig.autoPrintOnOrderCreate) {
-          autoPrintedOrderIds.current.add(createdOrder.id);
+          globalAutoPrintedOrderIds.add(createdOrder.id);
           printOrderAuto(createdOrder);
         }
         handleLoadComanda(createdOrder);
@@ -1386,7 +1394,7 @@ export default function PDVPanel({
         }),
       });
       if (printingConfig.autoPrintOnOrderCreate && launchedOrder?.id) {
-        autoPrintedOrderIds.current.add(launchedOrder.id);
+        globalAutoPrintedOrderIds.add(launchedOrder.id);
         printOrderAuto(launchedOrder);
       }
       setCart([]);
@@ -1425,7 +1433,7 @@ export default function PDVPanel({
 
     if (isPayingExistingContext && !isStone) {
       try {
-        await apiJson(`/api/tenants/${tenant.slug}/pdv/bill-context`, {
+        const billResult = await apiJson<{ orders?: any[] }>(`/api/tenants/${tenant.slug}/pdv/bill-context`, {
           method: "POST",
           body: JSON.stringify({
             tableId: selectedTableId || undefined,
@@ -1444,6 +1452,11 @@ export default function PDVPanel({
             installments: paymentMethod === "CREDIT" ? installments : 1,
           }),
         });
+
+        // Sem isso, o botão "Imprimir" da tela de sucesso ficava sem pedido pra imprimir
+        // (lastOrderRef nunca era preenchido nesse fluxo de fechar mesa/comanda existente,
+        // só no de venda nova) — clicar nele não fazia nada, silenciosamente.
+        lastOrderRef.current = billResult?.orders?.[0] ?? null;
 
         // Limpa a seleção visual (não chama onClearComanda para não dar MERGED e apagar da cozinha)
         if (selectedTableId) setSelectedTableId(null);
@@ -1503,7 +1516,7 @@ export default function PDVPanel({
       }) as { id: string; [key: string]: unknown };
       lastOrderRef.current = order;
       if (printingConfig.autoPrintOnOrderCreate && (order as any).id) {
-        autoPrintedOrderIds.current.add((order as any).id);
+        globalAutoPrintedOrderIds.add((order as any).id);
         printOrderAuto(order);
       }
 

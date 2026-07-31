@@ -8806,7 +8806,7 @@ app.post(
       }
       if (tableId) io.to(`${tenant.id}-mesa-${tableId}`).emit("table-update");
 
-      res.json({ success: true, total: totalToBill });
+      res.json({ success: true, total: totalToBill, orders: updatedOrders });
     } catch (error) {
       console.error(error);
       res.status(500).json({ error: "Falha ao faturar contexto." });
