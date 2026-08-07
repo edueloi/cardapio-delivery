@@ -20,11 +20,12 @@ import {
   FileText,
   Package,
   Phone,
+  Truck,
   Utensils,
   X,
 } from "lucide-react";
 import { PaymentBadge, useToast } from "../../../../components";
-import { apiFetch } from "../../../../lib/api";
+import { apiFetch, apiJson } from "../../../../lib/api";
 import { Order, dineInOrderLabel } from "../../../../types";
 import { playOrderDelayedSound } from "../../../../lib/notificationSound";
 
@@ -179,9 +180,10 @@ function DelayedOrdersAlert({ orders }: { orders: Order[] }) {
   );
 }
 
-function KanbanCard({ order, categoryMap, updateStatus, isExpanded, toggleOrder, isOverlay }: { order: Order, categoryMap: any, updateStatus: any, isExpanded: boolean, toggleOrder: () => void, isOverlay?: boolean }) {
+function KanbanCard({ order, categoryMap, updateStatus, isExpanded, toggleOrder, isOverlay, onBillDelivery }: { order: Order, categoryMap: any, updateStatus: any, isExpanded: boolean, toggleOrder: () => void, isOverlay?: boolean, onBillDelivery?: (order: Order) => void }) {
   const isDelayed = Date.now() - new Date(order.createdAt).getTime() > 30 * 60000 && order.status !== 'DELIVERED' && order.status !== 'CANCELLED';
   const isPaid = order.billed === true;
+  const needsBilling = order.orderType === 'DELIVERY' && order.status === 'DELIVERED' && !isPaid;
   const toast = useToast();
   const [reannouncing, setReannouncing] = useState(false);
 
@@ -249,6 +251,11 @@ function KanbanCard({ order, categoryMap, updateStatus, isExpanded, toggleOrder,
               {isPaid && (
                 <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-md text-[8px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0">
                   <CheckCircle2 className="w-2.5 h-2.5" /> Pago
+                </span>
+              )}
+              {needsBilling && (
+                <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 border border-purple-200 rounded-md text-[8px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0">
+                  <Truck className="w-2.5 h-2.5" /> Ag. Faturar
                 </span>
               )}
             </div>
@@ -339,14 +346,25 @@ function KanbanCard({ order, categoryMap, updateStatus, isExpanded, toggleOrder,
           <FileText className="w-3 h-3" />
           Ver detalhes
         </button>
-        <button
-          type="button"
-          onClick={handleNextAction}
-          className={`w-full flex items-center justify-center gap-1.5 py-2.5 text-white text-[9px] font-black uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-95 ${order.status === 'PENDING' ? 'bg-[#0D1B3E] hover:bg-blue-950 shadow-blue-900/20' : order.status === 'PREPARING' ? 'bg-[#C9A227] hover:bg-[#b58f20] shadow-[#C9A227]/20' : 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/20'}`}
-        >
-          <CheckCircle2 className="w-3 h-3" />
-          {actionLabel}
-        </button>
+        {needsBilling ? (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onBillDelivery?.(order); }}
+            className="w-full flex items-center justify-center gap-1.5 py-2.5 text-white text-[9px] font-black uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-95 bg-purple-500 hover:bg-purple-600 shadow-purple-500/20"
+          >
+            <Truck className="w-3 h-3" />
+            Faturar Delivery
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={handleNextAction}
+            className={`w-full flex items-center justify-center gap-1.5 py-2.5 text-white text-[9px] font-black uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-95 ${order.status === 'PENDING' ? 'bg-[#0D1B3E] hover:bg-blue-950 shadow-blue-900/20' : order.status === 'PREPARING' ? 'bg-[#C9A227] hover:bg-[#b58f20] shadow-[#C9A227]/20' : 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/20'}`}
+          >
+            <CheckCircle2 className="w-3 h-3" />
+            {actionLabel}
+          </button>
+        )}
         {order.status === 'SHIPPED' && (
           <button
             type="button"
@@ -452,14 +470,39 @@ export function OrdersList({
   const pendingOrders = filteredOrders.filter(o => o.status === 'PENDING');
   const preparingOrders = filteredOrders.filter(o => o.status === 'PREPARING');
   const shippedOrders = filteredOrders.filter(o => o.status === 'SHIPPED');
+  // Delivery entregue (pagamento na entrega) que ainda não teve o valor lançado
+  // no caixa — precisa ser faturado aqui, senão fica invisível pro operador.
+  const billingOrders = filteredOrders.filter(o => o.orderType === 'DELIVERY' && o.status === 'DELIVERED' && !o.billed);
+
+  const [billingOrder, setBillingOrder] = useState<Order | null>(null);
+  const [billingPaymentMethod, setBillingPaymentMethod] = useState<"CASH" | "CREDIT" | "DEBIT" | "PIX">("CASH");
+  const [isBilling, setIsBilling] = useState(false);
+  const toast = useToast();
+
+  const handleConfirmBilling = async () => {
+    if (!billingOrder || !tenant?.slug) return;
+    setIsBilling(true);
+    try {
+      await apiJson(`/api/tenants/${tenant.slug}/pdv/bill-order/${billingOrder.id}`, {
+        method: "POST",
+        body: JSON.stringify({ paymentMethod: billingPaymentMethod }),
+      });
+      setBillingOrder(null);
+      toast.success("Delivery faturado com sucesso!");
+    } catch (err: any) {
+      toast.error(err?.message || "Não foi possível faturar o pedido.");
+    } finally {
+      setIsBilling(false);
+    }
+  };
 
   // Helper for Kanban Column
-  const KanbanColumn = ({ id, title, count, orders, borderColor, textColor }: { id: string, title: string, count: number, orders: Order[], borderColor: string, textColor: string }) => {
-    const { isOver, setNodeRef } = useDroppable({ id });
-    
+  const KanbanColumn = ({ id, title, count, orders, borderColor, textColor, droppable = true, onBillDelivery }: { id: string, title: string, count: number, orders: Order[], borderColor: string, textColor: string, droppable?: boolean, onBillDelivery?: (order: Order) => void }) => {
+    const { isOver, setNodeRef } = useDroppable({ id, disabled: !droppable });
+
     return (
-      <div 
-        ref={setNodeRef} 
+      <div
+        ref={setNodeRef}
         className={`flex flex-col bg-slate-50/50 rounded-[1.75rem] border-2 p-3 sm:p-4 h-full transition-all ${isOver ? `border-dashed bg-white shadow-inner scale-[1.02] ${borderColor}` : 'border-solid border-slate-100'}`}
       >
         <div className={`flex items-center justify-between pb-2.5 mb-3 border-b-2 ${borderColor}`}>
@@ -475,13 +518,14 @@ export function OrdersList({
           ) : (
             <AnimatePresence mode="popLayout">
               {orders.map((order) => (
-                <KanbanCard 
-                  key={order.id} 
-                  order={order} 
-                  categoryMap={categoryMap} 
-                  updateStatus={updateStatus} 
+                <KanbanCard
+                  key={order.id}
+                  order={order}
+                  categoryMap={categoryMap}
+                  updateStatus={updateStatus}
                   isExpanded={expandedOrders.has(order.id)}
                   toggleOrder={() => toggleOrder(order.id, order.status === "DELIVERED" || order.status === "CANCELLED")}
+                  onBillDelivery={onBillDelivery}
                 />
               ))}
             </AnimatePresence>
@@ -519,24 +563,100 @@ export function OrdersList({
         <DelayedOrdersAlert orders={filteredOrders} />
 
         {/* Kanban Board */}
-        <div className="flex-1 min-h-0 grid gap-4 pb-3 overflow-hidden grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
+        <div className="flex-1 min-h-0 grid gap-4 pb-3 overflow-hidden grid-cols-1 lg:grid-cols-2 xl:grid-cols-4">
           <KanbanColumn id="PENDING" title="Pendentes" count={pendingOrders.length} orders={pendingOrders} borderColor="border-amber-400" textColor="text-amber-500" />
           <KanbanColumn id="PREPARING" title="Em preparo" count={preparingOrders.length} orders={preparingOrders} borderColor="border-orange-400" textColor="text-orange-500" />
           <KanbanColumn id="SHIPPED" title="Prontos / Retire" count={shippedOrders.length} orders={shippedOrders} borderColor="border-emerald-400" textColor="text-emerald-500" />
+          <KanbanColumn id="BILLING" title="Ag. Faturamento" count={billingOrders.length} orders={billingOrders} borderColor="border-purple-400" textColor="text-purple-500" droppable={false} onBillDelivery={setBillingOrder} />
         </div>
       </div>
       <DragOverlay dropAnimation={{ duration: 250, easing: 'ease' }}>
         {activeId ? (
-          <KanbanCard 
-            order={filteredOrders.find(o => o.id === activeId)!} 
-            categoryMap={categoryMap} 
-            updateStatus={updateStatus} 
+          <KanbanCard
+            order={filteredOrders.find(o => o.id === activeId)!}
+            categoryMap={categoryMap}
+            updateStatus={updateStatus}
             isExpanded={expandedOrders.has(activeId)}
             toggleOrder={() => {}}
             isOverlay
           />
         ) : null}
       </DragOverlay>
+
+      {/* ── Faturar Delivery Modal — mesmo fluxo do PDV (aba "Delivery Aguardando
+          Faturar"), disponível aqui pra não depender do operador saber que precisa
+          abrir o PDV pra fechar um pedido de delivery pago na entrega. ── */}
+      <AnimatePresence>
+        {billingOrder && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }}
+              className="bg-white rounded-[2.5rem] p-8 w-full max-w-sm space-y-6 shadow-2xl"
+            >
+              <div className="text-center space-y-2">
+                <div className="w-16 h-16 rounded-2xl bg-purple-500/10 text-purple-600 flex items-center justify-center mx-auto mb-4">
+                  <Truck className="w-8 h-8" />
+                </div>
+                <h3 className="text-xl font-black text-slate-800 uppercase tracking-widest">Faturar Delivery</h3>
+                <p className="text-xs text-slate-400 font-bold uppercase">{billingOrder.customerName} · {fmt(billingOrder.total)}</p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-1">
+                  Como foi pago?
+                </label>
+                <div className="max-h-32 overflow-y-auto rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2 space-y-1">
+                  {billingOrder.items.filter((item) => item.product).map((item) => (
+                    <div key={item.id} className="flex items-center justify-between text-xs gap-3">
+                      <span className="font-bold text-slate-600 truncate">{item.quantity}x {item.product?.name}</span>
+                      <span className="font-black text-slate-700 whitespace-nowrap">{fmt(item.price * item.quantity)}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { id: "CASH", label: "Dinheiro" },
+                    { id: "CREDIT", label: "Crédito" },
+                    { id: "DEBIT", label: "Débito" },
+                    { id: "PIX", label: "Pix" },
+                  ] as const).map((opt) => (
+                    <button
+                      key={opt.id}
+                      onClick={() => setBillingPaymentMethod(opt.id)}
+                      className={`py-3 rounded-xl text-xs font-black uppercase tracking-widest border-2 transition-all ${
+                        billingPaymentMethod === opt.id
+                          ? "border-[#C9A227] bg-[#C9A227]/10 text-[#0D1B3E]"
+                          : "border-slate-100 bg-slate-50 text-slate-400"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setBillingOrder(null)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-500 font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  disabled={isBilling}
+                  onClick={() => void handleConfirmBilling()}
+                  className="bg-[#0D1B3E] hover:bg-slate-800 text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest transition-all disabled:opacity-50"
+                >
+                  {isBilling ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto" />
+                  ) : "Confirmar e Faturar"}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </DndContext>
   );
 }

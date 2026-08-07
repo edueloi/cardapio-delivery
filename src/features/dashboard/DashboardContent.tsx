@@ -104,7 +104,12 @@ export default function DashboardContent({
   const preparingOrders = orders.filter((order) => order.status === "PREPARING").length;
   const shippedOrders = orders.filter((order) => order.status === "SHIPPED").length;
   const delayedOrders = orders.filter((order) => (order.status === "PENDING" || order.status === "PREPARING") && Date.now() - new Date(order.createdAt).getTime() > 30 * 60000).length;
-  const activeOrders = orders.filter((order) => order.status !== "DELIVERED" && order.status !== "CANCELLED" && order.status !== "MERGED");
+  const activeOrders = orders.filter((order) =>
+    (order.status !== "DELIVERED" && order.status !== "CANCELLED" && order.status !== "MERGED") ||
+    // Delivery entregue mas ainda não faturado (pagamento na entrega) continua
+    // aparecendo no painel, na coluna "Ag. Faturamento", até ser faturado.
+    (order.orderType === "DELIVERY" && order.status === "DELIVERED" && !order.billed)
+  );
 
   // If the active tab is not accessible, show the access denied screen
   if (!allowed(activeTab)) return <AccessDenied />;

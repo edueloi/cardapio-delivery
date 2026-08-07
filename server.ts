@@ -8664,6 +8664,7 @@ app.post(
       const updatedOrder = await prisma.order.update({
         where: { id: order.id },
         data: {
+          billed: true,
           paymentMethod: paymentMethod || "CASH",
           paymentDetail: paymentMetadata
             ? JSON.stringify({ ...paymentMetadata, cardBrand, installments })
