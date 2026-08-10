@@ -62,7 +62,7 @@ button:disabled,
 }
 
 @theme {
-  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Segoe UI", ui-sans-serif, system-ui, -apple-system, Roboto, sans-serif;
 
   /* ── Develoi Brand Colors ───────────────────────────── */
   --color-brand-navy:    #0D1B3E;
