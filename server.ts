@@ -8724,17 +8724,27 @@ app.post(
         return res.status(400).json({ error: "Informe a mesa ou senha." });
       }
 
-      // Busca os pedidos abertos no contexto
+      // Busca os pedidos abertos no contexto. Restrito ao dia atual + billed:false:
+      // counterTicketNumber é uma senha sequencial que se repete todo dia — sem o filtro
+      // de data, um pedido de outro dia que ficou pendurado sem status finalizado (nunca
+      // virou DELIVERED/CANCELLED/MERGED) seria resgatado aqui só por coincidir a mesma
+      // senha, e teria seu valor somado junto ao faturamento de hoje (caixa não bate,
+      // produtos de um pedido que "não existe" aparecem misturados). billed:false evita
+      // faturar de novo um pedido que outra requisição (duplo clique/reenvio) já processou.
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
       const orders = await prisma.order.findMany({
         where: {
           tenantId: tenant.id,
           orderType: "DINE_IN",
           status: { notIn: ["DELIVERED", "CANCELLED", "MERGED"] },
+          billed: false,
           ...(tableId
             ? { tableId }
             : {
                 counterTicketNumber: Number(counterTicketNumber),
                 tableId: null,
+                createdAt: { gte: startOfToday },
               }),
         },
       });
@@ -8787,16 +8797,19 @@ app.post(
         ? `Mesa ${tableId}`
         : `Senha ${String(counterTicketNumber).padStart(2, "0")}`;
 
-      await prisma.cashMovement.create({
-        data: {
+      // Um CashMovement por pedido (em vez de um único somando todos) — cada linha do
+      // Fluxo de Caixa fica rastreável ao seu orderId real, permitindo auditar depois
+      // exatamente quais pedidos compuseram o faturamento de uma senha/mesa.
+      await prisma.cashMovement.createMany({
+        data: orders.map((order: any) => ({
           cashRegisterId: currentCash.id,
           tenantId: tenant.id,
           type: pmType,
-          amount: totalToBill,
+          amount: order.total,
           description: `Faturamento ${desc}`,
-          orderId: orders[0].id, // Vincula ao primeiro pedido apenas para referência
+          orderId: order.id,
           operatorName: operatorName || null,
-        },
+        })),
       });
 
       for (const o of updatedOrders) {
