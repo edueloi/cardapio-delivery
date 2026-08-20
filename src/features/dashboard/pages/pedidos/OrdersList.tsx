@@ -20,6 +20,7 @@ import {
   FileText,
   Package,
   Phone,
+  Printer,
   Truck,
   Utensils,
   X,
@@ -28,6 +29,47 @@ import { PaymentBadge, useToast } from "../../../../components";
 import { apiFetch, apiJson } from "../../../../lib/api";
 import { Order, dineInOrderLabel } from "../../../../types";
 import { playOrderDelayedSound } from "../../../../lib/notificationSound";
+import { printReceiptPdf, type ReceiptData } from "../../../../lib/receipt";
+
+// Reconstrói os dados da notinha a partir de um pedido já salvo — usado pra reimprimir
+// direto do Painel de Pedidos, sem precisar abrir o PDV.
+function buildReceiptDataFromOrder(order: any, tenant: any): ReceiptData {
+  const items = (order.items || []).map((i: any) => ({
+    quantity: i.quantity,
+    name: i.productVariant?.name ? `${i.product?.name || ""} (${i.productVariant.name})` : (i.product?.name || ""),
+    price: i.price,
+    notes: i.notes || undefined,
+  }));
+  const orderSubtotal = items.reduce((acc: number, i: any) => acc + i.price * i.quantity, 0);
+  let paymentDetail: { amountReceived?: number; change?: number; splits?: Array<{ method: string; amount: number; cardBrand?: string; installments?: number }> } = {};
+  try { paymentDetail = order.paymentDetail ? JSON.parse(order.paymentDetail) : {}; } catch {}
+  const isNumericName = order.customerName && /^\d+$/.test(order.customerName);
+
+  return {
+    tenantName: tenant?.name || "",
+    tenantAddress: tenant?.address || undefined,
+    orderId: order.id,
+    tableId: order.tableId,
+    counterTicketNumber: order.counterTicketNumber != null ? order.counterTicketNumber : (isNumericName && !order.tableId ? Number(order.customerName) : null),
+    consumptionType: order.consumptionType || undefined,
+    paperWidthMm: (tenant?.receiptPaperWidth === 58 ? 58 : 80) as 58 | 80,
+    createdAt: order.createdAt ? new Date(order.createdAt) : new Date(),
+    customerName: (!isNumericName || order.tableId) ? order.customerName : undefined,
+    items,
+    subtotal: orderSubtotal,
+    discountAmount: order.discount || 0,
+    feeAmount: order.feeAmount || undefined,
+    feePercent: order.feePercent || undefined,
+    feePassedToCustomer: order.feePassedToCustomer,
+    serviceFeeAmount: order.serviceFeeAmount || undefined,
+    serviceFeePercent: order.serviceFeePercent || undefined,
+    total: order.total,
+    paymentMethod: order.paymentMethod,
+    amountReceived: order.paymentMethod === "CASH" ? paymentDetail.amountReceived : undefined,
+    change: order.paymentMethod === "CASH" ? paymentDetail.change : undefined,
+    paymentSplits: order.paymentMethod === "SPLIT" ? paymentDetail.splits : undefined,
+  };
+}
 
 function maskPhone(value: string | null | undefined): string {
   if (!value) return "";
@@ -180,7 +222,7 @@ function DelayedOrdersAlert({ orders }: { orders: Order[] }) {
   );
 }
 
-function KanbanCard({ order, categoryMap, updateStatus, isExpanded, toggleOrder, isOverlay, onBillDelivery }: { order: Order, categoryMap: any, updateStatus: any, isExpanded: boolean, toggleOrder: () => void, isOverlay?: boolean, onBillDelivery?: (order: Order) => void }) {
+function KanbanCard({ order, categoryMap, updateStatus, isExpanded, toggleOrder, isOverlay, onBillDelivery, tenant }: { order: Order, categoryMap: any, updateStatus: any, isExpanded: boolean, toggleOrder: () => void, isOverlay?: boolean, onBillDelivery?: (order: Order) => void, tenant?: import("../../../../types").Tenant | null }) {
   const isDelayed = Date.now() - new Date(order.createdAt).getTime() > 30 * 60000 && order.status !== 'DELIVERED' && order.status !== 'CANCELLED';
   const isPaid = order.billed === true;
   const needsBilling = order.orderType === 'DELIVERY' && order.status === 'DELIVERED' && !isPaid;
@@ -211,6 +253,17 @@ function KanbanCard({ order, categoryMap, updateStatus, isExpanded, toggleOrder,
     zIndex: isDragging ? 50 : 1,
     opacity: isDragging ? 0.3 : 1,
   } : undefined;
+
+  const handlePrint = (e: any) => {
+    e.stopPropagation();
+    const data = buildReceiptDataFromOrder(order, tenant);
+    const desktop = (window as any).pdvDesktop;
+    if (desktop?.printReceipt) {
+      desktop.printReceipt(data);
+    } else {
+      printReceiptPdf(data);
+    }
+  };
 
   const handleNextAction = (e: any) => {
     e.stopPropagation();
@@ -256,6 +309,12 @@ function KanbanCard({ order, categoryMap, updateStatus, isExpanded, toggleOrder,
               {needsBilling && (
                 <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 border border-purple-200 rounded-md text-[8px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0">
                   <Truck className="w-2.5 h-2.5" /> Ag. Faturar
+                </span>
+              )}
+              {order.consumptionType && (
+                <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 border border-amber-200 rounded-md text-[8px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0">
+                  {order.consumptionType === "EAT_IN" ? <Utensils className="w-2.5 h-2.5" /> : <Package className="w-2.5 h-2.5" />}
+                  {order.consumptionType === "EAT_IN" ? "Comer no local" : "Viagem"}
                 </span>
               )}
             </div>
@@ -338,14 +397,24 @@ function KanbanCard({ order, categoryMap, updateStatus, isExpanded, toggleOrder,
 
       {/* Actions */}
       <div className="grid grid-cols-1 gap-2">
-        <button
-          type="button"
-          onClick={toggleOrder}
-          className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 text-[9px] font-black uppercase tracking-widest rounded-xl transition-colors"
-        >
-          <FileText className="w-3 h-3" />
-          Ver detalhes
-        </button>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={toggleOrder}
+            className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 text-[9px] font-black uppercase tracking-widest rounded-xl transition-colors"
+          >
+            <FileText className="w-3 h-3" />
+            Ver detalhes
+          </button>
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 text-[9px] font-black uppercase tracking-widest rounded-xl transition-colors"
+          >
+            <Printer className="w-3 h-3" />
+            Imprimir
+          </button>
+        </div>
         {needsBilling ? (
           <button
             type="button"
@@ -526,6 +595,7 @@ export function OrdersList({
                   isExpanded={expandedOrders.has(order.id)}
                   toggleOrder={() => toggleOrder(order.id, order.status === "DELIVERED" || order.status === "CANCELLED")}
                   onBillDelivery={onBillDelivery}
+                  tenant={tenant}
                 />
               ))}
             </AnimatePresence>
@@ -579,6 +649,7 @@ export function OrdersList({
             isExpanded={expandedOrders.has(activeId)}
             toggleOrder={() => {}}
             isOverlay
+            tenant={tenant}
           />
         ) : null}
       </DragOverlay>

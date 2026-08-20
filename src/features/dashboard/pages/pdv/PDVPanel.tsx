@@ -183,6 +183,8 @@ export default function PDVPanel({
   const [nextTicketLoading, setNextTicketLoading] = useState(false);
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   const [selectedComandaId, setSelectedComandaId] = useState<string | null>(null);
+  // Comer no local ou para viagem — só perguntado em venda direta de balcão (sem mesa/comanda)
+  const [consumptionType, setConsumptionType] = useState<"EAT_IN" | "TAKEOUT" | null>(null);
   const [contextLoadMessage, setContextLoadMessage] = useState("");
   // true quando veio do fluxo "Fechar Conta" — só pagar, sem opção de lançar mais itens
   const [isClosingAccount, setIsClosingAccount] = useState(false);
@@ -914,6 +916,9 @@ export default function PDVPanel({
     : selectedComandaOrder
     ? dineInOrderLabel(selectedComandaOrder)
     : null;
+  // Venda direta de balcão (sem mesa/comanda) — única situação em que perguntamos
+  // se é pra comer no local ou levar pra viagem.
+  const isCounterSale = !selectedTableId && !selectedComandaId;
 
   useEffect(() => {
     if (selectedComandaId && currentContextOrders.length === 0 && cart.length === 0) {
@@ -1422,6 +1427,10 @@ export default function PDVPanel({
     if (checkoutItems.length === 0 || (cashRequired && !currentCash)) return;
     if (isSplitMode && !splitCanFinalize) return;
     if (!isSplitMode && paymentMethod === "CASH" && digitsToNumber(amountReceived) < finalTotal) return;
+    if (isCounterSale && !consumptionType) {
+      toast.error("Selecione se é para comer no local ou para viagem.");
+      return;
+    }
     setIsProcessing(true);
 
     const isStone = paymentMethod === "STONE";
@@ -1484,6 +1493,7 @@ export default function PDVPanel({
       customerCpf: [11, 14].includes(customerCpf.replace(/\D/g, "").length) ? customerCpf.replace(/\D/g, "") : undefined,
       orderType: selectedTableId || selectedComandaId ? "DINE_IN" : "TAKEAWAY",
       tableId: selectedTableId || undefined,
+      consumptionType: isCounterSale ? consumptionType : undefined,
       paymentMethod: useSplit ? "SPLIT" : isStone ? `STONE_${stonePaymentType.toUpperCase()}` : paymentMethod,
       paymentMetadata: useSplit
         ? { splits: normalizedPaymentSplits.map(({ id, ...s }) => s) }
@@ -1534,6 +1544,7 @@ export default function PDVPanel({
       }
 
       clearCart();
+      setConsumptionType(null);
       setShowCheckout(false);
       setShowSuccess(true);
       if (!fiscalEnabled) setTimeout(() => setShowSuccess(false), 3000);
@@ -1658,6 +1669,7 @@ export default function PDVPanel({
       orderId: order.id,
       tableId: order.tableId,
       counterTicketNumber: order.counterTicketNumber != null ? order.counterTicketNumber : (isNumericName && !order.tableId ? Number(order.customerName) : null),
+      consumptionType: order.consumptionType || undefined,
       paperWidthMm: (tenant.receiptPaperWidth === 58 ? 58 : 80) as 58 | 80,
       createdAt: order.createdAt ? new Date(order.createdAt) : new Date(),
       customerName: (!isNumericName || order.tableId) ? order.customerName : undefined,
@@ -1709,6 +1721,7 @@ export default function PDVPanel({
       isPreCheckout: true,
       tableId: selectedTableId || undefined,
       counterTicketNumber: (isNumericName && !selectedTableId) ? Number(receiptCustomerName) : null,
+      consumptionType: isCounterSale ? consumptionType || undefined : undefined,
       customerName: (!isNumericName || selectedTableId) ? receiptCustomerName : undefined,
       items: [...existingContextItems, ...cart.map((item) => ({
         quantity: item.quantity,
@@ -3165,6 +3178,38 @@ export default function PDVPanel({
                   {currentContextLabel || customerName || "Venda Balcão"}
                 </h3>
 
+                {isCounterSale && (
+                  <div className="mb-3">
+                    <p className="text-[10px] font-black uppercase text-white/40 tracking-[0.2em] mb-1.5">
+                      Comer no local ou viagem?
+                    </p>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        onClick={() => setConsumptionType("EAT_IN")}
+                        className={`flex items-center justify-center gap-1.5 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-colors ${
+                          consumptionType === "EAT_IN"
+                            ? "bg-[#C9A227] border-[#C9A227] text-black"
+                            : "bg-white/5 border-white/10 text-white/60 hover:bg-white/10"
+                        }`}
+                      >
+                        <Utensils className="w-3.5 h-3.5" />
+                        Comer no local
+                      </button>
+                      <button
+                        onClick={() => setConsumptionType("TAKEOUT")}
+                        className={`flex items-center justify-center gap-1.5 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-colors ${
+                          consumptionType === "TAKEOUT"
+                            ? "bg-[#C9A227] border-[#C9A227] text-black"
+                            : "bg-white/5 border-white/10 text-white/60 hover:bg-white/10"
+                        }`}
+                      >
+                        <Package className="w-3.5 h-3.5" />
+                        Viagem
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Cliente / CPF-CNPJ na nota — mesmo estado usado no carrinho, só que
                     acessível aqui também, pra não precisar voltar pra vincular ou
                     corrigir o documento antes de finalizar e emitir a NF. */}
@@ -3967,7 +4012,8 @@ export default function PDVPanel({
                         disabled={
                           isProcessing ||
                           (isSplitMode && !splitCanFinalize) ||
-                          (!isSplitMode && paymentMethod === "CASH" && digitsToNumber(amountReceived) < finalTotal)
+                          (!isSplitMode && paymentMethod === "CASH" && digitsToNumber(amountReceived) < finalTotal) ||
+                          (isCounterSale && !consumptionType)
                         }
                         onClick={handleCheckout}
                         className="flex-1 bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-3 rounded-xl transition-all shadow-lg shadow-[#C9A227]/25 flex items-center justify-center gap-2.5 uppercase tracking-widest text-xs"

@@ -77,6 +77,8 @@ export default function CounterMenuView() {
   const [selectedGroupItemIds, setSelectedGroupItemIds] = useState<string[]>([]);
   const [showGroupPicker, setShowGroupPicker] = useState(false);
   const [isOrdering, setIsOrdering] = useState(false);
+  // Comer no local ou levar pra viagem — perguntado antes de enviar o pedido do balcão.
+  const [showConsumptionModal, setShowConsumptionModal] = useState(false);
 
   // Lista (não um único pedido) — o cliente pode ter mais de uma senha em aberto ao
   // mesmo tempo (ex: fez um pedido, saiu/atualizou a página, voltou e pediu de novo sem
@@ -340,8 +342,9 @@ export default function CounterMenuView() {
     }
   };
 
-  const handleOrder = async () => {
+  const handleOrder = async (chosenConsumptionType: "EAT_IN" | "TAKEOUT") => {
     if (cart.length === 0) return;
+    setShowConsumptionModal(false);
     setIsOrdering(true);
     const orderData = {
       customerName: customer.name,
@@ -350,6 +353,7 @@ export default function CounterMenuView() {
       tenantSlug: slug,
       orderType: "DINE_IN",
       tableId: COUNTER_ORDER_TABLE_ID,
+      consumptionType: chosenConsumptionType,
       paymentMethod: "CASH",
       birthday: customer.birthday || undefined,
       items: cart.map(item => ({
@@ -986,6 +990,53 @@ export default function CounterMenuView() {
               )}
             </AnimatePresence>
 
+            {/* ── COMER NO LOCAL OU VIAGEM ────────────────────────────── */}
+            <AnimatePresence>
+              {showConsumptionModal && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+                  className="fixed inset-0 z-[130] bg-zinc-950/90 backdrop-blur-2xl flex items-center justify-center p-8 lg:absolute lg:inset-0 lg:z-50"
+                >
+                  <div className="bg-zinc-900 border border-white/10 rounded-[3rem] p-10 max-w-sm w-full text-center space-y-6 shadow-2xl relative">
+                    <button
+                      onClick={() => setShowConsumptionModal(false)}
+                      disabled={isOrdering}
+                      className="absolute top-6 right-6 w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-white/40 hover:text-white transition-all active:scale-90"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+
+                    <h3 className="text-2xl font-serif text-white">Comer no local ou viagem?</h3>
+
+                    <div className="grid grid-cols-2 gap-3 pt-2">
+                      <button
+                        onClick={() => handleOrder("EAT_IN")}
+                        disabled={isOrdering}
+                        className="flex flex-col items-center gap-3 py-6 rounded-3xl border border-white/10 bg-white/5 hover:bg-amber-500 hover:text-black hover:border-amber-500 text-white transition-all active:scale-95"
+                      >
+                        <Utensils className="w-8 h-8" />
+                        <span className="text-sm font-black uppercase tracking-tight">Comer no local</span>
+                      </button>
+                      <button
+                        onClick={() => handleOrder("TAKEOUT")}
+                        disabled={isOrdering}
+                        className="flex flex-col items-center gap-3 py-6 rounded-3xl border border-white/10 bg-white/5 hover:bg-amber-500 hover:text-black hover:border-amber-500 text-white transition-all active:scale-95"
+                      >
+                        <ShoppingBag className="w-8 h-8" />
+                        <span className="text-sm font-black uppercase tracking-tight">Viagem</span>
+                      </button>
+                    </div>
+
+                    {isOrdering && (
+                      <div className="flex items-center justify-center gap-2 text-white/40 text-xs font-bold uppercase tracking-widest">
+                        <Loader2 className="w-4 h-4 animate-spin" /> Enviando pedido...
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {/* Cart FAB (Mobile + Desktop) */}
             <AnimatePresence>
               {cart.length > 0 && (
@@ -996,7 +1047,7 @@ export default function CounterMenuView() {
                   className="fixed bottom-8 left-4 right-4 z-50 flex justify-center lg:bottom-12 lg:right-12 lg:left-auto"
                 >
                   <button
-                    onClick={handleOrder}
+                    onClick={() => setShowConsumptionModal(true)}
                     disabled={isOrdering}
                     className="w-full max-w-md bg-amber-500 text-black rounded-3xl p-4 flex items-center justify-between shadow-[0_20px_50px_rgba(245,158,11,0.3)] hover:scale-[1.02] active:scale-95 transition-all group overflow-hidden relative lg:max-w-xs lg:rounded-[2rem]"
                   >

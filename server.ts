@@ -3047,6 +3047,7 @@ app.post("/api/orders", async (req, res) => {
     scheduledTime,
     notes,
     birthday,
+    consumptionType,
   } = req.body;
 
   try {
@@ -3057,6 +3058,12 @@ app.post("/api/orders", async (req, res) => {
     // assim o cliente pode acompanhar pelo número no painel de TV,
     // independente de ser balcão, mesa ou delivery.
     const isCounterOrder = tableId === "Balcao";
+
+    // Balcão precisa saber se o cliente vai comer ali ou levar pra viagem —
+    // mesa e delivery já deixam isso implícito, então só exigimos aqui.
+    if (isCounterOrder && consumptionType !== "EAT_IN" && consumptionType !== "TAKEOUT") {
+      return res.status(400).json({ error: "Informe se é para comer no local ou para viagem." });
+    }
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
     const lastTicket = await prisma.order.findFirst({
@@ -3149,6 +3156,7 @@ app.post("/api/orders", async (req, res) => {
         tenantId,
         tableId: isCounterOrder ? null : tableId || null,
         counterTicketNumber,
+        consumptionType: isCounterOrder ? consumptionType : null,
         items: {
           create: orderItemsData,
         },
@@ -8172,6 +8180,7 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
       serviceChargeIncluded,
       source,
       counterTicketNumber: requestedCounterTicketNumber,
+      consumptionType,
     } = req.body;
 
     // O placar do garçom (leaderboard) só conta pedidos com operatorName preenchido —
@@ -8190,6 +8199,13 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
     const isDraftDineIn = isCounterComanda && validatedItems.length === 0;
     if (!isDineIn && validatedItems.length === 0) {
       return res.status(400).json({ error: "Nenhum item no pedido." });
+    }
+
+    // Venda direta de balcão (sem mesa/comanda) precisa dizer se é pra comer no
+    // local ou levar pra viagem — mesa/comanda e delivery já deixam isso implícito.
+    const isCounterSale = orderType === "TAKEAWAY";
+    if (isCounterSale && consumptionType !== "EAT_IN" && consumptionType !== "TAKEOUT") {
+      return res.status(400).json({ error: "Informe se é para comer no local ou para viagem." });
     }
 
     let counterTicketNumber: number | null = null;
@@ -8449,6 +8465,7 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
         orderType: orderType || "TAKEAWAY",
         tableId: tableId || null,
         counterTicketNumber,
+        consumptionType: isCounterSale ? consumptionType : null,
         paymentMethod: paymentMethod || "CASH",
         paymentDetail: paymentMetadata ? JSON.stringify(paymentMetadata) : null,
         discount: discountAmount,

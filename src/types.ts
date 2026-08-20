@@ -597,9 +597,10 @@ export interface Order {
   customerPhone: string;
   address?: string;
   status: 'PENDING' | 'PREPARING' | 'SHIPPED' | 'AWAITING_PAYMENT' | 'DELIVERED' | 'CANCELLED' | 'MERGED';
-  orderType: 'DELIVERY' | 'PICKUP' | 'DINE_IN';
+  orderType: 'DELIVERY' | 'PICKUP' | 'TAKEAWAY' | 'DINE_IN';
   tableId?: string | null;
   counterTicketNumber?: number | null; // senha sequencial diária — só para pedidos de balcão (sem mesa)
+  consumptionType?: 'EAT_IN' | 'TAKEOUT' | null; // comer no local ou para viagem — só pedidos de Balcão
   kitchenReady?: boolean;
   paymentMethod: 'PIX' | 'CREDIT' | 'DEBIT' | 'MEAL' | 'FOOD' | 'CASH' | 'VR' | 'SPLIT' | 'STONE_CREDIT' | 'STONE_DEBIT' | 'STONE_PIX';
   paymentDetail?: string;

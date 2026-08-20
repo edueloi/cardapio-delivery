@@ -14,6 +14,8 @@ export interface ReceiptData {
   orderId?: string;
   tableId?: string | null;
   counterTicketNumber?: number | null;
+  /** "EAT_IN" (comer no local) ou "TAKEOUT" (para viagem) — só pedidos de Balcão. */
+  consumptionType?: "EAT_IN" | "TAKEOUT" | null;
   createdAt?: Date;
   customerName?: string;
   isPreCheckout?: boolean;
@@ -80,6 +82,7 @@ function estimateHeight(data: ReceiptData, nameLines: string[], addressLines: st
   if (data.copyLabel) y += 5;
   if (data.tableId) y += 6;
   else if (data.counterTicketNumber != null) y += 18;
+  if (data.consumptionType) y += 5;
   if (data.customerName) y += 4;
   y += 1 + 5; // linha + espaço
   for (const item of data.items) {
@@ -169,6 +172,14 @@ export function buildReceiptPdf(data: ReceiptData): jsPDF {
     doc.setFontSize(width === 58 ? 8 : 9);
     doc.text("SENHA", width / 2, y, { align: "center" });
     y += 4;
+    doc.setFontSize(8);
+  }
+  if (data.consumptionType) {
+    doc.setFont("courier", "bold");
+    doc.setFontSize(9);
+    doc.text(data.consumptionType === "EAT_IN" ? "COMER NO LOCAL" : "PARA VIAGEM", width / 2, y, { align: "center" });
+    y += 5;
+    doc.setFont("courier", "normal");
     doc.setFontSize(8);
   }
   if (data.customerName) {

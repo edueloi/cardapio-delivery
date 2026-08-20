@@ -152,6 +152,10 @@ function buildEscPosBuffer(data) {
     out += CMD.boldOff;
   }
 
+  if (data.consumptionType) {
+    out += CMD.boldOn + (data.consumptionType === "EAT_IN" ? "COMER NO LOCAL" : "PARA VIAGEM") + "\n" + CMD.boldOff;
+  }
+
   if (data.customerName) out += `Cliente: ${data.customerName}\n`;
 
   out += CMD.alignLeft;
