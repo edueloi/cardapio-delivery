@@ -203,6 +203,10 @@ export default function PDVPanel({
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerCpf, setCustomerCpf] = useState("");
+  // Cliente pediu Nota Fiscal — marcado no fechamento do pagamento; se marcado, a NFC-e
+  // é emitida automaticamente assim que a venda for concluída, sem precisar de um clique
+  // extra depois (a emissão nunca acontece sozinha se isso não for marcado).
+  const [requestNfce, setRequestNfce] = useState(false);
   // Cliente vinculado por busca (fidelidade) — null quando os campos acima são digitados
   // à mão sem bater com nenhum cadastro. O vínculo em si com a venda acontece pelo telefone
   // no backend (awardLoyaltyPoints usa upsert por tenantId_phone), isso aqui é só UX:
@@ -1031,6 +1035,8 @@ export default function PDVPanel({
     setCart([]);
     setSelectedTableId(null);
     setSelectedComandaId(null);
+    setConsumptionType(null);
+    setRequestNfce(false);
     setContextLoadMessage("");
     setIsClosingAccount(false);
     setCustomerName("");
@@ -1490,6 +1496,7 @@ export default function PDVPanel({
         // Com fiscal habilitado, deixa o aviso aberto até fechar manualmente — 3s não dá
         // tempo de digitar/conferir o CPF-CNPJ e emitir a NFC-e antes de sumir sozinho.
         if (!fiscalEnabled) setTimeout(() => setShowSuccess(false), 3000);
+        if (fiscalEnabled && requestNfce) void handleEmitNfce();
         onOrderCreated?.();
       } catch (err) {
         console.error(err);
@@ -1557,10 +1564,10 @@ export default function PDVPanel({
       }
 
       clearCart();
-      setConsumptionType(null);
       setShowCheckout(false);
       setShowSuccess(true);
       if (!fiscalEnabled) setTimeout(() => setShowSuccess(false), 3000);
+      if (fiscalEnabled && requestNfce) void handleEmitNfce();
       onOrderCreated?.();
     } catch (err) {
       console.error(err);
@@ -1639,6 +1646,7 @@ export default function PDVPanel({
               setShowCheckout(false);
               setShowSuccess(true);
               if (!fiscalEnabled) setTimeout(() => setShowSuccess(false), 3000);
+              if (fiscalEnabled && requestNfce) void handleEmitNfce();
               onOrderCreated?.();
             }, 1500);
           } else if (poll.status === "failed" || poll.status === "canceled" || attempts > 36) {
@@ -3303,6 +3311,19 @@ export default function PDVPanel({
                         className="w-full bg-white/5 border border-white/10 rounded-lg py-1.5 pl-7 pr-2.5 text-[11px] text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
                       />
                     </div>
+                  )}
+                  {/* A NFC-e só sai se o atendente marcar isso aqui, no fechamento do
+                      pagamento — emitir sozinho pra toda venda não é o esperado. */}
+                  {fiscalEnabled && (
+                    <label className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-2.5 py-2 cursor-pointer hover:border-[#C9A227]/50 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={requestNfce}
+                        onChange={(e) => setRequestNfce(e.target.checked)}
+                        className="w-3.5 h-3.5 rounded accent-[#C9A227] shrink-0"
+                      />
+                      <span className="text-[11px] font-bold text-white/70">Cliente pediu Nota Fiscal (NFC-e)</span>
+                    </label>
                   )}
 
                   {/* Popover de busca/cadastro de cliente — cópia do que já existe no
