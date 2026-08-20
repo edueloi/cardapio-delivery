@@ -510,8 +510,13 @@ export default function CounterMenuView() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="fixed inset-0 z-50 flex flex-col items-center justify-center p-8 bg-black/40 backdrop-blur-md overflow-y-auto"
+            className="fixed inset-0 z-50 overflow-y-auto bg-black/40 backdrop-blur-md"
           >
+            {/* min-h-full (em vez de centralizar o próprio container fixed) — com 2+
+                senhas o conteúdo pode passar da altura da tela, e centralizar o
+                container inteiro cortava a primeira senha lá em cima sem dar pra
+                rolar até ela (limitação clássica de flex + overflow). */}
+            <div className="min-h-full flex flex-col items-center justify-center p-8">
             <div className="w-full max-w-sm space-y-8 text-center relative z-10 py-8">
               <div className="space-y-2">
                 <p className="text-amber-500/60 text-xs font-black tracking-widest uppercase">{tenant.name}</p>
@@ -574,6 +579,7 @@ export default function CounterMenuView() {
                 Fazer novo pedido
               </button>
             </div>{/* end w-full max-w-sm */}
+            </div>{/* end min-h-full */}
           </motion.div>
         )}
       </AnimatePresence>

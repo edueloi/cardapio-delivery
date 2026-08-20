@@ -75,6 +75,39 @@ import {
   fmt,
 } from "../_shared/ManagementShared";
 
+// Campo livre de UF na Localização deixava o usuário digitar "São Paulo" e travar
+// em "SÃ" (o onChange truncava pros 2 primeiros caracteres a cada tecla, sem
+// limpar o campo antes) — um dropdown com os códigos oficiais elimina isso de vez.
+const UF_OPTIONS = [
+  { value: "AC", label: "AC — Acre" },
+  { value: "AL", label: "AL — Alagoas" },
+  { value: "AP", label: "AP — Amapá" },
+  { value: "AM", label: "AM — Amazonas" },
+  { value: "BA", label: "BA — Bahia" },
+  { value: "CE", label: "CE — Ceará" },
+  { value: "DF", label: "DF — Distrito Federal" },
+  { value: "ES", label: "ES — Espírito Santo" },
+  { value: "GO", label: "GO — Goiás" },
+  { value: "MA", label: "MA — Maranhão" },
+  { value: "MT", label: "MT — Mato Grosso" },
+  { value: "MS", label: "MS — Mato Grosso do Sul" },
+  { value: "MG", label: "MG — Minas Gerais" },
+  { value: "PA", label: "PA — Pará" },
+  { value: "PB", label: "PB — Paraíba" },
+  { value: "PR", label: "PR — Paraná" },
+  { value: "PE", label: "PE — Pernambuco" },
+  { value: "PI", label: "PI — Piauí" },
+  { value: "RJ", label: "RJ — Rio de Janeiro" },
+  { value: "RN", label: "RN — Rio Grande do Norte" },
+  { value: "RS", label: "RS — Rio Grande do Sul" },
+  { value: "RO", label: "RO — Rondônia" },
+  { value: "RR", label: "RR — Roraima" },
+  { value: "SC", label: "SC — Santa Catarina" },
+  { value: "SP", label: "SP — São Paulo" },
+  { value: "SE", label: "SE — Sergipe" },
+  { value: "TO", label: "TO — Tocantins" },
+];
+
 export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, refresh: () => void }) {
   const toast = useToast();
   const [activeTab, setActiveTab] = useState<"general" | "hours" | "delivery" | "payments" | "maquinhas" | "fiscal">("general");
@@ -267,7 +300,13 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <Input label="Cidade" value={addr.city} onChange={e => setA("city", e.target.value)} placeholder="Cidade" />
-                  <Input label="Estado (UF)" value={addr.state} onChange={e => setA("state", e.target.value.toUpperCase().slice(0,2))} placeholder="SP" />
+                  <Select
+                    label="Estado (UF)"
+                    value={addr.state}
+                    onChange={e => setA("state", e.target.value)}
+                    options={UF_OPTIONS}
+                    placeholder="Selecione..."
+                  />
                   <Input label="País" value={addr.country} onChange={e => setA("country", e.target.value)} placeholder="Brasil" />
                 </div>
               </div>
