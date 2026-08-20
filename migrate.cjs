@@ -1165,6 +1165,12 @@ const migrations = [
     check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'selection_group'",
     run: "ALTER TABLE products ADD COLUMN selection_group TEXT NULL",
   },
+  // Comer no local ou para viagem — só pedidos de Balcão (PDV e cardápio QR)
+  {
+    name: 'add_orders_consumption_type',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'consumption_type'",
+    run: "ALTER TABLE orders ADD COLUMN consumption_type VARCHAR(191) NULL",
+  },
 ];
 
 async function run() {
