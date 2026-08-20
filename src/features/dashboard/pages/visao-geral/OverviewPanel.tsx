@@ -166,11 +166,16 @@ export default function OverviewPanel({ tenant, slug, orders, setActiveTab, setS
     const cancelled = orders.filter((o) => o.status === "CANCELLED").length;
     const active = pending + preparing + shipped;
 
+    // Pedido de Balcão/Mesa pago fica com status AWAITING_PAYMENT (ou PREPARING, se pago
+    // adiantado) pra sempre — faturar no PDV muda só o campo "billed", nunca o status.
+    // Contar só DELIVERED escondia essas vendas do total do dia (podia mostrar R$0 em
+    // vendas com um dia cheio de pedidos de balcão já pagos).
+    const isConcludedSale = (o: Order) => o.status !== "CANCELLED" && (o.billed === true || o.status === "DELIVERED");
     const totalSales = todayOrders
-      .filter((o) => o.status === "DELIVERED")
+      .filter(isConcludedSale)
       .reduce((s, o) => s + o.total, 0);
-    const deliveredCount = todayOrders.filter((o) => o.status === "DELIVERED").length;
-    const avgTicket = deliveredCount > 0 ? totalSales / deliveredCount : 0;
+    const concludedCount = todayOrders.filter(isConcludedSale).length;
+    const avgTicket = concludedCount > 0 ? totalSales / concludedCount : 0;
 
     // Pedidos por hora (últimas 8h)
     const byHour: number[] = Array(8).fill(0);

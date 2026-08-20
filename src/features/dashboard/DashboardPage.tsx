@@ -280,7 +280,11 @@ export default function DashboardPage() {
       }
 
       if (activeTab === "history") {
-        return order.status === "DELIVERED" || order.status === "CANCELLED";
+        // Pedido de Balcão/Mesa pago fica com status AWAITING_PAYMENT (ou PREPARING, se
+        // pago adiantado) pra sempre — faturar no PDV muda só o campo "billed", nunca o
+        // status. Filtrar só por DELIVERED/CANCELLED escondia essas vendas do Histórico
+        // inteiro, antes mesmo de chegar nos cálculos de total.
+        return order.status === "DELIVERED" || order.status === "CANCELLED" || order.billed === true;
       }
 
       return true;

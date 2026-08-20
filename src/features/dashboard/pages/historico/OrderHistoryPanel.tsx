@@ -34,6 +34,19 @@ import { Order, dineInOrderLabel } from "../../../../types";
 const fmt = (n: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
 
+// Pedido de Balcão/Mesa pago fica com status AWAITING_PAYMENT (ou PREPARING, se pago
+// adiantado) pra sempre — o faturamento no PDV muda só o campo "billed", nunca o status.
+// Usar só status === "DELIVERED" pra decidir "concluído" escondia essas vendas do total
+// e ainda rotulava como "Cancelado" (o único outro rótulo que existia) pedidos que na
+// verdade já foram pagos e entregues normalmente.
+function isOrderConcluded(o: Order): boolean {
+  return o.status !== "CANCELLED" && (o.billed === true || o.status === "DELIVERED");
+}
+function orderHistoryStatusLabel(o: Order): "Concluído" | "Cancelado" | "Em aberto" {
+  if (o.status === "CANCELLED") return "Cancelado";
+  return isOrderConcluded(o) ? "Concluído" : "Em aberto";
+}
+
 const HISTORY_PREFS_KEY = 'orderHistory_prefs_v1';
 
 function loadHistoryPrefs(slug: string) {
@@ -60,7 +73,7 @@ function exportOrdersCSV(orders: Order[]) {
     o.customerPhone || '',
     o.orderType === 'DELIVERY' ? 'Delivery' : o.orderType === 'DINE_IN' ? 'Mesa' : 'Retirada',
     o.tableId || '',
-    o.status === 'DELIVERED' ? 'Concluído' : 'Cancelado',
+    orderHistoryStatusLabel(o),
     o.paymentMethod,
     String(o.total).replace('.', ','),
   ]);
@@ -184,16 +197,16 @@ export function OrderHistoryPanel({
         const matchSearch = !q || o.id.toLowerCase().includes(q) || o.customerName.toLowerCase().includes(q);
         const matchType = typeFilter === 'all' || o.orderType === typeFilter;
         const matchPayment = paymentFilter === 'all' || o.paymentMethod === paymentFilter;
-        const matchStatus = statusFilter === 'all' || o.status === statusFilter;
+        const matchStatus = statusFilter === 'all'
+          || (statusFilter === 'CANCELLED' ? o.status === 'CANCELLED' : isOrderConcluded(o));
         return matchSearch && matchType && matchPayment && matchStatus;
       })
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [orders, searchTerm, typeFilter, paymentFilter, statusFilter, dateMode, dateFrom, dateTo, selMonth, selYear]);
 
-  const totalSales = useMemo(() => filtered.reduce((acc, o) => acc + (o.status === 'DELIVERED' ? o.total : 0), 0), [filtered]);
-  const avgTicket = filtered.filter(o => o.status === 'DELIVERED').length > 0
-    ? totalSales / filtered.filter(o => o.status === 'DELIVERED').length
-    : 0;
+  const totalSales = useMemo(() => filtered.reduce((acc, o) => acc + (isOrderConcluded(o) ? o.total : 0), 0), [filtered]);
+  const concludedCount = filtered.filter(isOrderConcluded).length;
+  const avgTicket = concludedCount > 0 ? totalSales / concludedCount : 0;
   const cancelled = filtered.filter(o => o.status === 'CANCELLED').length;
 
   const { page, pageSize, setPage, setPageSize, paginatedData, totalPages } = usePagination(filtered, 20);
@@ -220,7 +233,7 @@ export function OrderHistoryPanel({
   ];
   const statusOptions = [
     { value: 'all', label: 'Status' },
-    { value: 'DELIVERED', label: 'Concluído' },
+    { value: 'CONCLUDED', label: 'Concluído' },
     { value: 'CANCELLED', label: 'Cancelado' },
   ];
 
@@ -265,9 +278,9 @@ export function OrderHistoryPanel({
       hideOnMobile: true,
       render: (o: Order) => (
         <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
-          o.status === 'DELIVERED' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+          o.status === 'CANCELLED' ? 'bg-red-100 text-red-700' : isOrderConcluded(o) ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
         }`}>
-          {o.status === 'DELIVERED' ? 'Concluído' : 'Cancelado'}
+          {orderHistoryStatusLabel(o)}
         </span>
       ),
     },
@@ -460,9 +473,9 @@ export function OrderHistoryPanel({
                 {new Date(detailsOrder.createdAt).toLocaleString('pt-BR')}
               </span>
               <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
-                detailsOrder.status === 'DELIVERED' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                detailsOrder.status === 'CANCELLED' ? 'bg-red-100 text-red-700' : isOrderConcluded(detailsOrder) ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
               }`}>
-                {detailsOrder.status === 'DELIVERED' ? 'Concluído' : 'Cancelado'}
+                {orderHistoryStatusLabel(detailsOrder)}
               </span>
             </div>
 

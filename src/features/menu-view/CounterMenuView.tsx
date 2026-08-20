@@ -25,7 +25,11 @@ const fmt = (n: number) =>
 // o pedido pode estar em PENDING/PREPARING sem ainda ter sido pago (ex: cliente
 // escolheu pagar no balcão, ou o operador ainda não bateu o pagamento no PDV).
 function getStatusLabel(status: string, billed: boolean) {
-  if (status === "AWAITING_PAYMENT") return "Aguardando Pagamento";
+  // AWAITING_PAYMENT é o status de "já retirado no balcão, falta só fechar a conta no
+  // caixa" — sem checar billed aqui, a tela do cliente ficava presa em "Aguardando
+  // Pagamento" pra sempre, mesmo depois do PDV marcar o pagamento como feito (o
+  // faturamento no PDV muda só o billed, não o status).
+  if (status === "AWAITING_PAYMENT") return billed ? "Pagamento confirmado" : "Aguardando Pagamento";
   if (["PENDING", "PREPARING"].includes(status)) {
     return billed ? "Pedido pago — na fila de preparo" : "Pedido recebido — aguardando confirmação do pagamento";
   }
@@ -39,7 +43,9 @@ function getStatusLabel(status: string, billed: boolean) {
 // Mensagem de instrução dinâmica
 function getInstructionText(status: string, billed: boolean) {
   if (status === "AWAITING_PAYMENT") {
-    return "Pague no caixa e acompanhe pela tela — chamaremos sua senha quando estiver pronto.";
+    return billed
+      ? "Pagamento confirmado. Obrigado pela preferência!"
+      : "Pague no caixa e acompanhe pela tela — chamaremos sua senha quando estiver pronto.";
   }
   if (["PENDING", "PREPARING"].includes(status)) {
     return billed
