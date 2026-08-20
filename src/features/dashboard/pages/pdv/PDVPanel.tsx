@@ -1309,6 +1309,7 @@ export default function PDVPanel({
     setCart([]);
     setSelectedTableId(tableId);
     setSelectedComandaId(null);
+    setConsumptionType(null);
     setContextLoadMessage(`Mesa ${tableId} aberta no PDV. Os itens já lançados ficam separados dos novos itens.`);
     setOrderDetailsView(null);
     setActiveTab("products");
@@ -1322,6 +1323,7 @@ export default function PDVPanel({
     setSelectedTableId(comanda.tableId || null);
     setSelectedComandaId(comanda.id);
     setComandaNumber(comanda.customerName || "");
+    setConsumptionType(comanda.consumptionType || null);
     setContextLoadMessage(`${dineInOrderLabel(comanda)} aberta no PDV. O que já foi lançado aparece separado do que será adicionado agora.`);
     setOrderDetailsView(null);
     setActiveTab("products");
@@ -1348,6 +1350,7 @@ export default function PDVPanel({
           customerName: comandaNumber.trim() || undefined,
           customerPhone: "00000000000",
           orderType: "DINE_IN",
+          consumptionType,
           counterTicketNumber: nextTicket || undefined,
           status: cart.length > 0 ? "PENDING" : "AWAITING_PAYMENT",
           paymentMethod: "CASH",
@@ -1398,6 +1401,7 @@ export default function PDVPanel({
           customerName: customerName || currentContextLabel || "Comanda",
           customerPhone: customerPhone || "00000000000",
           orderType: "DINE_IN",
+          consumptionType: !selectedTableId ? consumptionType : undefined,
           tableId: selectedTableId || undefined,
           counterTicketNumber: selectedComandaOrder?.counterTicketNumber || undefined,
           status: "PENDING",
@@ -2203,7 +2207,7 @@ export default function PDVPanel({
             <div className="flex items-center justify-between mb-4">
               <h4 className="text-xs font-black uppercase tracking-widest text-slate-400">Comandas Ativas</h4>
               <button
-                onClick={() => { setComandaNumber(""); setShowComandaModal(true); }}
+                onClick={() => { setComandaNumber(""); setConsumptionType(null); setShowComandaModal(true); }}
                 className="bg-[#0D1B3E] text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
               >
                 <Plus className="w-3 h-3" />
@@ -2678,7 +2682,7 @@ export default function PDVPanel({
                 disabled={cart.length === 0 || isProcessing}
                 onClick={() => {
                   if (selectedTableId || selectedComandaId) void handleLaunchOrder();
-                  else setShowComandaModal(true);
+                  else { setConsumptionType(null); setShowComandaModal(true); }
                 }}
                 className={`${isWaiterMode ? "bg-[#C9A227] hover:bg-[#E8B93A] text-black shadow-xl shadow-[#C9A227]/20" : "bg-white/5 hover:bg-white/10 text-white"} disabled:opacity-30 font-black py-3 rounded-2xl transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-[10px]`}
               >
@@ -2984,7 +2988,7 @@ export default function PDVPanel({
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-[300] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
-            onClick={() => { setShowComandaModal(false); setComandaNumber(""); }}
+            onClick={() => { setShowComandaModal(false); setComandaNumber(""); setConsumptionType(null); }}
           >
             <motion.div
               initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.96, y: 12, opacity: 0 }}
@@ -2999,6 +3003,39 @@ export default function PDVPanel({
                 <p className="text-xs text-slate-400 font-bold uppercase">Identifique o cliente ou o cartão</p>
               </div>
               <div className="space-y-4">
+                {/* Comer no local ou viagem — obrigatório pra toda comanda de balcão (sem mesa) */}
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-1">
+                    Comer no local ou viagem?
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 mt-1">
+                    <button
+                      type="button"
+                      onClick={() => setConsumptionType("EAT_IN")}
+                      className={`flex items-center justify-center gap-1.5 py-3 rounded-2xl border text-[10px] font-black uppercase tracking-widest transition-colors ${
+                        consumptionType === "EAT_IN"
+                          ? "bg-[#C9A227] border-[#C9A227] text-black"
+                          : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
+                      }`}
+                    >
+                      <Utensils className="w-3.5 h-3.5" />
+                      Comer no local
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConsumptionType("TAKEOUT")}
+                      className={`flex items-center justify-center gap-1.5 py-3 rounded-2xl border text-[10px] font-black uppercase tracking-widest transition-colors ${
+                        consumptionType === "TAKEOUT"
+                          ? "bg-[#C9A227] border-[#C9A227] text-black"
+                          : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
+                      }`}
+                    >
+                      <Package className="w-3.5 h-3.5" />
+                      Viagem
+                    </button>
+                  </div>
+                </div>
+
                 {/* Próxima senha em destaque */}
                 <div className="text-center">
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Próxima senha</p>
@@ -3033,13 +3070,13 @@ export default function PDVPanel({
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <button
-                  onClick={() => { setShowComandaModal(false); setComandaNumber(""); }}
+                  onClick={() => { setShowComandaModal(false); setComandaNumber(""); setConsumptionType(null); }}
                   className="bg-slate-100 hover:bg-slate-200 text-slate-500 font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest transition-all"
                 >
                   Cancelar
                 </button>
                 <button
-                  disabled={isProcessing || nextTicketLoading}
+                  disabled={isProcessing || nextTicketLoading || !consumptionType}
                   onClick={() => void handleCreateComanda()}
                   className="bg-[#0D1B3E] hover:bg-slate-800 text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest transition-all disabled:opacity-50"
                 >

@@ -8201,9 +8201,10 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "Nenhum item no pedido." });
     }
 
-    // Venda direta de balcão (sem mesa/comanda) precisa dizer se é pra comer no
-    // local ou levar pra viagem — mesa/comanda e delivery já deixam isso implícito.
-    const isCounterSale = orderType === "TAKEAWAY";
+    // Venda de balcão — direta (sem comanda) ou comanda/senha sem mesa vinculada —
+    // precisa dizer se é pra comer no local ou levar pra viagem. Mesa e delivery já
+    // deixam isso implícito.
+    const isCounterSale = orderType === "TAKEAWAY" || isCounterComanda;
     if (isCounterSale && consumptionType !== "EAT_IN" && consumptionType !== "TAKEOUT") {
       return res.status(400).json({ error: "Informe se é para comer no local ou para viagem." });
     }
