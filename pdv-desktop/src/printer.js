@@ -72,6 +72,15 @@ function formatCnpj(raw) {
   return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
 }
 
+function formatPhone(raw) {
+  if (!raw) return "";
+  const digits = String(raw).replace(/\D/g, "");
+  const clean = digits.startsWith("55") && digits.length >= 12 ? digits.slice(2) : digits;
+  if (clean.length === 11) return `(${clean.slice(0, 2)}) ${clean.slice(2, 7)}-${clean.slice(7)}`;
+  if (clean.length === 10) return `(${clean.slice(0, 2)}) ${clean.slice(2, 6)}-${clean.slice(6)}`;
+  return raw;
+}
+
 function formatTenantAddress(raw) {
   if (!raw) return "";
   try {
@@ -143,7 +152,7 @@ function buildEscPosBuffer(data) {
   if (address) for (const line of wrapLine(address, cols)) out += line + "\n";
 
   if (data.tenantCnpj) out += `CNPJ: ${formatCnpj(data.tenantCnpj)}\n`;
-  if (data.tenantPhone) out += `Tel: ${data.tenantPhone}\n`;
+  if (data.tenantPhone) out += `Tel: ${formatPhone(data.tenantPhone)}\n`;
 
   const dateStr = data.createdAt ? new Date(data.createdAt).toLocaleString("pt-BR") : new Date().toLocaleString("pt-BR");
   out += dateStr + "\n";
@@ -151,10 +160,11 @@ function buildEscPosBuffer(data) {
 
   if (data.counterTicketNumber != null) {
     // Senha bem grande — é o que o cliente usa pra identificar o pedido no balcão/painel.
+    // Linhas em branco antes/depois de propósito, senão "SENHA" fica colado no número.
     out += "\n" + CMD.boldOn + CMD.sizeTriple;
     out += `${String(data.counterTicketNumber).padStart(2, "0")}\n`;
     out += CMD.sizeNormal;
-    out += "SENHA\n";
+    out += "SENHA\n\n";
     out += CMD.boldOff;
   }
 

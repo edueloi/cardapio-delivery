@@ -79,6 +79,17 @@ function formatCnpj(raw?: string): string {
   return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
 }
 
+// tenant.whatsapp vem só com dígitos (às vezes com o "55" do país na frente) — sem isso
+// o cabeçalho imprime um número cru tipo "5515992675429", ilegível.
+function formatPhone(raw?: string): string {
+  if (!raw) return "";
+  const digits = raw.replace(/\D/g, "");
+  const clean = digits.startsWith("55") && digits.length >= 12 ? digits.slice(2) : digits;
+  if (clean.length === 11) return `(${clean.slice(0, 2)}) ${clean.slice(2, 7)}-${clean.slice(7)}`;
+  if (clean.length === 10) return `(${clean.slice(0, 2)}) ${clean.slice(2, 6)}-${clean.slice(6)}`;
+  return raw;
+}
+
 // Estima a altura necessária (mm) somando as mesmas linhas que buildReceiptPdf desenha,
 // pra não sobrar papel em branco nem cortar conteúdo. nameLines/addressLines já vêm
 // quebrados pelo jsPDF (splitTextToSize), então o número de linhas reais é conhecido de antemão.
@@ -91,7 +102,7 @@ function estimateHeight(data: ReceiptData, nameLines: string[], addressLines: st
   y += 4; // data
   if (data.orderId) y += 4;
   if (data.tableId) y += 6;
-  else if (data.counterTicketNumber != null) y += 18;
+  else if (data.counterTicketNumber != null) y += 27;
   if (data.consumptionType) y += 5;
   if (data.customerName) y += 4;
   y += 1 + 5; // linha + espaço
@@ -154,7 +165,7 @@ export function buildReceiptPdf(data: ReceiptData): jsPDF {
     y += 4;
   }
   if (data.tenantPhone) {
-    doc.text(`Tel: ${data.tenantPhone}`, width / 2, y, { align: "center" });
+    doc.text(`Tel: ${formatPhone(data.tenantPhone)}`, width / 2, y, { align: "center" });
     y += 4;
   }
 
@@ -175,14 +186,18 @@ export function buildReceiptPdf(data: ReceiptData): jsPDF {
   } else if (data.counterTicketNumber != null) {
     // Senha em destaque bem maior — é a referência que o cliente usa pra buscar o pedido
     // no balcão/painel, precisa ser visível de longe, bem mais que o resto do cupom.
+    // O respiro antes/depois do número é de propósito: sem ele o rótulo "SENHA" fica
+    // colado embaixo do número grande, difícil de ler.
+    y += 3;
     doc.setFont("courier", "bold");
     doc.setFontSize(width === 58 ? 22 : 28);
-    doc.text(String(data.counterTicketNumber).padStart(2, "0"), width / 2, y + 8, { align: "center" });
-    y += 10;
+    y += width === 58 ? 9 : 11;
+    doc.text(String(data.counterTicketNumber).padStart(2, "0"), width / 2, y, { align: "center" });
+    y += 7;
     doc.setFont("courier", "normal");
     doc.setFontSize(width === 58 ? 8 : 9);
     doc.text("SENHA", width / 2, y, { align: "center" });
-    y += 4;
+    y += 6;
     doc.setFontSize(8);
   }
   if (data.consumptionType) {
