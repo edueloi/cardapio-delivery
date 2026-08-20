@@ -470,6 +470,15 @@ export default function PDVPanel({
     } catch { return false; }
   }, [tenant.fiscalConfig]);
 
+  // CNPJ do estabelecimento pro cabeçalho da notinha — vem da config fiscal mesmo
+  // quando o fiscal não está habilitado (é só informação do cabeçalho, não emissão de nota).
+  const tenantCnpj = useMemo(() => {
+    try {
+      const cfg = tenant.fiscalConfig ? JSON.parse(tenant.fiscalConfig as string) : null;
+      return cfg?.cnpj || undefined;
+    } catch { return undefined; }
+  }, [tenant.fiscalConfig]);
+
   const handleEmitNfce = async () => {
     const order = lastOrderRef.current;
     if (!order?.id) return;
@@ -1666,6 +1675,8 @@ export default function PDVPanel({
     return {
       tenantName: tenant.name,
       tenantAddress: tenant.address || undefined,
+      tenantCnpj,
+      tenantPhone: tenant.whatsapp || undefined,
       orderId: order.id,
       tableId: order.tableId,
       counterTicketNumber: order.counterTicketNumber != null ? order.counterTicketNumber : (isNumericName && !order.tableId ? Number(order.customerName) : null),
@@ -1718,6 +1729,8 @@ export default function PDVPanel({
     const data = {
       tenantName: tenant.name,
       tenantAddress: tenant.address || undefined,
+      tenantCnpj,
+      tenantPhone: tenant.whatsapp || undefined,
       isPreCheckout: true,
       tableId: selectedTableId || undefined,
       counterTicketNumber: (isNumericName && !selectedTableId) ? Number(receiptCustomerName) : null,

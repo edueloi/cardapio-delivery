@@ -27,9 +27,9 @@ import {
 } from "lucide-react";
 import { PaymentBadge, useToast } from "../../../../components";
 import { apiFetch, apiJson } from "../../../../lib/api";
-import { Order, dineInOrderLabel } from "../../../../types";
+import { Order, dineInOrderLabel, type DanfeData } from "../../../../types";
 import { playOrderDelayedSound } from "../../../../lib/notificationSound";
-import { printReceiptPdf, type ReceiptData } from "../../../../lib/receipt";
+import { printReceiptPdf, printDanfePdf, type ReceiptData } from "../../../../lib/receipt";
 
 // Reconstrói os dados da notinha a partir de um pedido já salvo — usado pra reimprimir
 // direto do Painel de Pedidos, sem precisar abrir o PDV.
@@ -44,10 +44,14 @@ function buildReceiptDataFromOrder(order: any, tenant: any): ReceiptData {
   let paymentDetail: { amountReceived?: number; change?: number; splits?: Array<{ method: string; amount: number; cardBrand?: string; installments?: number }> } = {};
   try { paymentDetail = order.paymentDetail ? JSON.parse(order.paymentDetail) : {}; } catch {}
   const isNumericName = order.customerName && /^\d+$/.test(order.customerName);
+  let tenantCnpj: string | undefined;
+  try { tenantCnpj = tenant?.fiscalConfig ? JSON.parse(tenant.fiscalConfig)?.cnpj || undefined : undefined; } catch {}
 
   return {
     tenantName: tenant?.name || "",
     tenantAddress: tenant?.address || undefined,
+    tenantCnpj,
+    tenantPhone: tenant?.whatsapp || undefined,
     orderId: order.id,
     tableId: order.tableId,
     counterTicketNumber: order.counterTicketNumber != null ? order.counterTicketNumber : (isNumericName && !order.tableId ? Number(order.customerName) : null),
@@ -254,10 +258,24 @@ function KanbanCard({ order, categoryMap, updateStatus, isExpanded, toggleOrder,
     opacity: isDragging ? 0.3 : 1,
   } : undefined;
 
-  const handlePrint = (e: any) => {
+  const handlePrint = async (e: any) => {
     e.stopPropagation();
-    const data = buildReceiptDataFromOrder(order, tenant);
     const desktop = (window as any).pdvDesktop;
+
+    // Pedido com NFC-e autorizada é documento fiscal — reimprime o DANFE completo
+    // (chave de acesso, protocolo, QR Code) em vez da notinha comercial simples.
+    if (order.nfceStatus === "AUTHORIZED" && tenant?.id) {
+      try {
+        const danfe = await apiJson<DanfeData>(`/api/owner/tenants/${tenant.id}/nfce/danfe/${order.id}`);
+        if (desktop?.printDanfe) desktop.printDanfe(danfe);
+        else printDanfePdf(danfe, tenant.receiptPaperWidth);
+        return;
+      } catch {
+        // Se a busca do DANFE falhar, cai pro recibo comum abaixo em vez de travar a impressão.
+      }
+    }
+
+    const data = buildReceiptDataFromOrder(order, tenant);
     if (desktop?.printReceipt) {
       desktop.printReceipt(data);
     } else {

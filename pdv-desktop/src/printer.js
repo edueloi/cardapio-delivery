@@ -65,6 +65,13 @@ function paymentLabel(method) {
   return labels[method] || method;
 }
 
+function formatCnpj(raw) {
+  if (!raw) return "";
+  const d = String(raw).replace(/\D/g, "");
+  if (d.length !== 14) return raw;
+  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
+}
+
 function formatTenantAddress(raw) {
   if (!raw) return "";
   try {
@@ -135,13 +142,12 @@ function buildEscPosBuffer(data) {
   const address = formatTenantAddress(data.tenantAddress);
   if (address) for (const line of wrapLine(address, cols)) out += line + "\n";
 
+  if (data.tenantCnpj) out += `CNPJ: ${formatCnpj(data.tenantCnpj)}\n`;
+  if (data.tenantPhone) out += `Tel: ${data.tenantPhone}\n`;
+
   const dateStr = data.createdAt ? new Date(data.createdAt).toLocaleString("pt-BR") : new Date().toLocaleString("pt-BR");
   out += dateStr + "\n";
   if (data.orderId) out += `Pedido #${String(data.orderId).slice(-8).toUpperCase()}\n`;
-
-  if (data.copyLabel) {
-    out += CMD.boldOn + `VIA DO ${data.copyLabel}\n` + CMD.boldOff;
-  }
 
   if (data.counterTicketNumber != null) {
     // Senha bem grande — é o que o cliente usa pra identificar o pedido no balcão/painel.
@@ -195,6 +201,9 @@ function buildEscPosBuffer(data) {
   out += CMD.boldOn + CMD.sizeDouble;
   out += twoCol("TOTAL", fmtMoney(data.total), Math.floor(cols / 2));
   out += CMD.sizeNormal + CMD.boldOff;
+
+  const itemCount = (data.items || []).reduce((acc, i) => acc + i.quantity, 0);
+  out += `Qtd. Itens: ${itemCount}\n`;
 
   if (!data.isPreCheckout) {
     if (data.paymentMethod === "SPLIT" && data.paymentSplits?.length) {

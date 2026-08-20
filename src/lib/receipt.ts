@@ -11,6 +11,8 @@ export interface ReceiptItem {
 export interface ReceiptData {
   tenantName: string;
   tenantAddress?: string;
+  tenantCnpj?: string;
+  tenantPhone?: string;
   orderId?: string;
   tableId?: string | null;
   counterTicketNumber?: number | null;
@@ -70,6 +72,13 @@ function formatTenantAddress(raw?: string): string {
   }
 }
 
+function formatCnpj(raw?: string): string {
+  if (!raw) return "";
+  const d = raw.replace(/\D/g, "");
+  if (d.length !== 14) return raw;
+  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
+}
+
 // Estima a altura necessária (mm) somando as mesmas linhas que buildReceiptPdf desenha,
 // pra não sobrar papel em branco nem cortar conteúdo. nameLines/addressLines já vêm
 // quebrados pelo jsPDF (splitTextToSize), então o número de linhas reais é conhecido de antemão.
@@ -77,9 +86,10 @@ function estimateHeight(data: ReceiptData, nameLines: string[], addressLines: st
   let y = 8;
   y += nameLines.length * 5; // nome da loja (pode quebrar em mais de 1 linha)
   y += addressLines.length * 4;
+  if (data.tenantCnpj) y += 4;
+  if (data.tenantPhone) y += 4;
   y += 4; // data
   if (data.orderId) y += 4;
-  if (data.copyLabel) y += 5;
   if (data.tableId) y += 6;
   else if (data.counterTicketNumber != null) y += 18;
   if (data.consumptionType) y += 5;
@@ -96,6 +106,7 @@ function estimateHeight(data: ReceiptData, nameLines: string[], addressLines: st
   if (data.serviceFeeAmount && data.serviceFeeAmount > 0) y += 4;
   y += 1 + 6; // linha + espaço
   y += 6; // total
+  y += 4; // quantidade de itens
   if (!data.isPreCheckout) {
     if (data.paymentMethod === "SPLIT" && data.paymentSplits?.length) {
       y += 4 + data.paymentSplits.length * 4;
@@ -138,6 +149,14 @@ export function buildReceiptPdf(data: ReceiptData): jsPDF {
     doc.text(addressLines, width / 2, y, { align: "center" });
     y += addressLines.length * 4;
   }
+  if (data.tenantCnpj) {
+    doc.text(`CNPJ: ${formatCnpj(data.tenantCnpj)}`, width / 2, y, { align: "center" });
+    y += 4;
+  }
+  if (data.tenantPhone) {
+    doc.text(`Tel: ${data.tenantPhone}`, width / 2, y, { align: "center" });
+    y += 4;
+  }
 
   const dateStr = (data.createdAt || new Date()).toLocaleString("pt-BR");
   doc.text(dateStr, width / 2, y, { align: "center" });
@@ -145,14 +164,6 @@ export function buildReceiptPdf(data: ReceiptData): jsPDF {
   if (data.orderId) {
     doc.text(`Pedido #${data.orderId.slice(-8).toUpperCase()}`, width / 2, y, { align: "center" });
     y += 4;
-  }
-  if (data.copyLabel) {
-    doc.setFont("courier", "bold");
-    doc.setFontSize(9);
-    doc.text(`VIA DO ${data.copyLabel}`, width / 2, y, { align: "center" });
-    y += 5;
-    doc.setFont("courier", "normal");
-    doc.setFontSize(8);
   }
   if (data.tableId) {
     doc.setFont("courier", "bold");
@@ -248,6 +259,9 @@ export function buildReceiptPdf(data: ReceiptData): jsPDF {
 
   doc.setFont("courier", "normal");
   doc.setFontSize(8);
+  const itemCount = data.items.reduce((acc, i) => acc + i.quantity, 0);
+  doc.text(`Qtd. Itens: ${itemCount}`, margin, y);
+  y += 4;
   if (!data.isPreCheckout) {
     if (data.paymentMethod === "SPLIT" && data.paymentSplits?.length) {
       doc.text("Pagamento (dividido):", margin, y);
