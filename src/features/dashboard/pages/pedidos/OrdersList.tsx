@@ -87,6 +87,17 @@ function maskPhone(value: string | null | undefined): string {
   return `(${clean.slice(0, 2)}) ${clean.slice(2, 7)}-${clean.slice(7, 11)}`;
 }
 
+// Pedido esquecido (pronto/preparo há dias, nunca finalizado) virava um número
+// gigante tipo "30145 min" — string bem mais larga que o badge foi desenhado pra
+// caber, o que apertava/colava no resto do cabeçalho do card. Acima de 1h mostra
+// horas, acima de 24h mostra dias, sempre compacto.
+function formatWaitMinutes(diffMinutes: number): string {
+  if (diffMinutes < 60) return `${diffMinutes} min`;
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}h`;
+  return `${Math.floor(diffHours / 24)}d`;
+}
+
 function OrderWaitTime({ createdAt, status }: { createdAt: string, status: string }) {
   const [wait, setWait] = useState("");
 
@@ -97,7 +108,7 @@ function OrderWaitTime({ createdAt, status }: { createdAt: string, status: strin
     }
     const update = () => {
       const diff = Math.floor((new Date().getTime() - new Date(createdAt).getTime()) / 60000);
-      setWait(`${diff} min`);
+      setWait(formatWaitMinutes(diff));
     };
     update();
     const interval = setInterval(update, 30000);
@@ -106,7 +117,7 @@ function OrderWaitTime({ createdAt, status }: { createdAt: string, status: strin
 
   if (wait === "--") return null;
 
-  return <span className="text-[10px] font-bold text-orange-500 bg-orange-50 px-2 py-0.5 rounded-full">{wait}</span>;
+  return <>{wait}</>;
 }
 
 const STATUS_MAP = {
@@ -308,12 +319,12 @@ function KanbanCard({ order, categoryMap, updateStatus, isExpanded, toggleOrder,
       className={`bg-white rounded-[1.25rem] p-3 sm:p-4 flex flex-col gap-3 border shadow-[0_2px_12px_rgba(0,0,0,0.03)] overflow-hidden transition-all ${isDelayed ? 'border-red-300 ring-2 ring-red-100' : 'border-slate-200/60'} ${isDragging ? 'shadow-xl scale-105 border-blue-400 cursor-grabbing' : ''}`}
     >
       {/* Top: Senha + Time (Draggable Area) */}
-      <div className="flex items-start justify-between gap-2 cursor-grab active:cursor-grabbing" {...listeners} {...attributes}>
-        <div className="flex items-center gap-2.5 min-w-0">
+      <div className="flex items-start justify-between gap-2 flex-wrap cursor-grab active:cursor-grabbing" {...listeners} {...attributes}>
+        <div className="flex items-center gap-2 min-w-0">
           {order.orderType === 'DINE_IN' && (order.tableId || order.counterTicketNumber != null) && (
-            <div className="shrink-0 w-11 h-11 flex flex-col items-center justify-center bg-slate-50 border border-slate-100 rounded-xl leading-none">
+            <div className="shrink-0 w-10 h-10 flex flex-col items-center justify-center bg-slate-50 border border-slate-100 rounded-xl leading-none">
               <span className="text-[7px] font-black uppercase tracking-widest text-slate-400">{order.tableId ? "Mesa" : "Senha"}</span>
-              <span className="text-base font-black text-[#0D1B3E] tabular-nums mt-0.5">{order.tableId || String(order.counterTicketNumber).padStart(2, "0")}</span>
+              <span className="text-sm font-black text-[#0D1B3E] tabular-nums mt-0.5">{order.tableId || String(order.counterTicketNumber).padStart(2, "0")}</span>
             </div>
           )}
           <div className="min-w-0">
@@ -332,7 +343,7 @@ function KanbanCard({ order, categoryMap, updateStatus, isExpanded, toggleOrder,
               {order.consumptionType && (
                 <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 border border-amber-200 rounded-md text-[8px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0">
                   {order.consumptionType === "EAT_IN" ? <Utensils className="w-2.5 h-2.5" /> : <Package className="w-2.5 h-2.5" />}
-                  {order.consumptionType === "EAT_IN" ? "Comer no local" : "Viagem"}
+                  {order.consumptionType === "EAT_IN" ? "Local" : "Viagem"}
                 </span>
               )}
             </div>
@@ -651,7 +662,9 @@ export function OrdersList({
         <DelayedOrdersAlert orders={filteredOrders} />
 
         {/* Kanban Board */}
-        <div className="flex-1 min-h-0 grid gap-4 pb-3 overflow-hidden grid-cols-1 lg:grid-cols-2 xl:grid-cols-4">
+        {/* xl (1280px) forçava 4 colunas mesmo em notebooks comuns, apertando demais
+            cada card — só assume 4 colunas a partir de telas bem largas (2xl). */}
+        <div className="flex-1 min-h-0 grid gap-3 pb-3 overflow-hidden grid-cols-1 lg:grid-cols-2 2xl:grid-cols-4">
           <KanbanColumn id="PENDING" title="Pendentes" count={pendingOrders.length} orders={pendingOrders} borderColor="border-amber-400" textColor="text-amber-500" />
           <KanbanColumn id="PREPARING" title="Em preparo" count={preparingOrders.length} orders={preparingOrders} borderColor="border-orange-400" textColor="text-orange-500" />
           <KanbanColumn id="SHIPPED" title="Prontos / Retire" count={shippedOrders.length} orders={shippedOrders} borderColor="border-emerald-400" textColor="text-emerald-500" />

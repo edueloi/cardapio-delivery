@@ -417,9 +417,19 @@ export function getCUF(uf: string): number {
   return map[uf.toUpperCase()] ?? 35;
 }
 
+// URLs de consulta pública de homologação por UF — a maioria dos estados só tem uma
+// URL de produção mesmo (o ambiente de teste usa parâmetro/estado interno do próprio
+// site), mas alguns têm domínio de homologação dedicado. Sem essa entrada específica,
+// TODOS os estados caíam no fallback genérico do RS abaixo — o que faz o QR Code/link
+// "Consulte pela Chave de Acesso" de uma nota de homologação de outro estado apontar
+// pro portal errado (a consulta simplesmente não encontra a chave).
+const HOMOLOG_URL_MAP: Record<string, string> = {
+  SP: "https://www.homologacao.nfce.fazenda.sp.gov.br/consulta",
+};
+
 export function getUrlChave(uf: string, ambiente: "homologacao" | "producao"): string {
   if (ambiente === "homologacao") {
-    return "https://hom.sefaz.rs.gov.br/nfce/consulta"; // genérico homologação
+    return HOMOLOG_URL_MAP[uf.toUpperCase()] ?? "https://hom.sefaz.rs.gov.br/nfce/consulta"; // genérico homologação
   }
   // URLs de consulta por UF (simplificado — as mais usadas)
   const map: Record<string, string> = {
