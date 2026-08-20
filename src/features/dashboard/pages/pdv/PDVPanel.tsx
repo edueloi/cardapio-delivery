@@ -697,9 +697,22 @@ export default function PDVPanel({
   }, [tenant, priceCheckTerm]);
 
   const activeComandas = useMemo(() => {
+    // counterTicketNumber reseta todo dia — sem filtrar por hoje, uma comanda de
+    // balcão esquecida (nunca faturada) de um dia anterior nunca some da lista e,
+    // se algum dia a senha se repetir, é resgatada aqui como se fosse a de hoje.
+    // Ao tentar pagar, o bill-context recusa (com razão: caixa de dias diferentes
+    // não pode se misturar), mas pro operador isso só parece um erro sem explicação.
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
     const grouped = new Map<string, Order>();
     orders
-      .filter((order) => order.orderType === "DINE_IN" && !["DELIVERED", "CANCELLED", "MERGED"].includes(order.status) && !order.tableId && !order.billed)
+      .filter((order) =>
+        order.orderType === "DINE_IN" &&
+        !["DELIVERED", "CANCELLED", "MERGED"].includes(order.status) &&
+        !order.tableId &&
+        !order.billed &&
+        new Date(order.createdAt) >= startOfToday
+      )
       .forEach((order) => {
         const key = order.counterTicketNumber != null ? `ticket-${order.counterTicketNumber}` : `order-${order.id}`;
         const existing = grouped.get(key);
@@ -1498,9 +1511,9 @@ export default function PDVPanel({
         if (!fiscalEnabled) setTimeout(() => setShowSuccess(false), 3000);
         if (fiscalEnabled && requestNfce) void handleEmitNfce();
         onOrderCreated?.();
-      } catch (err) {
+      } catch (err: any) {
         console.error(err);
-        toast.error("Erro ao faturar contexto.");
+        toast.error(err?.message || "Erro ao faturar contexto.");
       } finally {
         setIsProcessing(false);
       }
@@ -3221,7 +3234,7 @@ export default function PDVPanel({
 
                 <button
                   onClick={() => setShowAddItemsPanel((v) => !v)}
-                  className={`flex items-center justify-center gap-1.5 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-colors mb-3 ${
+                  className={`flex items-center justify-center gap-1.5 py-1.5 sm:py-2 rounded-xl border text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-colors mb-3 ${
                     showAddItemsPanel
                       ? "bg-[#C9A227] border-[#C9A227] text-black"
                       : "bg-white/5 border-white/10 text-white/60 hover:bg-white/10"
@@ -3815,7 +3828,7 @@ export default function PDVPanel({
                                 if (method.id !== "CASH") setAmountReceived("");
                                 if (method.id === "CASH") setCardBrand("");
                               }}
-                              className={`flex flex-col items-center justify-center gap-1 py-2.5 rounded-xl border transition-all ${
+                              className={`flex flex-col items-center justify-center gap-0.5 sm:gap-1 py-2 sm:py-2.5 rounded-xl border transition-all ${
                                 active
                                   ? "bg-[#C9A227] border-[#C9A227] shadow-lg shadow-[#C9A227]/20"
                                   : "bg-white/5 border-white/10 hover:bg-white/10"
@@ -4059,7 +4072,7 @@ export default function PDVPanel({
 
                 {/* Finalize button — sempre visível, fora da área rolável */}
                 {paymentMethod !== "STONE" || stoneStatus === "idle" ? (
-                  <div className="px-4 sm:px-6 py-3 border-t border-white/5 shrink-0 bg-black/20 space-y-2">
+                  <div className="px-3 sm:px-6 py-2 sm:py-3 border-t border-white/5 shrink-0 bg-black/20 space-y-1.5 sm:space-y-2">
                     {!isWaiterMode && (
                       <div className="flex items-center justify-center gap-4 text-[9px] font-bold text-white/30">
                         <span className="flex items-center gap-1.5">
@@ -4070,14 +4083,14 @@ export default function PDVPanel({
                         </span>
                       </div>
                     )}
-                    <div className="flex items-stretch gap-2">
+                    <div className="flex items-stretch gap-1.5 sm:gap-2">
                       <button
                         onClick={() => { setShowCheckout(false); setShowCartDrawer(true); }}
                         title="Cancelar pagamento e voltar ao carrinho"
-                        className="shrink-0 basis-1/3 bg-red-500/15 hover:bg-red-500/25 border border-red-500/20 text-red-300 hover:text-red-200 font-black py-3 rounded-xl transition-all flex items-center justify-center gap-2.5 uppercase tracking-widest text-xs"
+                        className="shrink-0 basis-1/3 bg-red-500/15 hover:bg-red-500/25 border border-red-500/20 text-red-300 hover:text-red-200 font-black py-2 sm:py-3 rounded-xl transition-all flex items-center justify-center gap-1 sm:gap-2.5 uppercase tracking-widest text-[9px] sm:text-xs"
                       >
-                        <X className="w-4 h-4" />
-                        Cancelar Compra
+                        <X className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                        Cancelar
                       </button>
                       <button
                         disabled={
@@ -4087,7 +4100,7 @@ export default function PDVPanel({
                           (isCounterSale && !consumptionType)
                         }
                         onClick={handleCheckout}
-                        className="flex-1 bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-3 rounded-xl transition-all shadow-lg shadow-[#C9A227]/25 flex items-center justify-center gap-2.5 uppercase tracking-widest text-xs"
+                        className="flex-1 bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-2 sm:py-3 rounded-xl transition-all shadow-lg shadow-[#C9A227]/25 flex items-center justify-center gap-1 sm:gap-2.5 uppercase tracking-widest text-[9px] sm:text-xs"
                       >
                         {isProcessing ? (
                           <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
@@ -4098,7 +4111,7 @@ export default function PDVPanel({
                         ) : (
                           <>
                             {paymentMethod === "STONE" ? "Enviar para Maquininha" : "Finalizar Venda"}
-                            {paymentMethod === "STONE" ? <Smartphone className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
+                            {paymentMethod === "STONE" ? <Smartphone className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> : <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />}
                           </>
                         )}
                       </button>
