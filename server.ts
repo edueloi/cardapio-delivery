@@ -2857,6 +2857,29 @@ const CONCLUDED_SALE_OR = [
   { billed: true, status: { not: "CANCELLED" } },
 ];
 
+// Pagamento dividido ("Dividir Pagamento" no PDV) grava o pedido com
+// paymentMethod="SPLIT" e o detalhamento real (ex: Pix + Dinheiro) dentro de
+// paymentDetail.splits. Sem decompor isso, todo relatório por forma de pagamento
+// jogava o valor inteiro num balde genérico "SPLIT", que não bate com o
+// dinheiro/cartão físico que realmente entrou no caixa.
+function splitPaymentBreakdown(
+  paymentMethod: string,
+  paymentDetail: string | null,
+  total: number
+): Array<{ method: string; amount: number }> {
+  if (paymentMethod === "SPLIT" && paymentDetail) {
+    try {
+      const detail = JSON.parse(paymentDetail);
+      if (Array.isArray(detail.splits) && detail.splits.length > 0) {
+        return detail.splits.map((s: any) => ({ method: s.method, amount: s.amount }));
+      }
+    } catch {
+      /* paymentDetail inválido — cai no fallback abaixo */
+    }
+  }
+  return [{ method: paymentMethod, amount: total }];
+}
+
 // Calculate delivery fee for a given CEP
 app.get("/api/tenants/:slug/delivery-fee", async (req, res) => {
   const { slug } = req.params;
@@ -6386,6 +6409,7 @@ app.get("/api/tenants/:slug/cash/summary", requireAuth, async (req, res) => {
       select: {
         total: true,
         paymentMethod: true,
+        paymentDetail: true,
         createdAt: true,
         discount: true,
         feeAmount: true,
@@ -6416,11 +6440,12 @@ app.get("/api/tenants/:slug/cash/summary", requireAuth, async (req, res) => {
       0
     );
 
-    // Agrupar receita por método
+    // Agrupar receita por método — decompõe pagamento dividido nos métodos reais.
     const byMethod: Record<string, number> = {};
     for (const o of orders) {
-      const key = o.paymentMethod;
-      byMethod[key] = (byMethod[key] || 0) + o.total;
+      for (const part of splitPaymentBreakdown(o.paymentMethod, o.paymentDetail, o.total)) {
+        byMethod[part.method] = (byMethod[part.method] || 0) + part.amount;
+      }
     }
 
     // Receita por dia (para gráfico)
@@ -7792,18 +7817,23 @@ app.get("/api/tenants/:slug/reports/summary", requireAuth, async (req, res) => {
     );
     const netRevenue = totalRevenue - totalFeesAbsorbed;
 
-    // Revenue by payment method
+    // Revenue by payment method — decompõe pedido com pagamento dividido nos
+    // métodos reais em vez de jogar tudo num balde "SPLIT".
     const byPaymentMethod: Record<
       string,
       { count: number; total: number; fees: number }
     > = {};
     for (const order of orders) {
-      const pm = order.paymentMethod;
-      if (!byPaymentMethod[pm])
-        byPaymentMethod[pm] = { count: 0, total: 0, fees: 0 };
-      byPaymentMethod[pm].count++;
-      byPaymentMethod[pm].total += order.total;
-      byPaymentMethod[pm].fees += order.feeAmount || 0;
+      const parts = splitPaymentBreakdown(order.paymentMethod, order.paymentDetail, order.total);
+      parts.forEach((part, idx) => {
+        if (!byPaymentMethod[part.method])
+          byPaymentMethod[part.method] = { count: 0, total: 0, fees: 0 };
+        byPaymentMethod[part.method].count++;
+        byPaymentMethod[part.method].total += part.amount;
+        // Taxa de maquininha é um valor único por pedido (não sabemos qual fatia do
+        // split gerou a taxa) — atribui só à primeira parte, pra não contar 2x.
+        if (idx === 0) byPaymentMethod[part.method].fees += order.feeAmount || 0;
+      });
     }
 
     // Revenue by order type

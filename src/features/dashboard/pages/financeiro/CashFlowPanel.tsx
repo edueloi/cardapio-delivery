@@ -13,6 +13,7 @@ import {
 } from "../../../../components";
 import { DatePicker } from "../../../../components/DatePicker";
 import { apiFetch, apiJson } from "../../../../lib/api";
+import { printCashClosingReportPdf } from "../../../../lib/receipt";
 import type { Tenant, CashRegister, CashMovement } from "../../../../types";
 
 const fmt = (n: number) =>
@@ -287,7 +288,7 @@ function HistoryCard({ h }: { h: CashRegister & { movements?: CashMovement[] } }
 }
 
 // ─── Componente principal ────────────────────────────────────────────────────
-export default function CashFlowPanel({ slug }: CashFlowPanelProps) {
+export default function CashFlowPanel({ slug, tenant }: CashFlowPanelProps) {
   const toast = useToast();
   const [currentCash, setCurrentCash] = useState<CashRegister | null>(null);
   const [movements,   setMovements]   = useState<CashMovement[]>([]);
@@ -359,6 +360,33 @@ export default function CashFlowPanel({ slug }: CashFlowPanelProps) {
   const expectedBalance  = (currentCash?.openingBalance ?? 0) + (paymentTotals["PAYMENT_CASH"] ?? 0) + totalSuprimentos - totalSangrias;
   const diffBalance      = closingBalance ? parseFloat(closingBalance) - expectedBalance : 0;
   const isOpen           = currentCash?.status === "OPEN";
+
+  // Resumo do caixa a qualquer momento do dia, sem precisar fechar — pedido explícito
+  // do dono pra conferir vendas/formas de pagamento no meio do turno.
+  const handlePrintDaySummary = () => {
+    if (!currentCash) return;
+    const ordersCount = movements.filter((m) => m.type.startsWith("PAYMENT_")).length;
+    const salesByMethod = Object.entries(paymentTotals)
+      .filter(([, total]) => total > 0)
+      .map(([type, total]) => ({ method: type.replace("PAYMENT_", ""), total }));
+    const summaryData = {
+      openedAt: currentCash.openedAt,
+      openingBalance: currentCash.openingBalance,
+      closingBalance: 0,
+      expectedBalance,
+      ordersCount,
+      grossTotal: totalVendas,
+      salesByMethod,
+      movements: movements.map((m) => ({ type: m.type, amount: m.amount, description: m.description })),
+      isPreview: true,
+    };
+    const desktop = (window as any).pdvDesktop;
+    if (desktop?.printCashClosingReport) {
+      desktop.printCashClosingReport(tenant.name, summaryData);
+    } else {
+      printCashClosingReportPdf(tenant.name, summaryData, (tenant.receiptPaperWidth === 58 ? 58 : 80) as 58 | 80);
+    }
+  };
 
   const handleOpenCash = async () => {
     setOpenLoading(true);
@@ -465,6 +493,10 @@ export default function CashFlowPanel({ slug }: CashFlowPanelProps) {
                 </p>
               </div>
               <div className="flex gap-2 shrink-0 flex-wrap">
+                <button onClick={handlePrintDaySummary}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-bold transition-colors">
+                  <Receipt className="w-3.5 h-3.5 text-[#C9A227]" /> Imprimir Resumo
+                </button>
                 <button onClick={() => { setMovementType("SUPRIMENTO"); setShowMovementModal(true); }}
                   className="flex items-center gap-1.5 px-3 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-bold transition-colors">
                   <ArrowDownCircle className="w-3.5 h-3.5 text-green-400" /> Suprimento

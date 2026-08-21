@@ -319,6 +319,10 @@ export interface CashClosingSummary {
   grossTotal: number;
   salesByMethod: Array<{ method: string; total: number }>;
   movements: Array<{ type: string; amount: number; description?: string | null }>;
+  /** true = resumo do caixa ainda aberto (sem contagem física ainda) — impresso a
+   * qualquer momento do dia, não só no fechamento. Some com "Contado"/"Falta/Sobra"
+   * (não existe contagem real ainda) e ajusta o título/rodapé. */
+  isPreview?: boolean;
 }
 
 const CASH_METHOD_LABELS: Record<string, string> = {
@@ -359,7 +363,7 @@ export function buildCashClosingReportPdf(
   doc.setFontSize(width === 58 ? 10 : 12);
   doc.text(tenantName, width / 2, y, { align: "center" });
   y += 5;
-  doc.text("FECHAMENTO DE CAIXA", width / 2, y, { align: "center" });
+  doc.text(summary.isPreview ? "RESUMO DO CAIXA (EM ABERTO)" : "FECHAMENTO DE CAIXA", width / 2, y, { align: "center" });
   y += 5;
 
   doc.setFont("courier", "normal");
@@ -367,7 +371,7 @@ export function buildCashClosingReportPdf(
   const openedStr = new Date(summary.openedAt).toLocaleString("pt-BR");
   const closedStr = summary.closedAt ? new Date(summary.closedAt).toLocaleString("pt-BR") : new Date().toLocaleString("pt-BR");
   doc.text(`Abertura: ${openedStr}`, margin, y); y += 4;
-  doc.text(`Fechamento: ${closedStr}`, margin, y); y += 4;
+  doc.text(`${summary.isPreview ? "Gerado em" : "Fechamento"}: ${closedStr}`, margin, y); y += 4;
 
   y += 1;
   doc.line(margin, y, width - margin, y);
@@ -418,19 +422,26 @@ export function buildCashClosingReportPdf(
   doc.text("Esperado em caixa", margin, y);
   doc.text(fmtMoney(summary.expectedBalance), width - margin, y, { align: "right" });
   y += 5;
-  doc.text("Contado", margin, y);
-  doc.text(fmtMoney(summary.closingBalance), width - margin, y, { align: "right" });
-  y += 5;
-  const diff = summary.closingBalance - summary.expectedBalance;
-  doc.text(diff < 0 ? "Falta" : "Sobra", margin, y);
-  doc.text(fmtMoney(Math.abs(diff)), width - margin, y, { align: "right" });
-  y += 6;
+  if (!summary.isPreview) {
+    doc.text("Contado", margin, y);
+    doc.text(fmtMoney(summary.closingBalance), width - margin, y, { align: "right" });
+    y += 5;
+    const diff = summary.closingBalance - summary.expectedBalance;
+    doc.text(diff < 0 ? "Falta" : "Sobra", margin, y);
+    doc.text(fmtMoney(Math.abs(diff)), width - margin, y, { align: "right" });
+    y += 6;
+  } else {
+    y += 1;
+  }
 
   doc.setFont("courier", "normal");
   doc.setFontSize(8);
   doc.line(margin, y, width - margin, y);
   y += 5;
-  doc.text("Use este resumo para conferir o caixa.", width / 2, y, { align: "center" });
+  doc.text(
+    summary.isPreview ? "Caixa ainda aberto — valores até este momento." : "Use este resumo para conferir o caixa.",
+    width / 2, y, { align: "center" }
+  );
 
   return doc;
 }

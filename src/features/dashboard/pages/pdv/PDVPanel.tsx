@@ -1698,6 +1698,12 @@ export default function PDVPanel({
       paperWidthMm: (tenant.receiptPaperWidth === 58 ? 58 : 80) as 58 | 80,
       createdAt: order.createdAt ? new Date(order.createdAt) : new Date(),
       customerName: (!isNumericName || order.tableId) ? order.customerName : undefined,
+      // Comanda recém-aberta/lançamento na cozinha ainda não foi paga — o campo
+      // paymentMethod nesse caso é só o valor padrão do banco ("CASH"), não uma forma
+      // de pagamento de verdade. Sem isso, a notinha mostrava "Pagamento: Dinheiro"
+      // pra pedido que ninguém cobrou ainda. Só mostra quando billed=true (faturado)
+      // ou status DELIVERED (venda instantânea, paga na hora).
+      isPreCheckout: !(order.billed === true || order.status === "DELIVERED"),
       copyLabel,
       items,
       subtotal: orderSubtotal,

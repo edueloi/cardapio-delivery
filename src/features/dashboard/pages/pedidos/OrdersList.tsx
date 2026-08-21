@@ -30,6 +30,11 @@ import { apiFetch, apiJson } from "../../../../lib/api";
 import { Order, dineInOrderLabel, type DanfeData } from "../../../../types";
 import { playOrderDelayedSound } from "../../../../lib/notificationSound";
 import { printReceiptPdf, printDanfePdf, type ReceiptData } from "../../../../lib/receipt";
+import socket from "../../../../lib/socket";
+
+// Evita imprimir o mesmo pedido 2x se o evento "order-created" chegar mais de uma vez
+// (ex: reconexão do socket) enquanto esta tela estiver montada.
+const autoPrintedOrderIds = new Set<string>();
 
 // Reconstrói os dados da notinha a partir de um pedido já salvo — usado pra reimprimir
 // direto do Painel de Pedidos, sem precisar abrir o PDV.
@@ -59,6 +64,9 @@ function buildReceiptDataFromOrder(order: any, tenant: any): ReceiptData {
     paperWidthMm: (tenant?.receiptPaperWidth === 58 ? 58 : 80) as 58 | 80,
     createdAt: order.createdAt ? new Date(order.createdAt) : new Date(),
     customerName: (!isNumericName || order.tableId) ? order.customerName : undefined,
+    // Pedido ainda não pago (comanda em aberto) tem paymentMethod só como valor padrão
+    // do banco, não uma forma de pagamento real — só mostra quando já foi faturado.
+    isPreCheckout: !(order.billed === true || order.status === "DELIVERED"),
     items,
     subtotal: orderSubtotal,
     discountAmount: order.discount || 0,
@@ -537,7 +545,26 @@ export function OrdersList({
     tenant?.categories?.forEach((cat) => { map[cat.id] = cat.name; });
     return map;
   }, [tenant?.categories]);
-  
+
+  // Imprime sozinho quando um pedido novo chega (cardápio QR do cliente, mesa, balcão,
+  // delivery) — sem isso, quem fica só no Painel de Pedidos (sem o PDV aberto em outra
+  // aba) nunca via a impressão automática configurada em Configurações > Impressão.
+  useEffect(() => {
+    let printingConfig: { autoPrintOnOrderCreate?: boolean } = {};
+    try { printingConfig = tenant?.printingConfig ? JSON.parse(tenant.printingConfig) : {}; } catch {}
+    if (!printingConfig.autoPrintOnOrderCreate) return;
+    const handler = (order: any) => {
+      if (!order?.id || autoPrintedOrderIds.has(order.id)) return;
+      autoPrintedOrderIds.add(order.id);
+      const data = buildReceiptDataFromOrder(order, tenant);
+      const desktop = (window as any).pdvDesktop;
+      if (desktop?.printReceipt) desktop.printReceipt(data);
+      else printReceiptPdf(data);
+    };
+    socket.on("order-created", handler);
+    return () => { socket.off("order-created", handler); };
+  }, [tenant]);
+
   const navigate = useNavigate();
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(() => new Set());
   
