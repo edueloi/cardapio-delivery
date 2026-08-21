@@ -152,31 +152,17 @@ export function OrderHistoryPanel({
   }, [slug, searchTerm, typeFilter, paymentFilter, statusFilter, dateMode, dateFrom, dateTo, selMonth, selYear]);
 
   const filtered = useMemo(() => {
-    const baseOrders = orders.filter(o => o.status === 'DELIVERED' || o.status === 'CANCELLED');
-    
-    const grouped = new Map<string, Order>();
-    baseOrders.forEach(o => {
-      if (o.orderType === 'DINE_IN' && o.status === 'DELIVERED') {
-        const dateStr = new Date(o.createdAt).toDateString();
-        const key = o.tableId ? `mesa-${o.tableId}-${dateStr}` : o.counterTicketNumber != null ? `senha-${o.counterTicketNumber}-${dateStr}` : o.id;
-        
-        if (grouped.has(key)) {
-          const existing = grouped.get(key)!;
-          grouped.set(key, {
-            ...existing,
-            total: existing.total + o.total,
-            items: [...(existing.items || []), ...(o.items || [])],
-            createdAt: new Date(o.createdAt) > new Date(existing.createdAt) ? existing.createdAt : o.createdAt
-          });
-        } else {
-          grouped.set(key, { ...o, items: [...(o.items || [])] });
-        }
-      } else {
-        grouped.set(o.id, { ...o, items: [...(o.items || [])] });
-      }
-    });
+    // Mesmo bug de origem: pedido de Balcão/Mesa pago fica em AWAITING_PAYMENT/PREPARING
+    // pra sempre, nunca vira DELIVERED — usar isOrderConcluded (billed=true conta) em vez
+    // de checar só o status literal.
+    //
+    // Cada linha do banco aparece como seu próprio registro aqui — nunca somamos pedidos
+    // diferentes (nem por mesma senha, nem por mesma mesa) num só total. Duas pessoas (ou
+    // a mesma pessoa em dois momentos) que dividem uma senha/mesa aparecem cada uma com
+    // seu próprio pedido, valor e itens, sem se misturar.
+    const baseOrders = orders.filter(o => o.status === 'CANCELLED' || isOrderConcluded(o));
 
-    return Array.from(grouped.values())
+    return baseOrders
       .filter(o => {
         const d = new Date(o.createdAt);
 

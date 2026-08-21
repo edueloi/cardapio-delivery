@@ -703,10 +703,15 @@ export default function PDVPanel({
     // se algum dia a senha se repetir, é resgatada aqui como se fosse a de hoje.
     // Ao tentar pagar, o bill-context recusa (com razão: caixa de dias diferentes
     // não pode se misturar), mas pro operador isso só parece um erro sem explicação.
+    //
+    // Cada pedido (linha do banco) aparece como seu próprio card aqui, mesmo que
+    // divida a mesma senha com outro — nunca somamos itens/valores de pedidos
+    // diferentes num só card. Ao abrir/pagar uma comanda, o fechamento (bill-context)
+    // já soma corretamente todas as linhas daquela senha por conta própria; isso aqui
+    // é só a lista, não precisa (nem deve) pré-somar visualmente.
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
-    const grouped = new Map<string, Order>();
-    orders
+    return orders
       .filter((order) =>
         order.orderType === "DINE_IN" &&
         !["DELIVERED", "CANCELLED", "MERGED"].includes(order.status) &&
@@ -714,29 +719,12 @@ export default function PDVPanel({
         !order.billed &&
         new Date(order.createdAt) >= startOfToday
       )
-      .forEach((order) => {
-        const key = order.counterTicketNumber != null ? `ticket-${order.counterTicketNumber}` : `order-${order.id}`;
-        const existing = grouped.get(key);
-        if (!existing) {
-          grouped.set(key, { ...order, items: [...(order.items || [])] });
-          return;
-        }
-        grouped.set(key, {
-          ...existing,
-          total: existing.total + order.total,
-          items: [...(existing.items || []), ...(order.items || [])],
-          createdAt: new Date(order.createdAt) > new Date(existing.createdAt) ? existing.createdAt : order.createdAt,
-          billed: existing.billed || order.billed,
-        });
-      });
-    return Array.from(grouped.values())
-      .filter((g) => !g.billed)
       .sort((a, b) => {
-      const ticketA = a.counterTicketNumber ?? Number.MAX_SAFE_INTEGER;
-      const ticketB = b.counterTicketNumber ?? Number.MAX_SAFE_INTEGER;
-      if (ticketA !== ticketB) return ticketA - ticketB;
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    });
+        const ticketA = a.counterTicketNumber ?? Number.MAX_SAFE_INTEGER;
+        const ticketB = b.counterTicketNumber ?? Number.MAX_SAFE_INTEGER;
+        if (ticketA !== ticketB) return ticketA - ticketB;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
   }, [orders]);
 
   // Delivery entregue mas ainda sem venda lançada no caixa (pagamento na entrega,
