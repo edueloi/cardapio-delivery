@@ -2065,15 +2065,16 @@ app.get("/api/owner/tenants/:tenantId/staff", requireAuth, async (req, res) => {
   const tenant = await requireTenantById(req, res, req.params.tenantId);
   if (!tenant) return;
 
-  // Only OWNER can manage staff
+  // OWNER e ADMIN podem gerenciar a equipe (proteção contra mexer no próprio OWNER
+  // fica nas rotas de edição/remoção, não aqui — essa é só a listagem).
   const account = currentAccount(req)!;
   const myMembership = await prisma.tenantMembership.findFirst({
     where: { accountId: account.id, tenantId: tenant.id },
   });
-  if (!myMembership || myMembership.role !== "OWNER")
+  if (!myMembership || (myMembership.role !== "OWNER" && myMembership.role !== "ADMIN"))
     return res
       .status(403)
-      .json({ error: "Apenas o proprietário pode gerenciar a equipe." });
+      .json({ error: "Apenas o proprietário ou administradores podem gerenciar a equipe." });
 
   const [members, pendingInvites] = await Promise.all([
     prisma.tenantMembership.findMany({
@@ -2124,10 +2125,10 @@ app.delete(
     const myMembership = await prisma.tenantMembership.findFirst({
       where: { accountId: account.id, tenantId: tenant.id },
     });
-    if (!myMembership || myMembership.role !== "OWNER")
+    if (!myMembership || (myMembership.role !== "OWNER" && myMembership.role !== "ADMIN"))
       return res
         .status(403)
-        .json({ error: "Apenas o proprietário pode cancelar convites." });
+        .json({ error: "Apenas o proprietário ou administradores podem cancelar convites." });
 
     const invite = await prisma.inviteToken.findFirst({
       where: { id: req.params.inviteId, tenantId: tenant.id },
@@ -2152,10 +2153,10 @@ app.post(
     const myMembership = await prisma.tenantMembership.findFirst({
       where: { accountId: account.id, tenantId: tenant.id },
     });
-    if (!myMembership || myMembership.role !== "OWNER")
+    if (!myMembership || (myMembership.role !== "OWNER" && myMembership.role !== "ADMIN"))
       return res
         .status(403)
-        .json({ error: "Apenas o proprietário pode convidar membros." });
+        .json({ error: "Apenas o proprietário ou administradores podem convidar membros." });
 
     const { email, role, name, permissions } = req.body;
     if (!email || !role)
@@ -2265,10 +2266,10 @@ app.patch(
     const myMembership = await prisma.tenantMembership.findFirst({
       where: { accountId: account.id, tenantId: tenant.id },
     });
-    if (!myMembership || myMembership.role !== "OWNER")
+    if (!myMembership || (myMembership.role !== "OWNER" && myMembership.role !== "ADMIN"))
       return res
         .status(403)
-        .json({ error: "Apenas o proprietário pode editar permissões." });
+        .json({ error: "Apenas o proprietário ou administradores podem editar permissões." });
 
     const target = await prisma.tenantMembership.findFirst({
       where: { id: req.params.membershipId, tenantId: tenant.id },
@@ -2319,10 +2320,10 @@ app.delete(
     const myMembership = await prisma.tenantMembership.findFirst({
       where: { accountId: account.id, tenantId: tenant.id },
     });
-    if (!myMembership || myMembership.role !== "OWNER")
+    if (!myMembership || (myMembership.role !== "OWNER" && myMembership.role !== "ADMIN"))
       return res
         .status(403)
-        .json({ error: "Apenas o proprietário pode remover membros." });
+        .json({ error: "Apenas o proprietário ou administradores podem remover membros." });
 
     const target = await prisma.tenantMembership.findFirst({
       where: { id: req.params.membershipId, tenantId: tenant.id },
@@ -2845,6 +2846,16 @@ async function geocodeCep(
 function fmtBRL(value: number): string {
   return `R$ ${value.toFixed(2).replace(".", ",")}`;
 }
+
+// Pedido de Balcão/Mesa pago fica com status AWAITING_PAYMENT (ou PREPARING, se pago
+// adiantado) pra sempre — faturar no PDV muda só o campo "billed", nunca o status
+// (só Delivery normalmente chega a DELIVERED). Filtrar relatório/resumo financeiro só por
+// status === "DELIVERED" escondia toda essa receita — usar esse fragmento de "where" do
+// Prisma em qualquer consulta que precise contar pedidos como "venda concluída de verdade".
+const CONCLUDED_SALE_OR = [
+  { status: "DELIVERED" },
+  { billed: true, status: { not: "CANCELLED" } },
+];
 
 // Calculate delivery fee for a given CEP
 app.get("/api/tenants/:slug/delivery-fee", async (req, res) => {
@@ -5992,7 +6003,7 @@ app.get("/api/tenants/:slug/finance-summary", requireAuth, async (req, res) => {
       prisma.order.aggregate({
         where: {
           tenantId: tenant.id,
-          status: "DELIVERED",
+          OR: CONCLUDED_SALE_OR,
           createdAt: { gte: startOfDay },
         },
         _sum: { total: true },
@@ -6001,7 +6012,7 @@ app.get("/api/tenants/:slug/finance-summary", requireAuth, async (req, res) => {
       prisma.order.aggregate({
         where: {
           tenantId: tenant.id,
-          status: "DELIVERED",
+          OR: CONCLUDED_SALE_OR,
           createdAt: { gte: startOfWeek },
         },
         _sum: { total: true },
@@ -6009,7 +6020,7 @@ app.get("/api/tenants/:slug/finance-summary", requireAuth, async (req, res) => {
       prisma.order.aggregate({
         where: {
           tenantId: tenant.id,
-          status: "DELIVERED",
+          OR: CONCLUDED_SALE_OR,
           createdAt: { gte: startOfMonth },
         },
         _sum: { total: true },
@@ -6365,11 +6376,11 @@ app.get("/api/tenants/:slug/cash/summary", requireAuth, async (req, res) => {
       : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
     const dateTo = to ? new Date(to + "T23:59:59") : new Date();
 
-    // Pedidos entregues no período
+    // Pedidos concluídos no período
     const orders = await prisma.order.findMany({
       where: {
         tenantId: tenant.id,
-        status: "DELIVERED",
+        OR: CONCLUDED_SALE_OR,
         createdAt: { gte: dateFrom, lte: dateTo },
       },
       select: {
@@ -7758,12 +7769,12 @@ app.get("/api/tenants/:slug/reports/summary", requireAuth, async (req, res) => {
       ? new Date(to)
       : new Date(new Date().setHours(23, 59, 59, 999));
 
-    // Só pedidos DELIVERED contam como venda de verdade — PENDING/PREPARING/SHIPPED/
-    // AWAITING_PAYMENT ainda não foram cobrados do cliente e não podem entrar nos relatórios.
+    // Concluída = Delivery entregue OU Balcão/Mesa já faturado (billed) — esse último
+    // fica preso em AWAITING_PAYMENT/PREPARING pra sempre, nunca vira DELIVERED.
     const orders = await prisma.order.findMany({
       where: {
         tenantId: tenant.id,
-        status: "DELIVERED",
+        OR: CONCLUDED_SALE_OR,
         createdAt: { gte: dateFrom, lte: dateTo },
       },
       include: { items: { include: { product: true } } },
@@ -7977,7 +7988,7 @@ app.get("/api/tenants/:slug/reports/daily", requireAuth, async (req, res) => {
     const orders = await prisma.order.findMany({
       where: {
         tenantId: tenant.id,
-        status: "DELIVERED",
+        OR: CONCLUDED_SALE_OR,
         createdAt: { gte: from },
       },
       select: { createdAt: true, total: true },
@@ -8022,7 +8033,7 @@ app.get("/api/tenants/:slug/reports/monthly", requireAuth, async (req, res) => {
     const orders = await prisma.order.findMany({
       where: {
         tenantId: tenant.id,
-        status: "DELIVERED",
+        OR: CONCLUDED_SALE_OR,
         createdAt: { gte: from, lte: to },
       },
       select: { createdAt: true, total: true },

@@ -95,13 +95,10 @@ export const ALL_PERMISSION_TABS: DashboardTabId[] = [
   "profile", "staff", "downloads", "manual",
 ];
 
-// Tabs always visible to OWNER, never to non-owners regardless of permissions
-export const OWNER_ONLY_TABS: DashboardTabId[] = ["profile", "staff", "ifood"];
-
-// Helper: can this membership access a given tab?
+// Helper: can this membership access a given tab? Admin vê tudo igual ao Owner —
+// só o Owner em si nunca pode ser editado/removido (checado à parte, nas rotas de equipe).
 export function canAccess(membership: MyMembership | null, tab: DashboardTabId): boolean {
-  if (!membership || membership.role === "OWNER") return true;
-  if (OWNER_ONLY_TABS.includes(tab)) return false;
+  if (!membership || membership.role === "OWNER" || membership.role === "ADMIN") return true;
   if (membership.permissions === null) return true;
   return membership.permissions.includes(tab);
 }

@@ -8,7 +8,7 @@ import { playNotificationSound, playNewOrderSound, playKitchenReadySound } from 
 import type { Order, Tenant } from "../../types";
 import DashboardContent from "./DashboardContent";
 import { DASHBOARD_NAVIGATION } from "./config/navigation";
-import { type DashboardOrderTabId, type DashboardTabId, type MyMembership, PATH_TO_TAB, TAB_TO_PATH, canAccess, OWNER_ONLY_TABS, ALL_PERMISSION_TABS } from "./types";
+import { type DashboardOrderTabId, type DashboardTabId, type MyMembership, PATH_TO_TAB, TAB_TO_PATH, canAccess, ALL_PERMISSION_TABS } from "./types";
 import { motion, AnimatePresence } from "motion/react";
 import { AlertCircle, Bell, BellRing, CheckCircle2, ChefHat, Clock, Receipt, ShoppingBag, X } from "lucide-react";
 
@@ -348,7 +348,7 @@ export default function DashboardPage() {
   const filteredNavigation = DASHBOARD_NAVIGATION.map((group) => ({
     ...group,
     items: group.items.filter((item) => {
-      if (item.ownerOnly && membership?.role !== "OWNER") return false;
+      if (item.ownerOnly && membership?.role !== "OWNER" && membership?.role !== "ADMIN") return false;
       return canAccess(membership, item.tab);
     }),
   })).filter((group) => group.items.length > 0);

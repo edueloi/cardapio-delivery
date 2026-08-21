@@ -183,8 +183,9 @@ export default function PDVPanel({
   const [nextTicketLoading, setNextTicketLoading] = useState(false);
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   const [selectedComandaId, setSelectedComandaId] = useState<string | null>(null);
-  // Comer no local ou para viagem — só perguntado em venda direta de balcão (sem mesa/comanda)
-  const [consumptionType, setConsumptionType] = useState<"EAT_IN" | "TAKEOUT" | null>(null);
+  // Comer no local ou para viagem — só perguntado em venda direta de balcão (sem mesa/comanda).
+  // Começa em "Comer no local" (caso mais comum) — o operador só precisa agir quando for viagem.
+  const [consumptionType, setConsumptionType] = useState<"EAT_IN" | "TAKEOUT" | null>("EAT_IN");
   const [contextLoadMessage, setContextLoadMessage] = useState("");
   // true quando veio do fluxo "Fechar Conta" — só pagar, sem opção de lançar mais itens
   const [isClosingAccount, setIsClosingAccount] = useState(false);
@@ -1048,7 +1049,7 @@ export default function PDVPanel({
     setCart([]);
     setSelectedTableId(null);
     setSelectedComandaId(null);
-    setConsumptionType(null);
+    setConsumptionType("EAT_IN");
     setRequestNfce(false);
     setContextLoadMessage("");
     setIsClosingAccount(false);
@@ -1328,7 +1329,7 @@ export default function PDVPanel({
     setCart([]);
     setSelectedTableId(tableId);
     setSelectedComandaId(null);
-    setConsumptionType(null);
+    setConsumptionType("EAT_IN");
     setContextLoadMessage(`Mesa ${tableId} aberta no PDV. Os itens já lançados ficam separados dos novos itens.`);
     setOrderDetailsView(null);
     setActiveTab("products");
@@ -2228,7 +2229,7 @@ export default function PDVPanel({
             <div className="flex items-center justify-between mb-4">
               <h4 className="text-xs font-black uppercase tracking-widest text-slate-400">Comandas Ativas</h4>
               <button
-                onClick={() => { setComandaNumber(""); setConsumptionType(null); setShowComandaModal(true); }}
+                onClick={() => { setComandaNumber(""); setConsumptionType("EAT_IN"); setShowComandaModal(true); }}
                 className="bg-[#0D1B3E] text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
               >
                 <Plus className="w-3 h-3" />
@@ -2703,7 +2704,7 @@ export default function PDVPanel({
                 disabled={cart.length === 0 || isProcessing}
                 onClick={() => {
                   if (selectedTableId || selectedComandaId) void handleLaunchOrder();
-                  else { setConsumptionType(null); setShowComandaModal(true); }
+                  else { setConsumptionType("EAT_IN"); setShowComandaModal(true); }
                 }}
                 className={`${isWaiterMode ? "bg-[#C9A227] hover:bg-[#E8B93A] text-black shadow-xl shadow-[#C9A227]/20" : "bg-white/5 hover:bg-white/10 text-white"} disabled:opacity-30 font-black py-3 rounded-2xl transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-[10px]`}
               >
@@ -3009,7 +3010,7 @@ export default function PDVPanel({
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-[300] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
-            onClick={() => { setShowComandaModal(false); setComandaNumber(""); setConsumptionType(null); }}
+            onClick={() => { setShowComandaModal(false); setComandaNumber(""); setConsumptionType("EAT_IN"); }}
           >
             <motion.div
               initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.96, y: 12, opacity: 0 }}
@@ -3091,7 +3092,7 @@ export default function PDVPanel({
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <button
-                  onClick={() => { setShowComandaModal(false); setComandaNumber(""); setConsumptionType(null); }}
+                  onClick={() => { setShowComandaModal(false); setComandaNumber(""); setConsumptionType("EAT_IN"); }}
                   className="bg-slate-100 hover:bg-slate-200 text-slate-500 font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest transition-all"
                 >
                   Cancelar
@@ -4098,6 +4099,13 @@ export default function PDVPanel({
                           (isSplitMode && !splitCanFinalize) ||
                           (!isSplitMode && paymentMethod === "CASH" && digitsToNumber(amountReceived) < finalTotal) ||
                           (isCounterSale && !consumptionType)
+                        }
+                        title={
+                          isCounterSale && !consumptionType
+                            ? "Selecione \"Comer no local\" ou \"Viagem\" antes de finalizar"
+                            : !isSplitMode && paymentMethod === "CASH" && digitsToNumber(amountReceived) < finalTotal
+                            ? "Informe o valor recebido"
+                            : undefined
                         }
                         onClick={handleCheckout}
                         className="flex-1 bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-2 sm:py-3 rounded-xl transition-all shadow-lg shadow-[#C9A227]/25 flex items-center justify-center gap-1 sm:gap-2.5 uppercase tracking-widest text-[9px] sm:text-xs"

@@ -31,13 +31,8 @@ export interface AuthenticatedRequest extends Request {
   membership?: AuthMembership;
 }
 
-// Tabs restritas ao proprietário, mesmo com allowlist de permissões explícita.
-// Mantido em sincronia com OWNER_ONLY_TABS em src/features/dashboard/types.ts.
-const OWNER_ONLY_TABS = new Set(["profile", "staff", "ifood"]);
-
 export function membershipCanAccess(membership: AuthMembership, tabId: string): boolean {
-  if (membership.role === "OWNER") return true;
-  if (OWNER_ONLY_TABS.has(tabId)) return false;
+  if (membership.role === "OWNER" || membership.role === "ADMIN") return true;
   if (membership.permissions === null) return true;
   return membership.permissions.includes(tabId);
 }
