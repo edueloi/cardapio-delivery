@@ -7026,11 +7026,13 @@ app.post(
 );
 
 app.get("/api/tenants/:slug/inventory", requireAuth, async (req, res) => {
+  // "menu" também libera — quem edita produto precisa listar os insumos pra vincular
+  // ao "Insumos usados" mesmo sem ter a permissão de Estoque (gerenciar compras/níveis).
   const tenant = await requireTenantBySlug(
     req,
     res,
     req.params.slug,
-    "inventory"
+    ["inventory", "menu"]
   );
   if (!tenant) return;
 
@@ -7076,11 +7078,12 @@ app.get(
   "/api/tenants/:slug/inventory/categories",
   requireAuth,
   async (req, res) => {
+    // "menu" também libera — mesmo motivo do GET /inventory acima.
     const tenant = await requireTenantBySlug(
       req,
       res,
       req.params.slug,
-      "inventory"
+      ["inventory", "menu"]
     );
     if (!tenant) return;
 
@@ -7163,28 +7166,6 @@ app.delete("/api/inventory/categories/:id", requireAuth, async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to delete inventory category" });
-  }
-});
-
-app.get("/api/tenants/:slug/inventory", requireAuth, async (req, res) => {
-  const tenant = await requireTenantBySlug(
-    req,
-    res,
-    req.params.slug,
-    "inventory"
-  );
-  if (!tenant) return;
-
-  try {
-    const items = await prisma.inventoryItem.findMany({
-      where: { tenantId: tenant.id },
-      orderBy: { name: "asc" },
-    });
-
-    res.json(items);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Failed to fetch inventory items" });
   }
 });
 
