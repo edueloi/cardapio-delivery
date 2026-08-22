@@ -2880,6 +2880,55 @@ function splitPaymentBreakdown(
   return [{ method: paymentMethod, amount: total }];
 }
 
+// Espelho de splitPaymentBreakdown na hora de GRAVAR o CashMovement (em vez de só
+// interpretar depois): sem isso, uma venda com "Dividir Pagamento" virava um único
+// registro type="PAYMENT_SPLIT" — a tela de Fluxo de Caixa não reconhece esse tipo,
+// então o valor sumia dos cards por método (mas continuava contando no total geral,
+// caixa parecia "não bater"). Gerando uma linha por método real (PAYMENT_CREDIT,
+// PAYMENT_DEBIT etc.) o extrato já nasce correto, sem precisar decompor na leitura.
+function buildPaymentCashMovements(opts: {
+  cashRegisterId: string;
+  tenantId: string;
+  paymentMethod: string;
+  splits?: Array<{ method: string; amount: number }> | null;
+  fallbackAmount: number;
+  description: string;
+  orderId: string;
+  operatorName?: string | null;
+}): Array<{
+  cashRegisterId: string;
+  tenantId: string;
+  type: string;
+  amount: number;
+  description: string;
+  orderId: string;
+  operatorName: string | null;
+}> {
+  const { cashRegisterId, tenantId, paymentMethod, splits, fallbackAmount, description, orderId, operatorName } = opts;
+  if (paymentMethod === "SPLIT" && Array.isArray(splits) && splits.length > 0) {
+    return splits.map((s) => ({
+      cashRegisterId,
+      tenantId,
+      type: `PAYMENT_${s.method}`,
+      amount: s.amount,
+      description,
+      orderId,
+      operatorName: operatorName || null,
+    }));
+  }
+  return [
+    {
+      cashRegisterId,
+      tenantId,
+      type: `PAYMENT_${paymentMethod || "CASH"}`,
+      amount: fallbackAmount,
+      description,
+      orderId,
+      operatorName: operatorName || null,
+    },
+  ];
+}
+
 // Calculate delivery fee for a given CEP
 app.get("/api/tenants/:slug/delivery-fee", async (req, res) => {
   const { slug } = req.params;
@@ -4081,6 +4130,10 @@ app.patch(
     if (!Number.isInteger(nextQuantity) || nextQuantity < 0) {
       return res.status(400).json({ error: "Quantidade inválida." });
     }
+    // Se o item já tinha sido preparado (perda/desperdício), o operador confirma isso na
+    // hora de cancelar — nesse caso NÃO devolvemos ao estoque (a baixa original vira perda).
+    // Sem perda, devolve normalmente (comportamento de antes).
+    const hadLoss = req.body?.hadLoss === true;
 
     try {
       const order = await prisma.order.findFirst({
@@ -4141,29 +4194,31 @@ app.patch(
       const result = await prisma.$transaction(async (tx: any) => {
         const touchedInventoryIds = new Set<string>();
 
-        const inventoryItemId = targetItem.productVariantId
-          ? targetItem.productVariant?.inventoryItemId
-          : targetItem.product?.inventoryItemId;
+        if (!hadLoss) {
+          const inventoryItemId = targetItem.productVariantId
+            ? targetItem.productVariant?.inventoryItemId
+            : targetItem.product?.inventoryItemId;
 
-        const directRestocked = await restockOrderItemInventory(
-          tx,
-          tenant.id,
-          order.id,
-          inventoryItemId,
-          removedQuantity
-        );
-        if (directRestocked && inventoryItemId)
-          touchedInventoryIds.add(inventoryItemId);
+          const directRestocked = await restockOrderItemInventory(
+            tx,
+            tenant.id,
+            order.id,
+            inventoryItemId,
+            removedQuantity
+          );
+          if (directRestocked && inventoryItemId)
+            touchedInventoryIds.add(inventoryItemId);
 
-        const recipeInventoryIds = await restockOrderItemRecipe(
-          tx,
-          tenant.id,
-          order.id,
-          targetItem.product,
-          removedQuantity
-        );
-        for (const touchedId of recipeInventoryIds)
-          touchedInventoryIds.add(touchedId);
+          const recipeInventoryIds = await restockOrderItemRecipe(
+            tx,
+            tenant.id,
+            order.id,
+            targetItem.product,
+            removedQuantity
+          );
+          for (const touchedId of recipeInventoryIds)
+            touchedInventoryIds.add(touchedId);
+        }
 
         let updatedOrder;
         if (remainingItems.length === 0) {
@@ -4291,8 +4346,12 @@ app.post(
           .status(400)
           .json({ error: "Este pedido já foi faturado no caixa." });
 
+      // Se houve perda (item já preparado/desperdiçado), o operador confirma isso no
+      // momento do cancelamento e a baixa de estoque original NÃO é devolvida.
+      const hadLoss = req.body?.hadLoss === true;
+
       const result = await prisma.$transaction(async (tx: any) => {
-        const touchedInventoryIds = await restockCancelledOrder(tx, order);
+        const touchedInventoryIds = hadLoss ? [] : await restockCancelledOrder(tx, order);
         const updatedOrder = await tx.order.update({
           where: { id: order.id },
           data: { status: "CANCELLED" },
@@ -8203,6 +8262,7 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
       source,
       counterTicketNumber: requestedCounterTicketNumber,
       consumptionType,
+      reuseExistingTicket,
     } = req.body;
 
     // O placar do garçom (leaderboard) só conta pedidos com operatorName preenchido —
@@ -8240,31 +8300,39 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
         Number(requestedCounterTicketNumber) > 0
           ? Number(requestedCounterTicketNumber)
           : null;
-      // O número sugerido pelo cliente (buscado quando o modal "Nova Comanda" abriu)
-      // pode ter ficado desatualizado se outra comanda foi criada nesse meio tempo —
-      // confiar cegamente nele já causou duas comandas com a mesma "Senha ##" no
-      // mesmo dia (uma delas pronta pra retirar, outra recém-criada e já aguardando
-      // cobrança), fazendo o alerta de cobrança parecer se referir ao pedido errado.
-      // Sempre validamos contra o banco antes de aceitar, e recalculamos se colidir.
-      const collision = requested
-        ? await prisma.order.findFirst({
-            where: { tenantId: tenant.id, counterTicketNumber: requested, createdAt: { gte: startOfDay } },
-            select: { id: true },
-          })
-        : null;
-      if (requested && !collision) {
+      if (requested && reuseExistingTicket) {
+        // Lançamento de mais itens numa comanda JÁ ABERTA (ex: "Adicionar mais itens" no
+        // PDV) — aqui o número pedido DEVE colidir com o pedido original da mesma senha,
+        // então aceitamos direto sem checar colisão (ver comentário abaixo: essa checagem
+        // é só pra evitar duas comandas NOVAS nascerem com a mesma senha por engano).
         counterTicketNumber = requested;
       } else {
-        const lastTicket = await prisma.order.findFirst({
-          where: {
-            tenantId: tenant.id,
-            counterTicketNumber: { not: null },
-            createdAt: { gte: startOfDay },
-          },
-          orderBy: { counterTicketNumber: "desc" },
-          select: { counterTicketNumber: true },
-        });
-        counterTicketNumber = (lastTicket?.counterTicketNumber ?? 0) + 1;
+        // O número sugerido pelo cliente (buscado quando o modal "Nova Comanda" abriu)
+        // pode ter ficado desatualizado se outra comanda foi criada nesse meio tempo —
+        // confiar cegamente nele já causou duas comandas com a mesma "Senha ##" no
+        // mesmo dia (uma delas pronta pra retirar, outra recém-criada e já aguardando
+        // cobrança), fazendo o alerta de cobrança parecer se referir ao pedido errado.
+        // Sempre validamos contra o banco antes de aceitar, e recalculamos se colidir.
+        const collision = requested
+          ? await prisma.order.findFirst({
+              where: { tenantId: tenant.id, counterTicketNumber: requested, createdAt: { gte: startOfDay } },
+              select: { id: true },
+            })
+          : null;
+        if (requested && !collision) {
+          counterTicketNumber = requested;
+        } else {
+          const lastTicket = await prisma.order.findFirst({
+            where: {
+              tenantId: tenant.id,
+              counterTicketNumber: { not: null },
+              createdAt: { gte: startOfDay },
+            },
+            orderBy: { counterTicketNumber: "desc" },
+            select: { counterTicketNumber: true },
+          });
+          counterTicketNumber = (lastTicket?.counterTicketNumber ?? 0) + 1;
+        }
       }
     }
 
@@ -8519,17 +8587,17 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
         orderBy: { openedAt: "desc" },
       });
       if (currentCash) {
-        const pmType = `PAYMENT_${paymentMethod}`;
-        await prisma.cashMovement.create({
-          data: {
+        await prisma.cashMovement.createMany({
+          data: buildPaymentCashMovements({
             cashRegisterId: currentCash.id,
             tenantId: tenant.id,
-            type: pmType,
-            amount: total,
+            paymentMethod: paymentMethod || "CASH",
+            splits: paymentMetadata?.splits,
+            fallbackAmount: total,
             description: `Venda PDV #${order.id.slice(-6).toUpperCase()}`,
             orderId: order.id,
-            operatorName: operatorName || null,
-          },
+            operatorName,
+          }),
         });
       }
 
@@ -8712,17 +8780,17 @@ app.post(
         },
       });
 
-      const pmType = `PAYMENT_${paymentMethod || "CASH"}`;
-      await prisma.cashMovement.create({
-        data: {
+      await prisma.cashMovement.createMany({
+        data: buildPaymentCashMovements({
           cashRegisterId: currentCash.id,
           tenantId: tenant.id,
-          type: pmType,
-          amount: order.total,
+          paymentMethod: paymentMethod || "CASH",
+          splits: paymentMetadata?.splits,
+          fallbackAmount: order.total,
           description: `Delivery #${order.id.slice(-6).toUpperCase()}`,
           orderId: order.id,
-          operatorName: operatorName || null,
-        },
+          operatorName,
+        }),
       });
 
       io.to(`tenant-${tenant.id}`).emit("order-status-updated", updatedOrder);
@@ -8829,28 +8897,39 @@ app.post(
         })
       );
 
-      const pmType =
-        paymentMethod === "SPLIT"
-          ? "PAYMENT_SPLIT"
-          : `PAYMENT_${paymentMethod || "CASH"}`;
       const desc = tableId
         ? `Mesa ${tableId}`
         : `Senha ${String(counterTicketNumber).padStart(2, "0")}`;
 
       // Um CashMovement por pedido (em vez de um único somando todos) — cada linha do
       // Fluxo de Caixa fica rastreável ao seu orderId real, permitindo auditar depois
-      // exatamente quais pedidos compuseram o faturamento de uma senha/mesa.
-      await prisma.cashMovement.createMany({
-        data: orders.map((order: any) => ({
-          cashRegisterId: currentCash.id,
-          tenantId: tenant.id,
-          type: pmType,
-          amount: order.total,
-          description: `Faturamento ${desc}`,
-          orderId: order.id,
-          operatorName: operatorName || null,
-        })),
-      });
+      // exatamente quais pedidos compuseram o faturamento de uma senha/mesa. Quando o
+      // pagamento é dividido, os splits cobrem o total da senha/mesa inteira (não dá
+      // pra saber qual parte veio de qual pedido específico), então gravamos uma linha
+      // por método real (referenciando o primeiro pedido) em vez de uma por pedido.
+      const cashMovementRows =
+        paymentMethod === "SPLIT" && Array.isArray(paymentMetadata?.splits) && paymentMetadata.splits.length > 0
+          ? buildPaymentCashMovements({
+              cashRegisterId: currentCash.id,
+              tenantId: tenant.id,
+              paymentMethod: "SPLIT",
+              splits: paymentMetadata.splits,
+              fallbackAmount: totalToBill,
+              description: `Faturamento ${desc}`,
+              orderId: orders[0].id,
+              operatorName,
+            })
+          : orders.map((order: any) => ({
+              cashRegisterId: currentCash.id,
+              tenantId: tenant.id,
+              type: `PAYMENT_${paymentMethod || "CASH"}`,
+              amount: order.total,
+              description: `Faturamento ${desc}`,
+              orderId: order.id,
+              operatorName: operatorName || null,
+            }));
+
+      await prisma.cashMovement.createMany({ data: cashMovementRows });
 
       for (const o of updatedOrders) {
         io.to(`tenant-${tenant.id}`).emit("order-status-updated", {

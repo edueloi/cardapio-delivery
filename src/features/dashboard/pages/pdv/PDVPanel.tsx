@@ -1406,12 +1406,13 @@ export default function PDVPanel({
       const launchedOrder = await apiJson<Order>(`/api/tenants/${tenant.slug}/pdv/order`, {
         method: "POST",
         body: JSON.stringify({
-          customerName: customerName || currentContextLabel || "Comanda",
+          customerName: customerName || undefined,
           customerPhone: customerPhone || "00000000000",
           orderType: "DINE_IN",
           consumptionType: !selectedTableId ? consumptionType : undefined,
           tableId: selectedTableId || undefined,
           counterTicketNumber: selectedComandaOrder?.counterTicketNumber || undefined,
+          reuseExistingTicket: !!selectedComandaOrder?.counterTicketNumber,
           status: "PENDING",
           paymentMethod: "CASH",
           operatorName: operatorName || undefined,
@@ -1579,14 +1580,14 @@ export default function PDVPanel({
     }
   };
 
-  const handleUpdateOpenOrderItemQuantity = async (orderId: string, orderItemId: string, nextQuantity: number) => {
+  const handleUpdateOpenOrderItemQuantity = async (orderId: string, orderItemId: string, nextQuantity: number, hadLoss: boolean) => {
     setDetailActionId(orderItemId);
     try {
       await apiJson(`/api/tenants/${tenant.slug}/pdv/orders/${orderId}/items/${orderItemId}`, {
         method: "PATCH",
-        body: JSON.stringify({ quantity: nextQuantity }),
+        body: JSON.stringify({ quantity: nextQuantity, hadLoss }),
       });
-      if (nextQuantity === 0) toast.success("Item removido da comanda.");
+      if (nextQuantity === 0) toast.success(hadLoss ? "Item cancelado (baixa no estoque como perda)." : "Item cancelado e devolvido ao estoque.");
       else toast.success("Quantidade atualizada.");
     } catch (err: any) {
       toast.error(err?.message || "Erro ao atualizar item.");
@@ -1595,23 +1596,44 @@ export default function PDVPanel({
     }
   };
 
-  const handleCancelOpenOrder = async (orderId: string) => {
+  const handleCancelOpenOrder = async (orderId: string, hadLoss: boolean) => {
     setDetailActionId(`cancel-${orderId}`);
     try {
       await apiJson(`/api/tenants/${tenant.slug}/pdv/orders/${orderId}/cancel-open`, {
         method: "POST",
+        body: JSON.stringify({ hadLoss }),
       });
       if (selectedComandaId === orderId) {
         setSelectedComandaId(null);
         setContextLoadMessage("");
       }
       setOrderDetailsView((current) => current && current.type === "comanda" && current.comanda.id === orderId ? null : current);
-      toast.success("Pedido cancelado e estoque ajustado.");
+      toast.success(hadLoss ? "Pedido cancelado (estoque baixado como perda)." : "Pedido cancelado e estoque devolvido.");
     } catch (err: any) {
       toast.error(err?.message || "Erro ao cancelar pedido.");
     } finally {
       setDetailActionId(null);
     }
+  };
+
+  // Antes de cancelar item/pedido já lançado, pergunta se houve perda (item já
+  // preparado/desperdiçado) — se sim, a baixa de estoque original fica valendo como
+  // perda; se não, devolve ao estoque normalmente. Ver handleUpdateOpenOrderItemQuantity
+  // e handleCancelOpenOrder (parâmetro hadLoss).
+  const [pendingLossConfirm, setPendingLossConfirm] = useState<
+    | { kind: "item"; orderId: string; itemId: string; nextQuantity: number; label: string }
+    | { kind: "order"; orderId: string }
+    | null
+  >(null);
+
+  const resolveLossConfirm = (hadLoss: boolean) => {
+    if (!pendingLossConfirm) return;
+    if (pendingLossConfirm.kind === "item") {
+      void handleUpdateOpenOrderItemQuantity(pendingLossConfirm.orderId, pendingLossConfirm.itemId, pendingLossConfirm.nextQuantity, hadLoss);
+    } else {
+      void handleCancelOpenOrder(pendingLossConfirm.orderId, hadLoss);
+    }
+    setPendingLossConfirm(null);
   };
 
   useEffect(() => {
@@ -2919,7 +2941,7 @@ export default function PDVPanel({
                             Pedido {idx + 1} · #{order.id.slice(-6).toUpperCase()}
                           </p>
                           <button
-                            onClick={() => void handleCancelOpenOrder(order.id)}
+                            onClick={() => setPendingLossConfirm({ kind: "order", orderId: order.id })}
                             disabled={detailActionId === `cancel-${order.id}`}
                             className="shrink-0 rounded-lg border border-red-200 bg-white px-2 py-1 text-[9px] font-black uppercase tracking-widest text-red-500 transition-colors hover:bg-red-50 disabled:opacity-50"
                           >
@@ -2944,7 +2966,7 @@ export default function PDVPanel({
                               <div className="mt-1.5 flex items-center justify-end gap-1.5">
                                 {item.quantity > 1 && (
                                   <button
-                                    onClick={() => void handleUpdateOpenOrderItemQuantity(order.id, item.id, item.quantity - 1)}
+                                    onClick={() => setPendingLossConfirm({ kind: "item", orderId: order.id, itemId: item.id, nextQuantity: item.quantity - 1, label: `${item.product?.name}` })}
                                     disabled={detailActionId === item.id}
                                     className="rounded-md border border-slate-200 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50"
                                   >
@@ -2952,11 +2974,11 @@ export default function PDVPanel({
                                   </button>
                                 )}
                                 <button
-                                  onClick={() => void handleUpdateOpenOrderItemQuantity(order.id, item.id, 0)}
+                                  onClick={() => setPendingLossConfirm({ kind: "item", orderId: order.id, itemId: item.id, nextQuantity: 0, label: `${item.quantity}x ${item.product?.name}` })}
                                   disabled={detailActionId === item.id}
                                   className="rounded-md border border-red-200 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-red-500 transition-colors hover:bg-red-50 disabled:opacity-50"
                                 >
-                                  {detailActionId === item.id ? "Salvando..." : "Remover"}
+                                  {detailActionId === item.id ? "Salvando..." : "Cancelar"}
                                 </button>
                               </div>
                             </div>
@@ -2996,6 +3018,52 @@ export default function PDVPanel({
             </motion.div>
           );
         })()}
+      </AnimatePresence>
+
+      {/* ── Confirmação de perda ao cancelar item/pedido lançado ── */}
+      <AnimatePresence>
+        {pendingLossConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[400] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
+            onClick={() => setPendingLossConfirm(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.96, y: 12, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-3xl p-6 w-full max-w-sm space-y-5 shadow-2xl"
+            >
+              <div className="space-y-1.5 text-center">
+                <h3 className="text-base font-black text-slate-800">
+                  {pendingLossConfirm.kind === "item" ? `Cancelar "${pendingLossConfirm.label}"?` : "Cancelar este pedido?"}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Houve gasto/perda no preparo (item já feito, não pode ser reaproveitado)?
+                </p>
+              </div>
+              <div className="space-y-2">
+                <button
+                  onClick={() => resolveLossConfirm(true)}
+                  className="w-full rounded-xl border border-red-200 bg-red-50 text-red-600 font-black py-3 text-xs uppercase tracking-widest hover:bg-red-100 transition-colors"
+                >
+                  Sim, houve perda — descontar do estoque
+                </button>
+                <button
+                  onClick={() => resolveLossConfirm(false)}
+                  className="w-full rounded-xl border border-slate-200 bg-white text-slate-600 font-black py-3 text-xs uppercase tracking-widest hover:bg-slate-50 transition-colors"
+                >
+                  Não, devolver ao estoque
+                </button>
+                <button
+                  onClick={() => setPendingLossConfirm(null)}
+                  className="w-full text-slate-400 font-bold py-2 text-[11px] uppercase tracking-widest hover:text-slate-600 transition-colors"
+                >
+                  Voltar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
       </AnimatePresence>
 
       {/* ── Comanda Modal ── */}
