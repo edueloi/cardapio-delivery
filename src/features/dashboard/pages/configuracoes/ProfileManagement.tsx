@@ -118,6 +118,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
     whatsapp: maskPhone(tenant?.whatsapp) || "",
     isOpen: tenant?.isOpen ?? true,
     isDeliveryOpen: tenant?.isDeliveryOpen ?? true,
+    counterTicketMode: (tenant?.counterTicketMode ?? "TICKET") as "TICKET" | "NAME",
     orderMode: (tenant?.orderMode ?? "DELIVERY_ONLY") as "DELIVERY_ONLY" | "PREORDER_ONLY" | "BOTH",
     scheduleMode: tenant?.scheduleMode ?? false,
     scheduleType: (tenant?.scheduleType ?? "CLIENT_CHOOSES") as "CLIENT_CHOOSES" | "OWNER_DEFINES",
@@ -166,7 +167,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
 
   useEffect(() => {
     if (tenant) {
-      setForm({ name: tenant.name || "", description: tenant.description || "", logoUrl: tenant.logoUrl || "", whatsapp: maskPhone(tenant.whatsapp) || "", isOpen: tenant.isOpen ?? true, isDeliveryOpen: tenant.isDeliveryOpen ?? true, orderMode: (tenant.orderMode ?? "DELIVERY_ONLY") as "DELIVERY_ONLY" | "PREORDER_ONLY" | "BOTH", scheduleMode: tenant.scheduleMode ?? false, scheduleType: (tenant.scheduleType ?? "CLIENT_CHOOSES") as "CLIENT_CHOOSES" | "OWNER_DEFINES", scheduleNotes: tenant.scheduleNotes || "", waiterNotifyOnReady: tenant.waiterNotifyOnReady ?? true, requireCashRegister: tenant.requireCashRegister ?? true, receiptPaperWidth: (tenant.receiptPaperWidth ?? 80) as 58 | 80 });
+      setForm({ name: tenant.name || "", description: tenant.description || "", logoUrl: tenant.logoUrl || "", whatsapp: maskPhone(tenant.whatsapp) || "", isOpen: tenant.isOpen ?? true, isDeliveryOpen: tenant.isDeliveryOpen ?? true, counterTicketMode: (tenant.counterTicketMode ?? "TICKET") as "TICKET" | "NAME", orderMode: (tenant.orderMode ?? "DELIVERY_ONLY") as "DELIVERY_ONLY" | "PREORDER_ONLY" | "BOTH", scheduleMode: tenant.scheduleMode ?? false, scheduleType: (tenant.scheduleType ?? "CLIENT_CHOOSES") as "CLIENT_CHOOSES" | "OWNER_DEFINES", scheduleNotes: tenant.scheduleNotes || "", waiterNotifyOnReady: tenant.waiterNotifyOnReady ?? true, requireCashRegister: tenant.requireCashRegister ?? true, receiptPaperWidth: (tenant.receiptPaperWidth ?? 80) as 58 | 80 });
       setScheduleDays(parseScheduleDays(tenant.scheduleDays));
       try { setPrinting(tenant.printingConfig ? { ...DEFAULT_PRINTING_CONFIG, ...JSON.parse(tenant.printingConfig) } : DEFAULT_PRINTING_CONFIG); } catch { setPrinting(DEFAULT_PRINTING_CONFIG); }
       setAddr(parseAddress(tenant.address) ?? { ...EMPTY_ADDR });
@@ -343,6 +344,29 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                       {form.isDeliveryOpen ? 'Ativo' : 'Pausado'}
                     </span>
                     <Switch checked={form.isDeliveryOpen} onCheckedChange={v => setForm(f => ({ ...f, isDeliveryOpen: v }))} />
+                  </div>
+                </div>
+                <div className="py-5 border-t border-zinc-100 space-y-3">
+                  <div>
+                    <p className="text-sm font-black text-slate-900">Senha do Balcão</p>
+                    <p className="text-xs text-slate-500 mt-1">Como identificar um pedido de Balcão sem mesa. Nem todo estabelecimento chama por número — algumas lojas preferem identificar só pelo nome do cliente.</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {([
+                      { value: "TICKET", label: "Senha sequencial", desc: "Cada pedido de balcão recebe um número (Senha 01, 02...) — ideal quando o cliente aguarda ser chamado.", icon: "🎫" },
+                      { value: "NAME",   label: "Nome do cliente",  desc: "Sem número de senha — identifica pelo nome (se não digitar nada, o pedido fica só com o ID curto).", icon: "🧑" },
+                    ] as const).map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setForm(f => ({ ...f, counterTicketMode: opt.value }))}
+                        className={`text-left p-3 rounded-xl border-2 transition-all ${form.counterTicketMode === opt.value ? "border-amber-400 bg-amber-50" : "border-slate-200 bg-white hover:border-amber-300"}`}
+                      >
+                        <p className="text-lg mb-1">{opt.icon}</p>
+                        <p className={`text-xs font-black ${form.counterTicketMode === opt.value ? "text-amber-700" : "text-slate-700"}`}>{opt.label}</p>
+                        <p className="text-[11px] text-slate-500 mt-0.5">{opt.desc}</p>
+                      </button>
+                    ))}
                   </div>
                 </div>
                 <div className="flex items-center justify-between gap-4 py-5 border-t border-zinc-100">

@@ -1171,6 +1171,13 @@ const migrations = [
     check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'consumption_type'",
     run: "ALTER TABLE orders ADD COLUMN consumption_type VARCHAR(191) NULL",
   },
+  // Como identificar pedido de Balcão sem mesa: TICKET (senha sequencial, padrão) ou
+  // NAME (sem senha, usa nome do cliente) — configurável em Configurações
+  {
+    name: 'add_tenants_counter_ticket_mode',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenants' AND COLUMN_NAME = 'counter_ticket_mode'",
+    run: "ALTER TABLE tenants ADD COLUMN counter_ticket_mode VARCHAR(191) NULL",
+  },
 ];
 
 async function run() {

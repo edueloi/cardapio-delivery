@@ -527,7 +527,9 @@ export default function CounterMenuView() {
               <div className="space-y-2">
                 <p className="text-amber-500/60 text-xs font-black tracking-widest uppercase">{tenant.name}</p>
                 <h1 className="text-xl font-serif text-white tracking-wide">
-                  {ticketOrders.length > 1 ? "Suas senhas" : "Sua senha é"}
+                  {ticketOrders.every((o) => o.counterTicketNumber == null)
+                    ? "Pedido confirmado"
+                    : ticketOrders.length > 1 ? "Suas senhas" : "Sua senha é"}
                 </h1>
               </div>
 
@@ -543,10 +545,21 @@ export default function CounterMenuView() {
                         ticketOrders.length > 1 ? "w-40 h-40" : "w-56 h-56"
                       }`}
                     >
-                      <span className="text-[10px] font-black text-amber-500/60 uppercase tracking-[0.3em]">Nº</span>
-                      <span className={`font-black text-amber-400 tracking-tighter tabular-nums ${ticketOrders.length > 1 ? "text-5xl" : "text-7xl"}`}>
-                        {order.counterTicketNumber ?? "—"}
-                      </span>
+                      {order.counterTicketNumber != null ? (
+                        <>
+                          <span className="text-[10px] font-black text-amber-500/60 uppercase tracking-[0.3em]">Nº</span>
+                          <span className={`font-black text-amber-400 tracking-tighter tabular-nums ${ticketOrders.length > 1 ? "text-5xl" : "text-7xl"}`}>
+                            {order.counterTicketNumber}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-[10px] font-black text-amber-500/60 uppercase tracking-[0.3em]">Pedido</span>
+                          <span className={`font-black text-amber-400 tracking-tight px-3 text-center ${ticketOrders.length > 1 ? "text-lg" : "text-2xl"}`}>
+                            {order.customerName || "Confirmado"}
+                          </span>
+                        </>
+                      )}
                     </motion.div>
 
                     <div className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-full mx-auto w-fit ${

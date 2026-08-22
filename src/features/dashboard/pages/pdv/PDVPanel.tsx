@@ -3121,21 +3121,24 @@ export default function PDVPanel({
                   </div>
                 </div>
 
-                {/* Próxima senha em destaque */}
-                <div className="text-center">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Próxima senha</p>
-                  <div className="mx-auto w-28 h-28 rounded-[2rem] border-2 border-[#C9A227]/30 bg-[#C9A227]/5 flex flex-col items-center justify-center gap-0.5 shadow-lg">
-                    <span className="text-[9px] font-black text-[#C9A227]/60 uppercase tracking-[0.3em]">Nº</span>
-                    {nextTicketLoading ? (
-                      <div className="w-5 h-5 border-2 border-[#C9A227] border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <span className="text-5xl font-black text-[#C9A227] tracking-tighter tabular-nums">
-                        {nextTicket ?? "—"}
-                      </span>
-                    )}
+                {/* Próxima senha em destaque — some se a loja desativou a senha sequencial
+                    do Balcão em Configurações (Senha do Balcão: Nome do cliente). */}
+                {tenant.counterTicketMode !== "NAME" && (
+                  <div className="text-center">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Próxima senha</p>
+                    <div className="mx-auto w-28 h-28 rounded-[2rem] border-2 border-[#C9A227]/30 bg-[#C9A227]/5 flex flex-col items-center justify-center gap-0.5 shadow-lg">
+                      <span className="text-[9px] font-black text-[#C9A227]/60 uppercase tracking-[0.3em]">Nº</span>
+                      {nextTicketLoading ? (
+                        <div className="w-5 h-5 border-2 border-[#C9A227] border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <span className="text-5xl font-black text-[#C9A227] tracking-tighter tabular-nums">
+                          {nextTicket ?? "—"}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[9px] text-slate-400 mt-2">Gerada automaticamente pelo sistema</p>
                   </div>
-                  <p className="text-[9px] text-slate-400 mt-2">Gerada automaticamente pelo sistema</p>
-                </div>
+                )}
 
                 {/* Identificação opcional */}
                 <div>
@@ -3150,7 +3153,9 @@ export default function PDVPanel({
                     placeholder="Ex: João ou Mesa VIP"
                     className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-5 text-base font-bold text-slate-800 focus:border-[#C9A227] outline-none text-center"
                   />
-                  <p className="text-[9px] text-slate-400 mt-1 text-center">Deixe em branco para usar só a senha numérica</p>
+                  <p className="text-[9px] text-slate-400 mt-1 text-center">
+                    {tenant.counterTicketMode === "NAME" ? "Deixe em branco se não quiser identificar o pedido" : "Deixe em branco para usar só a senha numérica"}
+                  </p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -3161,7 +3166,7 @@ export default function PDVPanel({
                   Cancelar
                 </button>
                 <button
-                  disabled={isProcessing || nextTicketLoading || !consumptionType}
+                  disabled={isProcessing || (tenant.counterTicketMode !== "NAME" && nextTicketLoading) || !consumptionType}
                   onClick={() => void handleCreateComanda()}
                   className="bg-[#0D1B3E] hover:bg-slate-800 text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest transition-all disabled:opacity-50"
                 >

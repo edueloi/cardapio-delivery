@@ -97,7 +97,10 @@ export function dineInOrderLabel(order: { tableId?: string | null; counterTicket
     return `Senha ${String(order.counterTicketNumber).padStart(2, "0")}${name}`;
   }
   if (order.tableId) return `Mesa ${order.tableId}`;
-  return "Comanda";
+  // Balcão sem senha (loja desativou a fila em Configurações) — identifica pelo nome do
+  // cliente, se tiver; sem forçar nenhum texto quando ninguém digitou nada.
+  const cleanName = cleanCustomerName(order.customerName);
+  return cleanName || "Comanda";
 }
 
 // scheduleType: CLIENT_CHOOSES = cliente escolhe qualquer data; OWNER_DEFINES = estabelecimento define dias/horários fixos
@@ -209,6 +212,10 @@ export interface Tenant {
   address?: string;
   isOpen?: boolean;
   isDeliveryOpen?: boolean; // fechar só o delivery sem fechar o estabelecimento inteiro
+  // Como identificar um pedido de Balcão sem mesa: TICKET = senha sequencial (fila, "Senha
+  // 02"); NAME = sem senha, usa o nome do cliente (se digitado). null/undefined = TICKET
+  // (comportamento padrão, preserva lojas já existentes).
+  counterTicketMode?: "TICKET" | "NAME" | null;
   effectiveIsOpen?: boolean; // isOpen combinado com o horário de funcionamento (calculado no servidor)
   scheduleMode?: boolean;
   scheduleType?: "CLIENT_CHOOSES" | "OWNER_DEFINES";

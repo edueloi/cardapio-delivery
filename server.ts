@@ -1861,6 +1861,7 @@ app.patch("/api/owner/tenants/:tenantId", requireAuth, async (req, res) => {
     logoUrl,
     isOpen,
     isDeliveryOpen,
+    counterTicketMode,
     scheduleMode,
     scheduleType,
     scheduleDays,
@@ -1933,6 +1934,9 @@ app.patch("/api/owner/tenants/:tenantId", requireAuth, async (req, res) => {
         ...(isOpen !== undefined && { isOpen: Boolean(isOpen) }),
         ...(isDeliveryOpen !== undefined && {
           isDeliveryOpen: Boolean(isDeliveryOpen),
+        }),
+        ...(counterTicketMode !== undefined && {
+          counterTicketMode: counterTicketMode === "NAME" ? "NAME" : "TICKET",
         }),
         ...(waiterNotifyOnReady !== undefined && {
           waiterNotifyOnReady: Boolean(waiterNotifyOnReady),
@@ -3147,18 +3151,25 @@ app.post("/api/orders", async (req, res) => {
     if (isCounterOrder && consumptionType !== "EAT_IN" && consumptionType !== "TAKEOUT") {
       return res.status(400).json({ error: "Informe se é para comer no local ou para viagem." });
     }
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-    const lastTicket = await prisma.order.findFirst({
-      where: {
-        tenantId,
-        counterTicketNumber: { not: null },
-        createdAt: { gte: startOfDay },
-      },
-      orderBy: { counterTicketNumber: "desc" },
-      select: { counterTicketNumber: true },
-    });
-    const counterTicketNumber = (lastTicket?.counterTicketNumber ?? 0) + 1;
+    // Loja pode desativar a senha sequencial do Balcão em Configurações (nem todo
+    // estabelecimento chama por número — alguns identificam só pelo nome do cliente).
+    // Mesa e Delivery continuam recebendo o número normalmente (acompanhamento no painel).
+    const usesCounterTicket = !isCounterOrder || tenant.counterTicketMode !== "NAME";
+    let counterTicketNumber: number | null = null;
+    if (usesCounterTicket) {
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+      const lastTicket = await prisma.order.findFirst({
+        where: {
+          tenantId,
+          counterTicketNumber: { not: null },
+          createdAt: { gte: startOfDay },
+        },
+        orderBy: { counterTicketNumber: "desc" },
+        select: { counterTicketNumber: true },
+      });
+      counterTicketNumber = (lastTicket?.counterTicketNumber ?? 0) + 1;
+    }
 
     let total = 0;
     const orderItemsData: Array<{
@@ -8290,8 +8301,12 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "Informe se é para comer no local ou para viagem." });
     }
 
+    // Loja pode desativar a senha sequencial do Balcão em Configurações — nesse caso a
+    // comanda fica sem número, identificada só pelo customerName (se o operador digitar um).
+    const usesCounterTicket = isCounterComanda && tenant.counterTicketMode !== "NAME";
+
     let counterTicketNumber: number | null = null;
-    if (isCounterComanda) {
+    if (usesCounterTicket) {
       const startOfDay = new Date();
       startOfDay.setHours(0, 0, 0, 0);
       const requested =
