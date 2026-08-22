@@ -695,7 +695,12 @@ export function OrdersList({
           <KanbanColumn id="PENDING" title="Pendentes" count={pendingOrders.length} orders={pendingOrders} borderColor="border-amber-400" textColor="text-amber-500" />
           <KanbanColumn id="PREPARING" title="Em preparo" count={preparingOrders.length} orders={preparingOrders} borderColor="border-orange-400" textColor="text-orange-500" />
           <KanbanColumn id="SHIPPED" title="Prontos / Retire" count={shippedOrders.length} orders={shippedOrders} borderColor="border-emerald-400" textColor="text-emerald-500" />
-          <KanbanColumn id="BILLING" title="Ag. Faturamento" count={billingOrders.length} orders={billingOrders} borderColor="border-purple-400" textColor="text-purple-500" droppable={false} onBillDelivery={setBillingOrder} />
+          {/* "Ag. Faturamento" é só de pedidos de Delivery pagos na entrega — some se o
+              lojista desativou o Delivery em Configurações, senão fica uma coluna vazia
+              sem sentido pra quem só vende Balcão/Mesa. */}
+          {(tenant?.isDeliveryOpen ?? true) && (
+            <KanbanColumn id="BILLING" title="Ag. Faturamento" count={billingOrders.length} orders={billingOrders} borderColor="border-purple-400" textColor="text-purple-500" droppable={false} onBillDelivery={setBillingOrder} />
+          )}
         </div>
       </div>
       <DragOverlay dropAnimation={{ duration: 250, easing: 'ease' }}>
