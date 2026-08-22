@@ -1406,13 +1406,14 @@ export default function PDVPanel({
       const launchedOrder = await apiJson<Order>(`/api/tenants/${tenant.slug}/pdv/order`, {
         method: "POST",
         body: JSON.stringify({
-          customerName: customerName || undefined,
+          // Sempre pega uma senha NOVA (fila) — nunca reaproveita a da comanda anterior,
+          // senão atropela quem já pediu depois. Só herda o nome do cliente, se tinha um.
+          customerName: customerName || selectedComandaOrder?.customerName || undefined,
           customerPhone: customerPhone || "00000000000",
           orderType: "DINE_IN",
           consumptionType: !selectedTableId ? consumptionType : undefined,
           tableId: selectedTableId || undefined,
           counterTicketNumber: selectedComandaOrder?.counterTicketNumber || undefined,
-          reuseExistingTicket: !!selectedComandaOrder?.counterTicketNumber,
           status: "PENDING",
           paymentMethod: "CASH",
           operatorName: operatorName || undefined,

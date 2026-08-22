@@ -8262,7 +8262,6 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
       source,
       counterTicketNumber: requestedCounterTicketNumber,
       consumptionType,
-      reuseExistingTicket,
     } = req.body;
 
     // O placar do garçom (leaderboard) só conta pedidos com operatorName preenchido —
@@ -8300,39 +8299,33 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
         Number(requestedCounterTicketNumber) > 0
           ? Number(requestedCounterTicketNumber)
           : null;
-      if (requested && reuseExistingTicket) {
-        // Lançamento de mais itens numa comanda JÁ ABERTA (ex: "Adicionar mais itens" no
-        // PDV) — aqui o número pedido DEVE colidir com o pedido original da mesma senha,
-        // então aceitamos direto sem checar colisão (ver comentário abaixo: essa checagem
-        // é só pra evitar duas comandas NOVAS nascerem com a mesma senha por engano).
+      // O número sugerido pelo cliente (buscado quando o modal "Nova Comanda" abriu, ou o
+      // ticket da comanda em "Adicionar mais itens") pode ter ficado desatualizado se
+      // outra comanda foi criada nesse meio tempo — confiar cegamente nele já causou duas
+      // comandas com a mesma "Senha ##" no mesmo dia. Sempre validamos contra o banco antes
+      // de aceitar, e recalculamos se colidir. Isso vale também pra "Adicionar mais itens":
+      // aqui é fila (painel/cozinha chamam por número), então um lançamento novo tem que
+      // pegar a PRÓXIMA senha da fila, nunca reaproveitar uma anterior — senão atropela quem
+      // já está na frente.
+      const collision = requested
+        ? await prisma.order.findFirst({
+            where: { tenantId: tenant.id, counterTicketNumber: requested, createdAt: { gte: startOfDay } },
+            select: { id: true },
+          })
+        : null;
+      if (requested && !collision) {
         counterTicketNumber = requested;
       } else {
-        // O número sugerido pelo cliente (buscado quando o modal "Nova Comanda" abriu)
-        // pode ter ficado desatualizado se outra comanda foi criada nesse meio tempo —
-        // confiar cegamente nele já causou duas comandas com a mesma "Senha ##" no
-        // mesmo dia (uma delas pronta pra retirar, outra recém-criada e já aguardando
-        // cobrança), fazendo o alerta de cobrança parecer se referir ao pedido errado.
-        // Sempre validamos contra o banco antes de aceitar, e recalculamos se colidir.
-        const collision = requested
-          ? await prisma.order.findFirst({
-              where: { tenantId: tenant.id, counterTicketNumber: requested, createdAt: { gte: startOfDay } },
-              select: { id: true },
-            })
-          : null;
-        if (requested && !collision) {
-          counterTicketNumber = requested;
-        } else {
-          const lastTicket = await prisma.order.findFirst({
-            where: {
-              tenantId: tenant.id,
-              counterTicketNumber: { not: null },
-              createdAt: { gte: startOfDay },
-            },
-            orderBy: { counterTicketNumber: "desc" },
-            select: { counterTicketNumber: true },
-          });
-          counterTicketNumber = (lastTicket?.counterTicketNumber ?? 0) + 1;
-        }
+        const lastTicket = await prisma.order.findFirst({
+          where: {
+            tenantId: tenant.id,
+            counterTicketNumber: { not: null },
+            createdAt: { gte: startOfDay },
+          },
+          orderBy: { counterTicketNumber: "desc" },
+          select: { counterTicketNumber: true },
+        });
+        counterTicketNumber = (lastTicket?.counterTicketNumber ?? 0) + 1;
       }
     }
 

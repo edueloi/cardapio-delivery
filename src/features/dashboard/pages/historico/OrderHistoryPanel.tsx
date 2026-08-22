@@ -8,6 +8,7 @@ import {
   Eye,
   History,
   Package,
+  Printer,
   TrendingUp,
 } from "lucide-react";
 import {
@@ -28,8 +29,64 @@ import {
   usePagination,
   useToast,
 } from "../../../../components";
-import { apiFetch } from "../../../../lib/api";
-import { Order, dineInOrderLabel } from "../../../../types";
+import { apiFetch, apiJson } from "../../../../lib/api";
+import { Order, Tenant, dineInOrderLabel, type DanfeData } from "../../../../types";
+import { printReceiptPdf, printDanfePdf, type ReceiptData } from "../../../../lib/receipt";
+
+// Reconstrói os dados da notinha a partir de um pedido já salvo — usado pra reimprimir
+// direto do Histórico, sem precisar abrir o PDV (mesma lógica de OrdersList.tsx).
+function buildReceiptDataFromOrder(order: Order, tenant: Tenant): ReceiptData {
+  const items = (order.items || []).map((i: any) => ({
+    quantity: i.quantity,
+    name: i.productVariant?.name ? `${i.product?.name || ""} (${i.productVariant.name})` : (i.product?.name || ""),
+    price: i.price,
+    notes: i.notes || undefined,
+  }));
+  const orderSubtotal = items.reduce((acc: number, i: any) => acc + i.price * i.quantity, 0);
+  let paymentDetail: { amountReceived?: number; change?: number; splits?: Array<{ method: string; amount: number; cardBrand?: string; installments?: number }> } = {};
+  try { paymentDetail = order.paymentDetail ? JSON.parse(order.paymentDetail) : {}; } catch {}
+  const isNumericName = order.customerName && /^\d+$/.test(order.customerName);
+  let tenantCnpj: string | undefined;
+  try { tenantCnpj = (tenant as any)?.fiscalConfig ? JSON.parse((tenant as any).fiscalConfig)?.cnpj || undefined : undefined; } catch {}
+
+  return {
+    tenantName: tenant?.name || "",
+    tenantAddress: (tenant as any)?.address || undefined,
+    tenantCnpj,
+    tenantPhone: (tenant as any)?.whatsapp || undefined,
+    orderId: order.id,
+    tableId: order.tableId,
+    counterTicketNumber: order.counterTicketNumber != null ? order.counterTicketNumber : (isNumericName && !order.tableId ? Number(order.customerName) : null),
+    consumptionType: order.consumptionType || undefined,
+    paperWidthMm: ((tenant as any)?.receiptPaperWidth === 58 ? 58 : 80) as 58 | 80,
+    createdAt: order.createdAt ? new Date(order.createdAt) : new Date(),
+    customerName: (!isNumericName || order.tableId) ? order.customerName : undefined,
+    isPreCheckout: !(order.billed === true || order.status === "DELIVERED"),
+    items,
+    subtotal: orderSubtotal,
+    discountAmount: (order as any).discount || 0,
+    feeAmount: order.feeAmount || undefined,
+    feePercent: order.feePercent || undefined,
+    feePassedToCustomer: (order as any).feePassedToCustomer,
+    serviceFeeAmount: order.serviceFeeAmount || undefined,
+    serviceFeePercent: order.serviceFeePercent || undefined,
+    total: order.total,
+    paymentMethod: order.paymentMethod,
+    amountReceived: order.paymentMethod === "CASH" ? paymentDetail.amountReceived : undefined,
+    change: order.paymentMethod === "CASH" ? paymentDetail.change : undefined,
+    paymentSplits: order.paymentMethod === "SPLIT" ? paymentDetail.splits : undefined,
+  };
+}
+
+function parsePaymentSplits(order: Order): Array<{ method: string; amount: number }> {
+  if (order.paymentMethod !== "SPLIT") return [];
+  try {
+    const detail = order.paymentDetail ? JSON.parse(order.paymentDetail) : null;
+    return Array.isArray(detail?.splits) ? detail.splits : [];
+  } catch {
+    return [];
+  }
+}
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
@@ -93,11 +150,13 @@ const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Se
 export function OrderHistoryPanel({
   orders,
   slug,
+  tenant,
   isOwner,
   onOrderChanged,
 }: {
   orders: Order[];
   slug: string;
+  tenant: Tenant;
   isOwner?: boolean;
   onOrderChanged?: () => void;
 }) {
@@ -131,6 +190,25 @@ export function OrderHistoryPanel({
     } finally {
       setIsCancelling(false);
     }
+  };
+
+  const handleReprintOrder = async (order: Order) => {
+    const desktop = (window as any).pdvDesktop;
+    // Pedido com NFC-e autorizada é documento fiscal — reimprime o DANFE completo em vez
+    // da notinha comercial simples (mesma regra do Painel de Pedidos).
+    if (order.nfceStatus === "AUTHORIZED" && (tenant as any)?.id) {
+      try {
+        const danfe = await apiJson<DanfeData>(`/api/owner/tenants/${(tenant as any).id}/nfce/danfe/${order.id}`);
+        if (desktop?.printDanfe) desktop.printDanfe(danfe);
+        else printDanfePdf(danfe, (tenant as any)?.receiptPaperWidth);
+        return;
+      } catch {
+        // Se buscar o DANFE falhar, cai pro recibo comum abaixo em vez de travar a impressão.
+      }
+    }
+    const data = buildReceiptDataFromOrder(order, tenant);
+    if (desktop?.printReceipt) desktop.printReceipt(data);
+    else printReceiptPdf(data);
   };
 
   const prefs = loadHistoryPrefs(slug);
@@ -492,14 +570,34 @@ export function OrderHistoryPanel({
               <span className="text-base font-black text-slate-800">{fmt(detailsOrder.total)}</span>
             </div>
 
-            {isOwner && detailsOrder.status !== 'CANCELLED' && (
-              <button
-                onClick={() => { setCancelOrder(detailsOrder); setCancelPassword(""); }}
-                className="w-full py-3 rounded-2xl border border-red-200 text-red-600 text-xs font-black uppercase tracking-widest hover:bg-red-50 transition-colors"
-              >
-                Cancelar Pedido
-              </button>
+            {parsePaymentSplits(detailsOrder).length > 0 && (
+              <div className="border border-slate-100 rounded-2xl divide-y divide-slate-100">
+                {parsePaymentSplits(detailsOrder).map((split, idx) => (
+                  <div key={idx} className="flex items-center justify-between px-4 py-2 text-xs">
+                    <PaymentBadge method={split.method.toLowerCase() as any} size="sm" />
+                    <span className="font-black text-slate-700">{fmt(split.amount)}</span>
+                  </div>
+                ))}
+              </div>
             )}
+
+            <div className={`grid gap-2.5 ${isOwner && detailsOrder.status !== 'CANCELLED' ? 'grid-cols-2' : 'grid-cols-1'}`}>
+              <button
+                onClick={() => void handleReprintOrder(detailsOrder)}
+                className="w-full py-3 rounded-2xl border border-slate-200 text-slate-600 text-xs font-black uppercase tracking-widest hover:bg-slate-50 transition-colors flex items-center justify-center gap-1.5"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                Reimprimir
+              </button>
+              {isOwner && detailsOrder.status !== 'CANCELLED' && (
+                <button
+                  onClick={() => { setCancelOrder(detailsOrder); setCancelPassword(""); }}
+                  className="w-full py-3 rounded-2xl border border-red-200 text-red-600 text-xs font-black uppercase tracking-widest hover:bg-red-50 transition-colors"
+                >
+                  Cancelar Pedido
+                </button>
+              )}
+            </div>
           </div>
         )}
       </Modal>
