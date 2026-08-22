@@ -348,6 +348,11 @@ function KanbanCard({ order, categoryMap, updateStatus, isExpanded, toggleOrder,
                   <Truck className="w-2.5 h-2.5" /> Ag. Faturar
                 </span>
               )}
+              {order.orderType === 'DELIVERY' && (
+                <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 border border-blue-200 rounded-md text-[8px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0">
+                  <Truck className="w-2.5 h-2.5" /> Delivery
+                </span>
+              )}
               {order.consumptionType && (
                 <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 border border-amber-200 rounded-md text-[8px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0">
                   {order.consumptionType === "EAT_IN" ? <Utensils className="w-2.5 h-2.5" /> : <Package className="w-2.5 h-2.5" />}
