@@ -598,6 +598,7 @@ export function OrdersList({
   // Delivery entregue (pagamento na entrega) que ainda não teve o valor lançado
   // no caixa — precisa ser faturado aqui, senão fica invisível pro operador.
   const billingOrders = filteredOrders.filter(o => o.orderType === 'DELIVERY' && o.status === 'DELIVERED' && !o.billed);
+  const showBillingColumn = tenant?.isDeliveryOpen ?? true;
 
   const [billingOrder, setBillingOrder] = useState<Order | null>(null);
   const [billingPaymentMethod, setBillingPaymentMethod] = useState<"CASH" | "CREDIT" | "DEBIT" | "PIX">("CASH");
@@ -690,15 +691,17 @@ export function OrdersList({
 
         {/* Kanban Board */}
         {/* xl (1280px) forçava 4 colunas mesmo em notebooks comuns, apertando demais
-            cada card — só assume 4 colunas a partir de telas bem largas (2xl). */}
-        <div className="flex-1 min-h-0 grid gap-3 pb-3 overflow-hidden grid-cols-1 lg:grid-cols-2 2xl:grid-cols-4">
+            cada card — só assume 4 colunas a partir de telas bem largas (2xl). Quando
+            "Ag. Faturamento" some (Delivery desativado), o grid cai pra 3 colunas — senão
+            o espaço da coluna escondida ficava reservado em branco, sem nenhum card nele. */}
+        <div className={`flex-1 min-h-0 grid gap-3 pb-3 overflow-hidden grid-cols-1 lg:grid-cols-2 ${showBillingColumn ? "2xl:grid-cols-4" : "2xl:grid-cols-3"}`}>
           <KanbanColumn id="PENDING" title="Pendentes" count={pendingOrders.length} orders={pendingOrders} borderColor="border-amber-400" textColor="text-amber-500" />
           <KanbanColumn id="PREPARING" title="Em preparo" count={preparingOrders.length} orders={preparingOrders} borderColor="border-orange-400" textColor="text-orange-500" />
           <KanbanColumn id="SHIPPED" title="Prontos / Retire" count={shippedOrders.length} orders={shippedOrders} borderColor="border-emerald-400" textColor="text-emerald-500" />
           {/* "Ag. Faturamento" é só de pedidos de Delivery pagos na entrega — some se o
               lojista desativou o Delivery em Configurações, senão fica uma coluna vazia
               sem sentido pra quem só vende Balcão/Mesa. */}
-          {(tenant?.isDeliveryOpen ?? true) && (
+          {showBillingColumn && (
             <KanbanColumn id="BILLING" title="Ag. Faturamento" count={billingOrders.length} orders={billingOrders} borderColor="border-purple-400" textColor="text-purple-500" droppable={false} onBillDelivery={setBillingOrder} />
           )}
         </div>
