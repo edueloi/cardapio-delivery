@@ -16,7 +16,7 @@ import { useToast } from "../../../../components";
 import { downloadReceiptPdf, printReceiptPdf, printCashClosingReportPdf, downloadDanfePdf, printDanfePdf } from "../../../../lib/receipt";
 import type { DanfeData } from "../../../../types";
 import socket from "../../../../lib/socket";
-import SelectionGroupPicker, { parseSelectionGroup, getSelectionGroupOptions, formatSelectionGroupNote } from "../../../menu-view/SelectionGroupPicker";
+import SelectionGroupPicker, { parseSelectionGroups, getSelectionGroupOptions, formatSelectionGroupsNote, selectionGroupsComplete } from "../../../menu-view/SelectionGroupPicker";
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
@@ -78,10 +78,10 @@ interface CartItem {
   price: number; // allows manual override
   productVariantId?: string;
   selectedExtras?: ProductExtra[];
-  // IDs escolhidos do grupo de seleção embutido no produto (ex: os 2 sabores de
-  // "2 espetos tradicionais") — guardado à parte pra poder reabrir e editar a
+  // IDs escolhidos dos grupos de seleção embutidos no produto (ex: numa marmita, os
+  // itens de Guarnição/Arroz/Feijão) — guardado à parte pra poder reabrir e editar a
   // escolha depois, já que `notes` só guarda o texto formatado, não os IDs.
-  selectedGroupItemIds?: string[];
+  selectedGroupItemIds?: string[][];
 }
 
 type SplitPaymentMethod = "CASH" | "DEBIT" | "CREDIT" | "PIX" | "VR";
@@ -169,7 +169,7 @@ export default function PDVPanel({
   const [productModalSelectedExtras, setProductModalSelectedExtras] = useState<ProductExtra[]>([]);
   // Itens escolhidos do grupo de seleção embutido no produto (ex: os 2 sabores de
   // "2 espetos tradicionais") — preço fixo, só define o que aparece na observação.
-  const [productModalGroupItemIds, setProductModalGroupItemIds] = useState<string[]>([]);
+  const [productModalGroupItemIds, setProductModalGroupItemIds] = useState<string[][]>([]);
   const [showGroupPicker, setShowGroupPicker] = useState(false);
   const [productModalEditIndex, setProductModalEditIndex] = useState<number | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -953,7 +953,7 @@ export default function PDVPanel({
   }, []);
 
   const hasProductCustomizations = useCallback((product: Product) => {
-    return (product.variants?.length || 0) > 0 || parseProductExtras(product).length > 0 || !!parseSelectionGroup(product);
+    return (product.variants?.length || 0) > 0 || parseProductExtras(product).length > 0 || parseSelectionGroups(product).length > 0;
   }, [parseProductExtras]);
 
   const buildCartNotes = useCallback((selectedExtras: ProductExtra[], notes: string) => {
@@ -987,8 +987,8 @@ export default function PDVPanel({
     const groupItemIds = editingItem?.selectedGroupItemIds || [];
     setProductModalGroupItemIds(groupItemIds);
     setProductModalEditIndex(editIndex);
-    const sg = parseSelectionGroup(product);
-    if (sg && groupItemIds.length !== sg.qty) setShowGroupPicker(true);
+    const groups = parseSelectionGroups(product);
+    if (groups.length > 0 && !selectionGroupsComplete(groups, groupItemIds)) setShowGroupPicker(true);
   }, [cart]);
 
   const closeProductOptions = useCallback(() => {
@@ -4433,19 +4433,28 @@ export default function PDVPanel({
                 )}
 
                 {(() => {
-                  const sg = parseSelectionGroup(productOptionsModal);
-                  if (!sg) return null;
-                  const options = getSelectionGroupOptions(tenant, sg);
-                  if (options.length === 0) return null;
-                  const isComplete = productModalGroupItemIds.length === sg.qty;
+                  const groups = parseSelectionGroups(productOptionsModal);
+                  if (groups.length === 0) return null;
+                  const optionsByGroup = groups.map((g) => getSelectionGroupOptions(tenant, g));
+                  if (optionsByGroup.every((o) => o.length === 0)) return null;
+                  const isComplete = selectionGroupsComplete(groups, productModalGroupItemIds);
+                  const doneCount = groups.reduce((acc, g, i) => acc + (productModalGroupItemIds[i]?.length ?? 0), 0);
+                  const totalCount = groups.reduce((acc, g) => acc + g.qty, 0);
+                  const summary = groups
+                    .map((g, i) => (productModalGroupItemIds[i] || [])
+                      .map((id) => optionsByGroup[i].find((p) => p.id === id)?.name)
+                      .filter(Boolean)
+                      .join(" + "))
+                    .filter(Boolean)
+                    .join(" · ");
                   return (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between gap-3">
                         <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                          {sg.label || `Escolha ${sg.qty} ${sg.qty > 1 ? "itens" : "item"}`}
+                          {groups.length > 1 ? "Personalize o pedido" : (groups[0].label || `Escolha ${groups[0].qty} ${groups[0].qty > 1 ? "itens" : "item"}`)}
                         </label>
                         <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${isComplete ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
-                          {productModalGroupItemIds.length}/{sg.qty}
+                          {doneCount}/{totalCount}
                         </span>
                       </div>
                       <button
@@ -4458,9 +4467,7 @@ export default function PDVPanel({
                         }`}
                       >
                         <span className="text-sm font-bold text-slate-700 truncate">
-                          {isComplete
-                            ? productModalGroupItemIds.map((id) => options.find((p) => p.id === id)?.name).filter(Boolean).join(" + ")
-                            : "Toque para escolher"}
+                          {isComplete ? summary : "Toque para escolher"}
                         </span>
                         <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
                       </button>
@@ -4490,13 +4497,13 @@ export default function PDVPanel({
                 </button>
                 <button
                   disabled={(() => {
-                    const sg = parseSelectionGroup(productOptionsModal);
-                    return !!sg && productModalGroupItemIds.length !== sg.qty;
+                    const groups = parseSelectionGroups(productOptionsModal);
+                    return groups.length > 0 && !selectionGroupsComplete(groups, productModalGroupItemIds);
                   })()}
                   onClick={() => {
-                    const sg = parseSelectionGroup(productOptionsModal);
-                    const groupOptions = sg ? getSelectionGroupOptions(tenant, sg) : [];
-                    const groupLabel = sg ? formatSelectionGroupNote(sg, productModalGroupItemIds, groupOptions) : "";
+                    const groups = parseSelectionGroups(productOptionsModal);
+                    const optionsByGroup = groups.map((g) => getSelectionGroupOptions(tenant, g));
+                    const groupLabel = groups.length > 0 ? formatSelectionGroupsNote(groups, productModalGroupItemIds, optionsByGroup) : "";
                     const notesWithGroup = [groupLabel, productModalNotes.trim()].filter(Boolean).join(" | ");
                     if (productModalEditIndex !== null && productOptionsModal) {
                       setCart(prev => {
@@ -4534,16 +4541,17 @@ export default function PDVPanel({
           </motion.div>
         )}
       </AnimatePresence>
-      {/* Grupo de seleção embutido — fluxo passo a passo (ex: "2 espetos") */}
+      {/* Grupos de seleção embutidos — fluxo passo a passo (ex: marmita com Guarnição/Arroz/Feijão) */}
       {showGroupPicker && productOptionsModal && (() => {
-        const sg = parseSelectionGroup(productOptionsModal);
-        if (!sg) return null;
-        const options = getSelectionGroupOptions(tenant, sg);
+        const groups = parseSelectionGroups(productOptionsModal);
+        if (groups.length === 0) return null;
+        const optionsByGroup = groups.map((g) => getSelectionGroupOptions(tenant, g));
         return (
           <SelectionGroupPicker
-            group={sg}
-            options={options}
-            onConfirm={(ids) => { setProductModalGroupItemIds(ids); setShowGroupPicker(false); }}
+            groups={groups}
+            optionsByGroup={optionsByGroup}
+            initialSelections={productModalGroupItemIds.length ? productModalGroupItemIds : undefined}
+            onConfirm={(idsByGroup) => { setProductModalGroupItemIds(idsByGroup); setShowGroupPicker(false); }}
             onCancel={() => setShowGroupPicker(false)}
           />
         );

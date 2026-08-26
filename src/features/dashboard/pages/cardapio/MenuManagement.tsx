@@ -322,13 +322,11 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
     scheduleRuleEndDate: "",
     variants: [] as { _key: string, name: string, price: string, description: string, inventoryItemId: string, imageUrl: string }[],
     extras: [] as { id: string, label: string, price: string }[],
-    // Grupo de seleção embutido — escolher N itens de uma categoria/lista, preço fixo do produto
-    selectionGroupEnabled: false,
-    selectionGroupSourceType: "category" as "category" | "products",
-    selectionGroupCategoryId: "",
-    selectionGroupProductIds: [] as string[],
-    selectionGroupQty: "1",
-    selectionGroupLabel: "",
+    // Grupos de seleção embutidos — cada um deixa o cliente escolher N itens de uma
+    // categoria/lista, sem alterar o preço fixo do produto. Uma marmita pode ter vários:
+    // "Guarnição" (escolha 1), "Arroz" (escolha 1), "Feijão" (escolha 1) — cada grupo sua
+    // própria categoria de opções.
+    selectionGroups: [] as { _key: string, sourceType: "category" | "products", categoryId: string, productIds: string[], qty: string, label: string }[],
     // Fiscal NFC-e
     ncm: "", cfop: "5102", csosn: "400", unitCom: "UN", origem: 0, aliqIcms: 0,
   });
@@ -400,7 +398,7 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
 
   const openNewProduct = (categoryId: string) => {
     setEditingProduct(null);
-    setProdForm({ name: "", description: "", price: "", imageUrl: "", inventoryItemId: "", recipeId: "", available: true, pdvOnly: false, kitchenPrint: false, autoDisableWhenOutOfStock: false, scheduleRuleEnabled: false, scheduleRuleType: "weekday", scheduleRuleWeekdays: [], scheduleRuleStartTime: "", scheduleRuleEndTime: "", scheduleRuleStartDate: "", scheduleRuleEndDate: "", variants: [], extras: [], selectionGroupEnabled: false, selectionGroupSourceType: "category", selectionGroupCategoryId: "", selectionGroupProductIds: [], selectionGroupQty: "1", selectionGroupLabel: "", ncm: "", cfop: "5102", csosn: "400", unitCom: "UN", origem: 0, aliqIcms: 0 });
+    setProdForm({ name: "", description: "", price: "", imageUrl: "", inventoryItemId: "", recipeId: "", available: true, pdvOnly: false, kitchenPrint: false, autoDisableWhenOutOfStock: false, scheduleRuleEnabled: false, scheduleRuleType: "weekday", scheduleRuleWeekdays: [], scheduleRuleStartTime: "", scheduleRuleEndTime: "", scheduleRuleStartDate: "", scheduleRuleEndDate: "", variants: [], extras: [], selectionGroups: [], ncm: "", cfop: "5102", csosn: "400", unitCom: "UN", origem: 0, aliqIcms: 0 });
     setExtraInput({ label: "", price: "" });
     setRecipeIngredients([]);
     setProdModal({ open: true, categoryId });
@@ -432,21 +430,20 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
         scheduleRuleEndDate = rule.endDate || "";
       }
     } catch {}
-    let selectionGroupEnabled = false;
-    let selectionGroupSourceType: "category" | "products" = "category";
-    let selectionGroupCategoryId = "";
-    let selectionGroupProductIds: string[] = [];
-    let selectionGroupQty = "1";
-    let selectionGroupLabel = "";
+    let selectionGroups: { _key: string, sourceType: "category" | "products", categoryId: string, productIds: string[], qty: string, label: string }[] = [];
     try {
       if (prod.selectionGroup) {
-        const sg = JSON.parse(prod.selectionGroup);
-        selectionGroupEnabled = true;
-        selectionGroupSourceType = sg.sourceType === "products" ? "products" : "category";
-        selectionGroupCategoryId = sg.categoryId || "";
-        selectionGroupProductIds = sg.productIds || [];
-        selectionGroupQty = String(sg.qty ?? 1);
-        selectionGroupLabel = sg.label || "";
+        const parsed = JSON.parse(prod.selectionGroup);
+        // Aceita tanto o formato antigo (um objeto só) quanto o novo (array de grupos).
+        const list = Array.isArray(parsed) ? parsed : [parsed];
+        selectionGroups = list.filter((sg: any) => sg && sg.qty).map((sg: any) => ({
+          _key: crypto.randomUUID(),
+          sourceType: sg.sourceType === "products" ? "products" : "category",
+          categoryId: sg.categoryId || "",
+          productIds: sg.productIds || [],
+          qty: String(sg.qty ?? 1),
+          label: sg.label || "",
+        }));
       }
     } catch {}
     setProdForm({
@@ -465,7 +462,7 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
       scheduleRuleEndDate,
       variants: prod.variants?.map((v: any) => ({ _key: v.id || crypto.randomUUID(), name: v.name, price: String(v.price), description: v.description || "", inventoryItemId: v.inventoryItemId || "", imageUrl: v.imageUrl || "" })) || [],
       extras: parsedExtras,
-      selectionGroupEnabled, selectionGroupSourceType, selectionGroupCategoryId, selectionGroupProductIds, selectionGroupQty, selectionGroupLabel,
+      selectionGroups,
       ncm: prod.ncm || "", cfop: prod.cfop || "5102", csosn: prod.csosn || "400",
       unitCom: prod.unitCom || "UN", origem: prod.origem ?? 0, aliqIcms: prod.aliqIcms ?? 0,
     });
@@ -529,35 +526,39 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
       scheduleRule = JSON.stringify(rule);
     }
     let selectionGroup: string | null = null;
-    if (prodForm.selectionGroupEnabled) {
+    if (prodForm.selectionGroups.length > 0) {
       // Os dois mecanismos resolvem "escolher o sabor" de formas diferentes — variação
       // já cria um preço por opção, grupo de seleção mantém preço fixo do produto e
       // reaproveita outra categoria. Juntos, o cliente escolhe a mesma coisa duas vezes
       // (foi exatamente o bug visto em produção no "1 espeto tradicional").
       if (hasVariants) {
-        toast.error("Este produto já tem variações — remova-as antes de ativar \"Cliente escolhe itens\", ou desative o grupo de seleção. Os dois juntos fazem o cliente escolher o sabor duas vezes.");
+        toast.error("Este produto já tem variações — remova-as antes de ativar \"Cliente escolhe itens\", ou remova os grupos de seleção. Os dois juntos fazem o cliente escolher o sabor duas vezes.");
         return;
       }
-      const qty = parseInt(prodForm.selectionGroupQty, 10);
-      if (!qty || qty < 1) {
-        toast.error("Informe quantos itens o cliente deve escolher.");
-        return;
+      const builtGroups: { sourceType: "category" | "products"; categoryId?: string; productIds?: string[]; qty: number; label?: string }[] = [];
+      for (const g of prodForm.selectionGroups) {
+        const qty = parseInt(g.qty, 10);
+        if (!qty || qty < 1) {
+          toast.error(`"${g.label || "Grupo de seleção"}": informe quantos itens o cliente deve escolher.`);
+          return;
+        }
+        if (g.sourceType === "category" && !g.categoryId) {
+          toast.error(`"${g.label || "Grupo de seleção"}": selecione a categoria de onde vêm as opções.`);
+          return;
+        }
+        if (g.sourceType === "products" && g.productIds.length === 0) {
+          toast.error(`"${g.label || "Grupo de seleção"}": selecione ao menos um item para a seleção.`);
+          return;
+        }
+        builtGroups.push({
+          sourceType: g.sourceType,
+          categoryId: g.sourceType === "category" ? g.categoryId : undefined,
+          productIds: g.sourceType === "products" ? g.productIds : undefined,
+          qty,
+          label: g.label || undefined,
+        });
       }
-      if (prodForm.selectionGroupSourceType === "category" && !prodForm.selectionGroupCategoryId) {
-        toast.error("Selecione a categoria de onde vêm as opções.");
-        return;
-      }
-      if (prodForm.selectionGroupSourceType === "products" && prodForm.selectionGroupProductIds.length === 0) {
-        toast.error("Selecione ao menos um item para a seleção.");
-        return;
-      }
-      selectionGroup = JSON.stringify({
-        sourceType: prodForm.selectionGroupSourceType,
-        categoryId: prodForm.selectionGroupSourceType === "category" ? prodForm.selectionGroupCategoryId : undefined,
-        productIds: prodForm.selectionGroupSourceType === "products" ? prodForm.selectionGroupProductIds : undefined,
-        qty,
-        label: prodForm.selectionGroupLabel || undefined,
-      });
+      selectionGroup = JSON.stringify(builtGroups);
     }
     const res = await apiFetch(url, {
       method: editingProduct ? 'PATCH' : 'POST',
@@ -806,6 +807,10 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
   const addVariantField = () => setProdForm(prev => ({ ...prev, variants: [...prev.variants, { _key: crypto.randomUUID(), name: "", price: "", description: "", inventoryItemId: "", imageUrl: "" }] }));
   const removeVariantField = (i: number) => setProdForm(prev => ({ ...prev, variants: prev.variants.filter((_, idx) => idx !== i) }));
   const updateVariantField = (i: number, field: string, value: string) => setProdForm(prev => ({ ...prev, variants: prev.variants.map((v, idx) => idx === i ? { ...v, [field]: value } : v) }));
+
+  const addSelectionGroupField = () => setProdForm(prev => ({ ...prev, selectionGroups: [...prev.selectionGroups, { _key: crypto.randomUUID(), sourceType: "category" as const, categoryId: "", productIds: [] as string[], qty: "1", label: "" }] }));
+  const removeSelectionGroupField = (i: number) => setProdForm(prev => ({ ...prev, selectionGroups: prev.selectionGroups.filter((_, idx) => idx !== i) }));
+  const updateSelectionGroupField = (i: number, field: string, value: any) => setProdForm(prev => ({ ...prev, selectionGroups: prev.selectionGroups.map((g, idx) => idx === i ? { ...g, [field]: value } : g) }));
 
   const categories = localCategories;
   const visibleCategories = categories
@@ -1263,108 +1268,110 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
             )}
           </div>
 
-          {/* Grupo de seleção embutido — escolher N itens de uma categoria/lista, sem
-              mudar o preço fixo do produto (ex: "2 espetos tradicionais" R$29 deixa
-              escolher os 2 sabores dentre os espetos já cadastrados, sem duplicar
-              como variação e sem somar preço próprio de cada item escolhido).
-              Incompatível com variações — as duas coisas resolvem "escolher o sabor";
-              juntas, o cliente escolhe a mesma coisa duas vezes (bug visto em produção
-              no "1 espeto tradicional", cadastrado com variações E grupo ao mesmo tempo). */}
+          {/* Grupos de seleção embutidos — cada um deixa o cliente escolher N itens de uma
+              categoria/lista, sem mudar o preço fixo do produto (ex: numa marmita, um grupo
+              "Guarnição" escolhe 1, outro "Arroz" escolhe 1, outro "Feijão" escolhe 1 — cada
+              um sua própria categoria de opções cadastrada). Incompatível com variações — as
+              duas coisas resolvem "escolher o sabor"; juntas, o cliente escolhe a mesma coisa
+              duas vezes (bug visto em produção no "1 espeto tradicional", cadastrado com
+              variações E grupo ao mesmo tempo). */}
           <div>
-            {prodForm.variants.length > 0 && (
+            {prodForm.variants.length > 0 && prodForm.selectionGroups.length > 0 && (
               <p className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2">
-                Este produto já tem variações — não é possível usar as duas formas de escolha juntas.
+                Este produto já tem variações — remova-as ou remova os grupos de seleção abaixo. Os dois juntos fazem o cliente escolher o sabor duas vezes.
               </p>
             )}
-            <label className={`flex items-center gap-2 mb-2 ${prodForm.variants.length > 0 ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}>
-              <input
-                type="checkbox"
-                disabled={prodForm.variants.length > 0}
-                checked={prodForm.selectionGroupEnabled}
-                onChange={e => setProdForm(f => ({ ...f, selectionGroupEnabled: e.target.checked }))}
-                className="w-4 h-4 rounded accent-amber-500"
-              />
+            <div className="flex items-center justify-between mb-2">
               <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">Cliente escolhe itens (preço fixo)</span>
-            </label>
-            <p className="text-xs text-slate-400 mb-3">Ex: "2 espetos tradicionais" — o cliente escolhe 2 sabores de uma categoria já cadastrada, sem alterar o preço do produto.</p>
-            {prodForm.selectionGroupEnabled && (
-              <div className="p-4 bg-amber-50/50 rounded-2xl border border-amber-100 space-y-3">
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setProdForm(f => ({ ...f, selectionGroupSourceType: "category" }))}
-                    className={`flex-1 px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wide transition-colors ${prodForm.selectionGroupSourceType === "category" ? "bg-[#0D1B3E] text-white" : "bg-white border border-slate-200 text-slate-500"}`}
-                  >Categoria inteira</button>
-                  <button
-                    type="button"
-                    onClick={() => setProdForm(f => ({ ...f, selectionGroupSourceType: "products" }))}
-                    className={`flex-1 px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wide transition-colors ${prodForm.selectionGroupSourceType === "products" ? "bg-[#0D1B3E] text-white" : "bg-white border border-slate-200 text-slate-500"}`}
-                  >Itens específicos</button>
-                </div>
+              <button
+                type="button"
+                disabled={prodForm.variants.length > 0}
+                onClick={addSelectionGroupField}
+                className={`text-xs font-black hover:underline ${prodForm.variants.length > 0 ? "text-slate-300 cursor-not-allowed" : "text-[#C9A227]"}`}
+              >+ Adicionar grupo</button>
+            </div>
+            <p className="text-xs text-slate-400 mb-3">Ex: numa marmita, um grupo "Guarnição" (escolhe 1), outro "Arroz" (escolhe 1) — cada grupo puxa de uma categoria já cadastrada, sem alterar o preço do produto.</p>
 
-                {prodForm.selectionGroupSourceType === "category" ? (
-                  <div>
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Categoria de onde vêm as opções</label>
-                    <select
-                      value={prodForm.selectionGroupCategoryId}
-                      onChange={e => setProdForm(f => ({ ...f, selectionGroupCategoryId: e.target.value }))}
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
-                    >
-                      <option value="">Selecione...</option>
-                      {localCategories.filter(c => c.id !== prodModal.categoryId).map(c => (
-                        <option key={c.id} value={c.id}>{c.name} ({c.products?.length || 0} itens)</option>
-                      ))}
-                    </select>
-                  </div>
-                ) : (
-                  <div>
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Selecione os itens que entram como opção</label>
-                    <div className="max-h-48 overflow-y-auto space-y-1 bg-white rounded-xl border border-slate-200 p-2">
-                      {localCategories.flatMap(c => c.products || []).map((p: any) => {
-                        const checked = prodForm.selectionGroupProductIds.includes(p.id);
-                        return (
-                          <label key={p.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => setProdForm(f => ({
-                                ...f,
-                                selectionGroupProductIds: checked
-                                  ? f.selectionGroupProductIds.filter(id => id !== p.id)
-                                  : [...f.selectionGroupProductIds, p.id],
-                              }))}
-                              className="w-3.5 h-3.5 rounded accent-amber-500"
-                            />
-                            <span className="text-xs font-bold text-slate-700">{p.name}</span>
-                          </label>
-                        );
-                      })}
+            {prodForm.selectionGroups.length > 0 && (
+              <div className="space-y-3">
+                {prodForm.selectionGroups.map((g, idx) => (
+                  <div key={g._key} className="p-4 bg-amber-50/50 rounded-2xl border border-amber-100 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <input
+                        type="text"
+                        placeholder={`Rótulo do grupo ${idx + 1} (ex: Guarnição)`}
+                        value={g.label}
+                        onChange={e => updateSelectionGroupField(idx, "label", e.target.value)}
+                        className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
+                      />
+                      <button type="button" onClick={() => removeSelectionGroupField(idx)} className="p-2 text-slate-300 hover:text-red-500 shrink-0">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => updateSelectionGroupField(idx, "sourceType", "category")}
+                        className={`flex-1 px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wide transition-colors ${g.sourceType === "category" ? "bg-[#0D1B3E] text-white" : "bg-white border border-slate-200 text-slate-500"}`}
+                      >Categoria inteira</button>
+                      <button
+                        type="button"
+                        onClick={() => updateSelectionGroupField(idx, "sourceType", "products")}
+                        className={`flex-1 px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wide transition-colors ${g.sourceType === "products" ? "bg-[#0D1B3E] text-white" : "bg-white border border-slate-200 text-slate-500"}`}
+                      >Itens específicos</button>
+                    </div>
+
+                    {g.sourceType === "category" ? (
+                      <div>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Categoria de onde vêm as opções</label>
+                        <select
+                          value={g.categoryId}
+                          onChange={e => updateSelectionGroupField(idx, "categoryId", e.target.value)}
+                          className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
+                        >
+                          <option value="">Selecione...</option>
+                          {localCategories.filter(c => c.id !== prodModal.categoryId).map(c => (
+                            <option key={c.id} value={c.id}>{c.name} ({c.products?.length || 0} itens)</option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Selecione os itens que entram como opção</label>
+                        <div className="max-h-48 overflow-y-auto space-y-1 bg-white rounded-xl border border-slate-200 p-2">
+                          {localCategories.flatMap(c => c.products || []).map((p: any) => {
+                            const checked = g.productIds.includes(p.id);
+                            return (
+                              <label key={p.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => updateSelectionGroupField(idx, "productIds", checked
+                                    ? g.productIds.filter(id => id !== p.id)
+                                    : [...g.productIds, p.id])}
+                                  className="w-3.5 h-3.5 rounded accent-amber-500"
+                                />
+                                <span className="text-xs font-bold text-slate-700">{p.name}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Quantos itens o cliente escolhe neste grupo</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={g.qty}
+                        onChange={e => updateSelectionGroupField(idx, "qty", e.target.value.replace(/\D/g, ""))}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
+                      />
                     </div>
                   </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Quantos itens o cliente escolhe</label>
-                    <input
-                      type="number"
-                      min={1}
-                      value={prodForm.selectionGroupQty}
-                      onChange={e => setProdForm(f => ({ ...f, selectionGroupQty: e.target.value.replace(/\D/g, "") }))}
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Rótulo (opcional)</label>
-                    <input
-                      type="text"
-                      placeholder="Ex: Escolha os sabores"
-                      value={prodForm.selectionGroupLabel}
-                      onChange={e => setProdForm(f => ({ ...f, selectionGroupLabel: e.target.value }))}
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
-                    />
-                  </div>
-                </div>
+                ))}
               </div>
             )}
           </div>
@@ -1443,8 +1450,8 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
           <div>
             <div className="flex items-center justify-between mb-2">
               <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">Tamanhos / Variantes</span>
-              {prodForm.selectionGroupEnabled ? (
-                <span className="text-[10px] font-bold text-slate-400">Desative "Cliente escolhe itens" para usar variações</span>
+              {prodForm.selectionGroups.length > 0 ? (
+                <span className="text-[10px] font-bold text-slate-400">Remova os grupos de seleção para usar variações</span>
               ) : (
                 <button onClick={addVariantField} className="text-xs font-black text-[#C9A227] hover:underline">+ Adicionar</button>
               )}

@@ -14,7 +14,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import socket from "../../lib/socket";
 import type { Tenant, Product, ProductVariant, Order } from "../../types";
-import SelectionGroupPicker, { parseSelectionGroup, getSelectionGroupOptions, formatSelectionGroupNote } from "./SelectionGroupPicker";
+import SelectionGroupPicker, { parseSelectionGroups, getSelectionGroupOptions, formatSelectionGroupsNote, selectionGroupsComplete } from "./SelectionGroupPicker";
 import { COUNTER_ORDER_TABLE_ID } from "../../types";
 
 const fmt = (n: number) =>
@@ -80,7 +80,7 @@ export default function CounterMenuView() {
   // Itens escolhidos do grupo de seleção embutido (ex: os 2 sabores de "2 espetos
   // tradicionais") — preço fixo do produto, a escolha aqui só define quais sabores
   // aparecem na observação do pedido, nunca soma valor.
-  const [selectedGroupItemIds, setSelectedGroupItemIds] = useState<string[]>([]);
+  const [selectedGroupItemIds, setSelectedGroupItemIds] = useState<string[][]>([]);
   const [showGroupPicker, setShowGroupPicker] = useState(false);
   const [isOrdering, setIsOrdering] = useState(false);
   // Comer no local ou levar pra viagem — perguntado antes de enviar o pedido do balcão.
@@ -165,8 +165,8 @@ export default function CounterMenuView() {
   // Produto tem grupo de seleção embutido (ex: "2 espetos tradicionais") e ainda não
   // foi escolhido — abre o picker passo a passo automaticamente ao abrir o produto.
   useEffect(() => {
-    const sg = parseSelectionGroup(selectedProduct);
-    if (sg && selectedGroupItemIds.length !== sg.qty) {
+    const groups = parseSelectionGroups(selectedProduct);
+    if (groups.length > 0 && !selectionGroupsComplete(groups, selectedGroupItemIds)) {
       setShowGroupPicker(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1233,16 +1233,27 @@ export default function CounterMenuView() {
                         })()}
 
                         {(() => {
-                          const sg = parseSelectionGroup(selectedProduct);
-                          if (!sg) return null;
-                          const options = getSelectionGroupOptions(tenant, sg);
-                          if (options.length === 0) return null;
-                          const isComplete = selectedGroupItemIds.length === sg.qty;
+                          const groups = parseSelectionGroups(selectedProduct);
+                          if (groups.length === 0) return null;
+                          const optionsByGroup = groups.map(g => getSelectionGroupOptions(tenant, g));
+                          if (optionsByGroup.every(o => o.length === 0)) return null;
+                          const isComplete = selectionGroupsComplete(groups, selectedGroupItemIds);
+                          const doneCount = groups.reduce((acc, g, i) => acc + (selectedGroupItemIds[i]?.length ?? 0), 0);
+                          const totalCount = groups.reduce((acc, g) => acc + g.qty, 0);
+                          const summary = groups
+                            .map((g, i) => (selectedGroupItemIds[i] || [])
+                              .map(id => optionsByGroup[i].find(p => p.id === id)?.name)
+                              .filter(Boolean)
+                              .join(' + '))
+                            .filter(Boolean)
+                            .join(' · ');
                           return (
                             <div className="space-y-2">
                               <div className="flex items-center justify-between">
-                                <h4 className="text-sm font-bold text-zinc-900 lg:text-amber-500 lg:uppercase lg:tracking-[0.2em]">{sg.label || `Escolha ${sg.qty} ${sg.qty > 1 ? "itens" : "item"}`}</h4>
-                                <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${isComplete ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-500 lg:bg-white/10 lg:text-white/60'}`}>{selectedGroupItemIds.length}/{sg.qty}</span>
+                                <h4 className="text-sm font-bold text-zinc-900 lg:text-amber-500 lg:uppercase lg:tracking-[0.2em]">
+                                  {groups.length > 1 ? "Personalize seu pedido" : (groups[0].label || `Escolha ${groups[0].qty} ${groups[0].qty > 1 ? "itens" : "item"}`)}
+                                </h4>
+                                <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${isComplete ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-500 lg:bg-white/10 lg:text-white/60'}`}>{doneCount}/{totalCount}</span>
                               </div>
                               <button
                                 type="button"
@@ -1254,9 +1265,7 @@ export default function CounterMenuView() {
                                 }`}
                               >
                                 <span className="text-sm font-bold text-zinc-900 lg:text-white truncate">
-                                  {isComplete
-                                    ? selectedGroupItemIds.map(id => options.find(p => p.id === id)?.name).filter(Boolean).join(' + ')
-                                    : 'Toque para escolher'}
+                                  {isComplete ? summary : 'Toque para escolher'}
                                 </span>
                                 <ChevronRight className="w-4 h-4 text-zinc-400 shrink-0" />
                               </button>
@@ -1300,8 +1309,10 @@ export default function CounterMenuView() {
                     {/* Bottom Action Bar */}
                     <div className="sticky bottom-0 p-4 bg-white border-t border-zinc-100 lg:p-12 lg:bg-zinc-900/50 lg:border-none">
                       {(() => {
-                        const sg = parseSelectionGroup(selectedProduct);
-                        const selectionIncomplete = !!sg && selectedGroupItemIds.length !== sg.qty;
+                        const groups = parseSelectionGroups(selectedProduct);
+                        const selectionIncomplete = groups.length > 0 && !selectionGroupsComplete(groups, selectedGroupItemIds);
+                        const doneCount = groups.reduce((acc, g, i) => acc + (selectedGroupItemIds[i]?.length ?? 0), 0);
+                        const totalCount = groups.reduce((acc, g) => acc + g.qty, 0);
                         return (
                           <>
                             {selectionIncomplete && (
@@ -1309,7 +1320,7 @@ export default function CounterMenuView() {
                                 onClick={() => setShowGroupPicker(true)}
                                 className="w-full text-center text-xs font-bold text-red-500 mb-2 underline"
                               >
-                                Escolha {sg!.qty} {sg!.qty > 1 ? "itens" : "item"} para continuar ({selectedGroupItemIds.length}/{sg!.qty})
+                                Escolha {totalCount} {totalCount > 1 ? "itens" : "item"} para continuar ({doneCount}/{totalCount})
                               </button>
                             )}
                             <button
@@ -1319,8 +1330,8 @@ export default function CounterMenuView() {
                                   ? selectedExtras.map(e => e.price > 0 ? `${e.label} (+${fmt(e.price)})` : e.label).join(', ')
                                   : '';
                                 const extrasPrice = selectedExtras.reduce((s, e) => s + e.price, 0);
-                                const groupOptions = sg ? getSelectionGroupOptions(tenant, sg) : [];
-                                const groupLabel = sg ? formatSelectionGroupNote(sg, selectedGroupItemIds, groupOptions) : '';
+                                const optionsByGroup = groups.map(g => getSelectionGroupOptions(tenant, g));
+                                const groupLabel = groups.length > 0 ? formatSelectionGroupsNote(groups, selectedGroupItemIds, optionsByGroup) : '';
                                 const fullNotes = [groupLabel, extrasLabel, notes].filter(Boolean).join(' | ');
                                 const basePrice = selectedVariant ? selectedVariant.price : selectedProduct.price;
                                 const displayName = selectedVariant ? `${selectedProduct.name} — ${selectedVariant.name}` : selectedProduct.name;
@@ -1355,16 +1366,17 @@ export default function CounterMenuView() {
                 </motion.div>
               )}
             </AnimatePresence>
-            {/* Grupo de seleção embutido — fluxo passo a passo (ex: "2 espetos") */}
+            {/* Grupos de seleção embutidos — fluxo passo a passo (ex: marmita com Guarnição/Arroz/Feijão) */}
             {showGroupPicker && selectedProduct && (() => {
-              const sg = parseSelectionGroup(selectedProduct);
-              if (!sg) return null;
-              const options = getSelectionGroupOptions(tenant, sg);
+              const groups = parseSelectionGroups(selectedProduct);
+              if (groups.length === 0) return null;
+              const optionsByGroup = groups.map(g => getSelectionGroupOptions(tenant, g));
               return (
                 <SelectionGroupPicker
-                  group={sg}
-                  options={options}
-                  onConfirm={(ids) => { setSelectedGroupItemIds(ids); setShowGroupPicker(false); }}
+                  groups={groups}
+                  optionsByGroup={optionsByGroup}
+                  initialSelections={selectedGroupItemIds.length ? selectedGroupItemIds : undefined}
+                  onConfirm={(idsByGroup) => { setSelectedGroupItemIds(idsByGroup); setShowGroupPicker(false); }}
                   onCancel={() => {
                     setShowGroupPicker(false);
                     if (selectedGroupItemIds.length === 0) setSelectedProduct(null);

@@ -13,19 +13,21 @@ export interface ProductSelectionGroup {
   label?: string;
 }
 
-// Lê o grupo de seleção embutido no produto (ex: "2 espetos tradicionais" — escolhe 2
-// sabores de uma categoria já cadastrada). Compartilhado por todas as telas de cliente
-// (balcão, mesa, PDV, delivery) para não duplicar o parse/validação em cada uma.
-export function parseSelectionGroup(product: Product | null | undefined): ProductSelectionGroup | null {
-  if (!product) return null;
+// Lê os grupos de seleção embutidos no produto — ex: numa marmita, "Guarnição" (escolha
+// 1), "Arroz" (escolha 1), "Feijão" (escolha 1), cada um sua própria categoria/opções.
+// Aceita tanto o formato antigo (um único objeto — produtos cadastrados antes de suportar
+// múltiplos grupos) quanto o novo (array), sem precisar migrar dados existentes.
+// Compartilhado por todas as telas de cliente (balcão, mesa, PDV, delivery).
+export function parseSelectionGroups(product: Product | null | undefined): ProductSelectionGroup[] {
+  if (!product) return [];
   const raw = (product as any).selectionGroup;
-  if (!raw) return null;
+  if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed.qty !== "number" || parsed.qty < 1) return null;
-    return parsed;
+    const list = Array.isArray(parsed) ? parsed : [parsed];
+    return list.filter((g) => g && typeof g.qty === "number" && g.qty >= 1);
   } catch {
-    return null;
+    return [];
   }
 }
 
@@ -44,41 +46,70 @@ export function formatSelectionGroupNote(group: ProductSelectionGroup, selectedI
   return `${group.label || "Escolha"}: ${names.join(" + ")}`;
 }
 
+// Junta as notas de todos os grupos num único texto pra guardar no item do pedido —
+// ex: "Guarnição: Batata frita | Arroz: Arroz branco | Feijão: Feijão carioca".
+export function formatSelectionGroupsNote(groups: ProductSelectionGroup[], selectedIdsByGroup: string[][], optionsByGroup: Product[][]): string {
+  return groups
+    .map((g, i) => formatSelectionGroupNote(g, selectedIdsByGroup[i] || [], optionsByGroup[i] || []))
+    .filter(Boolean)
+    .join(" | ");
+}
+
+export function selectionGroupsComplete(groups: ProductSelectionGroup[], selectedIdsByGroup: string[][]): boolean {
+  return groups.every((g, i) => (selectedIdsByGroup[i]?.length ?? 0) === g.qty);
+}
+
 interface SelectionGroupPickerProps {
-  group: ProductSelectionGroup;
-  options: Product[];
-  onConfirm: (selectedIds: string[]) => void;
+  groups: ProductSelectionGroup[];
+  optionsByGroup: Product[][];
+  initialSelections?: string[][];
+  onConfirm: (selectedIdsByGroup: string[][]) => void;
   onCancel: () => void;
 }
 
-// Fluxo passo a passo para o grupo de seleção embutido no produto (ex: "2 espetos
-// tradicionais" — escolhe 2 sabores da categoria "Espetos"). Cada unidade é escolhida
-// em sua própria etapa (avança sozinho ao tocar), igual ao fluxo de combos, e termina
-// numa tela de resumo pra revisar/trocar antes de confirmar. Preço nunca muda aqui —
-// quem chama decide o preço (sempre o fixo do produto pai).
-export default function SelectionGroupPicker({ group, options, onConfirm, onCancel }: SelectionGroupPickerProps) {
+// Fluxo passo a passo pelos grupos de seleção embutidos no produto — ex: numa marmita,
+// primeiro escolhe a Guarnição, depois o Arroz, depois o Feijão; dentro de cada grupo,
+// cada unidade é escolhida em sua própria etapa (avança sozinho ao tocar), igual ao fluxo
+// de combos, terminando numa tela de resumo com TODOS os grupos pra revisar/trocar antes
+// de confirmar. Preço nunca muda aqui — quem chama decide o preço (sempre o fixo do produto pai).
+export default function SelectionGroupPicker({ groups, optionsByGroup, initialSelections, onConfirm, onCancel }: SelectionGroupPickerProps) {
+  const [groupIdx, setGroupIdx] = useState(0);
   const [unitIdx, setUnitIdx] = useState(0);
-  const [selections, setSelections] = useState<(string | null)[]>(() => Array.from({ length: group.qty }, () => null));
+  const [selections, setSelections] = useState<string[][]>(
+    () => initialSelections ?? groups.map((g) => Array.from({ length: g.qty }, () => null as unknown as string))
+  );
   const [showSummary, setShowSummary] = useState(false);
 
+  const group = groups[groupIdx];
+  const options = optionsByGroup[groupIdx] || [];
+
   const pick = (productId: string) => {
-    const next = [...selections];
-    next[unitIdx] = productId;
+    const next = selections.map((arr) => [...arr]);
+    next[groupIdx][unitIdx] = productId;
     setSelections(next);
     setTimeout(() => {
-      if (unitIdx < group.qty - 1) setUnitIdx((i) => i + 1);
-      else setShowSummary(true);
+      if (unitIdx < group.qty - 1) {
+        setUnitIdx((i) => i + 1);
+      } else if (groupIdx < groups.length - 1) {
+        setGroupIdx((i) => i + 1);
+        setUnitIdx(0);
+      } else {
+        setShowSummary(true);
+      }
     }, 220);
   };
 
   const goBack = () => {
     if (showSummary) { setShowSummary(false); return; }
     if (unitIdx > 0) { setUnitIdx((i) => i - 1); return; }
+    if (groupIdx > 0) { setGroupIdx((i) => i - 1); setUnitIdx(groups[groupIdx - 1].qty - 1); return; }
     onCancel();
   };
 
-  const allDone = selections.every((s) => s !== null);
-  const progress = showSummary ? 1 : (unitIdx + (selections[unitIdx] ? 1 : 0)) / group.qty;
+  const allDone = selections.every((arr) => arr.every((s) => s != null));
+  const totalUnits = groups.reduce((acc, g) => acc + g.qty, 0);
+  const doneUnits = groups.reduce((acc, g, gi) => acc + (gi < groupIdx ? g.qty : gi === groupIdx ? unitIdx + (selections[gi][unitIdx] ? 1 : 0) : 0), 0);
+  const progress = showSummary ? 1 : totalUnits > 0 ? doneUnits / totalUnits : 0;
 
   return (
     <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center">
@@ -102,10 +133,10 @@ export default function SelectionGroupPicker({ group, options, onConfirm, onCanc
             </motion.button>
             <div className="flex-1 min-w-0">
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 mb-0.5">
-                {showSummary ? "Confirme sua escolha" : `${group.label || "Escolha os itens"} · ${unitIdx + 1}/${group.qty}`}
+                {showSummary ? "Confirme sua escolha" : `${group.label || "Escolha os itens"}${group.qty > 1 ? ` · ${unitIdx + 1}/${group.qty}` : ""}`}
               </p>
               <h2 className="text-[15px] font-black text-slate-900 leading-tight truncate">
-                {showSummary ? (group.label || "Escolha os itens") : `${unitIdx + 1}ª unidade`}
+                {showSummary ? "Resumo das escolhas" : group.qty > 1 ? `${unitIdx + 1}ª unidade` : (group.label || "Escolha os itens")}
               </h2>
             </div>
             <motion.button whileTap={{ scale: 0.88 }} onClick={onCancel} className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
@@ -126,7 +157,7 @@ export default function SelectionGroupPicker({ group, options, onConfirm, onCanc
           <AnimatePresence mode="wait">
             {!showSummary ? (
               <motion.div
-                key={`unit-${unitIdx}`}
+                key={`unit-${groupIdx}-${unitIdx}`}
                 initial={{ opacity: 0, x: 24 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -24 }}
@@ -134,7 +165,7 @@ export default function SelectionGroupPicker({ group, options, onConfirm, onCanc
                 className="px-4 py-3 grid grid-cols-1 gap-2"
               >
                 {options.map((product) => {
-                  const selected = selections[unitIdx] === product.id;
+                  const selected = selections[groupIdx][unitIdx] === product.id;
                   return (
                     <motion.button
                       key={product.id}
@@ -170,27 +201,31 @@ export default function SelectionGroupPicker({ group, options, onConfirm, onCanc
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -24 }}
                 transition={{ duration: 0.2 }}
-                className="px-5 py-4 space-y-2"
+                className="px-5 py-4 space-y-4"
               >
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Suas escolhas</p>
-                {selections.map((id, idx) => {
-                  const product = options.find((p) => p.id === id);
-                  return (
-                    <div key={idx} className="bg-slate-50 rounded-2xl p-3.5 border border-slate-100 flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-2 h-2 rounded-full shrink-0" style={{ background: BRAND }} />
-                        <p className="text-sm font-bold text-slate-800 truncate">{product?.name || "—"}</p>
-                      </div>
-                      <motion.button
-                        whileTap={{ scale: 0.9 }}
-                        onClick={() => { setShowSummary(false); setUnitIdx(idx); }}
-                        className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg bg-white border border-slate-200 text-slate-500 hover:text-slate-800 transition-colors shrink-0"
-                      >
-                        Trocar
-                      </motion.button>
-                    </div>
-                  );
-                })}
+                {groups.map((g, gi) => (
+                  <div key={gi} className="space-y-2">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{g.label || `Grupo ${gi + 1}`}</p>
+                    {selections[gi].map((id, ui) => {
+                      const product = (optionsByGroup[gi] || []).find((p) => p.id === id);
+                      return (
+                        <div key={ui} className="bg-slate-50 rounded-2xl p-3.5 border border-slate-100 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-2 h-2 rounded-full shrink-0" style={{ background: BRAND }} />
+                            <p className="text-sm font-bold text-slate-800 truncate">{product?.name || "—"}</p>
+                          </div>
+                          <motion.button
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() => { setShowSummary(false); setGroupIdx(gi); setUnitIdx(ui); }}
+                            className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg bg-white border border-slate-200 text-slate-500 hover:text-slate-800 transition-colors shrink-0"
+                          >
+                            Trocar
+                          </motion.button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
               </motion.div>
             )}
           </AnimatePresence>
@@ -201,7 +236,7 @@ export default function SelectionGroupPicker({ group, options, onConfirm, onCanc
             <motion.button
               whileTap={{ scale: 0.97 }}
               disabled={!allDone}
-              onClick={() => onConfirm(selections.filter((s): s is string => s !== null))}
+              onClick={() => onConfirm(selections)}
               className="w-full flex items-center justify-center gap-3 px-5 py-4 rounded-2xl text-[14px] font-black text-white shadow-2xl disabled:opacity-40"
               style={{ background: `linear-gradient(135deg, ${BRAND} 0%, #a37d1a 100%)` }}
             >
