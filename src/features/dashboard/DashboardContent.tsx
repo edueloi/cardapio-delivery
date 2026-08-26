@@ -18,6 +18,7 @@ import {
   BundlesPanel,
   CashFlowPanel,
   CustomerCRMPanel,
+  DeliveryDriversPanel,
   DisplayPanelSettingsPanel,
   DownloadsPanel,
   EntradasSaidasPanel,
@@ -191,6 +192,10 @@ export default function DashboardContent({
           </div>
           <MenuManagement tenant={tenant} refresh={refreshTenant} membership={membership} />
         </div>
+      )}
+
+      {activeTab === "drivers" && (
+        <DeliveryDriversPanel slug={slug} tenant={tenant} />
       )}
 
       {activeTab === "finance" && (

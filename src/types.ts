@@ -636,6 +636,19 @@ export interface Order {
   serviceFeeAmount?: number | null;
   serviceFeePercent?: number | null;
   billed?: boolean; // true quando já existe lançamento de caixa (CashMovement) pra este pedido
+  // Entregador (só Delivery)
+  driverId?: string | null;
+  driverName?: string | null;
+}
+
+export interface DeliveryDriver {
+  id: string;
+  name: string;
+  phone?: string | null;
+  vehicle?: string | null;
+  plate?: string | null;
+  active: boolean;
+  createdAt: string;
 }
 
 export interface OrderItem {

@@ -25,4 +25,5 @@ export { default as WaiterPanel } from "./garcom";
 export { KitchenKDSPanel } from "./cozinha";
 export { default as IfoodPanel } from "./ifood";
 export { default as ManualPanel } from "./manual";
+export { DeliveryDriversPanel } from "./entregadores";
 

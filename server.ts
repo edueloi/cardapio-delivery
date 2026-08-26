@@ -9794,6 +9794,166 @@ app.delete(
   }
 );
 
+// ─── Entregadores (motoboys) ──────────────────────────────────────────────────
+
+app.get("/api/tenants/:slug/delivery-drivers", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "drivers");
+  if (!tenant) return;
+  try {
+    const drivers = await (prisma as any).deliveryDriver.findMany({
+      where: { tenantId: tenant.id },
+      orderBy: [{ active: "desc" }, { name: "asc" }],
+    });
+    res.json(drivers);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+app.post("/api/tenants/:slug/delivery-drivers", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "drivers");
+  if (!tenant) return;
+  try {
+    const { name, phone, vehicle, plate, active } = req.body;
+    if (!name?.trim())
+      return res.status(400).json({ error: "Nome é obrigatório." });
+    const driver = await (prisma as any).deliveryDriver.create({
+      data: {
+        tenantId: tenant.id,
+        name: name.trim(),
+        phone: phone || null,
+        vehicle: vehicle || null,
+        plate: plate || null,
+        active: active !== undefined ? Boolean(active) : true,
+      },
+    });
+    res.json(driver);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+app.put("/api/tenants/:slug/delivery-drivers/:id", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "drivers");
+  if (!tenant) return;
+  try {
+    const existing = await (prisma as any).deliveryDriver.findFirst({
+      where: { id: req.params.id, tenantId: tenant.id },
+    });
+    if (!existing)
+      return res.status(404).json({ error: "Entregador não encontrado." });
+    const { name, phone, vehicle, plate, active } = req.body;
+    const driver = await (prisma as any).deliveryDriver.update({
+      where: { id: req.params.id },
+      data: {
+        ...(name !== undefined && { name: String(name).trim() }),
+        ...(phone !== undefined && { phone: phone || null }),
+        ...(vehicle !== undefined && { vehicle: vehicle || null }),
+        ...(plate !== undefined && { plate: plate || null }),
+        ...(active !== undefined && { active: Boolean(active) }),
+      },
+    });
+    res.json(driver);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+app.delete("/api/tenants/:slug/delivery-drivers/:id", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "drivers");
+  if (!tenant) return;
+  try {
+    const existing = await (prisma as any).deliveryDriver.findFirst({
+      where: { id: req.params.id, tenantId: tenant.id },
+    });
+    if (!existing)
+      return res.status(404).json({ error: "Entregador não encontrado." });
+    // Não apaga o histórico: pedidos antigos já têm driverName snapshotado, então só
+    // desvincula o FK (SetNull) e remove o cadastro.
+    await (prisma as any).deliveryDriver.delete({ where: { id: req.params.id } });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+// Relatório de entregas por entregador num período — quantidade e valor total das
+// entregas concluídas (Delivery, status DELIVERED) atribuídas a cada um.
+app.get("/api/tenants/:slug/delivery-drivers/report", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "drivers");
+  if (!tenant) return;
+  try {
+    const { from, to } = req.query as { from?: string; to?: string };
+    const dateFrom = from ? new Date(from + "T00:00:00") : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const dateTo = to ? new Date(to + "T23:59:59") : new Date();
+
+    const [drivers, orders] = await Promise.all([
+      (prisma as any).deliveryDriver.findMany({ where: { tenantId: tenant.id } }),
+      prisma.order.findMany({
+        where: {
+          tenantId: tenant.id,
+          orderType: "DELIVERY",
+          status: "DELIVERED",
+          driverId: { not: null },
+          createdAt: { gte: dateFrom, lte: dateTo },
+        },
+        select: { driverId: true, driverName: true, total: true },
+      }),
+    ]);
+
+    const byDriver: Record<string, { driverId: string; name: string; active: boolean; deliveries: number; total: number }> = {};
+    for (const d of drivers) {
+      byDriver[d.id] = { driverId: d.id, name: d.name, active: d.active, deliveries: 0, total: 0 };
+    }
+    for (const o of orders as any[]) {
+      const key = o.driverId as string;
+      if (!byDriver[key]) {
+        // Entregador removido do cadastro depois — mantém no relatório com o nome salvo no pedido.
+        byDriver[key] = { driverId: key, name: o.driverName || "Entregador removido", active: false, deliveries: 0, total: 0 };
+      }
+      byDriver[key].deliveries += 1;
+      byDriver[key].total += o.total;
+    }
+
+    res.json(Object.values(byDriver).sort((a, b) => b.deliveries - a.deliveries));
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+// Atribui (ou remove, driverId=null) o entregador responsável por um pedido de Delivery.
+app.patch("/api/tenants/:slug/orders/:orderId/driver", requireAuth, async (req, res) => {
+  const tenant = await requireTenantBySlug(req, res, req.params.slug, "drivers");
+  if (!tenant) return;
+  try {
+    const order = await prisma.order.findFirst({
+      where: { id: req.params.orderId, tenantId: tenant.id },
+    });
+    if (!order) return res.status(404).json({ error: "Pedido não encontrado." });
+    if (order.orderType !== "DELIVERY")
+      return res.status(400).json({ error: "Só pedidos de Delivery podem ter entregador." });
+
+    const { driverId } = req.body;
+    let driverName: string | null = null;
+    if (driverId) {
+      const driver = await (prisma as any).deliveryDriver.findFirst({
+        where: { id: driverId, tenantId: tenant.id },
+      });
+      if (!driver) return res.status(404).json({ error: "Entregador não encontrado." });
+      driverName = driver.name;
+    }
+
+    const updated = await prisma.order.update({
+      where: { id: order.id },
+      data: { driverId: driverId || null, driverName },
+    });
+    io.to(`tenant-${tenant.id}`).emit("order-status-updated", updated);
+    res.json(updated);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
 // ─── Supplier Catalog Items ───────────────────────────────────────────────────
 
 app.get(

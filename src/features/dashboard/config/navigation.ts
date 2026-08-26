@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  Bike,
   CalendarDays,
   CircleDollarSign,
   ClipboardList,
@@ -36,6 +37,7 @@ export const DASHBOARD_NAVIGATION: DashboardNavigationGroup[] = [
       { id: "pos",       label: "PDV — Caixa",        tab: "pos",          icon: Receipt },
       { id: "waiter",    label: "Garçom",             tab: "waiter",       icon: UserCog },
       { id: "orders",    label: "Painel de Pedidos",  tab: "live-orders",  icon: Clock },
+      { id: "drivers",   label: "Entregadores",       tab: "drivers",      icon: Bike },
       { id: "display-panel", label: "Config. Painel TV", tab: "display-panel", icon: Monitor },
       { id: "scheduled", label: "Agendamentos",       tab: "scheduled",    icon: CalendarDays },
 

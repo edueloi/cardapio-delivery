@@ -55,6 +55,7 @@ model Tenant {
   customers   Customer[]
   promotions  Promotion[]
   suppliers   Supplier[]
+  deliveryDrivers DeliveryDriver[]
   condominiums CondominiumTenant[]
   financialEntries FinancialEntry[]
   recurringEntries RecurringEntry[]
@@ -339,6 +340,22 @@ model InventoryItem {
   supplierItems SupplierInventoryItem[]
 
   @@map("inventory_items")
+}
+
+model DeliveryDriver {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  name      String
+  phone     String?
+  vehicle   String?  // ex: "Moto Honda CG 160"
+  plate     String?  // placa do veículo
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orders Order[]
+
+  @@map("delivery_drivers")
 }
 
 model Supplier {
@@ -758,6 +775,10 @@ model Order {
   // Taxa de serviço (ex: 10% da mesa) — opcional, o cliente pode recusar no pagamento
   serviceFeeAmount  Float?  @map("service_fee_amount")  // valor da taxa de serviço aplicada neste pedido
   serviceFeePercent Float?  @map("service_fee_percent") // percentual aplicado (snapshot da config no momento do pedido)
+  // Entregador (só Delivery) — driverName é um snapshot do nome no momento da atribuição,
+  // pra sobreviver caso o entregador seja removido do cadastro depois.
+  driverId       String?  @map("driver_id")
+  driverName     String?  @map("driver_name")
   total          Float
   tenantId      String   @map("tenant_id")
   // Métricas de tempo — só preenchidos a partir da mudança que introduziu esses campos;
@@ -770,6 +791,7 @@ model Order {
 
   tenant Tenant      @relation(fields: [tenantId], references: [id])
   items  OrderItem[]
+  driver DeliveryDriver? @relation(fields: [driverId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, source, externalOrderId])
   @@map("orders")

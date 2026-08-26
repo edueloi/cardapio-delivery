@@ -14,6 +14,7 @@ import { AnimatePresence, motion } from "motion/react";
 import {
   AlertTriangle,
   Bell,
+  Bike,
   CheckCircle2,
   ChefHat,
   Eye,
@@ -245,7 +246,7 @@ function DelayedOrdersAlert({ orders }: { orders: Order[] }) {
   );
 }
 
-function KanbanCard({ order, categoryMap, updateStatus, isExpanded, toggleOrder, isOverlay, onBillDelivery, tenant }: { order: Order, categoryMap: any, updateStatus: any, isExpanded: boolean, toggleOrder: () => void, isOverlay?: boolean, onBillDelivery?: (order: Order) => void, tenant?: import("../../../../types").Tenant | null }) {
+function KanbanCard({ order, categoryMap, updateStatus, isExpanded, toggleOrder, isOverlay, onBillDelivery, tenant, drivers, onAssignDriver }: { order: Order, categoryMap: any, updateStatus: any, isExpanded: boolean, toggleOrder: () => void, isOverlay?: boolean, onBillDelivery?: (order: Order) => void, tenant?: import("../../../../types").Tenant | null, drivers?: import("../../../../types").DeliveryDriver[], onAssignDriver?: (orderId: string, driverId: string | null) => void }) {
   const isDelayed = Date.now() - new Date(order.createdAt).getTime() > 30 * 60000 && order.status !== 'DELIVERED' && order.status !== 'CANCELLED';
   const isPaid = order.billed === true;
   const needsBilling = order.orderType === 'DELIVERY' && order.status === 'DELIVERED' && !isPaid;
@@ -515,6 +516,27 @@ function KanbanCard({ order, categoryMap, updateStatus, isExpanded, toggleOrder,
                     {order.address}
                   </p>
                 )}
+                {order.orderType === 'DELIVERY' && onAssignDriver && (
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-200" onClick={(e) => e.stopPropagation()}>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1">
+                      <Bike className="w-3 h-3 text-slate-400" />
+                      Entregador
+                    </span>
+                    <select
+                      value={order.driverId || ""}
+                      onChange={(e) => onAssignDriver(order.id, e.target.value || null)}
+                      className="text-[10px] font-bold text-slate-600 bg-white border border-slate-200 rounded-lg px-2 py-1 outline-none focus:border-[#C9A227] max-w-[140px]"
+                    >
+                      <option value="">Sem entregador</option>
+                      {order.driverId && !(drivers || []).some((d) => d.id === order.driverId) && (
+                        <option value={order.driverId}>{order.driverName || "Entregador"}</option>
+                      )}
+                      {(drivers || []).filter((d) => d.active || d.id === order.driverId).map((d) => (
+                        <option key={d.id} value={d.id}>{d.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div className="flex items-center justify-between pt-2 border-t border-slate-200">
                   <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Método de Pgto</span>
                   {order.orderType === "DINE_IN" && !order.billed ? (
@@ -569,6 +591,29 @@ export function OrdersList({
     socket.on("order-created", handler);
     return () => { socket.off("order-created", handler); };
   }, [tenant]);
+
+  // Entregadores ativos, pra poder atribuir quem vai entregar cada pedido de Delivery
+  // direto no card, sem precisar ir na tela de Entregadores.
+  const [drivers, setDrivers] = useState<import("../../../../types").DeliveryDriver[]>([]);
+  useEffect(() => {
+    if (!slug) return;
+    apiFetch(`/api/tenants/${slug}/delivery-drivers`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((list) => setDrivers(Array.isArray(list) ? list : []))
+      .catch(() => setDrivers([]));
+  }, [slug]);
+
+  const handleAssignDriver = async (orderId: string, driverId: string | null) => {
+    if (!slug) return;
+    try {
+      await apiJson(`/api/tenants/${slug}/orders/${orderId}/driver`, {
+        method: "PATCH",
+        body: JSON.stringify({ driverId }),
+      });
+    } catch {
+      // erro de rede pontual — o card volta ao estado anterior no próximo evento de socket
+    }
+  };
 
   const navigate = useNavigate();
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(() => new Set());
@@ -658,6 +703,8 @@ export function OrdersList({
                   toggleOrder={() => toggleOrder(order.id, order.status === "DELIVERED" || order.status === "CANCELLED")}
                   onBillDelivery={onBillDelivery}
                   tenant={tenant}
+                  drivers={drivers}
+                  onAssignDriver={handleAssignDriver}
                 />
               ))}
             </AnimatePresence>
