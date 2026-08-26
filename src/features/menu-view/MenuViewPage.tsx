@@ -348,6 +348,10 @@ export default function MenuViewPage() {
       .then((data) => {
         if (data.error) { setTenant(null); setLoading(false); setSplashDone(true); return; }
         setTenant(data);
+        // Sem entrar na sala do tenant, o socket fica "surdo" — o listener de
+        // order-status-updated abaixo nunca recebe nada, e o acompanhamento do pedido
+        // (tela "Meu Pedido") só atualizava dando F5 manual.
+        if (data.id) socket.emit("join-tenant", data.id);
         if (data.categories?.length > 0) setActiveCategory(data.categories[0]?.id ?? "");
         setLoading(false);
       })
