@@ -1038,6 +1038,31 @@ app.delete(
   }
 );
 
+// Troca a senha de uma conta (dono de loja) sem precisar da senha atual — usado quando o
+// usuário perdeu acesso ao e-mail de recuperação e chama o suporte.
+app.post(
+  "/api/superadmin/accounts/:id/reset-password",
+  requireAuth,
+  requireSuperAdmin,
+  async (req, res) => {
+    const { password } = req.body;
+    if (!password || String(password).length < 6) {
+      return res
+        .status(400)
+        .json({ error: "A senha precisa ter pelo menos 6 caracteres." });
+    }
+    try {
+      await prisma.account.update({
+        where: { id: req.params.id },
+        data: { passwordHash: hashPassword(String(password)) },
+      });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Falha ao trocar a senha." });
+    }
+  }
+);
+
 // Lista os convites gerados
 app.get(
   "/api/superadmin/invites",

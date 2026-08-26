@@ -5,6 +5,7 @@ import {
   Clock, CheckCircle2, XCircle, RefreshCw, LogOut, ChevronDown, ChevronUp,
   Wallet, TrendingUp, Star, CalendarDays, Package, BarChart3,
   ArrowUpRight, Crown, Zap, Building2, Mail, Edit3, X, Store, MapPin, Search, Loader2,
+  KeyRound,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "../../lib/auth";
@@ -560,6 +561,12 @@ export default function SuperAdminPage() {
   const [deleteSubId, setDeleteSubId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // Trocar senha de uma conta
+  const [resetPasswordAccount, setResetPasswordAccount] = useState<Account | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [resettingPassword, setResettingPassword] = useState(false);
+  const [resetPasswordError, setResetPasswordError] = useState("");
+
   // Expandir
   const [expandedAccount, setExpandedAccount] = useState<string | null>(null);
 
@@ -623,6 +630,28 @@ export default function SuperAdminPage() {
       setAccounts(prev => prev.filter(a => a.id !== deleteAccountId));
     } catch {}
     setDeleting(false); setDeleteAccountId(null);
+  }
+
+  async function handleResetPassword() {
+    if (!resetPasswordAccount) return;
+    if (newPassword.length < 6) {
+      setResetPasswordError("A senha precisa ter pelo menos 6 caracteres.");
+      return;
+    }
+    setResettingPassword(true);
+    setResetPasswordError("");
+    try {
+      await apiJson(`/api/superadmin/accounts/${resetPasswordAccount.id}/reset-password`, {
+        method: "POST",
+        body: JSON.stringify({ password: newPassword }),
+      });
+      setResetPasswordAccount(null);
+      setNewPassword("");
+    } catch (err: any) {
+      setResetPasswordError(err?.message || "Falha ao trocar a senha.");
+    } finally {
+      setResettingPassword(false);
+    }
   }
 
   async function handleRevokeInvite() {
@@ -904,6 +933,13 @@ export default function SuperAdminPage() {
                             title="Criar assinatura"
                           >
                             <Crown className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => { setResetPasswordAccount(acc); setNewPassword(""); setResetPasswordError(""); }}
+                            className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-xl transition-colors"
+                            title="Trocar senha"
+                          >
+                            <KeyRound className="w-4 h-4" />
                           </button>
                           <button onClick={() => setExpandedAccount(expanded ? null : acc.id)} className="p-2 text-slate-400 hover:text-slate-600 rounded-xl transition-colors">
                             {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -1300,6 +1336,25 @@ export default function SuperAdminPage() {
         <ModalFooter>
           <Button variant="ghost" onClick={() => setShowSubModal(false)}>Cancelar</Button>
           <Button variant="primary" loading={savingSub} onClick={handleCreateSub} disabled={!subForm.accountId || !subForm.planId}>Criar assinatura</Button>
+        </ModalFooter>
+      </Modal>
+
+      {/* Modal: Trocar senha */}
+      <Modal isOpen={!!resetPasswordAccount} onClose={() => setResetPasswordAccount(null)} title="Trocar senha" size="sm">
+        <p className="text-sm text-slate-500 -mt-2 mb-4">
+          Defina uma nova senha para <span className="font-bold text-slate-700">{resetPasswordAccount?.name}</span> ({resetPasswordAccount?.email}). A senha atual será substituída imediatamente, sem precisar confirmá-la.
+        </p>
+        <Input
+          label="Nova senha"
+          type="password"
+          value={newPassword}
+          onChange={e => { setNewPassword(e.target.value); setResetPasswordError(""); }}
+          placeholder="Mínimo 6 caracteres"
+        />
+        {resetPasswordError && <p className="text-xs text-red-500 font-bold mt-2">{resetPasswordError}</p>}
+        <ModalFooter>
+          <Button variant="ghost" onClick={() => setResetPasswordAccount(null)}>Cancelar</Button>
+          <Button variant="primary" loading={resettingPassword} onClick={handleResetPassword}>Trocar senha</Button>
         </ModalFooter>
       </Modal>
 
