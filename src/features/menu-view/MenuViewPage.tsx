@@ -677,7 +677,7 @@ export default function MenuViewPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F5F5F5]" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif" }}>
+    <div className="min-h-screen bg-[#FAF9F6]" style={{ fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
 
       {/* ── TENANT SPLASH ─────────────────────────────────────────────────────── */}
       <AnimatePresence>
@@ -875,7 +875,7 @@ export default function MenuViewPage() {
             </div>
 
             {/* Curved bottom edge */}
-            <div className="h-7 bg-[#F5F5F5] rounded-t-[28px]" />
+            <div className="h-7 bg-[#FAF9F6] rounded-t-[28px]" />
           </div>
 
           {/* ── DESKTOP SEARCH BAR ────────────────────────────────────────── */}
