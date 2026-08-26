@@ -8790,8 +8790,21 @@ app.post(
       const alreadyBilled = await prisma.cashMovement.findFirst({
         where: { tenantId: tenant.id, orderId: order.id },
       });
-      if (alreadyBilled)
-        return res.status(400).json({ error: "Este pedido já foi faturado." });
+      if (alreadyBilled) {
+        // Já existe o lançamento de caixa (dinheiro já contabilizado) — só o campo
+        // "billed" do pedido ficou desatualizado (ex: corrida entre duas requisições
+        // concorrentes). Sem isso, o pedido ficava preso pra sempre em "Ag. Faturamento":
+        // toda tentativa de faturar esbarrava aqui, sem nunca sincronizar a tela do
+        // operador, que via o mesmo erro indefinidamente. Autocorrige e trata como sucesso.
+        if (!order.billed) {
+          const fixedOrder = await prisma.order.update({
+            where: { id: order.id },
+            data: { billed: true },
+          });
+          io.to(`tenant-${tenant.id}`).emit("order-status-updated", fixedOrder);
+        }
+        return res.json({ success: true, alreadyBilled: true });
+      }
 
       const currentCash = await prisma.cashRegister.findFirst({
         where: { tenantId: tenant.id, status: "OPEN" },

@@ -655,6 +655,20 @@ export function OrdersList({
   const [isBilling, setIsBilling] = useState(false);
   const toast = useToast();
 
+  // Pré-seleciona a forma de pagamento que o cliente já escolheu ao fazer o pedido —
+  // sem isso, o modal sempre abria em "Dinheiro" por padrão, mesmo quando o cliente
+  // tinha marcado Cartão/Pix no cardápio, obrigando o operador a lembrar e trocar.
+  const mapOrderPaymentMethod = (method?: string): "CASH" | "CREDIT" | "DEBIT" | "PIX" => {
+    if (method === "CREDIT" || method === "STONE_CREDIT") return "CREDIT";
+    if (method === "DEBIT" || method === "STONE_DEBIT") return "DEBIT";
+    if (method === "PIX" || method === "STONE_PIX") return "PIX";
+    return "CASH";
+  };
+  const handleOpenBilling = (order: Order) => {
+    setBillingOrder(order);
+    setBillingPaymentMethod(mapOrderPaymentMethod(order.paymentMethod));
+  };
+
   const handleConfirmBilling = async () => {
     if (!billingOrder || !tenant?.slug) return;
     setIsBilling(true);
@@ -754,7 +768,7 @@ export function OrdersList({
               lojista desativou o Delivery em Configurações, senão fica uma coluna vazia
               sem sentido pra quem só vende Balcão/Mesa. */}
           {showBillingColumn && (
-            <KanbanColumn id="BILLING" title="Ag. Faturamento" count={billingOrders.length} orders={billingOrders} borderColor="border-purple-400" textColor="text-purple-500" droppable={false} onBillDelivery={setBillingOrder} />
+            <KanbanColumn id="BILLING" title="Ag. Faturamento" count={billingOrders.length} orders={billingOrders} borderColor="border-purple-400" textColor="text-purple-500" droppable={false} onBillDelivery={handleOpenBilling} />
           )}
         </div>
       </div>

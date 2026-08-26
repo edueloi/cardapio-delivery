@@ -2306,7 +2306,19 @@ export default function PDVPanel({
               {pendingDeliveryOrders.map((order) => (
                 <button
                   key={order.id}
-                  onClick={() => { setBillingOrder(order); setBillingPaymentMethod("CASH"); }}
+                  onClick={() => {
+                    setBillingOrder(order);
+                    // Pré-seleciona a forma de pagamento que o cliente já escolheu ao fazer
+                    // o pedido, em vez de sempre abrir em "Dinheiro" por padrão.
+                    const m = order.paymentMethod;
+                    setBillingPaymentMethod(
+                      m === "CREDIT" || m === "STONE_CREDIT" ? "CREDIT"
+                      : m === "DEBIT" || m === "STONE_DEBIT" ? "DEBIT"
+                      : m === "PIX" || m === "STONE_PIX" ? "PIX"
+                      : m === "VR" ? "VR"
+                      : "CASH"
+                    );
+                  }}
                   className="bg-white p-4 rounded-2xl border-2 border-slate-100 hover:border-[#C9A227] hover:shadow-md transition-all text-left flex items-center gap-3 group"
                 >
                   <div className="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-600 group-hover:bg-blue-500 group-hover:text-white flex items-center justify-center shrink-0 transition-colors">
