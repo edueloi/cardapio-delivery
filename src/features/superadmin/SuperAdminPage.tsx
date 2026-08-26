@@ -567,8 +567,8 @@ export default function SuperAdminPage() {
   const [resettingPassword, setResettingPassword] = useState(false);
   const [resetPasswordError, setResetPasswordError] = useState("");
 
-  // Expandir
-  const [expandedAccount, setExpandedAccount] = useState<string | null>(null);
+  // Busca (por nome/email da conta ou nome/slug da empresa)
+  const [accountSearch, setAccountSearch] = useState("");
 
   // Planos
   const [showPlanModal, setShowPlanModal] = useState(false);
@@ -888,13 +888,35 @@ export default function SuperAdminPage() {
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
             <SectionTitle title="Contas" description={`${accounts.length} conta${accounts.length !== 1 ? "s" : ""} cadastrada${accounts.length !== 1 ? "s" : ""}`} icon={Users} />
 
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={accountSearch}
+                onChange={e => setAccountSearch(e.target.value)}
+                placeholder="Buscar por nome, e-mail ou empresa..."
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-zinc-200 bg-white text-sm outline-none focus:border-[#C9A227] transition-colors"
+              />
+            </div>
+
             {accounts.length === 0 ? (
               <EmptyState title="Nenhuma conta" description="Nenhuma conta cadastrada." icon={Users} />
-            ) : (
+            ) : (() => {
+              const q = accountSearch.trim().toLowerCase();
+              const filteredAccounts = q
+                ? accounts.filter(acc =>
+                    acc.name.toLowerCase().includes(q) ||
+                    acc.email.toLowerCase().includes(q) ||
+                    acc.memberships.some(m => m.tenant.name.toLowerCase().includes(q) || m.tenant.slug.toLowerCase().includes(q))
+                  )
+                : accounts;
+              if (filteredAccounts.length === 0) {
+                return <EmptyState title="Nenhum resultado" description="Nenhuma conta ou empresa bate com essa busca." icon={Search} />;
+              }
+              return (
               <div className="space-y-2">
-                {accounts.map(acc => {
+                {filteredAccounts.map(acc => {
                   const isMe = acc.id === (account as any)?.id;
-                  const expanded = expandedAccount === acc.id;
                   const accSubs = stats?.subscriptions.filter(s => s.accountId === acc.id) ?? [];
                   const activeSub = accSubs.find(s => s.status === "ACTIVE" && new Date(s.expiresAt) > new Date());
                   return (
@@ -912,7 +934,7 @@ export default function SuperAdminPage() {
                             {isMe && <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md bg-blue-100 text-blue-700">Você</span>}
                             {activeSub && <StatusBadge status="ACTIVE" expiresAt={activeSub.expiresAt} />}
                           </div>
-                          <div className="flex items-center gap-3 mt-0.5">
+                          <div className="flex items-center gap-3 mt-0.5 flex-wrap">
                             <p className="text-xs text-slate-400 flex items-center gap-1"><Mail className="w-3 h-3" />{acc.email}</p>
                             {activeSub && (
                               <p className="text-[10px] text-slate-400 flex items-center gap-1">
@@ -924,9 +946,22 @@ export default function SuperAdminPage() {
                               </p>
                             )}
                           </div>
+                          {/* Empresa(s) + cargo sempre visíveis — antes só apareciam clicando pra
+                              expandir, o que escondia justamente a info mais útil pra achar a
+                              conta certa (a quem ela pertence e o que ela pode fazer). */}
+                          {acc.memberships.length > 0 && (
+                            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                              {acc.memberships.map(m => (
+                                <span key={m.tenant.id} className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-600 bg-zinc-100 rounded-md px-2 py-0.5">
+                                  <Building2 className="w-2.5 h-2.5 text-slate-400" />
+                                  {m.tenant.name}
+                                  <span className="text-slate-400 font-black">· {m.role}</span>
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
-                          <span className="text-[10px] text-slate-400 hidden sm:inline">{acc.memberships.length} tenant{acc.memberships.length !== 1 ? "s" : ""}</span>
                           <button
                             onClick={() => { setSubForm(f => ({ ...f, accountId: acc.id })); setTab("subscriptions"); setTimeout(() => setShowSubModal(true), 100); }}
                             className="p-2 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-xl transition-colors"
@@ -941,9 +976,6 @@ export default function SuperAdminPage() {
                           >
                             <KeyRound className="w-4 h-4" />
                           </button>
-                          <button onClick={() => setExpandedAccount(expanded ? null : acc.id)} className="p-2 text-slate-400 hover:text-slate-600 rounded-xl transition-colors">
-                            {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                          </button>
                           {!isMe && !acc.isSuperAdmin && (
                             <button onClick={() => setDeleteAccountId(acc.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors">
                               <Trash2 className="w-4 h-4" />
@@ -951,28 +983,12 @@ export default function SuperAdminPage() {
                           )}
                         </div>
                       </div>
-                      <AnimatePresence>
-                        {expanded && acc.memberships.length > 0 && (
-                          <motion.div initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }} className="overflow-hidden border-t border-zinc-100">
-                            <div className="px-4 py-3 space-y-2">
-                              {acc.memberships.map(m => (
-                                <div key={m.tenant.id} className="flex items-center justify-between text-xs">
-                                  <span className="font-bold text-slate-600">{m.tenant.name}</span>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-slate-400 font-mono">/{m.tenant.slug}</span>
-                                    <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md bg-zinc-100 text-slate-500">{m.role}</span>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
                     </ContentCard>
                   );
                 })}
               </div>
-            )}
+              );
+            })()}
           </motion.div>
         )}
 
