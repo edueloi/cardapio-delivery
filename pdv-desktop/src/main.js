@@ -175,7 +175,7 @@ function buildAppMenu() {
         { label: "Configurar Impressora...", accelerator: "F9", click: () => openPrinterConfigWindow(mainWindow) },
         { type: "separator" },
         {
-          label: "Ocultar esta barra de menu (Alt para mostrar)",
+          label: "Ocultar esta barra de menu (Alt ou F10 para mostrar)",
           type: "checkbox",
           checked: getHideMenuBar(),
           click: (menuItem) => setHideMenuBar(menuItem.checked),
@@ -210,6 +210,13 @@ function registerShortcuts(win) {
 
     if (input.key === "F11") {
       win.setFullScreen(!win.isFullScreen());
+      event.preventDefault();
+    } else if (input.key === "F10") {
+      // Alt sozinho já deveria mostrar/esconder a barra de menu (autoHideMenuBar), mas
+      // em algumas máquinas/versões do Windows isso não dispara de forma confiável —
+      // F10 é o atalho clássico de "menu" no Windows e funciona sempre, sem depender
+      // desse comportamento nativo às vezes inconsistente.
+      win.setMenuBarVisibility(!win.isMenuBarVisible());
       event.preventDefault();
     } else if (input.key === "F9") {
       openPrinterConfigWindow(win);
