@@ -7558,11 +7558,15 @@ app.get(
   "/api/tenants/:slug/production/recipes",
   requireAuth,
   async (req, res) => {
+    // "Insumos Usados" no cadastro do cardápio também busca essa lista pra popular o
+    // seletor de fichas de receita — sem aceitar "menu" aqui, quem só tem permissão de
+    // Cardápio (não Produção) via essa tela vazia/quebrada, mesmo já podendo vincular
+    // via PATCH /api/products/:id/recipe (que já aceita "menu").
     const tenant = await requireTenantBySlug(
       req,
       res,
       req.params.slug,
-      "production"
+      ["production", "menu"]
     );
     if (!tenant) return;
 

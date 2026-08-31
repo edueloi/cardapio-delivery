@@ -353,10 +353,18 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
         .then(res => res.json())
         .then(data => setInventoryCategories(Array.isArray(data) ? data : []))
         .catch(() => {});
+      // Mesmo bug do /inventory acima: sem permissão, o servidor responde 403 (não um
+      // array) — sem checar res.ok isso virava uma lista vazia em silêncio, fazendo
+      // "Insumos Usados" parecer sem nenhum insumo vinculado mesmo quando já existia um.
       apiFetch(`/api/tenants/${tenant.slug}/production/recipes`)
-        .then(res => res.json())
+        .then(res => res.ok ? res.json() : Promise.reject(res))
         .then(data => setProductionRecipes(Array.isArray(data) ? data : []))
-        .catch(() => {});
+        .catch((err) => {
+          setProductionRecipes([]);
+          if (err?.status === 403) {
+            toast.error("Sem permissão de Produção/Cardápio para ver os insumos — peça ao proprietário para liberar em Equipe > permissões.");
+          }
+        });
     }
   }, [tenant]);
 
