@@ -28,7 +28,11 @@ jobs:
           cache: npm
           cache-dependency-path: pdv-desktop/package-lock.json
 
-      - run: npm ci
+      # npm ci exige que package-lock.json bata exatamente com package.json — o lockfile
+      # deste projeto ficou desatualizado por muito tempo (o build local nunca rodou aqui
+      # pra regeneralo, por causa do bloqueio de symlink). npm install e mais tolerante e
+      # corrige isso sozinho.
+      - run: npm install
 
       - run: npm run dist
 
