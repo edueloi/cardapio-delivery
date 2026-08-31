@@ -3180,21 +3180,6 @@ app.post("/api/orders", async (req, res) => {
     // estabelecimento chama por número — alguns identificam só pelo nome do cliente).
     // Mesa e Delivery continuam recebendo o número normalmente (acompanhamento no painel).
     const usesCounterTicket = !isCounterOrder || tenant.counterTicketMode !== "NAME";
-    let counterTicketNumber: number | null = null;
-    if (usesCounterTicket) {
-      const startOfDay = new Date();
-      startOfDay.setHours(0, 0, 0, 0);
-      const lastTicket = await prisma.order.findFirst({
-        where: {
-          tenantId,
-          counterTicketNumber: { not: null },
-          createdAt: { gte: startOfDay },
-        },
-        orderBy: { counterTicketNumber: "desc" },
-        select: { counterTicketNumber: true },
-      });
-      counterTicketNumber = (lastTicket?.counterTicketNumber ?? 0) + 1;
-    }
 
     let total = 0;
     const orderItemsData: Array<{
@@ -3259,36 +3244,64 @@ app.post("/api/orders", async (req, res) => {
       customerId = customer.id;
     }
 
-    const order = await prisma.order.create({
-      data: {
-        customerName,
-        customerPhone,
-        customerId: customerId || null,
-        address,
-        orderType: orderType || "DELIVERY",
-        paymentMethod: paymentMethod || "CASH",
-        paymentDetail,
-        notes: notes || null,
-        scheduledDate: scheduledDate ? new Date(scheduledDate) : null,
-        scheduledTime: scheduledTime || null,
-        total,
-        tenantId,
-        tableId: isCounterOrder ? null : tableId || null,
-        counterTicketNumber,
-        consumptionType: isCounterOrder ? consumptionType : null,
-        items: {
-          create: orderItemsData,
-        },
-      },
-      include: {
-        items: {
-          include: {
-            product: true,
-            productVariant: true,
+    // Calcula a senha e cria o pedido na MESMA transação, com um lock na linha do tenant
+    // segurando o cálculo até o commit — sem isso, dois pedidos quase simultâneos (dois
+    // clientes pedindo ao mesmo tempo, ou um cliente e uma ação do PDV) podiam ler o mesmo
+    // "último número" antes de qualquer um confirmar, e os dois criavam pedidos com a
+    // MESMA senha — o segundo aparecia como um "pedido fantasma" junto do primeiro na
+    // tela de comandas do PDV, mesmo sendo de gente/pedidos completamente diferentes.
+    const order = await prisma.$transaction(async (tx) => {
+      let counterTicketNumber: number | null = null;
+      if (usesCounterTicket) {
+        await tx.$executeRawUnsafe(
+          "SELECT id FROM tenants WHERE id = ? FOR UPDATE",
+          tenantId
+        );
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+        const lastTicket = await tx.order.findFirst({
+          where: {
+            tenantId,
+            counterTicketNumber: { not: null },
+            createdAt: { gte: startOfDay },
+          },
+          orderBy: { counterTicketNumber: "desc" },
+          select: { counterTicketNumber: true },
+        });
+        counterTicketNumber = (lastTicket?.counterTicketNumber ?? 0) + 1;
+      }
+
+      return tx.order.create({
+        data: {
+          customerName,
+          customerPhone,
+          customerId: customerId || null,
+          address,
+          orderType: orderType || "DELIVERY",
+          paymentMethod: paymentMethod || "CASH",
+          paymentDetail,
+          notes: notes || null,
+          scheduledDate: scheduledDate ? new Date(scheduledDate) : null,
+          scheduledTime: scheduledTime || null,
+          total,
+          tenantId,
+          tableId: isCounterOrder ? null : tableId || null,
+          counterTicketNumber,
+          consumptionType: isCounterOrder ? consumptionType : null,
+          items: {
+            create: orderItemsData,
           },
         },
-        tenant: true,
-      },
+        include: {
+          items: {
+            include: {
+              product: true,
+              productVariant: true,
+            },
+          },
+          tenant: true,
+        },
+      });
     });
 
     io.to(`tenant-${tenant.id}`).emit("new-order", order);
@@ -8332,46 +8345,10 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
 
     // Loja pode desativar a senha sequencial do Balcão em Configurações — nesse caso a
     // comanda fica sem número, identificada só pelo customerName (se o operador digitar um).
+    // O número em si só é calculado mais abaixo, dentro da mesma transação que cria o
+    // pedido (ver comentário perto do prisma.$transaction) — calcular aqui e usar só lá
+    // na frente deixava uma janela grande pra outro pedido colidir no meio do caminho.
     const usesCounterTicket = isCounterComanda && tenant.counterTicketMode !== "NAME";
-
-    let counterTicketNumber: number | null = null;
-    if (usesCounterTicket) {
-      const startOfDay = new Date();
-      startOfDay.setHours(0, 0, 0, 0);
-      const requested =
-        Number.isInteger(Number(requestedCounterTicketNumber)) &&
-        Number(requestedCounterTicketNumber) > 0
-          ? Number(requestedCounterTicketNumber)
-          : null;
-      // O número sugerido pelo cliente (buscado quando o modal "Nova Comanda" abriu, ou o
-      // ticket da comanda em "Adicionar mais itens") pode ter ficado desatualizado se
-      // outra comanda foi criada nesse meio tempo — confiar cegamente nele já causou duas
-      // comandas com a mesma "Senha ##" no mesmo dia. Sempre validamos contra o banco antes
-      // de aceitar, e recalculamos se colidir. Isso vale também pra "Adicionar mais itens":
-      // aqui é fila (painel/cozinha chamam por número), então um lançamento novo tem que
-      // pegar a PRÓXIMA senha da fila, nunca reaproveitar uma anterior — senão atropela quem
-      // já está na frente.
-      const collision = requested
-        ? await prisma.order.findFirst({
-            where: { tenantId: tenant.id, counterTicketNumber: requested, createdAt: { gte: startOfDay } },
-            select: { id: true },
-          })
-        : null;
-      if (requested && !collision) {
-        counterTicketNumber = requested;
-      } else {
-        const lastTicket = await prisma.order.findFirst({
-          where: {
-            tenantId: tenant.id,
-            counterTicketNumber: { not: null },
-            createdAt: { gte: startOfDay },
-          },
-          orderBy: { counterTicketNumber: "desc" },
-          select: { counterTicketNumber: true },
-        });
-        counterTicketNumber = (lastTicket?.counterTicketNumber ?? 0) + 1;
-      }
-    }
 
     // Lançamento do garçom (comanda) para a cozinha ver: nasce PENDING, sem debitar
     // estoque nem dar pontos agora — isso acontece depois, quando o pedido avançar de
@@ -8585,33 +8562,84 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
       }
     }
 
-    const order = await prisma.order.create({
-      data: {
-        tenantId: tenant.id,
-        customerName: customerName || (isCounterComanda ? "" : "Venda PDV"),
-        customerPhone: customerPhone || "00000000000",
-        orderType: orderType || "TAKEAWAY",
-        tableId: tableId || null,
-        counterTicketNumber,
-        consumptionType: isCounterSale ? consumptionType : null,
-        paymentMethod: paymentMethod || "CASH",
-        paymentDetail: paymentMetadata ? JSON.stringify(paymentMetadata) : null,
-        discount: discountAmount,
-        discountType: discountType || null,
-        notes: notes || null,
-        operatorName: operatorName || null,
-        customerId: customerId || null,
-        customerCpf: customerCpf ? customerCpf.replace(/\D/g, "") : null,
-        feeAmount: feeAmount || null,
-        feePercent: feePercent || null,
-        feePassedToCustomer,
-        serviceFeeAmount: serviceFeeAmount || null,
-        serviceFeePercent: serviceFeeAmount ? serviceFeePercent : null,
-        status: initialStatus,
-        total,
-        items: { create: orderItems },
-      },
-      include: { items: { include: { product: true, productVariant: true } } },
+    // Calcula a senha e cria o pedido na MESMA transação, com um lock na linha do tenant
+    // segurando o cálculo até o commit — sem isso, dois lançamentos quase simultâneos
+    // (ex: um atendente no PDV e um cliente pedindo pelo QR ao mesmo tempo) podiam ler o
+    // mesmo "último número" antes de qualquer um confirmar, e os dois criavam pedidos com
+    // a MESMA senha — o segundo aparecia como um "pedido fantasma" junto do primeiro na
+    // tela de comandas do PDV, mesmo sendo de gente/pedidos completamente diferentes.
+    const order = await prisma.$transaction(async (tx) => {
+      let counterTicketNumber: number | null = null;
+      if (usesCounterTicket) {
+        await tx.$executeRawUnsafe(
+          "SELECT id FROM tenants WHERE id = ? FOR UPDATE",
+          tenant.id
+        );
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+        const requested =
+          Number.isInteger(Number(requestedCounterTicketNumber)) &&
+          Number(requestedCounterTicketNumber) > 0
+            ? Number(requestedCounterTicketNumber)
+            : null;
+        // O número sugerido pelo cliente (buscado quando o modal "Nova Comanda" abriu, ou
+        // o ticket da comanda em "Adicionar mais itens") pode ter ficado desatualizado se
+        // outra comanda foi criada nesse meio tempo — confiar cegamente nele já causou
+        // duas comandas com a mesma "Senha ##" no mesmo dia. Sempre validamos contra o
+        // banco antes de aceitar, e recalculamos se colidir. Isso vale também pra
+        // "Adicionar mais itens": aqui é fila (painel/cozinha chamam por número), então um
+        // lançamento novo tem que pegar a PRÓXIMA senha da fila, nunca reaproveitar uma
+        // anterior — senão atropela quem já está na frente.
+        const collision = requested
+          ? await tx.order.findFirst({
+              where: { tenantId: tenant.id, counterTicketNumber: requested, createdAt: { gte: startOfDay } },
+              select: { id: true },
+            })
+          : null;
+        if (requested && !collision) {
+          counterTicketNumber = requested;
+        } else {
+          const lastTicket = await tx.order.findFirst({
+            where: {
+              tenantId: tenant.id,
+              counterTicketNumber: { not: null },
+              createdAt: { gte: startOfDay },
+            },
+            orderBy: { counterTicketNumber: "desc" },
+            select: { counterTicketNumber: true },
+          });
+          counterTicketNumber = (lastTicket?.counterTicketNumber ?? 0) + 1;
+        }
+      }
+
+      return tx.order.create({
+        data: {
+          tenantId: tenant.id,
+          customerName: customerName || (isCounterComanda ? "" : "Venda PDV"),
+          customerPhone: customerPhone || "00000000000",
+          orderType: orderType || "TAKEAWAY",
+          tableId: tableId || null,
+          counterTicketNumber,
+          consumptionType: isCounterSale ? consumptionType : null,
+          paymentMethod: paymentMethod || "CASH",
+          paymentDetail: paymentMetadata ? JSON.stringify(paymentMetadata) : null,
+          discount: discountAmount,
+          discountType: discountType || null,
+          notes: notes || null,
+          operatorName: operatorName || null,
+          customerId: customerId || null,
+          customerCpf: customerCpf ? customerCpf.replace(/\D/g, "") : null,
+          feeAmount: feeAmount || null,
+          feePercent: feePercent || null,
+          feePassedToCustomer,
+          serviceFeeAmount: serviceFeeAmount || null,
+          serviceFeePercent: serviceFeeAmount ? serviceFeePercent : null,
+          status: initialStatus,
+          total,
+          items: { create: orderItems },
+        },
+        include: { items: { include: { product: true, productVariant: true } } },
+      });
     });
 
     // Comanda do garçom ou lançamento pendente ainda não é venda faturada — sem movimento de caixa
