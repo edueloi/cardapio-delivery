@@ -133,10 +133,10 @@ export default function DashboardShell({
 
   return (
     <>
-      <div className="bg-[#F4F6FA] flex flex-col xl:flex-row font-sans relative h-screen h-[100dvh] overflow-hidden">
+      <div className="bg-[#F4F6FA] flex flex-col 2xl:flex-row font-sans relative h-screen h-[100dvh] overflow-hidden">
 
       {/* ══ MOBILE TOPBAR ══ */}
-      <div className="xl:hidden shrink-0 z-40 bg-[#0A1628] border-b border-white/[0.07]">
+      <div className="2xl:hidden shrink-0 z-40 bg-[#0A1628] border-b border-white/[0.07]">
         <div className="flex items-center justify-between gap-3 px-4 h-14">
           {/* Logo */}
           <div className="flex items-center gap-2.5 min-w-0">
@@ -201,8 +201,8 @@ export default function DashboardShell({
       <aside className={cn(
         "fixed inset-y-0 left-0 z-50 w-[82vw] max-w-[300px] bg-[#0A1628] text-slate-300 flex flex-col",
         "transition-[transform,width] duration-300 ease-in-out",
-        isTopbarLayout ? "xl:hidden" : "xl:max-w-none xl:translate-x-0 xl:sticky xl:top-0 xl:h-screen shrink-0",
-        isCollapsed && !isTopbarLayout ? "xl:w-20" : "xl:w-64",
+        isTopbarLayout ? "2xl:hidden" : "2xl:max-w-none 2xl:translate-x-0 2xl:sticky 2xl:top-0 2xl:h-screen shrink-0",
+        isCollapsed && !isTopbarLayout ? "2xl:w-20" : "2xl:w-64",
         isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         {/* Logo header */}
@@ -214,7 +214,7 @@ export default function DashboardShell({
             {!isCollapsed && <p className="text-[13px] font-black text-white/90 leading-none truncate">Box Sys</p>}
           </div>
           {!isCollapsed && (
-            <button onClick={onCloseMobileMenu} className="xl:hidden w-7 h-7 rounded-lg flex items-center justify-center text-white/30 hover:text-white transition-colors">
+            <button onClick={onCloseMobileMenu} className="2xl:hidden w-7 h-7 rounded-lg flex items-center justify-center text-white/30 hover:text-white transition-colors">
               <X className="w-4 h-4" />
             </button>
           )}
@@ -225,7 +225,7 @@ export default function DashboardShell({
           onClick={() => setIsCollapsed((v) => !v)}
           title={isCollapsed ? "Expandir menu" : "Recolher menu"}
           className={cn(
-            "hidden xl:flex items-center gap-3 px-3 py-2.5 mx-2.5 mt-2 rounded-xl text-slate-500 hover:bg-white/[0.06] hover:text-white transition-all",
+            "hidden 2xl:flex items-center gap-3 px-3 py-2.5 mx-2.5 mt-2 rounded-xl text-slate-500 hover:bg-white/[0.06] hover:text-white transition-all",
             isCollapsed && "justify-center"
           )}
         >
@@ -411,7 +411,7 @@ export default function DashboardShell({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 xl:hidden"
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 2xl:hidden"
             onClick={onCloseMobileMenu}
           />
         )}
@@ -427,7 +427,7 @@ export default function DashboardShell({
             trocar de aba. Fica bem fina pra não roubar o espaço vertical que hideHeader
             existe pra garantir. */}
         {hideHeader && isTopbarLayout && (
-          <div className="hidden xl:flex items-center gap-2 h-8 px-3 bg-[#0A1628] shrink-0 overflow-x-auto">
+          <div className="hidden 2xl:flex items-center gap-2 h-8 px-3 bg-[#0A1628] shrink-0 overflow-x-auto">
             <div className="w-5 h-5 rounded bg-white flex items-center justify-center shrink-0 p-0.5">
               <img src={logoSrc} alt="Logo" className="w-full h-full object-contain" />
             </div>
@@ -474,7 +474,7 @@ export default function DashboardShell({
         {/* ══ DESKTOP TOPBAR ══ */}
           {!hideHeader && (
         <header className={cn(
-          "hidden xl:flex items-center justify-between gap-4 bg-white border-b border-slate-200/80 z-30 h-16 shrink-0",
+          "hidden 2xl:flex items-center justify-between gap-4 bg-white border-b border-slate-200/80 z-30 h-16 shrink-0",
           isLiveOrdersTab ? "px-4 lg:px-5" : "px-6 lg:px-8"
         )}>
 
@@ -679,7 +679,7 @@ export default function DashboardShell({
                 ? "flex flex-col p-2 sm:p-3"
                 : (isLiveOrdersTab
                     ? "px-2 py-2 sm:px-3 sm:py-3 lg:px-4 lg:py-4"
-                    : "px-3 py-3 sm:p-5 md:p-7")
+                    : "px-3 py-3 sm:p-4 lg:p-5 2xl:p-7")
             )}
           >
             {children}
