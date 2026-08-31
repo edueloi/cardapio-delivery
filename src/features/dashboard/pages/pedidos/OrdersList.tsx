@@ -760,7 +760,7 @@ export function OrdersList({
             cada card — só assume 4 colunas a partir de telas bem largas (2xl). Quando
             "Ag. Faturamento" some (Delivery desativado), o grid cai pra 3 colunas — senão
             o espaço da coluna escondida ficava reservado em branco, sem nenhum card nele. */}
-        <div className={`flex-1 min-h-0 grid gap-3 pb-3 overflow-hidden grid-cols-1 lg:grid-cols-2 ${showBillingColumn ? "2xl:grid-cols-4" : "2xl:grid-cols-3"}`}>
+        <div className={`flex-1 min-h-0 grid gap-3 pb-3 overflow-hidden grid-cols-1 lg:grid-cols-2 ${showBillingColumn ? "xl:grid-cols-4" : "xl:grid-cols-3"}`}>
           <KanbanColumn id="PENDING" title="Pendentes" count={pendingOrders.length} orders={pendingOrders} borderColor="border-amber-400" textColor="text-amber-500" />
           <KanbanColumn id="PREPARING" title="Em preparo" count={preparingOrders.length} orders={preparingOrders} borderColor="border-orange-400" textColor="text-orange-500" />
           <KanbanColumn id="SHIPPED" title="Prontos / Retire" count={shippedOrders.length} orders={shippedOrders} borderColor="border-emerald-400" textColor="text-emerald-500" />
