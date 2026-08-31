@@ -32,7 +32,19 @@ jobs:
       # deste projeto ficou desatualizado por muito tempo (o build local nunca rodou aqui
       # pra regeneralo, por causa do bloqueio de symlink). npm install e mais tolerante e
       # corrige isso sozinho.
-      - run: npm install
+      #
+      # O download do binario do Electron (~200MB, baixado pelo postinstall do pacote
+      # "electron") as vezes esbarra num 504 Gateway Timeout do servidor de origem — falha
+      # de rede pontual, nao do projeto. Repete algumas vezes antes de desistir.
+      - name: Install dependencies (com retry pra download do Electron)
+        shell: bash
+        run: |
+          for i in 1 2 3 4 5; do
+            npm install && exit 0
+            echo "npm install falhou (tentativa $i/5), tentando de novo em 15s..."
+            sleep 15
+          done
+          exit 1
 
       - run: npm run dist
 
