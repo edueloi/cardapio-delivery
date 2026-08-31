@@ -180,15 +180,15 @@ export default function DashboardContent({
       )}
 
       {activeTab === "menu" && (
-        <div className="min-w-0 space-y-4">
-          <div className="bg-[#0D1B3E] rounded-lg p-4 sm:p-5 text-white mb-4 shadow-lg shadow-[#0D1B3E]/15 flex items-center justify-between gap-4 overflow-hidden relative">
+        <div className="space-y-6">
+          <div className="bg-[#0D1B3E] rounded-[28px] sm:rounded-3xl p-6 sm:p-8 text-white mb-8 shadow-xl shadow-[#0D1B3E]/20 flex flex-col items-start gap-5 sm:flex-row sm:justify-between sm:items-center overflow-hidden relative">
             <div className="relative z-10 max-w-md">
-              <h3 className="text-lg sm:text-xl font-black tracking-tight mb-1">Cardápio Inteligente</h3>
-              <p className="text-[#C9A227]/80 font-medium text-xs sm:text-sm">
+              <h3 className="text-2xl sm:text-3xl font-black tracking-tight mb-2">Cardápio Inteligente</h3>
+              <p className="text-[#C9A227]/80 font-medium text-sm sm:text-base">
                 Gerencie categorias, preços e disponibilidades em tempo real.
               </p>
             </div>
-            <Utensils className="w-20 h-20 absolute -right-3 -bottom-4 text-[#C9A227]/15 rotate-12" />
+            <Utensils className="w-24 h-24 sm:w-32 sm:h-32 absolute -right-6 -bottom-6 sm:-right-8 sm:-bottom-8 text-[#C9A227]/15 rotate-12" />
           </div>
           <MenuManagement tenant={tenant} refresh={refreshTenant} membership={membership} />
         </div>

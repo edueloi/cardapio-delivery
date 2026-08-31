@@ -77,7 +77,7 @@ function SortableProductRow({
     <div
       ref={setNodeRef}
       style={style}
-      className={`grid grid-cols-[auto_48px_minmax(0,1fr)] sm:flex sm:items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 transition-colors ${!prod.available ? 'bg-slate-50/50 opacity-70' : 'bg-white'} ${isDragging ? 'opacity-40 z-10 relative' : ''}`}
+      className={`flex items-center gap-3 px-4 py-3 transition-colors ${!prod.available ? 'bg-slate-50/50 opacity-70' : 'bg-white'} ${isDragging ? 'opacity-40 z-10 relative' : ''}`}
     >
       {dragEnabled && (
         <button
@@ -136,7 +136,7 @@ function SortableProductRow({
           <p className="text-[11px] text-slate-400 truncate mt-0.5">{prod.description}</p>
         )}
       </div>
-      <div className="col-span-3 sm:col-span-1 flex items-center justify-end gap-1 shrink-0 border-t border-slate-100 pt-2 sm:border-0 sm:pt-0">
+      <div className="flex items-center gap-1 shrink-0">
         <button
           onClick={() => toggleProductAvailability(prod)}
           title={prod.available ? "Desativar produto" : "Ativar produto"}
@@ -223,10 +223,10 @@ function SortableCategoryCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden mb-3 last:mb-0 ${isDragging ? 'opacity-40 z-10 relative' : ''}`}
+      className={`bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-4 last:mb-0 ${isDragging ? 'opacity-40 z-10 relative' : ''}`}
     >
       {/* Category header */}
-      <div className="px-3 sm:px-4 py-3 border-b border-slate-100 bg-slate-50/60 flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/60 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 min-w-0">
           {dragEnabled && (
             <button
@@ -246,7 +246,7 @@ function SortableCategoryCard({
             <span className="ml-2 text-zinc-400 font-bold normal-case tracking-normal">{cat.products?.length || 0} itens</span>
           </h3>
         </div>
-        <div className="flex items-center justify-end gap-1 shrink-0">
+        <div className="flex items-center gap-1 shrink-0">
           <button
             onClick={() => openNewProduct(cat.id)}
             className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest text-[#C9A227] hover:text-[#A8841C] px-2 py-1.5 rounded-lg hover:bg-amber-50 transition-colors"
@@ -829,7 +829,7 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
   const fmt = (n: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
 
   return (
-    <div className="min-w-0 space-y-4">
+    <div className="space-y-4">
 
       {/* Toolbar */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">

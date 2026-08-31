@@ -1810,7 +1810,7 @@ export default function PDVPanel({
   const cartItemCount = existingContextItemCount + pendingCartItemCount;
 
   return (
-    <div className="relative flex flex-col 2xl:flex-row gap-2 2xl:gap-4 h-full min-h-0">
+    <div className="relative flex flex-col lg:flex-row gap-2 lg:gap-4 h-full min-h-0">
       {/* ── Success flash + NFC-e ── */}
       <AnimatePresence>
         {showSuccess && (
@@ -2062,7 +2062,7 @@ export default function PDVPanel({
                 </div>
               ) : (
                 <div
-                  className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2"
+                  className="flex flex-col gap-1.5 lg:grid lg:gap-2.5"
                   style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" } as React.CSSProperties}
                 >
                   {filteredProducts.map((product) => {
@@ -2382,7 +2382,7 @@ export default function PDVPanel({
       {!showCartDrawer && (
         <button
           onClick={() => setShowCartDrawer(true)}
-          className="2xl:hidden fixed bottom-4 right-4 z-40 w-14 h-14 rounded-full bg-[#C9A227] text-black shadow-2xl shadow-black/30 flex items-center justify-center active:scale-95 transition-transform"
+          className="lg:hidden fixed bottom-5 right-5 z-40 w-16 h-16 rounded-full bg-[#C9A227] text-black shadow-2xl shadow-black/30 flex items-center justify-center active:scale-95 transition-transform"
         >
           <ShoppingCart className="w-6 h-6" />
           {cartItemCount > 0 && (
@@ -2396,7 +2396,7 @@ export default function PDVPanel({
       {/* ── Cart modal backdrop (mobile/tablet) ── */}
       {showCartDrawer && (
         <div
-          className="2xl:hidden fixed inset-0 z-30 bg-black/50 backdrop-blur-sm"
+          className="lg:hidden fixed inset-0 z-30 bg-black/50 backdrop-blur-sm"
           onClick={() => setShowCartDrawer(false)}
         />
       )}
@@ -2404,21 +2404,21 @@ export default function PDVPanel({
       {/* ── Right: Order/Cart Panel ── */}
       <div className={`${
         showCartDrawer
-          ? "fixed flex inset-x-0 bottom-0 top-2 sm:inset-x-6 sm:inset-y-6 2xl:static 2xl:inset-auto z-40 2xl:z-auto"
-          : "hidden 2xl:flex"
-      } w-full sm:w-auto 2xl:w-[390px] flex-col bg-[#0D1B3E] rounded-t-2xl sm:rounded-2xl text-white overflow-hidden shadow-2xl relative shrink-0`}>
+          ? "fixed flex inset-x-0 bottom-0 top-4 sm:inset-x-6 sm:inset-y-6 lg:static lg:inset-auto z-40 lg:z-auto"
+          : "hidden lg:flex"
+      } w-full sm:w-auto lg:w-[380px] xl:w-[420px] flex-col bg-[#0D1B3E] rounded-t-[2rem] sm:rounded-[2rem] lg:rounded-[2rem] text-white overflow-hidden shadow-2xl relative shrink-0`}>
         {/* Header */}
         <div className="p-3.5 border-b border-white/5 bg-white/[0.02]">
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowCartDrawer(false)}
-                className="2xl:hidden w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white flex items-center justify-center shrink-0 transition-colors -ml-1"
+                className="lg:hidden w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white flex items-center justify-center shrink-0 transition-colors -ml-1"
                 title="Voltar para os produtos"
               >
                 <ArrowLeft className="w-4 h-4" />
               </button>
-              <div className="hidden 2xl:flex w-7 h-7 rounded-lg bg-[#C9A227]/15 text-[#C9A227] items-center justify-center shrink-0">
+              <div className="hidden lg:flex w-7 h-7 rounded-lg bg-[#C9A227]/15 text-[#C9A227] items-center justify-center shrink-0">
                 <ShoppingCart className="w-3.5 h-3.5" />
               </div>
               <div>
@@ -3294,9 +3294,9 @@ export default function PDVPanel({
                 <span className="text-[10px] font-black uppercase text-white/30 tracking-[0.2em]">Pagamento</span>
               </div>
 
-              <div className="flex-1 flex flex-col xl:flex-row min-h-0 overflow-hidden">
+              <div className="flex-1 flex flex-col md:flex-row min-h-0">
               {/* Left: Summary */}
-              <div className="w-full max-h-[42dvh] xl:max-h-none xl:w-80 2xl:w-96 bg-black/20 p-3 sm:p-4 flex flex-col border-b xl:border-b-0 xl:border-r border-white/5 overflow-y-auto custom-scrollbar shrink-0">
+              <div className="w-full md:w-80 lg:w-96 bg-black/20 p-4 flex flex-col border-r border-white/5 overflow-y-auto custom-scrollbar shrink-0">
                 <button
                   onClick={() => {
                     // isClosingAccount fica true quando o pagamento foi aberto direto do
