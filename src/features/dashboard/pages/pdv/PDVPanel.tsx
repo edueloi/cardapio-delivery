@@ -3090,16 +3090,16 @@ export default function PDVPanel({
             <motion.div
               initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.96, y: 12, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-[2.5rem] p-8 w-full max-w-sm space-y-6 shadow-2xl"
+              className="bg-white rounded-3xl p-6 w-full max-w-[22rem] max-h-[90vh] overflow-y-auto space-y-4 shadow-2xl"
             >
-              <div className="text-center space-y-2">
-                <div className="w-16 h-16 rounded-2xl bg-[#C9A227]/10 text-[#C9A227] flex items-center justify-center mx-auto mb-4">
-                  <Hash className="w-8 h-8" />
+              <div className="text-center space-y-1">
+                <div className="w-11 h-11 rounded-xl bg-[#C9A227]/10 text-[#C9A227] flex items-center justify-center mx-auto mb-2">
+                  <Hash className="w-5 h-5" />
                 </div>
-                <h3 className="text-xl font-black text-slate-800 uppercase tracking-widest">Abrir Comanda</h3>
-                <p className="text-xs text-slate-400 font-bold uppercase">Identifique o cliente ou o cartão</p>
+                <h3 className="text-base font-black text-slate-800 uppercase tracking-widest">Abrir Comanda</h3>
+                <p className="text-[11px] text-slate-400 font-bold uppercase">Identifique o cliente ou o cartão</p>
               </div>
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {/* Comer no local ou viagem — obrigatório pra toda comanda de balcão (sem mesa) */}
                 <div>
                   <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-1">
@@ -3109,7 +3109,7 @@ export default function PDVPanel({
                     <button
                       type="button"
                       onClick={() => setConsumptionType("EAT_IN")}
-                      className={`flex items-center justify-center gap-1.5 py-3 rounded-2xl border text-[10px] font-black uppercase tracking-widest transition-colors ${
+                      className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-colors ${
                         consumptionType === "EAT_IN"
                           ? "bg-[#C9A227] border-[#C9A227] text-black"
                           : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
@@ -3121,7 +3121,7 @@ export default function PDVPanel({
                     <button
                       type="button"
                       onClick={() => setConsumptionType("TAKEOUT")}
-                      className={`flex items-center justify-center gap-1.5 py-3 rounded-2xl border text-[10px] font-black uppercase tracking-widest transition-colors ${
+                      className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-colors ${
                         consumptionType === "TAKEOUT"
                           ? "bg-[#C9A227] border-[#C9A227] text-black"
                           : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
@@ -3133,22 +3133,19 @@ export default function PDVPanel({
                   </div>
                 </div>
 
-                {/* Próxima senha em destaque — some se a loja desativou a senha sequencial
-                    do Balcão em Configurações (Senha do Balcão: Nome do cliente). */}
+                {/* Próxima senha — some se a loja desativou a senha sequencial do Balcão
+                    em Configurações (Senha do Balcão: Nome do cliente). Mostrada como uma
+                    linha compacta em vez de um card grande — é só um número de apoio. */}
                 {tenant.counterTicketMode !== "NAME" && (
-                  <div className="text-center">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Próxima senha</p>
-                    <div className="mx-auto w-28 h-28 rounded-[2rem] border-2 border-[#C9A227]/30 bg-[#C9A227]/5 flex flex-col items-center justify-center gap-0.5 shadow-lg">
-                      <span className="text-[9px] font-black text-[#C9A227]/60 uppercase tracking-[0.3em]">Nº</span>
-                      {nextTicketLoading ? (
-                        <div className="w-5 h-5 border-2 border-[#C9A227] border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        <span className="text-5xl font-black text-[#C9A227] tracking-tighter tabular-nums">
-                          {nextTicket ?? "—"}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[9px] text-slate-400 mt-2">Gerada automaticamente pelo sistema</p>
+                  <div className="flex items-center justify-between gap-3 bg-[#C9A227]/5 border border-[#C9A227]/20 rounded-xl px-4 py-2">
+                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Próxima senha</p>
+                    {nextTicketLoading ? (
+                      <div className="w-4 h-4 border-2 border-[#C9A227] border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <span className="text-2xl font-black text-[#C9A227] tracking-tighter tabular-nums">
+                        Nº {nextTicket ?? "—"}
+                      </span>
+                    )}
                   </div>
                 )}
 
@@ -3163,24 +3160,24 @@ export default function PDVPanel({
                     value={comandaNumber}
                     onChange={(e) => setComandaNumber(e.target.value)}
                     placeholder="Ex: João ou Mesa VIP"
-                    className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-5 text-base font-bold text-slate-800 focus:border-[#C9A227] outline-none text-center"
+                    className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-4 text-sm font-bold text-slate-800 focus:border-[#C9A227] outline-none text-center"
                   />
                   <p className="text-[9px] text-slate-400 mt-1 text-center">
                     {tenant.counterTicketMode === "NAME" ? "Deixe em branco se não quiser identificar o pedido" : "Deixe em branco para usar só a senha numérica"}
                   </p>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2.5">
                 <button
                   onClick={() => { setShowComandaModal(false); setComandaNumber(""); setConsumptionType("EAT_IN"); }}
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-500 font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest transition-all"
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-500 font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all"
                 >
                   Cancelar
                 </button>
                 <button
                   disabled={isProcessing || (tenant.counterTicketMode !== "NAME" && nextTicketLoading) || !consumptionType}
                   onClick={() => void handleCreateComanda()}
-                  className="bg-[#0D1B3E] hover:bg-slate-800 text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest transition-all disabled:opacity-50"
+                  className="bg-[#0D1B3E] hover:bg-slate-800 text-white font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all disabled:opacity-50"
                 >
                   {isProcessing ? (
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto" />
