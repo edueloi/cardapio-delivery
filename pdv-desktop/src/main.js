@@ -118,6 +118,20 @@ function setHideSystemMenu(value) {
   refreshAppMenu(); // atualiza o "check" do item no menu Exibir
 }
 
+// Barra de menu NATIVA do Windows (PDV/Operação/.../Exibir) — visual clássico de
+// aplicativo de escritório antigo, destoando do painel escuro/moderno por baixo dela.
+// Escondida por padrão (Alt no teclado ainda revela ela temporariamente, convenção
+// normal do Windows — não perde a navegação por teclado, só some do visual do dia a dia).
+function getHideMenuBar() {
+  return store.get("hideMenuBar", true);
+}
+
+function setHideMenuBar(value) {
+  store.set("hideMenuBar", value);
+  if (mainWindow) mainWindow.setAutoHideMenuBar(value);
+  refreshAppMenu(); // atualiza o "check" do item no menu Exibir
+}
+
 // Barra de menu nativa (PDV / <categorias> / Exibir) — cada categoria do dashboard
 // (Operação, Catálogo & Estoque, Financeiro, Clientes & Marketing, Administração) é seu
 // próprio menu de topo, lado a lado com PDV e Exibir — não um item dentro de um menu
@@ -161,12 +175,18 @@ function buildAppMenu() {
         { label: "Configurar Impressora...", accelerator: "F9", click: () => openPrinterConfigWindow(mainWindow) },
         { type: "separator" },
         {
+          label: "Ocultar esta barra de menu (Alt para mostrar)",
+          type: "checkbox",
+          checked: getHideMenuBar(),
+          click: (menuItem) => setHideMenuBar(menuItem.checked),
+        },
+        {
           label: "Esconder menu do sistema (lateral/topo)",
           type: "checkbox",
           checked: getHideSystemMenu(),
           // Controla a navegação do próprio site (sidebar ou barra de categorias do
-          // dashboard) — não tem relação com esta barra de menu nativa do Windows, que
-          // continua sempre visível. Útil quando o menu nativo já cobre a navegação e o
+          // dashboard) — item separado do "Ocultar esta barra de menu" acima, que é sobre
+          // a barra nativa do Windows. Útil quando o menu nativo já cobre a navegação e o
           // menu do site fica redundante, competindo por espaço em telas menores.
           click: (menuItem) => setHideSystemMenu(menuItem.checked),
         },
@@ -217,11 +237,16 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1366,
     height: 800,
-    minWidth: 1024,
-    minHeight: 640,
+    // O layout do PDV (barra lateral + grade de produtos + carrinho) usa breakpoints
+    // Tailwind que viram "modo mobile" (coluna única, tudo espremido) abaixo de 1024px —
+    // 1024 era exatamente o limite mínimo permitido, deixando fácil cair nessa zona
+    // quebrada só redimensionando a janela um pouco. 1280 dá folga real.
+    minWidth: 1280,
+    minHeight: 720,
     show: false,
     icon: path.join(__dirname, "..", "assets", "icon.png"),
     backgroundColor: "#0A1628",
+    autoHideMenuBar: getHideMenuBar(),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
