@@ -59,7 +59,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "artifactName": "Box Sys-PDV-Setup-${version}.exe"
+      "artifactName": "Box-Sys-PDV-Setup.exe"
     },
     "portable": {
       "artifactName": "BoxSys-PDV-Portable.exe"

@@ -1,7 +1,11 @@
 import { Download, Monitor, Globe, CheckCircle2, ArrowRight, Package2, Smartphone, Share, Plus, MoreHorizontal, Tv } from "lucide-react";
 import { PageWrapper, SectionTitle, ContentCard } from "../../../../components";
 
-const VERSION = "1.5.0";
+// Baixa direto da Release mais recente no GitHub (link estável — o nome do arquivo não
+// leva a versão, então "latest/download/<nome>" sempre aponta pro build mais novo, sem
+// precisar editar esta tela a cada atualização do app). A Release é publicada
+// automaticamente pelo workflow .github/workflows/build-pdv-desktop.yml.
+const GITHUB_RELEASES_BASE = "https://github.com/edueloi/cardapio-delivery/releases/latest/download";
 
 const downloads = [
   {
@@ -12,9 +16,9 @@ const downloads = [
     icon: Monitor,
     badge: "Recomendado",
     badgeColor: "bg-[#C9A227] text-black",
-    filename: `Box Sys-PDV-Setup-${VERSION}.exe`,
-    url: `/downloads/Box Sys-PDV-Setup-${VERSION}.exe`,
-    size: "~85 MB",
+    filename: `Box-Sys-PDV-Setup.exe`,
+    url: `${GITHUB_RELEASES_BASE}/Box-Sys-PDV-Setup.exe`,
+    size: "~150 MB",
     os: "Windows 10/11 64-bit",
   },
   {
@@ -26,8 +30,8 @@ const downloads = [
     badge: "Sem instalação",
     badgeColor: "bg-slate-100 text-slate-600",
     filename: `BoxSys-PDV-Portable.exe`,
-    url: `/downloads/BoxSys-PDV-Portable.exe`,
-    size: "~85 MB",
+    url: `${GITHUB_RELEASES_BASE}/BoxSys-PDV-Portable.exe`,
+    size: "~150 MB",
     os: "Windows 10/11 64-bit",
   },
 ];

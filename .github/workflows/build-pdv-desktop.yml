@@ -13,6 +13,9 @@ on:
       - "pdv-desktop/**"
       - ".github/workflows/build-pdv-desktop.yml"
 
+permissions:
+  contents: write # necessario pro softprops/action-gh-release publicar a Release
+
 jobs:
   build:
     runs-on: windows-latest
@@ -54,3 +57,20 @@ jobs:
           path: |
             pdv-desktop/dist-installer/*.exe
           if-no-files-found: error
+
+      - name: Ler versão do app
+        id: pkg
+        shell: bash
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      # Publica os instaladores como assets de uma Release pública — link direto, sem
+      # precisar de login no GitHub nem de eu copiar o arquivo manualmente pra algum lugar.
+      # O nome do arquivo (artifactName no package.json) não leva a versão, então o link
+      # "latest/download/<nome>" da tela de Downloads nunca precisa mudar entre versões.
+      - name: Publicar GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.pkg.outputs.version }}
+          name: Box Sys PDV v${{ steps.pkg.outputs.version }}
+          make_latest: true
+          files: pdv-desktop/dist-installer/*.exe
