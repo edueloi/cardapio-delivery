@@ -344,9 +344,9 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
       {activeTab === "recipes" && (
         <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
           {/* Lista de receitas */}
-          <ContentCard padding="lg" className="space-y-5">
+          <ContentCard padding="lg" className="min-w-0 space-y-5">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div>
+              <div className="min-w-0">
                 <p className="text-[11px] font-black uppercase tracking-[0.25em] text-slate-400">Fichas técnicas</p>
                 <h3 className="mt-1 text-xl font-black tracking-tight text-slate-900">Receitas prontas para reproduzir</h3>
               </div>
@@ -356,7 +356,7 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
                   placeholder="Buscar receita ou produto..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="sm:min-w-[220px]"
+                  className="w-full sm:w-[220px]"
                 />
                 <FilterLineSegmented
                   options={[
@@ -462,7 +462,7 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
           </ContentCard>
 
           {/* Painel de detalhes */}
-          <ContentCard padding="lg" className="space-y-5">
+          <ContentCard padding="lg" className="min-w-0 space-y-5">
             {!selectedRecipe || !previewSimulation ? (
               <EmptyState
                 icon={Factory}
@@ -472,9 +472,9 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
             ) : (
               <>
                 <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                  <div className="space-y-2">
+                  <div className="min-w-0 space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-xl font-black tracking-tight text-slate-900">{selectedRecipe.name}</p>
+                      <p className="min-w-0 break-words text-xl font-black tracking-tight text-slate-900">{selectedRecipe.name}</p>
                       <Badge color={selectedRecipe.active ? "success" : "default"}>
                         {selectedRecipe.active ? "Ativa" : "Inativa"}
                       </Badge>
@@ -490,13 +490,13 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
                         Base {formatQuantity(selectedRecipe.outputQuantity, selectedRecipe.outputUnit)}
                       </Badge>
                       {selectedRecipe.product && (
-                        <Badge color="primary" icon={<Link2 className="h-3.5 w-3.5" />}>
+                        <Badge color="primary" icon={<Link2 className="h-3.5 w-3.5" />} className="max-w-full shrink truncate">
                           {selectedRecipe.product.name}
                         </Badge>
                       )}
                     </div>
                   </div>
-                  <div className="grid gap-3 sm:min-w-[220px]">
+                  <div className="grid w-full gap-3 shrink-0 md:w-[220px]">
                     <Input
                       label="Quantidade a produzir"
                       type="number"
@@ -558,9 +558,9 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
                       className={`rounded-2xl border p-4 ${ingredient.available ? "border-emerald-100 bg-emerald-50/40" : "border-amber-200 bg-amber-50/70"}`}
                     >
                       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="space-y-1">
+                        <div className="min-w-0 space-y-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-sm font-black text-slate-900">{ingredient.itemName}</p>
+                            <p className="break-words text-sm font-black text-slate-900">{ingredient.itemName}</p>
                             <Badge color={ingredient.available ? "success" : "warning"}>
                               {ingredient.available ? "Disponível" : "Ajuste estoque"}
                             </Badge>
@@ -571,7 +571,7 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
                           </p>
                           {ingredient.message && <p className="text-[11px] font-semibold text-amber-700">{ingredient.message}</p>}
                         </div>
-                        <div className="grid grid-cols-2 gap-2 text-right sm:min-w-[200px]">
+                        <div className="grid w-full grid-cols-2 gap-2 text-right shrink-0 lg:w-[200px]">
                           <MetricPill label="Antes" value={formatQuantity(ingredient.stockBefore, ingredient.inventoryUnit)} />
                           <MetricPill label="Depois" value={formatQuantity(ingredient.stockAfter, ingredient.inventoryUnit)} />
                           <MetricPill label="Custo unit." value={formatCurrency(ingredient.unitCost)} />
@@ -1348,8 +1348,8 @@ function ProductionRunDetailsModal({ run, onClose }: { run: ProductionRun; onClo
       <div className="space-y-5">
         <div className="rounded-3xl border border-slate-200 bg-slate-50/70 p-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-            <div>
-              <p className="text-2xl font-black tracking-tight text-slate-900">{run.recipeName}</p>
+            <div className="min-w-0">
+              <p className="break-words text-2xl font-black tracking-tight text-slate-900">{run.recipeName}</p>
               <p className="mt-1 text-sm text-slate-500">
                 Produzido em {formatDateTime(run.createdAt)}{run.createdByName ? ` por ${run.createdByName}` : ""}
               </p>
@@ -1357,7 +1357,7 @@ function ProductionRunDetailsModal({ run, onClose }: { run: ProductionRun; onClo
                 <p className="mt-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">{run.notes}</p>
               )}
             </div>
-            <div className="grid gap-3 sm:min-w-[260px]">
+            <div className="grid w-full gap-3 shrink-0 md:w-[260px]">
               <MetricPill label="Produzido" value={formatQuantity(run.quantityProduced, run.unit)} />
               <MetricPill label="Custo total" value={formatCurrency(run.totalCost)} />
               <MetricPill label="CMV unitário" value={formatCurrency(run.costPerOutput)} />
@@ -1370,14 +1370,14 @@ function ProductionRunDetailsModal({ run, onClose }: { run: ProductionRun; onClo
           {run.ingredientsSnapshot.map((ingredient) => (
             <div key={ingredient.id} className="rounded-2xl border border-slate-200 bg-white p-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                <div className="space-y-1">
-                  <p className="text-sm font-black text-slate-900">{ingredient.itemName}</p>
+                <div className="min-w-0 space-y-1">
+                  <p className="break-words text-sm font-black text-slate-900">{ingredient.itemName}</p>
                   <p className="text-[11px] text-slate-500">
                     Receita: {formatQuantity(ingredient.requestedQuantity, ingredient.unit)}
                     {ingredient.convertedQuantity !== null ? ` • baixa real ${formatQuantity(ingredient.convertedQuantity, ingredient.inventoryUnit)}` : ""}
                   </p>
                 </div>
-                <div className="grid grid-cols-2 gap-3 sm:min-w-[240px]">
+                <div className="grid w-full grid-cols-2 gap-3 shrink-0 lg:w-[240px]">
                   <MetricPill label="Antes" value={formatQuantity(ingredient.stockBefore, ingredient.inventoryUnit)} />
                   <MetricPill label="Depois" value={formatQuantity(ingredient.stockAfter, ingredient.inventoryUnit)} />
                   <MetricPill label="Custo unitário" value={formatCurrency(ingredient.unitCost)} />
