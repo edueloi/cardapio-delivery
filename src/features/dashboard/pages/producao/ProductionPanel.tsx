@@ -239,29 +239,21 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
   return (
     <div className="space-y-6">
       {/* Hero */}
-      <div className="overflow-hidden rounded-[30px] border border-[#0D1B3E]/10 bg-[radial-gradient(circle_at_top_left,_rgba(201,162,39,0.24),_transparent_42%),linear-gradient(135deg,#0D1B3E_0%,#142751_55%,#1e3570_100%)] p-6 text-white shadow-[0_30px_80px_-50px_rgba(13,27,62,0.7)] sm:p-8">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="max-w-2xl space-y-3">
-            <Badge color="primary" size="md" className="bg-white/12 text-white border-white/10">
+      <div className="overflow-hidden rounded-2xl border border-[#0D1B3E]/10 bg-[radial-gradient(circle_at_top_left,_rgba(201,162,39,0.24),_transparent_42%),linear-gradient(135deg,#0D1B3E_0%,#142751_55%,#1e3570_100%)] p-4 text-white shadow-[0_20px_50px_-30px_rgba(13,27,62,0.7)] sm:p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0 space-y-1.5">
+            <Badge color="primary" size="sm" className="bg-white/12 text-white border-white/10">
               Engenharia de produção integrada
             </Badge>
-            <div>
-              <h2 className="text-3xl font-black tracking-tight sm:text-4xl">Central de Produção</h2>
-              <p className="mt-2 max-w-xl text-sm font-medium leading-relaxed text-slate-200 sm:text-base">
-                Monte fichas técnicas, converta unidades automaticamente, acompanhe consumo real
-                dos insumos e registre o custo completo de cada produção.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2 text-[11px] font-black uppercase tracking-[0.22em] text-[#C9A227]">
-              <span>Estoque automático</span>
-              <span>Receitas reproduzíveis</span>
-              <span>Custos diretos e indiretos</span>
-            </div>
+            <h2 className="text-lg font-black tracking-tight sm:text-xl">Central de Produção</h2>
+            <p className="max-w-xl text-xs font-medium leading-relaxed text-slate-300 sm:text-sm">
+              Monte fichas técnicas, converta unidades automaticamente e registre o custo completo de cada produção.
+            </p>
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="flex flex-col gap-2 sm:flex-row shrink-0">
             <Button
               variant="outline"
-              size="lg"
+              size="md"
               className="border-white/15 bg-white/8 text-white hover:bg-white/12"
               iconLeft={<Plus className="h-4 w-4" />}
               onClick={() => { setEditingRecipe(null); setShowRecipeModal(true); }}
@@ -270,7 +262,7 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
             </Button>
             <Button
               variant="primary"
-              size="lg"
+              size="md"
               iconLeft={<Play className="h-4 w-4" />}
               onClick={() => selectedRecipe && setRecipeToProduce(selectedRecipe)}
               disabled={!selectedRecipe}
@@ -344,11 +336,11 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
       {activeTab === "recipes" && (
         <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
           {/* Lista de receitas */}
-          <ContentCard padding="lg" className="min-w-0 space-y-5">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <ContentCard padding="md" className="min-w-0 space-y-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
               <div className="min-w-0">
-                <p className="text-[11px] font-black uppercase tracking-[0.25em] text-slate-400">Fichas técnicas</p>
-                <h3 className="mt-1 text-xl font-black tracking-tight text-slate-900">Receitas prontas para reproduzir</h3>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Fichas técnicas</p>
+                <h3 className="mt-0.5 truncate text-base font-black tracking-tight text-slate-900">Receitas prontas para reproduzir</h3>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <Input
@@ -462,7 +454,7 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
           </ContentCard>
 
           {/* Painel de detalhes */}
-          <ContentCard padding="lg" className="min-w-0 space-y-5">
+          <ContentCard padding="md" className="min-w-0 space-y-4">
             {!selectedRecipe || !previewSimulation ? (
               <EmptyState
                 icon={Factory}
@@ -471,10 +463,10 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
               />
             ) : (
               <>
-                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                  <div className="min-w-0 space-y-2">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0 space-y-1.5">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="min-w-0 break-words text-xl font-black tracking-tight text-slate-900">{selectedRecipe.name}</p>
+                      <p className="min-w-0 break-words text-base font-black tracking-tight text-slate-900">{selectedRecipe.name}</p>
                       <Badge color={selectedRecipe.active ? "success" : "default"}>
                         {selectedRecipe.active ? "Ativa" : "Inativa"}
                       </Badge>
@@ -482,7 +474,7 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
                         <Badge color="warning">{previewSimulation.missingItems} item(ns) em falta</Badge>
                       )}
                     </div>
-                    <p className="text-sm leading-relaxed text-slate-500">
+                    <p className="text-xs leading-relaxed text-slate-500">
                       {selectedRecipe.description || "Receita pronta para controle de produção, estoque e CMV."}
                     </p>
                     <div className="flex flex-wrap gap-2">
