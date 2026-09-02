@@ -17,6 +17,7 @@ import {
   Plus,
   Scale,
   Trash2,
+  X,
   Zap,
 } from "lucide-react";
 import {
@@ -334,33 +335,26 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
 
       {/* Aba Fichas Técnicas */}
       {activeTab === "recipes" && (
-        <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-          {/* Lista de receitas */}
+        <>
           <ContentCard padding="md" className="min-w-0 space-y-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-              <div className="min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Fichas técnicas</p>
-                <h3 className="mt-0.5 truncate text-base font-black tracking-tight text-slate-900">Receitas prontas para reproduzir</h3>
-              </div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <Input
-                  size="sm"
-                  placeholder="Buscar receita ou produto..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full sm:w-[220px]"
-                />
-                <FilterLineSegmented
-                  options={[
-                    { value: "all", label: `Todas (${recipes.length})` },
-                    { value: "active", label: "Ativas" },
-                    { value: "critical", label: "Críticas" },
-                    { value: "inactive", label: "Inativas" },
-                  ]}
-                  value={filter}
-                  onChange={(value) => setFilter(value as RecipeFilter)}
-                />
-              </div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <Input
+                size="sm"
+                placeholder="Buscar receita ou produto..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full sm:w-[260px]"
+              />
+              <FilterLineSegmented
+                options={[
+                  { value: "all", label: `Todas (${recipes.length})` },
+                  { value: "active", label: "Ativas" },
+                  { value: "critical", label: "Críticas" },
+                  { value: "inactive", label: "Inativas" },
+                ]}
+                value={filter}
+                onChange={(value) => setFilter(value as RecipeFilter)}
+              />
             </div>
 
             {loading ? (
@@ -379,15 +373,15 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
                 )}
               />
             ) : (
-              <div className="space-y-3">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {filteredRecipes.map(({ recipe, simulation }) => (
                   <button
                     key={recipe.id}
                     type="button"
-                    onClick={() => setSelectedRecipe(recipe.id === selectedRecipe?.id ? null : recipe)}
-                    className={`w-full rounded-2xl border p-4 text-left transition-all hover:shadow-sm ${
+                    onClick={() => setSelectedRecipe(recipe)}
+                    className={`flex min-w-0 flex-col gap-3 rounded-2xl border p-4 text-left transition-all hover:shadow-sm ${
                       selectedRecipe?.id === recipe.id
-                        ? "border-[#0D1B3E]/30 bg-[#0D1B3E]/[0.03] shadow-sm ring-1 ring-[#0D1B3E]/10"
+                        ? "border-[#C9A227] shadow-sm ring-1 ring-[#C9A227]/20"
                         : !recipe.active
                           ? "border-slate-200 bg-slate-50/50"
                           : simulation.missingItems > 0
@@ -395,57 +389,41 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
                             : "border-slate-200 bg-white hover:border-slate-300"
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-black text-slate-900 truncate">{recipe.name}</p>
-                          {!recipe.active && <Badge color="default" size="sm">Inativa</Badge>}
-                          {simulation.missingItems > 0 && <Badge color="warning" size="sm">Falta estoque</Badge>}
-                        </div>
-                        <p className="text-[11px] font-semibold text-slate-500 truncate">
-                          {recipe.product?.name || "Sem produto vinculado"} • Base: {formatQuantity(recipe.outputQuantity, recipe.outputUnit)}
-                        </p>
-                        <div className="flex flex-wrap gap-3 pt-1">
-                          <span className="text-[11px] font-black text-slate-700">{formatCurrency(simulation.totalCost)}</span>
-                          <span className="text-[11px] text-slate-400">{formatCurrency(simulation.costPerOutput)} por {simulation.outputUnit}</span>
-                          <span className="text-[11px] text-slate-400">{recipe.ingredients.length} insumo(s)</span>
-                        </div>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#fdf8e8] text-[#A8841C]">
+                        <ChefHat className="h-[18px] w-[18px]" />
                       </div>
-                      <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                        <IconButton
-                          size="sm"
-                          variant="ghost"
-                          title="Registrar produção"
-                          onClick={() => setRecipeToProduce(recipe)}
-                        >
-                          <Play className="h-4 w-4" />
-                        </IconButton>
-                        <IconButton
-                          size="sm"
-                          variant="ghost"
-                          title="Editar receita"
-                          onClick={() => { setEditingRecipe(recipe); setShowRecipeModal(true); }}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </IconButton>
-                        <IconButton
-                          size="sm"
-                          variant="ghost"
-                          title="Duplicar receita"
-                          onClick={() => void handleDuplicateRecipe(tenant.slug, recipe, fetchData, toast.error)}
-                        >
-                          <Copy className="h-4 w-4" />
-                        </IconButton>
-                        <IconButton
-                          size="sm"
-                          variant="ghost"
-                          className="text-red-500 hover:text-red-700"
-                          title="Excluir receita"
-                          onClick={() => setRecipeToDelete(recipe)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </IconButton>
-                      </div>
+                      {!recipe.active ? (
+                        <Badge color="default" size="sm">Inativa</Badge>
+                      ) : simulation.missingItems > 0 ? (
+                        <Badge color="warning" size="sm">Falta estoque</Badge>
+                      ) : (
+                        <Badge color="success" size="sm">Ativa</Badge>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-[13.5px] font-black text-slate-900">{recipe.name}</p>
+                      <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-400">
+                        {recipe.product?.name || "Sem produto vinculado"} · Base {formatQuantity(recipe.outputQuantity, recipe.outputUnit)}
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-between text-[11.5px] text-slate-500">
+                      <span className="font-black text-slate-900">{formatCurrency(simulation.totalCost)}</span>
+                      <span>{recipe.ingredients.length} insumo(s)</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 border-t border-slate-100 pt-3" onClick={(e) => e.stopPropagation()}>
+                      <IconButton size="sm" variant="ghost" title="Registrar produção" onClick={() => setRecipeToProduce(recipe)}>
+                        <Play className="h-4 w-4" />
+                      </IconButton>
+                      <IconButton size="sm" variant="ghost" title="Editar receita" onClick={() => { setEditingRecipe(recipe); setShowRecipeModal(true); }}>
+                        <Pencil className="h-4 w-4" />
+                      </IconButton>
+                      <IconButton size="sm" variant="ghost" title="Duplicar receita" onClick={() => void handleDuplicateRecipe(tenant.slug, recipe, fetchData, toast.error)}>
+                        <Copy className="h-4 w-4" />
+                      </IconButton>
+                      <IconButton size="sm" variant="ghost" className="ml-auto text-red-500 hover:text-red-700" title="Excluir receita" onClick={() => setRecipeToDelete(recipe)}>
+                        <Trash2 className="h-4 w-4" />
+                      </IconButton>
                     </div>
                   </button>
                 ))}
@@ -453,17 +431,12 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
             )}
           </ContentCard>
 
-          {/* Painel de detalhes */}
-          <ContentCard padding="md" className="min-w-0 space-y-4">
-            {!selectedRecipe || !previewSimulation ? (
-              <EmptyState
-                icon={Factory}
-                title="Selecione uma receita"
-                description="Clique em uma ficha técnica para ver consumo projetado, custo, CMV unitário e simulação de produção."
-              />
-            ) : (
-              <>
-                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          {/* Painel de detalhes (slide-over) */}
+          {selectedRecipe && previewSimulation && (
+            <div className="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true">
+              <div className="absolute inset-0 bg-slate-900/40" onClick={() => setSelectedRecipe(null)} />
+              <div className="relative flex h-full w-full max-w-md flex-col gap-4 overflow-y-auto bg-white p-5 shadow-2xl">
+                <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 space-y-1.5">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="min-w-0 break-words text-base font-black tracking-tight text-slate-900">{selectedRecipe.name}</p>
@@ -488,28 +461,33 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
                       )}
                     </div>
                   </div>
-                  <div className="grid w-full gap-3 shrink-0 md:w-[220px]">
+                  <IconButton size="sm" variant="ghost" title="Fechar" onClick={() => setSelectedRecipe(null)} className="shrink-0">
+                    <X className="h-4 w-4" />
+                  </IconButton>
+                </div>
+
+                <div>
+                  <p className="mb-1.5 text-[11px] font-bold text-slate-500">Quantidade a produzir</p>
+                  <div className="flex items-center gap-2">
                     <Input
-                      label="Quantidade a produzir"
                       type="number"
                       min="0.001"
                       step="0.001"
                       value={previewQuantity}
                       onChange={(e) => setPreviewQuantity(e.target.value)}
                       addonRight={selectedRecipe.outputUnit}
+                      className="flex-1"
                     />
-                    <div className="flex flex-wrap gap-2">
-                      {[1, 2, 5].map((multiplier) => (
-                        <Button
-                          key={multiplier}
-                          size="xs"
-                          variant="outline"
-                          onClick={() => setPreviewQuantity(String(roundProductionValue(selectedRecipe.outputQuantity * multiplier)))}
-                        >
-                          x{multiplier}
-                        </Button>
-                      ))}
-                    </div>
+                    {[1, 2, 5].map((multiplier) => (
+                      <Button
+                        key={multiplier}
+                        size="xs"
+                        variant="outline"
+                        onClick={() => setPreviewQuantity(String(roundProductionValue(selectedRecipe.outputQuantity * multiplier)))}
+                      >
+                        x{multiplier}
+                      </Button>
+                    ))}
                   </div>
                 </div>
 
@@ -521,17 +499,17 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
                 </div>
 
                 {selectedRecipe.product?.price ? (
-                  <div className="rounded-3xl border border-emerald-100 bg-emerald-50/70 p-4">
+                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
-                        <p className="text-[11px] font-black uppercase tracking-[0.24em] text-emerald-600">Margem estimada</p>
-                        <p className="mt-1 text-sm font-semibold text-emerald-800">Preço do produto: {formatCurrency(selectedRecipe.product.price)}</p>
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600">Margem estimada</p>
+                        <p className="mt-1 text-xs font-semibold text-emerald-800">Preço do produto: {formatCurrency(selectedRecipe.product.price)}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-2xl font-black text-emerald-700">
+                        <p className="text-xl font-black text-emerald-700">
                           {formatCurrency(selectedRecipe.product.price - previewSimulation.costPerOutput)}
                         </p>
-                        <p className="text-[11px] font-semibold text-emerald-600">por {selectedRecipe.outputUnit}</p>
+                        <p className="text-[10px] font-semibold text-emerald-600">por {selectedRecipe.outputUnit}</p>
                       </div>
                     </div>
                   </div>
@@ -549,7 +527,7 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
                       key={ingredient.id}
                       className={`rounded-2xl border p-4 ${ingredient.available ? "border-emerald-100 bg-emerald-50/40" : "border-amber-200 bg-amber-50/70"}`}
                     >
-                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="flex flex-col gap-3">
                         <div className="min-w-0 space-y-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="break-words text-sm font-black text-slate-900">{ingredient.itemName}</p>
@@ -563,7 +541,7 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
                           </p>
                           {ingredient.message && <p className="text-[11px] font-semibold text-amber-700">{ingredient.message}</p>}
                         </div>
-                        <div className="grid w-full grid-cols-2 gap-2 text-right shrink-0 lg:w-[200px]">
+                        <div className="grid grid-cols-2 gap-2 text-right sm:grid-cols-4">
                           <MetricPill label="Antes" value={formatQuantity(ingredient.stockBefore, ingredient.inventoryUnit)} />
                           <MetricPill label="Depois" value={formatQuantity(ingredient.stockAfter, ingredient.inventoryUnit)} />
                           <MetricPill label="Custo unit." value={formatCurrency(ingredient.unitCost)} />
@@ -606,8 +584,8 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
                 {previewSimulation.outputSnapshot && (
                   <>
                     <Divider />
-                    <div className="rounded-3xl border border-[#0D1B3E]/10 bg-[#0D1B3E]/[0.03] p-4">
-                      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="rounded-2xl border border-[#0D1B3E]/10 bg-[#0D1B3E]/[0.03] p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                           <p className="text-sm font-black text-slate-900">Entrada do produto final</p>
                           <p className="text-[11px] text-slate-500">Ao concluir, o item vinculado recebe entrada automática.</p>
@@ -616,7 +594,7 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
                           {previewSimulation.outputSnapshot.canRestock ? "Entrada configurada" : "Configuração pendente"}
                         </Badge>
                       </div>
-                      <div className="mt-4 grid gap-3 md:grid-cols-2">
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
                         <MetricPill label="Produção planejada" value={formatQuantity(previewSimulation.outputSnapshot.requestedQuantity, previewSimulation.outputSnapshot.requestedUnit)} />
                         <MetricPill
                           label="Estoque final"
@@ -635,7 +613,7 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
                 {selectedRecipe.instructions && (
                   <>
                     <Divider />
-                    <div className="rounded-3xl border border-slate-200 bg-slate-50/70 p-4">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
                       <p className="text-sm font-black text-slate-900">Modo de preparo</p>
                       <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-slate-600">
                         {selectedRecipe.instructions}
@@ -644,7 +622,7 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
                   </>
                 )}
 
-                <div className="flex flex-col gap-3 sm:flex-row">
+                <div className="mt-auto flex flex-col gap-3 pt-2 sm:flex-row">
                   <Button variant="primary" size="lg" iconLeft={<Play className="h-4 w-4" />} onClick={() => setRecipeToProduce(selectedRecipe)}>
                     Registrar Agora
                   </Button>
@@ -652,10 +630,10 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
                     Editar Ficha
                   </Button>
                 </div>
-              </>
-            )}
-          </ContentCard>
-        </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* Aba Histórico */}
