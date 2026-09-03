@@ -43,7 +43,7 @@ import {
   useToast,
 } from "../../../../components";
 import { apiFetch, apiJson } from "../../../../lib/api";
-import { DeliveryZone, KmRange, PaymentConfig, Tenant } from "../../../../types";
+import { DeliveryZone, KmRange, PaymentConfig, ProductExtraStockLink, Tenant } from "../../../../types";
 
 export const fmt = (n: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
@@ -513,6 +513,117 @@ export interface RecipeIngredientDraft {
 
 const RECIPE_UNIT_OPTIONS = ["g", "kg", "ml", "l", "un", "dz", "cm", "m"];
 
+const PICKER_ACCENT = {
+  orange: { ring: "focus:ring-orange-400", border: "border-orange-200" },
+  amber: { ring: "focus:ring-amber-400", border: "border-amber-200" },
+} as const;
+
+// Modal de busca de item do estoque, compartilhado por qualquer campo que precise
+// escolher um item (insumos de receita, vínculos de estoque de adicionais, etc) —
+// busca por nome, filtro e agrupamento visual por categoria de estoque.
+export function InventoryItemPickerModal({
+  isOpen,
+  onClose,
+  inventoryItems,
+  inventoryCategories = [],
+  onPick,
+  accent = "orange",
+  title = "Escolher item do estoque",
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  inventoryItems: any[];
+  inventoryCategories?: any[];
+  onPick: (item: any) => void;
+  accent?: keyof typeof PICKER_ACCENT;
+  title?: string;
+}) {
+  const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const colors = PICKER_ACCENT[accent];
+  const categoryById = new Map(inventoryCategories.map((cat: any) => [cat.id, cat]));
+
+  const filtered = inventoryItems.filter((item: any) =>
+    (!search || item.name.toLowerCase().includes(search.toLowerCase())) &&
+    (categoryFilter === "all" || item.categoryId === categoryFilter)
+  );
+
+  // Agrupa por categoria de estoque pra facilitar achar o item certo quando tem muitos
+  const groupedFiltered = (() => {
+    const groups = new Map<string, { label: string; items: any[] }>();
+    for (const item of filtered) {
+      const key = item.categoryId || "_none";
+      if (!groups.has(key)) {
+        groups.set(key, { label: categoryById.get(item.categoryId)?.name || "Sem categoria", items: [] });
+      }
+      groups.get(key)!.items.push(item);
+    }
+    return Array.from(groups.values()).sort((a, b) => a.label.localeCompare(b.label));
+  })();
+
+  const handleClose = () => { onClose(); setSearch(""); setCategoryFilter("all"); };
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
+      title={title}
+      size="md"
+      mobileStyle="bottom-sheet"
+      footer={<ModalFooter><Button variant="outline" onClick={handleClose}>Fechar</Button></ModalFooter>}
+    >
+      <div className="space-y-2.5 p-1">
+        <input
+          autoFocus
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Buscar item..."
+          className={`w-full bg-zinc-50 border ${colors.border} rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 ${colors.ring}`}
+        />
+        {inventoryCategories.length > 0 && (
+          <select
+            value={categoryFilter}
+            onChange={e => setCategoryFilter(e.target.value)}
+            className={`w-full bg-zinc-50 border ${colors.border} rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 ${colors.ring}`}
+          >
+            <option value="all">Todas as categorias</option>
+            {inventoryCategories.map((cat: any) => (
+              <option key={cat.id} value={cat.id}>{cat.name}</option>
+            ))}
+          </select>
+        )}
+        <div className="space-y-2.5 max-h-[50vh] overflow-y-auto pr-1">
+          {groupedFiltered.map(group => (
+            <div key={group.label}>
+              {categoryFilter === "all" && (
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1 mb-1">{group.label}</p>
+              )}
+              <div className="space-y-1.5">
+                {group.items.map((item: any) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => { onPick(item); handleClose(); }}
+                    className="w-full flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm text-left hover:bg-slate-50 border border-transparent transition-colors"
+                  >
+                    <p className="flex-1 min-w-0 font-black text-slate-800 truncate text-[13px]">{item.name}</p>
+                    <p className={`text-[10px] font-black uppercase shrink-0 ${item.quantity <= 0 ? "text-red-500" : item.quantity < 5 ? "text-amber-500" : "text-green-600"}`}>
+                      {item.quantity <= 0 ? "Esgotado" : `${item.quantity} ${item.unit || 'un'}`}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+          {filtered.length === 0 && (
+            <p className="text-center text-sm text-slate-400 py-6">Nenhum item encontrado</p>
+          )}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 // Lista simples de insumos que o produto consome ao ser vendido — cada item do
 // estoque pode ter sua própria quantidade e unidade (100g de frango, 1un de espeto,
 // 10g de sal...). Some tudo isso vira uma ProductionRecipe por trás, mas o usuário
@@ -529,12 +640,7 @@ export function RecipeIngredientsField({
   onChange: (val: RecipeIngredientDraft[]) => void;
 }) {
   const [pickerOpenFor, setPickerOpenFor] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-
-  const saleItems = inventoryItems;
-  const itemById = new Map(saleItems.map((item: any) => [item.id, item]));
-  const categoryById = new Map(inventoryCategories.map((cat: any) => [cat.id, cat]));
+  const itemById = new Map(inventoryItems.map((item: any) => [item.id, item]));
 
   const addIngredient = () => {
     const draft: RecipeIngredientDraft = {
@@ -555,24 +661,6 @@ export function RecipeIngredientsField({
     onChange(value.filter(ing => ing._key !== key));
   };
 
-  const filtered = saleItems.filter((item: any) =>
-    (!search || item.name.toLowerCase().includes(search.toLowerCase())) &&
-    (categoryFilter === "all" || item.categoryId === categoryFilter)
-  );
-
-  // Agrupa por categoria de estoque pra facilitar achar o item certo quando tem muitos
-  const groupedFiltered = (() => {
-    const groups = new Map<string, { label: string; items: any[] }>();
-    for (const item of filtered) {
-      const key = item.categoryId || "_none";
-      if (!groups.has(key)) {
-        groups.set(key, { label: categoryById.get(item.categoryId)?.name || "Sem categoria", items: [] });
-      }
-      groups.get(key)!.items.push(item);
-    }
-    return Array.from(groups.values()).sort((a, b) => a.label.localeCompare(b.label));
-  })();
-
   return (
     <div className="space-y-2">
       <label className="block text-[11px] font-black uppercase tracking-widest text-orange-600">Insumos usados (opcional)</label>
@@ -585,7 +673,7 @@ export function RecipeIngredientsField({
             <div key={ing._key} className="flex items-center gap-2 bg-orange-50/60 border border-orange-200 rounded-xl px-2.5 py-2">
               <button
                 type="button"
-                onClick={() => { setPickerOpenFor(ing._key); setSearch(""); }}
+                onClick={() => setPickerOpenFor(ing._key)}
                 className="flex-1 min-w-0 text-left text-sm font-bold text-slate-800 truncate hover:text-orange-600"
               >
                 {item ? item.name : <span className="text-slate-400 font-semibold">Escolher item do estoque...</span>}
@@ -626,80 +714,114 @@ export function RecipeIngredientsField({
         <Plus className="w-3.5 h-3.5" /> Adicionar insumo
       </button>
 
-      {saleItems.length === 0 && (
+      {inventoryItems.length === 0 && (
         <p className="text-[11px] text-slate-400 italic">Nenhum item cadastrado no estoque ainda.</p>
       )}
 
-      {/* Modal de seleção do item de estoque para o insumo sendo editado */}
-      <Modal
+      <InventoryItemPickerModal
         isOpen={!!pickerOpenFor}
-        onClose={() => { setPickerOpenFor(null); setSearch(""); setCategoryFilter("all"); }}
-        title="Escolher item do estoque"
-        size="md"
-        mobileStyle="bottom-sheet"
-        footer={<ModalFooter><Button variant="outline" onClick={() => { setPickerOpenFor(null); setSearch(""); setCategoryFilter("all"); }}>Fechar</Button></ModalFooter>}
+        onClose={() => setPickerOpenFor(null)}
+        inventoryItems={inventoryItems}
+        inventoryCategories={inventoryCategories}
+        accent="orange"
+        onPick={(item) => {
+          if (pickerOpenFor) {
+            updateIngredient(pickerOpenFor, { inventoryItemId: item.id, unit: item.stockUnit || item.unit || "un" });
+          }
+        }}
+      />
+    </div>
+  );
+}
+
+// Vínculo(s) de um adicional de produto com estoque — um adicional pode descontar
+// vários itens ao mesmo tempo (ex: "Kit Viagem" -> Embalagem térmica + Copo + Canudo).
+// Mesmo padrão de RecipeIngredientsField, reaproveitando o mesmo picker de item.
+export function StockLinksField({
+  inventoryItems,
+  inventoryCategories = [],
+  value,
+  onChange,
+}: {
+  inventoryItems: any[];
+  inventoryCategories?: any[];
+  value: ProductExtraStockLink[];
+  onChange: (val: ProductExtraStockLink[]) => void;
+}) {
+  const [pickerOpenFor, setPickerOpenFor] = useState<string | null>(null);
+  const itemById = new Map(inventoryItems.map((item: any) => [item.id, item]));
+
+  const addLink = () => {
+    const draft: ProductExtraStockLink = { id: crypto.randomUUID(), inventoryItemId: "", quantity: 1, unit: "un" };
+    onChange([...value, draft]);
+    setPickerOpenFor(draft.id);
+  };
+
+  const updateLink = (id: string, patch: Partial<ProductExtraStockLink>) => {
+    onChange(value.map(link => link.id === id ? { ...link, ...patch } : link));
+  };
+
+  const removeLink = (id: string) => {
+    onChange(value.filter(link => link.id !== id));
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="space-y-1.5">
+        {value.map(link => {
+          const item = itemById.get(link.inventoryItemId);
+          return (
+            <div key={link.id} className="flex items-center gap-1.5 bg-white border border-amber-200 rounded-lg px-2 py-1.5">
+              <span className="text-[11px] font-bold text-slate-500 shrink-0">Consome</span>
+              <input
+                type="number"
+                inputMode="decimal"
+                placeholder="Qtd"
+                value={link.quantity}
+                onChange={e => updateLink(link.id, { quantity: parseFloat(e.target.value) || 0 })}
+                className="w-14 bg-zinc-50 border border-amber-200 rounded-lg px-1.5 py-1 text-xs font-bold text-center focus:outline-none focus:ring-2 focus:ring-amber-400"
+              />
+              <button
+                type="button"
+                onClick={() => setPickerOpenFor(link.id)}
+                className="flex-1 min-w-0 text-left text-xs font-bold text-slate-800 truncate hover:text-amber-700"
+              >
+                {item ? `${link.unit || item.stockUnit || item.unit || "un"} de ${item.name}` : <span className="text-slate-400 font-semibold">Escolher item do estoque...</span>}
+              </button>
+              <button
+                type="button"
+                onClick={() => removeLink(link.id)}
+                className="p-1 text-slate-400 hover:text-red-500 shrink-0"
+                title="Remover vínculo"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      <button
+        type="button"
+        onClick={addLink}
+        className="w-full flex items-center justify-center gap-1.5 border-2 border-dashed border-amber-200 rounded-lg px-2.5 py-1.5 text-[11px] font-black uppercase tracking-wide text-amber-600 hover:bg-amber-50 transition-colors"
       >
-        <div className="space-y-3 p-1">
-          <input
-            autoFocus
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar item..."
-            className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-orange-400"
-          />
-          {inventoryCategories.length > 0 && (
-            <select
-              value={categoryFilter}
-              onChange={e => setCategoryFilter(e.target.value)}
-              className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-orange-400"
-            >
-              <option value="all">Todas as categorias</option>
-              {inventoryCategories.map((cat: any) => (
-                <option key={cat.id} value={cat.id}>{cat.name}</option>
-              ))}
-            </select>
-          )}
-          <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
-            {groupedFiltered.map(group => (
-              <div key={group.label}>
-                {categoryFilter === "all" && (
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1 mb-1">{group.label}</p>
-                )}
-                <div className="space-y-2">
-                  {group.items.map((item: any) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => {
-                        if (pickerOpenFor) {
-                          updateIngredient(pickerOpenFor, {
-                            inventoryItemId: item.id,
-                            unit: item.stockUnit || item.unit || "un",
-                          });
-                        }
-                        setPickerOpenFor(null);
-                        setSearch("");
-                        setCategoryFilter("all");
-                      }}
-                      className="w-full flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm text-left hover:bg-slate-50 border border-transparent transition-colors"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="font-black text-slate-800 truncate">{item.name}</p>
-                        <p className={`text-[10px] font-black uppercase ${item.quantity <= 0 ? "text-red-500" : item.quantity < 5 ? "text-amber-500" : "text-green-600"}`}>
-                          {item.quantity <= 0 ? "Esgotado" : `${item.quantity} ${item.unit || 'un'}`}
-                        </p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-            {filtered.length === 0 && (
-              <p className="text-center text-sm text-slate-400 py-6">Nenhum item encontrado</p>
-            )}
-          </div>
-        </div>
-      </Modal>
+        <Plus className="w-3 h-3" /> {value.length > 0 ? "Vincular outro item do estoque" : "Vincular a um item do estoque"}
+      </button>
+
+      <InventoryItemPickerModal
+        isOpen={!!pickerOpenFor}
+        onClose={() => setPickerOpenFor(null)}
+        inventoryItems={inventoryItems}
+        inventoryCategories={inventoryCategories}
+        accent="amber"
+        title="Vincular item do estoque ao adicional"
+        onPick={(item) => {
+          if (pickerOpenFor) {
+            updateLink(pickerOpenFor, { inventoryItemId: item.id, unit: item.stockUnit || item.unit || "un" });
+          }
+        }}
+      />
     </div>
   );
 }

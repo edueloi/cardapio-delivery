@@ -3147,13 +3147,16 @@ app.get("/api/admin/tenant/:slug", requireAuth, async (req, res) => {
 // produto (nunca confia em preço nem vínculo de estoque vindo do client, só no id
 // selecionado) — usado no pedido público e no PDV pra fixar o preço final e decidir o
 // que dar baixa no estoque (ex: adicional "Embalagem de viagem" vinculado a um insumo).
+type ResolvedExtraStockLink = {
+  inventoryItemId: string;
+  quantity: number;
+  unit?: string;
+};
 type ResolvedExtra = {
   id: string;
   label: string;
   price: number;
-  inventoryItemId?: string;
-  inventoryQuantity?: number;
-  inventoryUnit?: string;
+  stockLinks?: ResolvedExtraStockLink[];
   autoApplyOnTakeout?: boolean;
 };
 function resolveSelectedExtras(
@@ -3187,13 +3190,20 @@ function resolveSelectedExtras(
   for (const id of selectedIds) {
     const def = extrasById.get(id);
     if (!def) continue;
+    // stockLinks é o formato atual (vários itens por adicional); produto salvo antes
+    // dessa mudança só tem o vínculo único legado (inventoryItemId/Quantity/Unit).
+    const stockLinks: ResolvedExtraStockLink[] = Array.isArray(def.stockLinks) && def.stockLinks.length > 0
+      ? def.stockLinks
+          .filter((l: any) => l?.inventoryItemId)
+          .map((l: any) => ({ inventoryItemId: l.inventoryItemId, quantity: Number(l.quantity) || 0, unit: l.unit || undefined }))
+      : def.inventoryItemId
+        ? [{ inventoryItemId: def.inventoryItemId, quantity: def.inventoryQuantity != null ? Number(def.inventoryQuantity) : 0, unit: def.inventoryUnit || undefined }]
+        : [];
     resolved.push({
       id: def.id,
       label: def.label,
       price: Number(def.price) || 0,
-      inventoryItemId: def.inventoryItemId || undefined,
-      inventoryQuantity: def.inventoryQuantity != null ? Number(def.inventoryQuantity) : undefined,
-      inventoryUnit: def.inventoryUnit || undefined,
+      stockLinks: stockLinks.length > 0 ? stockLinks : undefined,
       autoApplyOnTakeout: def.autoApplyOnTakeout || undefined,
     });
   }
@@ -3909,18 +3919,20 @@ async function deductSelectedExtrasStock(
     return;
   }
   for (const extra of extras) {
-    if (!extra.inventoryItemId || !extra.inventoryQuantity) continue;
-    const deductQty = extra.inventoryQuantity * item.quantity;
-    const updatedBatches = await deductStockFIFO(
-      prisma,
-      tenantId,
-      extra.inventoryItemId,
-      deductQty,
-      orderId,
-      "SALE"
-    );
-    if (updatedBatches.length > 0) {
-      await handleStockBatchSideEffects(tenantId, tenantWhatsapp, updatedBatches, deductQty);
+    for (const link of extra.stockLinks || []) {
+      if (!link.inventoryItemId || !link.quantity) continue;
+      const deductQty = link.quantity * item.quantity;
+      const updatedBatches = await deductStockFIFO(
+        prisma,
+        tenantId,
+        link.inventoryItemId,
+        deductQty,
+        orderId,
+        "SALE"
+      );
+      if (updatedBatches.length > 0) {
+        await handleStockBatchSideEffects(tenantId, tenantWhatsapp, updatedBatches, deductQty);
+      }
     }
   }
 }
@@ -4207,18 +4219,20 @@ async function restockSelectedExtras(
   }
   const touched: string[] = [];
   for (const extra of extras) {
-    if (!extra.inventoryItemId || !extra.inventoryQuantity) continue;
-    const restocked = await restockOrderItemInventory(
-      tx,
-      tenantId,
-      orderId,
-      extra.inventoryItemId,
-      roundMoney(Number(extra.inventoryQuantity) * removedQuantity),
-      "SALE",
-      "ORDER_ITEM_REMOVED_SALE",
-      extra.inventoryUnit
-    );
-    if (restocked) touched.push(extra.inventoryItemId);
+    for (const link of extra.stockLinks || []) {
+      if (!link.inventoryItemId || !link.quantity) continue;
+      const restocked = await restockOrderItemInventory(
+        tx,
+        tenantId,
+        orderId,
+        link.inventoryItemId,
+        roundMoney(Number(link.quantity) * removedQuantity),
+        "SALE",
+        "ORDER_ITEM_REMOVED_SALE",
+        link.unit
+      );
+      if (restocked) touched.push(link.inventoryItemId);
+    }
   }
   return touched;
 }

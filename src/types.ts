@@ -404,17 +404,28 @@ export interface Category {
   products: Product[];
 }
 
+export interface ProductExtraStockLink {
+  id: string;              // uuid local, chave estável pro form (React key + picker)
+  inventoryItemId: string;
+  quantity: number;        // quantidade consumida por seleção (por unidade do item do pedido)
+  unit: string;            // unidade em que quantity é expresso (ex: "un", "g")
+}
+
 export interface ProductExtra {
   id: string;       // uuid gerado no front
   label: string;    // "Gelo", "Limão", "Sem Cebola", "Embalagem de viagem"
   price?: number;   // 0 = gratuito
   imageUrl?: string;
-  // Vínculo opcional com estoque: ao ser selecionado pelo cliente, dá baixa
-  // nesse item de estoque (ex: adicional "Embalagem de viagem" -> consome
-  // 1un de "Caixa Kraft P"). Sem vínculo = adicional não afeta estoque.
+  // Legado: um único vínculo com estoque, mantido só pra ler produtos salvos antes de
+  // stockLinks existir — cadastro novo usa sempre stockLinks (ver resolveSelectedExtras
+  // no server, que faz o fallback pra esse formato quando stockLinks não existe).
   inventoryItemId?: string | null;
-  inventoryQuantity?: number | null; // quantidade consumida por seleção (por unidade do item do pedido)
-  inventoryUnit?: string | null;     // unidade em que inventoryQuantity é expresso (ex: "un", "g")
+  inventoryQuantity?: number | null;
+  inventoryUnit?: string | null;
+  // Vínculo(s) com estoque: ao ser selecionado pelo cliente, dá baixa em cada item
+  // listado aqui (ex: adicional "Kit Viagem" -> consome 1un de "Embalagem térmica" +
+  // 1un de "Copo" + 1un de "Canudo"). Vazio/ausente = adicional não afeta estoque.
+  stockLinks?: ProductExtraStockLink[];
   // Aplica esse adicional automaticamente quando o pedido é "para viagem" (consumptionType
   // TAKEOUT), sem exigir que o cliente/operador selecione manualmente — ex: embalagem.
   autoApplyOnTakeout?: boolean;
