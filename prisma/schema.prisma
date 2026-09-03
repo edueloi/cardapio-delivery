@@ -805,6 +805,7 @@ model OrderItem {
   quantity         Int
   price            Float
   notes            String? // User observations (remover cebola, etc)
+  selectedExtras   String? @map("selected_extras") @db.Text // JSON: ProductExtra[] — snapshot dos adicionais escolhidos, incl. vínculo de estoque
 
   order   Order   @relation(fields: [orderId], references: [id])
   product Product @relation(fields: [productId], references: [id])

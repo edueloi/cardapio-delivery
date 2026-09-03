@@ -406,9 +406,15 @@ export interface Category {
 
 export interface ProductExtra {
   id: string;       // uuid gerado no front
-  label: string;    // "Gelo", "Limão", "Sem Cebola"
+  label: string;    // "Gelo", "Limão", "Sem Cebola", "Embalagem de viagem"
   price?: number;   // 0 = gratuito
   imageUrl?: string;
+  // Vínculo opcional com estoque: ao ser selecionado pelo cliente, dá baixa
+  // nesse item de estoque (ex: adicional "Embalagem de viagem" -> consome
+  // 1un de "Caixa Kraft P"). Sem vínculo = adicional não afeta estoque.
+  inventoryItemId?: string | null;
+  inventoryQuantity?: number | null; // quantidade consumida por seleção (por unidade do item do pedido)
+  inventoryUnit?: string | null;     // unidade em que inventoryQuantity é expresso (ex: "un", "g")
 }
 
 // Grupo de seleção embutido no produto — ex: "2 espetos tradicionais" (preço fixo)
@@ -658,6 +664,7 @@ export interface OrderItem {
   quantity: number;
   price: number;
   notes?: string;
+  selectedExtras?: string | null; // JSON: ProductExtra[] — snapshot dos adicionais escolhidos no pedido
   product?: Product;
   productVariant?: ProductVariant | null;
 }

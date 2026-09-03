@@ -1204,6 +1204,13 @@ const migrations = [
     check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'driver_name'",
     run: "ALTER TABLE orders ADD COLUMN driver_name VARCHAR(191) NULL",
   },
+  // Snapshot dos adicionais escolhidos no item do pedido (inclui vínculo de estoque,
+  // ex: adicional "Embalagem de viagem" -> baixa em item de estoque)
+  {
+    name: 'add_order_items_selected_extras',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'order_items' AND COLUMN_NAME = 'selected_extras'",
+    run: "ALTER TABLE order_items ADD COLUMN selected_extras TEXT NULL",
+  },
 ];
 
 async function run() {

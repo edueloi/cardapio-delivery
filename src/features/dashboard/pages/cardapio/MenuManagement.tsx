@@ -321,7 +321,7 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
     scheduleRuleStartDate: "",
     scheduleRuleEndDate: "",
     variants: [] as { _key: string, name: string, price: string, description: string, inventoryItemId: string, imageUrl: string }[],
-    extras: [] as { id: string, label: string, price: string }[],
+    extras: [] as { id: string, label: string, price: string, inventoryItemId: string, inventoryQuantity: string, inventoryUnit: string }[],
     // Grupos de seleção embutidos — cada um deixa o cliente escolher N itens de uma
     // categoria/lista, sem alterar o preço fixo do produto. Uma marmita pode ter vários:
     // "Guarnição" (escolha 1), "Arroz" (escolha 1), "Feijão" (escolha 1) — cada grupo sua
@@ -332,6 +332,8 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
   });
   const [extraInput, setExtraInput] = useState({ label: "", price: "" });
   const [recipeIngredients, setRecipeIngredients] = useState<RecipeIngredientDraft[]>([]);
+  const [extraStockPickerFor, setExtraStockPickerFor] = useState<string | null>(null);
+  const [extraStockSearch, setExtraStockSearch] = useState("");
 
   useEffect(() => {
     if (tenant) {
@@ -414,10 +416,17 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
 
   const openEditProduct = (prod: any) => {
     setEditingProduct(prod);
-    let parsedExtras: { id: string, label: string, price: string }[] = [];
+    let parsedExtras: { id: string, label: string, price: string, inventoryItemId: string, inventoryQuantity: string, inventoryUnit: string }[] = [];
     try {
       const raw = prod.extras ? JSON.parse(prod.extras) : [];
-      parsedExtras = raw.map((e: any) => ({ id: e.id, label: e.label, price: String(e.price ?? 0) }));
+      parsedExtras = raw.map((e: any) => ({
+        id: e.id,
+        label: e.label,
+        price: String(e.price ?? 0),
+        inventoryItemId: e.inventoryItemId || "",
+        inventoryQuantity: e.inventoryQuantity != null ? String(e.inventoryQuantity) : "",
+        inventoryUnit: e.inventoryUnit || "",
+      }));
     } catch {}
     let scheduleRuleEnabled = false;
     let scheduleRuleType: "weekday" | "daterange" | "both" = "weekday";
@@ -573,7 +582,14 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ...prodForm,
-        extras: JSON.stringify(prodForm.extras.map(e => ({ id: e.id, label: e.label, price: parseFloat(e.price) || 0 }))),
+        extras: JSON.stringify(prodForm.extras.map(e => ({
+          id: e.id,
+          label: e.label,
+          price: parseFloat(e.price) || 0,
+          inventoryItemId: e.inventoryItemId || undefined,
+          inventoryQuantity: e.inventoryItemId && e.inventoryQuantity ? parseFloat(e.inventoryQuantity) || undefined : undefined,
+          inventoryUnit: e.inventoryItemId ? (e.inventoryUnit || undefined) : undefined,
+        }))),
         selectionGroup,
         scheduleRule,
         categoryId: prodModal.categoryId,
@@ -1243,7 +1259,7 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
                 onKeyDown={e => {
                   if (e.key === 'Enter' && extraInput.label.trim()) {
                     e.preventDefault();
-                    setProdForm(prev => ({ ...prev, extras: [...prev.extras, { id: crypto.randomUUID(), label: extraInput.label.trim(), price: extraInput.price }] }));
+                    setProdForm(prev => ({ ...prev, extras: [...prev.extras, { id: crypto.randomUUID(), label: extraInput.label.trim(), price: extraInput.price, inventoryItemId: "", inventoryQuantity: "", inventoryUnit: "" }] }));
                     setExtraInput({ label: "", price: "" });
                   }
                 }}
@@ -1258,22 +1274,119 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
               <button
                 onClick={() => {
                   if (!extraInput.label.trim()) return;
-                  setProdForm(prev => ({ ...prev, extras: [...prev.extras, { id: crypto.randomUUID(), label: extraInput.label.trim(), price: extraInput.price }] }));
+                  setProdForm(prev => ({ ...prev, extras: [...prev.extras, { id: crypto.randomUUID(), label: extraInput.label.trim(), price: extraInput.price, inventoryItemId: "", inventoryQuantity: "", inventoryUnit: "" }] }));
                   setExtraInput({ label: "", price: "" });
                 }}
                 className="px-3 py-2 bg-amber-500 text-white rounded-xl text-sm font-black hover:bg-amber-600"
               >+</button>
             </div>
             {prodForm.extras.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {prodForm.extras.map((ex) => (
-                  <span key={ex.id} className="inline-flex items-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold px-3 py-1.5 rounded-full">
-                    {ex.label}{parseFloat(ex.price) > 0 ? ` +R$${parseFloat(ex.price).toFixed(2)}` : ' (grátis)'}
-                    <button onClick={() => setProdForm(prev => ({ ...prev, extras: prev.extras.filter(e => e.id !== ex.id) }))} className="hover:text-red-500 ml-0.5">×</button>
-                  </span>
-                ))}
+              <div className="space-y-2">
+                {prodForm.extras.map((ex) => {
+                  const linkedItem = ex.inventoryItemId ? inventoryItems.find((i: any) => i.id === ex.inventoryItemId) : null;
+                  return (
+                    <div key={ex.id} className="bg-amber-50/60 border border-amber-200 rounded-xl px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="flex-1 text-sm font-bold text-amber-900 truncate">
+                          {ex.label}{parseFloat(ex.price) > 0 ? ` +R$${parseFloat(ex.price).toFixed(2)}` : ' (grátis)'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setProdForm(prev => ({ ...prev, extras: prev.extras.filter(e => e.id !== ex.id) }))}
+                          className="p-1 text-slate-400 hover:text-red-500 shrink-0"
+                          title="Remover adicional"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                      {linkedItem ? (
+                        <div className="flex flex-wrap items-center gap-2 mt-2 pt-2 border-t border-amber-200/70">
+                          <span className="text-[11px] font-bold text-slate-600">
+                            Consome <span className="text-amber-700">{ex.inventoryQuantity || "1"} {ex.inventoryUnit || linkedItem.unit || "un"}</span> de <span className="text-slate-800">{linkedItem.name}</span> por seleção
+                          </span>
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            value={ex.inventoryQuantity}
+                            onChange={e => setProdForm(prev => ({ ...prev, extras: prev.extras.map(x => x.id === ex.id ? { ...x, inventoryQuantity: e.target.value } : x) }))}
+                            placeholder="Qtd"
+                            className="w-16 bg-white border border-amber-200 rounded-lg px-2 py-1 text-xs font-bold text-center focus:outline-none focus:ring-2 focus:ring-amber-400"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setProdForm(prev => ({ ...prev, extras: prev.extras.map(x => x.id === ex.id ? { ...x, inventoryItemId: "", inventoryQuantity: "", inventoryUnit: "" } : x) }))}
+                            className="text-[11px] font-black text-slate-400 hover:text-red-500 ml-auto"
+                          >
+                            Remover vínculo
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => { setExtraStockPickerFor(ex.id); setExtraStockSearch(""); }}
+                          className="mt-2 pt-2 border-t border-amber-200/70 w-full text-left text-[11px] font-black text-amber-600 hover:text-amber-800"
+                        >
+                          + Vincular a um item do estoque (opcional)
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
+            <p className="text-[11px] text-slate-400 mt-2">Vincular um adicional ao estoque (ex: "Embalagem de viagem") desconta o item automaticamente sempre que o cliente selecionar esse adicional.</p>
+
+            {/* Modal: escolher item do estoque pro adicional sendo vinculado */}
+            <Modal
+              isOpen={!!extraStockPickerFor}
+              onClose={() => { setExtraStockPickerFor(null); setExtraStockSearch(""); }}
+              title="Vincular adicional a um item do estoque"
+              size="md"
+              mobileStyle="bottom-sheet"
+              footer={<ModalFooter><Button variant="outline" onClick={() => { setExtraStockPickerFor(null); setExtraStockSearch(""); }}>Fechar</Button></ModalFooter>}
+            >
+              <div className="space-y-3 p-1">
+                <input
+                  autoFocus
+                  value={extraStockSearch}
+                  onChange={e => setExtraStockSearch(e.target.value)}
+                  placeholder="Buscar item do estoque..."
+                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400"
+                />
+                <div className="space-y-1.5 max-h-[50vh] overflow-y-auto pr-1">
+                  {inventoryItems
+                    .filter((item: any) => !extraStockSearch || item.name.toLowerCase().includes(extraStockSearch.toLowerCase()))
+                    .map((item: any) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          const pickerId = extraStockPickerFor;
+                          if (pickerId) {
+                            setProdForm(prev => ({
+                              ...prev,
+                              extras: prev.extras.map(x => x.id === pickerId
+                                ? { ...x, inventoryItemId: item.id, inventoryQuantity: x.inventoryQuantity || "1", inventoryUnit: item.stockUnit || item.unit || "un" }
+                                : x),
+                            }));
+                          }
+                          setExtraStockPickerFor(null);
+                          setExtraStockSearch("");
+                        }}
+                        className="w-full flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm text-left hover:bg-slate-50 border border-transparent transition-colors"
+                      >
+                        <p className="font-black text-slate-800 truncate">{item.name}</p>
+                        <p className={`text-[10px] font-black uppercase shrink-0 ${item.quantity <= 0 ? "text-red-500" : "text-slate-400"}`}>
+                          {item.quantity <= 0 ? "Esgotado" : `${item.quantity} ${item.unit || 'un'}`}
+                        </p>
+                      </button>
+                    ))}
+                  {inventoryItems.length === 0 && (
+                    <p className="text-center text-sm text-slate-400 py-6">Nenhum item cadastrado no estoque ainda.</p>
+                  )}
+                </div>
+              </div>
+            </Modal>
           </div>
 
           {/* Grupos de seleção embutidos — cada um deixa o cliente escolher N itens de uma

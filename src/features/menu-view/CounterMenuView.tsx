@@ -366,7 +366,8 @@ export default function CounterMenuView() {
         productId: item.productId,
         productVariantId: item.variantId,
         quantity: item.quantity,
-        notes: item.notes
+        notes: item.notes,
+        selectedExtras: item.extras || []
       })),
       total
     };
@@ -1341,7 +1342,8 @@ export default function CounterMenuView() {
                                   name: displayName,
                                   price: basePrice + extrasPrice,
                                   quantity: qty,
-                                  notes: fullNotes
+                                  notes: fullNotes,
+                                  extras: selectedExtras.map(e => ({ id: e.id }))
                                 }]);
                                 setSelectedProduct(null);
                                 setSelectedVariant(null);

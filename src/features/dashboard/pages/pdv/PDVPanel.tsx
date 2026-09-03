@@ -114,6 +114,22 @@ interface PDVPanelProps {
   onOpenFullscreen?: () => void;
 }
 
+// Item de comanda já aberta vem do backend com selectedExtras como JSON string (é assim
+// que fica salvo no banco); item recém-adicionado ao carrinho já é array de ProductExtra.
+// Normaliza os dois formatos pra reenviar no pedido mesclado do checkout.
+function parseExtrasForResend(raw: unknown): ProductExtra[] {
+  if (Array.isArray(raw)) return raw as ProductExtra[];
+  if (typeof raw === "string" && raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 const BASE_PAYMENT_METHODS = [
   { id: "CASH",   label: "Dinheiro",      icon: Banknote,    desc: "Espécie" },
   { id: "DEBIT",  label: "Débito",        icon: CreditCard,  desc: "À vista" },
@@ -916,6 +932,8 @@ export default function PDVPanel({
       quantity: item.quantity,
       price: item.price,
       notes: item.notes || undefined,
+      // Item já veio salvo do backend — selectedExtras chega como JSON string.
+      selectedExtras: parseExtrasForResend((item as any).selectedExtras),
     })),
     ...cart.map((item) => ({
       productId: item.product.id,
@@ -923,6 +941,7 @@ export default function PDVPanel({
       quantity: item.quantity,
       price: item.price,
       notes: item.notes || undefined,
+      selectedExtras: item.selectedExtras || [],
     })),
   ];
   const selectedComandaOrder = selectedComandaBaseOrder;
@@ -1369,6 +1388,7 @@ export default function PDVPanel({
             quantity: i.quantity,
             price: i.price,
             notes: i.notes || undefined,
+            selectedExtras: i.selectedExtras || [],
           })),
           ...(isWaiterMode ? { source: "waiter" } : {}),
         }),
@@ -1417,7 +1437,7 @@ export default function PDVPanel({
           status: "PENDING",
           paymentMethod: "CASH",
           operatorName: operatorName || undefined,
-          items: cart.map((item) => ({ productId: item.product.id, productVariantId: item.productVariantId, quantity: item.quantity, price: item.price, notes: item.notes || undefined })),
+          items: cart.map((item) => ({ productId: item.product.id, productVariantId: item.productVariantId, quantity: item.quantity, price: item.price, notes: item.notes || undefined, selectedExtras: item.selectedExtras || [] })),
           ...(isWaiterMode ? { source: "waiter" } : {}),
         }),
       });
@@ -1540,6 +1560,7 @@ export default function PDVPanel({
         quantity: item.quantity,
         price: item.price,
         notes: item.notes || undefined,
+        selectedExtras: item.selectedExtras || [],
       })),
     };
 

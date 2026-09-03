@@ -1058,6 +1058,9 @@ export function registerProductionRoutes({
 
       for (const productEvent of operation.productEvents) {
         io.to(`tenant-${tenant.id}`).emit("product-availability-changed", productEvent);
+        // "product-availability-changed" sozinho não tinha listener nenhum no front —
+        // o Dashboard já recarrega a árvore do tenant ao ouvir "menu-updated".
+        io.to(`tenant-${tenant.id}`).emit("menu-updated", { tenantId: tenant.id });
       }
 
       res.json(parseProductionRunRecord(operation.productionRun));

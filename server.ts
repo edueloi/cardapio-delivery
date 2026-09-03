@@ -3143,6 +3143,51 @@ app.get("/api/admin/tenant/:slug", requireAuth, async (req, res) => {
   res.json(completeTenant);
 });
 
+// Valida os adicionais escolhidos pelo cliente contra a lista real de adicionais do
+// produto (nunca confia em preço nem vínculo de estoque vindo do client, só no id
+// selecionado) — usado no pedido público e no PDV pra fixar o preço final e decidir o
+// que dar baixa no estoque (ex: adicional "Embalagem de viagem" vinculado a um insumo).
+type ResolvedExtra = {
+  id: string;
+  label: string;
+  price: number;
+  inventoryItemId?: string;
+  inventoryQuantity?: number;
+  inventoryUnit?: string;
+};
+function resolveSelectedExtras(
+  productExtrasRaw: string | null | undefined,
+  selectedFromClient: any
+): ResolvedExtra[] {
+  if (!Array.isArray(selectedFromClient) || selectedFromClient.length === 0) return [];
+  let productExtras: any[] = [];
+  try {
+    productExtras = productExtrasRaw ? JSON.parse(productExtrasRaw) : [];
+  } catch {
+    return [];
+  }
+  const extrasById = new Map(productExtras.map((e: any) => [e.id, e]));
+  const selectedIds = new Set<string>(
+    selectedFromClient
+      .map((sel: any) => (sel && typeof sel === "object" ? sel.id : sel))
+      .filter(Boolean)
+  );
+  const resolved: ResolvedExtra[] = [];
+  for (const id of selectedIds) {
+    const def = extrasById.get(id);
+    if (!def) continue;
+    resolved.push({
+      id: def.id,
+      label: def.label,
+      price: Number(def.price) || 0,
+      inventoryItemId: def.inventoryItemId || undefined,
+      inventoryQuantity: def.inventoryQuantity != null ? Number(def.inventoryQuantity) : undefined,
+      inventoryUnit: def.inventoryUnit || undefined,
+    });
+  }
+  return resolved;
+}
+
 app.post("/api/orders", async (req, res) => {
   console.log("Incoming Order Body:", JSON.stringify(req.body, null, 2));
   const {
@@ -3188,6 +3233,7 @@ app.post("/api/orders", async (req, res) => {
       quantity: number;
       price: number;
       notes: string | null;
+      selectedExtras: string | null;
     }> = [];
 
     for (const item of items || []) {
@@ -3206,6 +3252,11 @@ app.post("/api/orders", async (req, res) => {
         if (variant) itemPrice = variant.price;
       }
 
+      // Valida os adicionais selecionados contra a definição real do produto — nunca
+      // confia em preço ou vínculo de estoque vindo do cliente, só no id selecionado.
+      const selectedExtrasSnapshot = resolveSelectedExtras(product.extras, item.selectedExtras);
+      for (const extra of selectedExtrasSnapshot) itemPrice += extra.price || 0;
+
       total += itemPrice * item.quantity;
       orderItemsData.push({
         productId: item.productId,
@@ -3213,6 +3264,7 @@ app.post("/api/orders", async (req, res) => {
         quantity: item.quantity,
         price: itemPrice,
         notes: item.notes || null,
+        selectedExtras: selectedExtrasSnapshot.length > 0 ? JSON.stringify(selectedExtrasSnapshot) : null,
       });
     }
 
@@ -3491,62 +3543,12 @@ async function updateOrderStatus(
         );
 
         if (updatedBatches.length > 0) {
-          const allBatchesNow = await prisma.inventoryItem.findMany({
-            where: {
-              tenantId: updatedOrder.tenantId,
-              name: updatedBatches[0].name,
-            },
-          });
-          const totalQty = allBatchesNow.reduce(
-            (acc, b) => acc + b.quantity,
-            0
+          await handleStockBatchSideEffects(
+            updatedOrder.tenantId,
+            updatedOrder.tenant.whatsapp,
+            updatedBatches,
+            item.quantity
           );
-          const beforeQty = totalQty + item.quantity;
-
-          for (const b of updatedBatches) {
-            io.to(`tenant-${updatedOrder.tenantId}`).emit("inventory-update", {
-              id: b.id,
-              quantity: b.quantity,
-            });
-          }
-
-          const minStock = updatedBatches[0].minStock;
-          if (
-            minStock != null &&
-            totalQty <= minStock &&
-            beforeQty > minStock
-          ) {
-            sendLowStockAlert(
-              updatedOrder.tenantId,
-              { whatsapp: updatedOrder.tenant.whatsapp },
-              {
-                name: updatedBatches[0].name,
-                quantity: totalQty,
-                minStock: minStock,
-                unit: updatedBatches[0].unit,
-              }
-            ).catch((err: unknown) =>
-              console.warn("[WPP] Failed to send low stock alert:", err)
-            );
-          }
-
-          if (totalQty <= 0) {
-            const batchIds = allBatchesNow.map((b) => b.id);
-            const productsToDisable = await prisma.product.findMany({
-              where: { inventoryItemId: { in: batchIds }, available: true },
-            });
-            for (const p of productsToDisable) {
-              if (!(p as any).autoDisableWhenOutOfStock) continue;
-              await prisma.product.update({
-                where: { id: p.id },
-                data: { available: false },
-              });
-              io.to(`tenant-${updatedOrder.tenantId}`).emit(
-                "product-availability-changed",
-                { id: p.id, available: false }
-              );
-            }
-          }
         }
       }
 
@@ -3581,18 +3583,24 @@ async function updateOrderStatus(
               "PRODUCTION",
               ingredient.unit
             );
-            for (const b of updatedBatches) {
-              io.to(`tenant-${updatedOrder.tenantId}`).emit(
-                "inventory-update",
-                {
-                  id: b.id,
-                  quantity: b.quantity,
-                }
+            if (updatedBatches.length > 0) {
+              await handleStockBatchSideEffects(
+                updatedOrder.tenantId,
+                updatedOrder.tenant.whatsapp,
+                updatedBatches,
+                deductQty
               );
             }
           }
         }
       }
+
+      await deductSelectedExtrasStock(
+        updatedOrder.tenantId,
+        updatedOrder.tenant.whatsapp,
+        item,
+        updatedOrder.id
+      );
     }
   }
 
@@ -3773,6 +3781,106 @@ function recalculateOpenOrderAmounts(
   };
 }
 
+// Efeitos colaterais de uma baixa de estoque via `deductStockFIFO`: emite a atualização
+// de quantidade, dispara alerta de estoque mínimo e — se o total do lote (somando todos
+// os lotes com esse nome) zerou — desativa produtos vinculados que tenham
+// `autoDisableWhenOutOfStock` marcado. Extraído pra ser chamado tanto pela rota de status
+// do pedido (KDS) quanto pela criação direta de pedido no PDV, que antes não rodava essa
+// checagem e por isso um produto podia zerar por venda de balcão sem ser desativado.
+async function handleStockBatchSideEffects(
+  tenantId: string,
+  tenantWhatsapp: string | null | undefined,
+  updatedBatches: { id: string; name: string; quantity: number; minStock: number | null; unit: string }[],
+  deductedQuantity: number
+) {
+  if (updatedBatches.length === 0) return;
+
+  const allBatchesNow = await prisma.inventoryItem.findMany({
+    where: { tenantId, name: updatedBatches[0].name },
+  });
+  const totalQty = allBatchesNow.reduce((acc, b) => acc + b.quantity, 0);
+  const beforeQty = totalQty + deductedQuantity;
+
+  for (const b of updatedBatches) {
+    io.to(`tenant-${tenantId}`).emit("inventory-update", {
+      id: b.id,
+      quantity: b.quantity,
+    });
+  }
+
+  const minStock = updatedBatches[0].minStock;
+  if (minStock != null && totalQty <= minStock && beforeQty > minStock) {
+    sendLowStockAlert(
+      tenantId,
+      { whatsapp: tenantWhatsapp },
+      {
+        name: updatedBatches[0].name,
+        quantity: totalQty,
+        minStock: minStock,
+        unit: updatedBatches[0].unit,
+      }
+    ).catch((err: unknown) =>
+      console.warn("[WPP] Failed to send low stock alert:", err)
+    );
+  }
+
+  if (totalQty <= 0) {
+    const batchIds = allBatchesNow.map((b) => b.id);
+    const productsToDisable = await prisma.product.findMany({
+      where: { inventoryItemId: { in: batchIds }, available: true },
+    });
+    for (const p of productsToDisable) {
+      if (!(p as any).autoDisableWhenOutOfStock) continue;
+      await prisma.product.update({
+        where: { id: p.id },
+        data: { available: false },
+      });
+      io.to(`tenant-${tenantId}`).emit("product-availability-changed", {
+        id: p.id,
+        available: false,
+      });
+      // O front do Dashboard (Cardápio, Estoque, PDV) já escuta "menu-updated" pra
+      // recarregar a árvore do tenant — "product-availability-changed" sozinho não tinha
+      // nenhum listener real, então a desativação nunca aparecia em tempo real na tela.
+      io.to(`tenant-${tenantId}`).emit("menu-updated", { tenantId });
+    }
+  }
+}
+
+// Dá baixa no estoque vinculado aos adicionais selecionados nesse item (ex: adicional
+// "Embalagem de viagem" vinculado a 1un de "Caixa Kraft P") — a quantidade configurada no
+// adicional é multiplicada pela quantidade do item no pedido. Chamado nos mesmos pontos
+// onde o produto/receita já é debitado, tanto no fluxo de status (KDS) quanto no PDV.
+async function deductSelectedExtrasStock(
+  tenantId: string,
+  tenantWhatsapp: string | null | undefined,
+  item: { selectedExtras?: string | null; quantity: number },
+  orderId: string
+) {
+  if (!item.selectedExtras) return;
+  let extras: ResolvedExtra[] = [];
+  try {
+    extras = JSON.parse(item.selectedExtras) || [];
+  } catch {
+    return;
+  }
+  for (const extra of extras) {
+    if (!extra.inventoryItemId || !extra.inventoryQuantity) continue;
+    const deductQty = extra.inventoryQuantity * item.quantity;
+    const updatedBatches = await deductStockFIFO(
+      prisma,
+      tenantId,
+      extra.inventoryItemId,
+      deductQty,
+      orderId,
+      "SALE"
+    );
+    if (updatedBatches.length > 0) {
+      await handleStockBatchSideEffects(tenantId, tenantWhatsapp, updatedBatches, deductQty);
+    }
+  }
+}
+
 async function emitInventoryRestockSideEffects(
   tenantId: string,
   inventoryItemId: string
@@ -3804,6 +3912,7 @@ async function emitInventoryRestockSideEffects(
         id: product.id,
         available: true,
       });
+      io.to(`tenant-${tenantId}`).emit("menu-updated", { tenantId });
     }
   }
 }
@@ -4035,6 +4144,41 @@ async function restockOrderItemRecipe(
   return touchedInventoryIds;
 }
 
+// Devolve ao estoque os insumos vinculados aos adicionais selecionados nesse item (ex:
+// "Embalagem de viagem"), proporcional à quantidade removida — usado tanto no cancelamento
+// do pedido inteiro quanto na redução de quantidade de um item numa comanda aberta.
+async function restockSelectedExtras(
+  tx: any,
+  tenantId: string,
+  orderId: string,
+  item: { selectedExtras?: string | null },
+  removedQuantity: number
+): Promise<string[]> {
+  if (!item.selectedExtras || removedQuantity <= 0) return [];
+  let extras: ResolvedExtra[] = [];
+  try {
+    extras = JSON.parse(item.selectedExtras) || [];
+  } catch {
+    return [];
+  }
+  const touched: string[] = [];
+  for (const extra of extras) {
+    if (!extra.inventoryItemId || !extra.inventoryQuantity) continue;
+    const restocked = await restockOrderItemInventory(
+      tx,
+      tenantId,
+      orderId,
+      extra.inventoryItemId,
+      roundMoney(Number(extra.inventoryQuantity) * removedQuantity),
+      "SALE",
+      "ORDER_ITEM_REMOVED_SALE",
+      extra.inventoryUnit
+    );
+    if (restocked) touched.push(extra.inventoryItemId);
+  }
+  return touched;
+}
+
 async function restockCancelledOrder(tx: any, order: any) {
   const touchedInventoryIds = new Set<string>();
 
@@ -4061,6 +4205,16 @@ async function restockCancelledOrder(tx: any, order: any) {
       Number(item.quantity || 0)
     );
     for (const touchedId of recipeInventoryIds)
+      touchedInventoryIds.add(touchedId);
+
+    const extrasInventoryIds = await restockSelectedExtras(
+      tx,
+      order.tenantId,
+      order.id,
+      item,
+      Number(item.quantity || 0)
+    );
+    for (const touchedId of extrasInventoryIds)
       touchedInventoryIds.add(touchedId);
   }
 
@@ -4266,6 +4420,16 @@ app.patch(
             removedQuantity
           );
           for (const touchedId of recipeInventoryIds)
+            touchedInventoryIds.add(touchedId);
+
+          const extrasInventoryIds = await restockSelectedExtras(
+            tx,
+            tenant.id,
+            order.id,
+            targetItem,
+            removedQuantity
+          );
+          for (const touchedId of extrasInventoryIds)
             touchedInventoryIds.add(touchedId);
         }
 
@@ -7423,6 +7587,16 @@ app.post("/api/inventory/items/quick-adjust", requireAuth, async (req, res) => {
           reason || "MANUAL"
         )
       );
+      // Ajuste manual de saída (tela de Estoque) não passava por essa checagem — um
+      // produto podia zerar por aqui e nunca ser desativado do cardápio automaticamente.
+      if (updatedBatches.length > 0) {
+        await handleStockBatchSideEffects(
+          tenant.id,
+          tenant.whatsapp,
+          updatedBatches,
+          numericQuantity
+        );
+      }
       return res.json({ success: true, updatedBatches });
     } else {
       if (isNewBatch) {
@@ -7456,6 +7630,9 @@ app.post("/api/inventory/items/quick-adjust", requireAuth, async (req, res) => {
             },
           },
         });
+        // Reativa produtos que estavam auto-desativados por esse insumo zerar — ajuste
+        // manual de entrada (novo lote) não disparava essa reativação antes.
+        await emitInventoryRestockSideEffects(tenant.id, newItem.id);
         return res.json({ success: true, item: newItem });
       } else {
         const updatedItem = await prisma.inventoryItem.update({
@@ -7472,6 +7649,8 @@ app.post("/api/inventory/items/quick-adjust", requireAuth, async (req, res) => {
             },
           },
         });
+        // Idem — ajuste manual de entrada num lote existente também precisa reativar.
+        await emitInventoryRestockSideEffects(tenant.id, updatedItem.id);
         return res.json({ success: true, item: updatedItem });
       }
     }
@@ -7546,6 +7725,14 @@ app.patch("/api/inventory/items/:id", requireAuth, async (req, res) => {
             : undefined,
       },
     });
+
+    // Edição manual (tela de Estoque) também não passava por essa checagem: reativa o
+    // produto se voltou a ter estoque, ou desativa se essa edição zerou o total do lote.
+    if (newQuantity > 0) {
+      await emitInventoryRestockSideEffects(scoped.tenant.id, item.id);
+    } else {
+      await handleStockBatchSideEffects(scoped.tenant.id, scoped.tenant.whatsapp, [item], 0);
+    }
 
     res.json(item);
   } catch (error) {
@@ -8397,6 +8584,10 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
         price = variant.price;
         productVariantId = variant.id;
       }
+
+      const selectedExtrasSnapshot = resolveSelectedExtras((product as any).extras, item.selectedExtras);
+      for (const extra of selectedExtrasSnapshot) price += extra.price || 0;
+
       subtotal += price * item.quantity;
       orderItems.push({
         productId: item.productId,
@@ -8404,6 +8595,7 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
         quantity: item.quantity,
         price,
         notes: item.notes,
+        selectedExtras: selectedExtrasSnapshot.length > 0 ? JSON.stringify(selectedExtrasSnapshot) : null,
       });
     }
 
@@ -8687,34 +8879,12 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
           );
 
           if (updatedBatches.length > 0) {
-            const allBatchesNow = await prisma.inventoryItem.findMany({
-              where: { tenantId: tenant.id, name: updatedBatches[0].name },
-            });
-            const totalQty = allBatchesNow.reduce(
-              (acc, b) => acc + b.quantity,
-              0
+            await handleStockBatchSideEffects(
+              tenant.id,
+              tenant.whatsapp,
+              updatedBatches,
+              item.quantity
             );
-            const beforeQty = totalQty + item.quantity;
-            const minStock = updatedBatches[0].minStock;
-
-            if (
-              minStock != null &&
-              totalQty <= minStock &&
-              beforeQty > minStock
-            ) {
-              sendLowStockAlert(
-                tenant.id,
-                { whatsapp: tenant.whatsapp },
-                {
-                  name: updatedBatches[0].name,
-                  quantity: totalQty,
-                  minStock: minStock,
-                  unit: updatedBatches[0].unit,
-                }
-              ).catch((err: unknown) =>
-                console.warn("[WPP] Failed to send low stock alert:", err)
-              );
-            }
           }
         }
 
@@ -8749,18 +8919,19 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
                 "SALE",
                 ingredient.unit
               );
-              for (const b of updatedBatches) {
-                io.to(`tenant-${tenant.id}`).emit(
-                  "inventory-update",
-                  {
-                    id: b.id,
-                    quantity: b.quantity,
-                  }
+              if (updatedBatches.length > 0) {
+                await handleStockBatchSideEffects(
+                  tenant.id,
+                  tenant.whatsapp,
+                  updatedBatches,
+                  deductQty
                 );
               }
             }
           }
         }
+
+        await deductSelectedExtrasStock(tenant.id, tenant.whatsapp, item, order.id);
       }
     }
 
