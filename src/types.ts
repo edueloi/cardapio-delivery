@@ -415,6 +415,9 @@ export interface ProductExtra {
   inventoryItemId?: string | null;
   inventoryQuantity?: number | null; // quantidade consumida por seleção (por unidade do item do pedido)
   inventoryUnit?: string | null;     // unidade em que inventoryQuantity é expresso (ex: "un", "g")
+  // Aplica esse adicional automaticamente quando o pedido é "para viagem" (consumptionType
+  // TAKEOUT), sem exigir que o cliente/operador selecione manualmente — ex: embalagem.
+  autoApplyOnTakeout?: boolean;
 }
 
 // Grupo de seleção embutido no produto — ex: "2 espetos tradicionais" (preço fixo)

@@ -3154,12 +3154,13 @@ type ResolvedExtra = {
   inventoryItemId?: string;
   inventoryQuantity?: number;
   inventoryUnit?: string;
+  autoApplyOnTakeout?: boolean;
 };
 function resolveSelectedExtras(
   productExtrasRaw: string | null | undefined,
-  selectedFromClient: any
+  selectedFromClient: any,
+  consumptionType?: string | null
 ): ResolvedExtra[] {
-  if (!Array.isArray(selectedFromClient) || selectedFromClient.length === 0) return [];
   let productExtras: any[] = [];
   try {
     productExtras = productExtrasRaw ? JSON.parse(productExtrasRaw) : [];
@@ -3168,10 +3169,20 @@ function resolveSelectedExtras(
   }
   const extrasById = new Map(productExtras.map((e: any) => [e.id, e]));
   const selectedIds = new Set<string>(
-    selectedFromClient
-      .map((sel: any) => (sel && typeof sel === "object" ? sel.id : sel))
-      .filter(Boolean)
+    Array.isArray(selectedFromClient)
+      ? selectedFromClient
+          .map((sel: any) => (sel && typeof sel === "object" ? sel.id : sel))
+          .filter(Boolean)
+      : []
   );
+  // Pedido "para viagem" aplica sozinho os adicionais marcados como autoApplyOnTakeout
+  // (ex: embalagem) mesmo que ninguém tenha selecionado manualmente — Set evita duplicar
+  // caso o cliente também tenha selecionado o mesmo adicional.
+  if (consumptionType === "TAKEOUT") {
+    for (const def of productExtras) {
+      if (def?.autoApplyOnTakeout && def.id) selectedIds.add(def.id);
+    }
+  }
   const resolved: ResolvedExtra[] = [];
   for (const id of selectedIds) {
     const def = extrasById.get(id);
@@ -3183,6 +3194,7 @@ function resolveSelectedExtras(
       inventoryItemId: def.inventoryItemId || undefined,
       inventoryQuantity: def.inventoryQuantity != null ? Number(def.inventoryQuantity) : undefined,
       inventoryUnit: def.inventoryUnit || undefined,
+      autoApplyOnTakeout: def.autoApplyOnTakeout || undefined,
     });
   }
   return resolved;
@@ -3254,7 +3266,7 @@ app.post("/api/orders", async (req, res) => {
 
       // Valida os adicionais selecionados contra a definição real do produto — nunca
       // confia em preço ou vínculo de estoque vindo do cliente, só no id selecionado.
-      const selectedExtrasSnapshot = resolveSelectedExtras(product.extras, item.selectedExtras);
+      const selectedExtrasSnapshot = resolveSelectedExtras(product.extras, item.selectedExtras, isCounterOrder ? consumptionType : null);
       for (const extra of selectedExtrasSnapshot) itemPrice += extra.price || 0;
 
       total += itemPrice * item.quantity;
@@ -8585,7 +8597,7 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
         productVariantId = variant.id;
       }
 
-      const selectedExtrasSnapshot = resolveSelectedExtras((product as any).extras, item.selectedExtras);
+      const selectedExtrasSnapshot = resolveSelectedExtras((product as any).extras, item.selectedExtras, isCounterSale ? consumptionType : null);
       for (const extra of selectedExtrasSnapshot) price += extra.price || 0;
 
       subtotal += price * item.quantity;

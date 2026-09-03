@@ -321,7 +321,7 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
     scheduleRuleStartDate: "",
     scheduleRuleEndDate: "",
     variants: [] as { _key: string, name: string, price: string, description: string, inventoryItemId: string, imageUrl: string }[],
-    extras: [] as { id: string, label: string, price: string, inventoryItemId: string, inventoryQuantity: string, inventoryUnit: string }[],
+    extras: [] as { id: string, label: string, price: string, inventoryItemId: string, inventoryQuantity: string, inventoryUnit: string, autoApplyOnTakeout: boolean }[],
     // Grupos de seleção embutidos — cada um deixa o cliente escolher N itens de uma
     // categoria/lista, sem alterar o preço fixo do produto. Uma marmita pode ter vários:
     // "Guarnição" (escolha 1), "Arroz" (escolha 1), "Feijão" (escolha 1) — cada grupo sua
@@ -416,7 +416,7 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
 
   const openEditProduct = (prod: any) => {
     setEditingProduct(prod);
-    let parsedExtras: { id: string, label: string, price: string, inventoryItemId: string, inventoryQuantity: string, inventoryUnit: string }[] = [];
+    let parsedExtras: { id: string, label: string, price: string, inventoryItemId: string, inventoryQuantity: string, inventoryUnit: string, autoApplyOnTakeout: boolean }[] = [];
     try {
       const raw = prod.extras ? JSON.parse(prod.extras) : [];
       parsedExtras = raw.map((e: any) => ({
@@ -426,6 +426,7 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
         inventoryItemId: e.inventoryItemId || "",
         inventoryQuantity: e.inventoryQuantity != null ? String(e.inventoryQuantity) : "",
         inventoryUnit: e.inventoryUnit || "",
+        autoApplyOnTakeout: !!e.autoApplyOnTakeout,
       }));
     } catch {}
     let scheduleRuleEnabled = false;
@@ -589,6 +590,7 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
           inventoryItemId: e.inventoryItemId || undefined,
           inventoryQuantity: e.inventoryItemId && e.inventoryQuantity ? parseFloat(e.inventoryQuantity) || undefined : undefined,
           inventoryUnit: e.inventoryItemId ? (e.inventoryUnit || undefined) : undefined,
+          autoApplyOnTakeout: e.inventoryItemId && e.autoApplyOnTakeout ? true : undefined,
         }))),
         selectionGroup,
         scheduleRule,
@@ -1259,7 +1261,7 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
                 onKeyDown={e => {
                   if (e.key === 'Enter' && extraInput.label.trim()) {
                     e.preventDefault();
-                    setProdForm(prev => ({ ...prev, extras: [...prev.extras, { id: crypto.randomUUID(), label: extraInput.label.trim(), price: extraInput.price, inventoryItemId: "", inventoryQuantity: "", inventoryUnit: "" }] }));
+                    setProdForm(prev => ({ ...prev, extras: [...prev.extras, { id: crypto.randomUUID(), label: extraInput.label.trim(), price: extraInput.price, inventoryItemId: "", inventoryQuantity: "", inventoryUnit: "", autoApplyOnTakeout: false }] }));
                     setExtraInput({ label: "", price: "" });
                   }
                 }}
@@ -1274,7 +1276,7 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
               <button
                 onClick={() => {
                   if (!extraInput.label.trim()) return;
-                  setProdForm(prev => ({ ...prev, extras: [...prev.extras, { id: crypto.randomUUID(), label: extraInput.label.trim(), price: extraInput.price, inventoryItemId: "", inventoryQuantity: "", inventoryUnit: "" }] }));
+                  setProdForm(prev => ({ ...prev, extras: [...prev.extras, { id: crypto.randomUUID(), label: extraInput.label.trim(), price: extraInput.price, inventoryItemId: "", inventoryQuantity: "", inventoryUnit: "", autoApplyOnTakeout: false }] }));
                   setExtraInput({ label: "", price: "" });
                 }}
                 className="px-3 py-2 bg-amber-500 text-white rounded-xl text-sm font-black hover:bg-amber-600"
@@ -1319,6 +1321,15 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
                           >
                             Remover vínculo
                           </button>
+                          <label className="flex items-center gap-1.5 w-full text-[11px] font-bold text-slate-600 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={!!ex.autoApplyOnTakeout}
+                              onChange={e => setProdForm(prev => ({ ...prev, extras: prev.extras.map(x => x.id === ex.id ? { ...x, autoApplyOnTakeout: e.target.checked } : x) }))}
+                              className="accent-amber-500"
+                            />
+                            Aplicar automaticamente em pedidos para viagem (sem precisar selecionar)
+                          </label>
                         </div>
                       ) : (
                         <button
