@@ -800,15 +800,26 @@ model Order {
 model OrderItem {
   id               String  @id @default(cuid())
   orderId          String  @map("order_id")
-  productId        String  @map("product_id")
+  productId        String? @map("product_id")
   productVariantId String? @map("product_variant_id")
   quantity         Int
   price            Float
   notes            String? // User observations (remover cebola, etc)
   selectedExtras   String? @map("selected_extras") @db.Text // JSON: ProductExtra[] — snapshot dos adicionais escolhidos, incl. vínculo de estoque
+  // Nome do produto no momento da venda — preserva o histórico legível mesmo depois
+  // do produto ser excluído de vez do catálogo (productId vira null nesse caso).
+  productName      String? @map("product_name")
+  // Dados fiscais NFC-e congelados no momento da venda — sem isso, excluir o produto
+  // depois faria a nota (emitida ou reemitida depois) cair em NCM/CFOP genérico errado.
+  ncm         String?
+  cfop        String?
+  csosn       String?
+  unitCom     String? @map("unit_com")
+  origem      Int?
+  aliqIcms    Float?  @map("aliq_icms")
 
-  order   Order   @relation(fields: [orderId], references: [id])
-  product Product @relation(fields: [productId], references: [id])
+  order   Order    @relation(fields: [orderId], references: [id])
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
   productVariant ProductVariant? @relation(fields: [productVariantId], references: [id])
 
   @@map("order_items")

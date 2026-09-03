@@ -689,7 +689,7 @@ export default function PDVPanel({
     let products: Product[] = [];
     tenant.categories?.forEach((cat) => {
       if (!selectedCategoryId || cat.id === selectedCategoryId) {
-        products = [...products, ...cat.products];
+        products = [...products, ...cat.products.filter((p) => p.available !== false)];
       }
     });
     if (searchTerm) {
@@ -705,7 +705,7 @@ export default function PDVPanel({
   // Consulta de preço (F7) — busca em todos os produtos, independente da categoria selecionada no PDV
   const priceCheckResults = useMemo(() => {
     if (!priceCheckTerm.trim()) return [];
-    const allProducts = tenant.categories?.flatMap((cat) => cat.products) ?? [];
+    const allProducts = (tenant.categories?.flatMap((cat) => cat.products) ?? []).filter((p) => p.available !== false);
     const term = priceCheckTerm.toLowerCase();
     return allProducts
       .filter((p) => p.name.toLowerCase().includes(term) || p.description?.toLowerCase().includes(term))
@@ -2013,10 +2013,10 @@ export default function PDVPanel({
                     onChange={(e) => setSelectedCategoryId(e.target.value === "all" ? null : e.target.value)}
                     className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-xl py-2 pl-4 pr-9 text-sm font-bold text-slate-700 focus:border-[#C9A227] focus:bg-white outline-none transition-all cursor-pointer"
                   >
-                    <option value="all">Todos ({tenant.categories?.reduce((s, c) => s + c.products.length, 0) ?? 0})</option>
+                    <option value="all">Todos ({tenant.categories?.reduce((s, c) => s + c.products.filter((p) => p.available !== false).length, 0) ?? 0})</option>
                     {tenant.categories?.map((cat) => (
                       <option key={cat.id} value={cat.id}>
-                        {cat.name} ({cat.products.length})
+                        {cat.name} ({cat.products.filter((p) => p.available !== false).length})
                       </option>
                     ))}
                   </select>
@@ -2055,7 +2055,7 @@ export default function PDVPanel({
                       selectedCategoryId === null ? "bg-[#0D1B3E] text-white" : "text-slate-500 hover:bg-white"
                     }`}
                   >
-                    Todas ({tenant.categories?.reduce((s, c) => s + c.products.length, 0) ?? 0})
+                    Todas ({tenant.categories?.reduce((s, c) => s + c.products.filter((p) => p.available !== false).length, 0) ?? 0})
                   </button>
                   {tenant.categories?.map((cat) => (
                     <button
@@ -2065,7 +2065,7 @@ export default function PDVPanel({
                         selectedCategoryId === cat.id ? "bg-[#0D1B3E] text-white" : "text-slate-500 hover:bg-white"
                       }`}
                     >
-                      {cat.name} ({cat.products.length})
+                      {cat.name} ({cat.products.filter((p) => p.available !== false).length})
                     </button>
                   ))}
                 </div>

@@ -3200,6 +3200,24 @@ function resolveSelectedExtras(
   return resolved;
 }
 
+// Produtos podem ser excluídos de vez do catálogo (product_id vira NULL em order_items,
+// ver migration add_order_items_product_name) — aqui preenchemos de volta item.product.name
+// a partir do snapshot productName gravado no momento da venda, pra nenhuma tela (Histórico,
+// KDS, Garçom, WhatsApp, PDV) precisar saber da diferença entre produto vivo e removido.
+function hydrateOrderItemNames<T extends { items?: Array<{ product?: any; productName?: string | null }> }>(
+  orderOrOrders: T | T[] | null | undefined
+): T | T[] | null | undefined {
+  const orders = Array.isArray(orderOrOrders) ? orderOrOrders : orderOrOrders ? [orderOrOrders] : [];
+  for (const order of orders) {
+    for (const item of order.items || []) {
+      if (!item.product) {
+        item.product = { name: item.productName || "Produto removido" };
+      }
+    }
+  }
+  return orderOrOrders;
+}
+
 app.post("/api/orders", async (req, res) => {
   console.log("Incoming Order Body:", JSON.stringify(req.body, null, 2));
   const {
@@ -3246,6 +3264,13 @@ app.post("/api/orders", async (req, res) => {
       price: number;
       notes: string | null;
       selectedExtras: string | null;
+      productName: string;
+      ncm: string | null;
+      cfop: string | null;
+      csosn: string | null;
+      unitCom: string | null;
+      origem: number | null;
+      aliqIcms: number | null;
     }> = [];
 
     for (const item of items || []) {
@@ -3277,6 +3302,13 @@ app.post("/api/orders", async (req, res) => {
         price: itemPrice,
         notes: item.notes || null,
         selectedExtras: selectedExtrasSnapshot.length > 0 ? JSON.stringify(selectedExtrasSnapshot) : null,
+        productName: product.name,
+        ncm: product.ncm,
+        cfop: product.cfop,
+        csosn: product.csosn,
+        unitCom: product.unitCom,
+        origem: product.origem,
+        aliqIcms: product.aliqIcms,
       });
     }
 
@@ -5249,6 +5281,7 @@ app.get("/api/kitchen/global/data", async (req, res) => {
       orderBy: { createdAt: "desc" },
       take: 200,
     });
+    hydrateOrderItemNames(orders);
     res.json({ tenant, orders, staffName });
   } catch (error) {
     console.error(error);
@@ -5359,6 +5392,7 @@ app.get("/api/kitchen/:slug/data", async (req, res) => {
       orderBy: { createdAt: "desc" },
       take: 200,
     });
+    hydrateOrderItemNames(orders);
     res.json({ tenant, orders, staffName });
   } catch (error) {
     console.error(error);
@@ -6211,8 +6245,9 @@ app.delete("/api/products/:id", requireAuth, async (req, res) => {
     res.sendStatus(200);
   } catch (error: any) {
     if (error?.code === "P2003") {
-      // Produto já usado em pedidos (histórico de vendas) — não pode ser excluído
-      // fisicamente por causa da FK em order_items. Desativa em vez de apagar.
+      // order_items.product_id agora é SET NULL, então isso só deveria acontecer se
+      // alguma outra FK (ex: futura) ainda restringir a exclusão. Mantido como rede
+      // de segurança: desativa em vez de deixar o erro estourar pro usuário.
       const product = await prisma.product.update({
         where: { id: scoped.product.id },
         data: { available: false },
@@ -6575,6 +6610,7 @@ async function attachOrderDetails<T extends { orderId?: string | null }>(
     where: { id: { in: orderIds } },
     include: { items: { include: { product: { select: { name: true } } } } },
   });
+  hydrateOrderItemNames(orders);
   const orderMap = new Map<string, any>(orders.map((o) => [o.id, o]));
 
   return movements.map((m) => {
@@ -8056,6 +8092,7 @@ app.get(
         orderBy: { createdAt: "desc" },
         take: 30,
       });
+      hydrateOrderItemNames(orders);
       res.json(orders);
     } catch (error) {
       console.error(error);
@@ -8096,6 +8133,7 @@ app.get("/api/tenants/:slug/reports/summary", requireAuth, async (req, res) => {
       },
       include: { items: { include: { product: true } } },
     });
+    hydrateOrderItemNames(orders);
 
     const totalRevenue = orders.reduce((s, o) => s + o.total, 0);
     const totalOrders = orders.length;
@@ -8608,6 +8646,13 @@ app.post("/api/tenants/:slug/pdv/order", requireAuth, async (req, res) => {
         price,
         notes: item.notes,
         selectedExtras: selectedExtrasSnapshot.length > 0 ? JSON.stringify(selectedExtrasSnapshot) : null,
+        productName: product.name,
+        ncm: (product as any).ncm,
+        cfop: (product as any).cfop,
+        csosn: (product as any).csosn,
+        unitCom: (product as any).unitCom,
+        origem: (product as any).origem,
+        aliqIcms: (product as any).aliqIcms,
       });
     }
 
@@ -9350,6 +9395,7 @@ app.post("/api/tenants/:slug/stone/webhook", async (req, res) => {
       include: { items: { include: { product: true } } },
     });
     if (!order) return res.status(200).json({ received: true }); // idempotent
+    hydrateOrderItemNames(order);
 
     if (status === "paid") {
       // Mark order delivered and register cash movement
@@ -10573,16 +10619,18 @@ app.post(
       // Determina próximo número e incrementa
       const numero = fiscal.proximoNumero || 1;
 
-      // Monta items fiscais — exige NCM/CFOP no produto
+      // Monta items fiscais — prioriza o snapshot congelado no pedido (não muda mesmo
+      // que o produto seja editado ou excluído depois), com o produto vivo como
+      // fallback só para pedidos criados antes desse snapshot existir.
       const { emitirNfce } = await import("./src/lib/fiscal.js");
       const fiscalItems = order.items.map((item: any) => ({
-        productName: item.product?.name ?? "Produto",
-        ncm: item.product?.ncm ?? "00000000",
-        cfop: item.product?.cfop ?? "5102",
-        csosn: item.product?.csosn ?? "400",
-        unitCom: item.product?.unitCom ?? "UN",
-        origem: item.product?.origem ?? 0,
-        aliqIcms: item.product?.aliqIcms ?? 0,
+        productName: item.productName ?? item.product?.name ?? "Produto",
+        ncm: item.ncm ?? item.product?.ncm ?? "00000000",
+        cfop: item.cfop ?? item.product?.cfop ?? "5102",
+        csosn: item.csosn ?? item.product?.csosn ?? "400",
+        unitCom: item.unitCom ?? item.product?.unitCom ?? "UN",
+        origem: item.origem ?? item.product?.origem ?? 0,
+        aliqIcms: item.aliqIcms ?? item.product?.aliqIcms ?? 0,
         quantity: item.quantity,
         unitPrice: item.price,
       }));

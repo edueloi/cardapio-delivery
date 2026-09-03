@@ -1211,6 +1211,46 @@ const migrations = [
     check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'order_items' AND COLUMN_NAME = 'selected_extras'",
     run: "ALTER TABLE order_items ADD COLUMN selected_extras TEXT NULL",
   },
+  // Permite excluir um produto de vez do catálogo mesmo já tendo sido usado em pedidos —
+  // o nome fica congelado aqui no momento da venda, e o vínculo com o produto (product_id)
+  // vira NULL em vez de bloquear a exclusão (antes a FK era RESTRICT por padrão).
+  {
+    name: 'add_order_items_product_name',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'order_items' AND COLUMN_NAME = 'product_name'",
+    run: "ALTER TABLE order_items ADD COLUMN product_name VARCHAR(191) NULL",
+  },
+  {
+    name: 'backfill_order_items_product_name',
+    check: "SELECT id FROM order_items WHERE product_name IS NULL LIMIT 1",
+    run: "UPDATE order_items oi JOIN products p ON p.id = oi.product_id SET oi.product_name = p.name WHERE oi.product_name IS NULL",
+  },
+  // Snapshot fiscal (NCM/CFOP/CSOSN etc) — necessário pra emitir/reemitir NFC-e de
+  // pedidos antigos corretamente mesmo depois do produto ser excluído do catálogo.
+  {
+    name: 'add_order_items_fiscal_snapshot',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'order_items' AND COLUMN_NAME = 'ncm'",
+    run: "ALTER TABLE order_items ADD COLUMN ncm VARCHAR(191) NULL, ADD COLUMN cfop VARCHAR(191) NULL, ADD COLUMN csosn VARCHAR(191) NULL, ADD COLUMN unit_com VARCHAR(191) NULL, ADD COLUMN origem INT NULL, ADD COLUMN aliq_icms DOUBLE NULL",
+  },
+  {
+    name: 'backfill_order_items_fiscal_snapshot',
+    check: "SELECT id FROM order_items WHERE ncm IS NULL AND product_id IS NOT NULL LIMIT 1",
+    run: "UPDATE order_items oi JOIN products p ON p.id = oi.product_id SET oi.ncm = p.ncm, oi.cfop = p.cfop, oi.csosn = p.csosn, oi.unit_com = p.unit_com, oi.origem = p.origem, oi.aliq_icms = p.aliq_icms WHERE oi.ncm IS NULL",
+  },
+  {
+    name: 'drop_order_items_product_id_fkey_restrict',
+    check: "SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'order_items' AND CONSTRAINT_NAME = 'order_items_product_id_fkey' AND DELETE_RULE != 'SET NULL'",
+    run: "ALTER TABLE order_items DROP FOREIGN KEY order_items_product_id_fkey",
+  },
+  {
+    name: 'make_order_items_product_id_nullable',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'order_items' AND COLUMN_NAME = 'product_id' AND IS_NULLABLE = 'YES'",
+    run: "ALTER TABLE order_items MODIFY COLUMN product_id VARCHAR(191) NULL",
+  },
+  {
+    name: 'add_order_items_product_id_fkey_setnull',
+    check: "SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'order_items' AND CONSTRAINT_NAME = 'order_items_product_id_fkey' AND DELETE_RULE = 'SET NULL'",
+    run: "ALTER TABLE order_items ADD CONSTRAINT order_items_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL ON UPDATE CASCADE",
+  },
 ];
 
 async function run() {
