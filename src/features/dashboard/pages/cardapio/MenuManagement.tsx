@@ -290,6 +290,7 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
   const toast = useToast();
   const [search, setSearch] = useState("");
   const [selectedCat, setSelectedCat] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   // Lazy initializer: popula de imediato com o que o tenant já trouxer, evitando
   // o "flash vazio" que aparecia sempre que esta tela era desmontada e remontada
   // (ex: trocar para "Estoque" e voltar) antes do useEffect abaixo rodar.
@@ -685,7 +686,7 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
     if (res.status === 409) {
       const data = await res.json().catch(() => ({}));
       if (data?.deactivated) {
-        toast.error(data.error || "Produto já usado em pedidos — foi desativado em vez de excluído.");
+        toast.warning("Este produto já foi usado em pedidos e não pode ser excluído (mantém o histórico de vendas), mas foi desativado e não aparece mais no cardápio.");
         setLocalCategories(cats => cats.map(cat => ({
           ...cat,
           products: cat.products?.map((p: any) => p.id === id ? { ...p, available: false } : p)
@@ -843,14 +844,17 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
     .filter(cat => selectedCat === "all" || cat.id === selectedCat)
     .map(cat => ({
       ...cat,
-      products: (cat.products || []).filter(p =>
-        !search || p.name.toLowerCase().includes(search.toLowerCase())
-      )
+      products: (cat.products || []).filter(p => {
+        if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false;
+        if (statusFilter === "active" && p.available === false) return false;
+        if (statusFilter === "inactive" && p.available !== false) return false;
+        return true;
+      })
     }))
-    .filter(cat => !search || cat.products.length > 0);
+    .filter(cat => (!search && statusFilter === "all") || cat.products.length > 0);
 
-  // Arrastar só faz sentido quando a ordem exibida é a ordem real (sem filtro de busca/categoria)
-  const dragEnabled = !search && selectedCat === "all";
+  // Arrastar só faz sentido quando a ordem exibida é a ordem real (sem filtro de busca/categoria/status)
+  const dragEnabled = !search && selectedCat === "all" && statusFilter === "all";
 
   const fmt = (n: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
 
@@ -870,6 +874,22 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
             {categories.map(cat => (
               <option key={cat.id} value={cat.id}>{cat.name} ({cat.products?.length || 0})</option>
             ))}
+          </select>
+          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </span>
+        </div>
+
+        {/* Status filter dropdown */}
+        <div className="relative flex-1">
+          <select
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value as "all" | "active" | "inactive")}
+            className="w-full appearance-none bg-white border border-zinc-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400 pr-8"
+          >
+            <option value="all">Ativos e inativos</option>
+            <option value="active">Somente ativos</option>
+            <option value="inactive">Somente inativos</option>
           </select>
           <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400">
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -977,10 +997,14 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
         </DragOverlay>
       </DndContext>
 
-      {/* Search no result */}
-      {search && visibleCategories.length === 0 && categories.length > 0 && (
+      {/* Search / filtro sem resultado */}
+      {(search || statusFilter !== "all") && visibleCategories.length === 0 && categories.length > 0 && (
         <div className="text-center py-10 text-slate-400 text-sm font-medium">
-          Nenhum produto encontrado para "<span className="font-bold">{search}</span>"
+          {search
+            ? <>Nenhum produto encontrado para "<span className="font-bold">{search}</span>"</>
+            : statusFilter === "inactive"
+              ? "Nenhum produto inativo no momento."
+              : "Nenhum produto ativo encontrado."}
         </div>
       )}
 
