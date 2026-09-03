@@ -104,7 +104,7 @@ function QuickAdjustModal({ isOpen, onClose, item, tenantId, onSave }: any) {
           </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Input
             label={`Quantidade (${item.unit || "un"})`}
             type="number"
@@ -135,7 +135,7 @@ function QuickAdjustModal({ isOpen, onClose, item, tenantId, onSave }: any) {
             </label>
 
             {isNewBatch && (
-              <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-200">
+              <div className="grid grid-cols-1 gap-3 pt-3 border-t border-slate-200 sm:grid-cols-2">
                 <Input
                   label="Nova Validade"
                   type="date"
@@ -1141,7 +1141,7 @@ function InventoryItemModal({ tenant, item, categories, onClose, onSave, refresh
             <p className="text-[11px] text-amber-700 leading-relaxed -mt-1">
               Use quando compra em uma unidade mas consome em outra. Ex: compra <b>1 garrafa (un)</b> de óleo que contém <b>1000 ml</b> — na produção desconta em <b>ml</b>.
             </p>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div>
                 <UnitSelectInput
                   label="Unidade de compra"
