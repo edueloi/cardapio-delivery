@@ -1091,7 +1091,7 @@ function InventoryItemModal({ tenant, item, categories, onClose, onSave, refresh
               value={form.name}
               onChange={e => set("name", e.target.value)}
             />
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <Input label="SKU" size="sm" placeholder="78900..." value={form.code} onChange={e => set("code", e.target.value)} />
               <Input label="Marca" size="sm" placeholder="Ambev" value={form.brand} onChange={e => set("brand", e.target.value)} />
             </div>
@@ -1125,11 +1125,11 @@ function InventoryItemModal({ tenant, item, categories, onClose, onSave, refresh
           {/* Estoque */}
           <div className="rounded-xl border border-zinc-100 bg-zinc-50 p-3 space-y-3">
             <SectionHeader icon={Package} label="Estoque" color="bg-orange-500" />
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <Input label="Quantidade" required size="sm" type="number" step="0.001" placeholder="0" value={form.quantity} onChange={e => set("quantity", e.target.value)} />
               <Input label="Mín. alerta" size="sm" type="number" step="0.01" placeholder="0" value={form.minStock} onChange={e => set("minStock", e.target.value)} />
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <UnitSelectInput label="Unidade de armazenamento" value={form.unit} onChange={v => set("unit", v)} />
               <Input label="Peso/Volume" size="sm" placeholder="500g, 1.5L" value={form.weight} onChange={e => set("weight", e.target.value)} />
             </div>
@@ -1199,11 +1199,11 @@ function InventoryItemModal({ tenant, item, categories, onClose, onSave, refresh
           {/* Financeiro */}
           <div className="rounded-xl border border-zinc-100 bg-zinc-50 p-3 space-y-3">
             <SectionHeader icon={CircleDollarSign} label="Financeiro" color="bg-emerald-500" />
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <CurrencyInput label="Custo (R$)" size="sm" value={form.purchasePrice} onChange={v => set("purchasePrice", v)} />
               <CurrencyInput label="Venda (R$)" size="sm" value={form.sellingPrice} onChange={v => set("sellingPrice", v)} />
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <Input label="Compra" size="sm" type="date" value={form.purchaseDate} onChange={e => set("purchaseDate", e.target.value)} />
               <Input label="Validade" size="sm" type="date" value={form.expirationDate} onChange={e => set("expirationDate", e.target.value)} />
             </div>

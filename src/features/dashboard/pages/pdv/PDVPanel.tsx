@@ -3028,7 +3028,7 @@ export default function PDVPanel({
                     <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total</span>
                     <span className="text-xl font-black text-slate-800">{fmt(detailSubtotal)}</span>
                   </div>
-                  <div className="grid grid-cols-2 gap-2.5">
+                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                     <button
                       onClick={() => isTable ? handleLoadTable(orderDetailsView.tableId) : handleLoadComanda(orderDetailsView.comanda)}
                       className="bg-white border border-slate-200 hover:border-[#C9A227] text-slate-700 font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5"
@@ -3989,7 +3989,7 @@ export default function PDVPanel({
                     {paymentMethod === "CREDIT" && (
                       <div className="bg-white/5 rounded-2xl p-3 border border-white/10 space-y-2.5">
                         <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Parcelamento</p>
-                        <div className="grid grid-cols-3 gap-1.5">
+                        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
                           {creditInstallmentOptions.map((n) => (
                             <button
                               key={n}
