@@ -1718,11 +1718,25 @@ export default function PDVPanel({
 
   const buildReceiptDataFromOrder = (order: any, copyLabel?: "CLIENTE" | "ESTABELECIMENTO") => {
     if (!order) return null;
+    // selectedExtras (JSON de ProductExtra[]) inclui tanto os adicionais escolhidos manualmente
+    // quanto os aplicados automaticamente (ex: embalagem em pedidos para viagem) — esses últimos
+    // nunca entram em "notes" (montado só na escolha manual no carrinho), então sem ler
+    // selectedExtras aqui o adicional automático nunca aparece na notinha.
+    const extrasLabels = (i: any): string[] => {
+      if (!i.selectedExtras) return [];
+      try {
+        const extras: Array<{ label: string; price?: number }> = typeof i.selectedExtras === "string" ? JSON.parse(i.selectedExtras) : i.selectedExtras;
+        return extras.map((extra) => extra.price && extra.price > 0 ? `${extra.label} (+${fmt(extra.price)})` : extra.label);
+      } catch {
+        return [];
+      }
+    };
     const items = (order.items || []).map((i: any) => ({
       quantity: i.quantity,
       name: itemDisplayName(i),
       price: i.price,
       notes: i.notes || undefined,
+      extras: extrasLabels(i),
     }));
     const orderSubtotal = items.reduce((acc: number, i: any) => acc + i.price * i.quantity, 0);
     let paymentDetail: { amountReceived?: number; change?: number; splits?: Array<{ method: string; amount: number; cardBrand?: string; installments?: number }> } = {};
@@ -1742,6 +1756,7 @@ export default function PDVPanel({
       paperWidthMm: (tenant.receiptPaperWidth === 58 ? 58 : 80) as 58 | 80,
       createdAt: order.createdAt ? new Date(order.createdAt) : new Date(),
       customerName: (!isNumericName || order.tableId) ? order.customerName : undefined,
+      operatorName: order.operatorName || operatorName || undefined,
       // Comanda recém-aberta/lançamento na cozinha ainda não foi paga — o campo
       // paymentMethod nesse caso é só o valor padrão do banco ("CASH"), não uma forma
       // de pagamento de verdade. Sem isso, a notinha mostrava "Pagamento: Dinheiro"

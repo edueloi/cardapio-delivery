@@ -37,6 +37,20 @@ import socket from "../../../../lib/socket";
 // (ex: reconexão do socket) enquanto esta tela estiver montada.
 const autoPrintedOrderIds = new Set<string>();
 
+// selectedExtras (JSON de ProductExtra[]) inclui tanto os adicionais escolhidos manualmente
+// quanto os aplicados automaticamente (ex: embalagem em pedidos para viagem) — esses últimos
+// nunca entram no campo "notes" (que só é montado no momento da escolha manual no carrinho),
+// então sem ler selectedExtras aqui o adicional automático nunca aparece na notinha.
+function extrasLabelsFromOrderItem(i: any): string[] {
+  if (!i.selectedExtras) return [];
+  try {
+    const extras: Array<{ label: string; price?: number }> = JSON.parse(i.selectedExtras);
+    return extras.map((extra) => extra.price && extra.price > 0 ? `${extra.label} (+${fmt(extra.price)})` : extra.label);
+  } catch {
+    return [];
+  }
+}
+
 // Reconstrói os dados da notinha a partir de um pedido já salvo — usado pra reimprimir
 // direto do Painel de Pedidos, sem precisar abrir o PDV.
 function buildReceiptDataFromOrder(order: any, tenant: any): ReceiptData {
@@ -45,6 +59,7 @@ function buildReceiptDataFromOrder(order: any, tenant: any): ReceiptData {
     name: i.productVariant?.name ? `${i.product?.name || ""} (${i.productVariant.name})` : (i.product?.name || ""),
     price: i.price,
     notes: i.notes || undefined,
+    extras: extrasLabelsFromOrderItem(i),
   }));
   const orderSubtotal = items.reduce((acc: number, i: any) => acc + i.price * i.quantity, 0);
   let paymentDetail: { amountReceived?: number; change?: number; splits?: Array<{ method: string; amount: number; cardBrand?: string; installments?: number }> } = {};
@@ -65,6 +80,7 @@ function buildReceiptDataFromOrder(order: any, tenant: any): ReceiptData {
     paperWidthMm: (tenant?.receiptPaperWidth === 58 ? 58 : 80) as 58 | 80,
     createdAt: order.createdAt ? new Date(order.createdAt) : new Date(),
     customerName: (!isNumericName || order.tableId) ? order.customerName : undefined,
+    operatorName: order.operatorName || undefined,
     // Pedido ainda não pago (comanda em aberto) tem paymentMethod só como valor padrão
     // do banco, não uma forma de pagamento real — só mostra quando já foi faturado.
     isPreCheckout: !(order.billed === true || order.status === "DELIVERED"),
@@ -389,6 +405,9 @@ function KanbanCard({ order, categoryMap, updateStatus, isExpanded, toggleOrder,
                   {item.productVariant?.name && (
                     <p className="text-[10px] font-black uppercase text-[#C9A227] mt-0.5">· {item.productVariant.name}</p>
                   )}
+                  {extrasLabelsFromOrderItem(item).map((extra, idx) => (
+                    <p key={idx} className="text-[10px] text-slate-400 mt-0.5">+ {extra}</p>
+                  ))}
                   {item.notes && (
                     <div className="mt-1 bg-amber-50 border border-amber-200 text-amber-800 text-[9px] font-bold px-2 py-1 rounded-lg flex items-start gap-1">
                       <Utensils className="w-2.5 h-2.5 mt-0.5 shrink-0" />

@@ -407,9 +407,9 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
                         {recipe.product?.name || "Sem produto vinculado"} · Base {formatQuantity(recipe.outputQuantity, recipe.outputUnit)}
                       </p>
                     </div>
-                    <div className="flex items-center justify-between text-[11.5px] text-slate-500">
-                      <span className="font-black text-slate-900">{formatCurrency(simulation.totalCost)}</span>
-                      <span>{recipe.ingredients.length} insumo(s)</span>
+                    <div className="flex items-center justify-between gap-2 text-[11.5px] text-slate-500">
+                      <span className="truncate font-black text-slate-900">{formatCurrency(simulation.totalCost)}</span>
+                      <span className="shrink-0 whitespace-nowrap">{recipe.ingredients.length} insumo(s)</span>
                     </div>
                     <div className="flex items-center gap-1.5 border-t border-slate-100 pt-3" onClick={(e) => e.stopPropagation()}>
                       <IconButton size="sm" variant="ghost" title="Registrar produção" onClick={() => setRecipeToProduce(recipe)}>

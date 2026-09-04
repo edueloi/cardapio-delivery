@@ -33,6 +33,20 @@ import { apiFetch, apiJson } from "../../../../lib/api";
 import { Order, Tenant, dineInOrderLabel, type DanfeData } from "../../../../types";
 import { printReceiptPdf, printDanfePdf, type ReceiptData } from "../../../../lib/receipt";
 
+// selectedExtras (JSON de ProductExtra[]) inclui tanto os adicionais escolhidos manualmente
+// quanto os aplicados automaticamente (ex: embalagem em pedidos para viagem) — esses últimos
+// nunca entram no campo "notes" (que só é montado no momento da escolha manual no carrinho),
+// então sem ler selectedExtras aqui o adicional automático nunca aparece na notinha.
+function extrasLabelsFromOrderItem(i: any): string[] {
+  if (!i.selectedExtras) return [];
+  try {
+    const extras: Array<{ label: string; price?: number }> = JSON.parse(i.selectedExtras);
+    return extras.map((extra) => extra.price && extra.price > 0 ? `${extra.label} (+${fmt(extra.price)})` : extra.label);
+  } catch {
+    return [];
+  }
+}
+
 // Reconstrói os dados da notinha a partir de um pedido já salvo — usado pra reimprimir
 // direto do Histórico, sem precisar abrir o PDV (mesma lógica de OrdersList.tsx).
 function buildReceiptDataFromOrder(order: Order, tenant: Tenant): ReceiptData {
@@ -41,6 +55,7 @@ function buildReceiptDataFromOrder(order: Order, tenant: Tenant): ReceiptData {
     name: i.productVariant?.name ? `${i.product?.name || ""} (${i.productVariant.name})` : (i.product?.name || ""),
     price: i.price,
     notes: i.notes || undefined,
+    extras: extrasLabelsFromOrderItem(i),
   }));
   const orderSubtotal = items.reduce((acc: number, i: any) => acc + i.price * i.quantity, 0);
   let paymentDetail: { amountReceived?: number; change?: number; splits?: Array<{ method: string; amount: number; cardBrand?: string; installments?: number }> } = {};
@@ -61,6 +76,7 @@ function buildReceiptDataFromOrder(order: Order, tenant: Tenant): ReceiptData {
     paperWidthMm: ((tenant as any)?.receiptPaperWidth === 58 ? 58 : 80) as 58 | 80,
     createdAt: order.createdAt ? new Date(order.createdAt) : new Date(),
     customerName: (!isNumericName || order.tableId) ? order.customerName : undefined,
+    operatorName: order.operatorName || undefined,
     isPreCheckout: !(order.billed === true || order.status === "DELIVERED"),
     items,
     subtotal: orderSubtotal,
@@ -338,6 +354,13 @@ export function OrderHistoryPanel({
       ),
     },
     {
+      header: 'Atendente',
+      hideOnMobile: true,
+      render: (o: Order) => (
+        <span className="text-xs font-bold text-slate-600 truncate max-w-[110px] block">{o.operatorName || "—"}</span>
+      ),
+    },
+    {
       header: 'Status',
       hideOnMobile: true,
       render: (o: Order) => (
@@ -548,6 +571,9 @@ export function OrderHistoryPanel({
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 {detailsOrder.orderType === 'DELIVERY' ? 'Delivery' : detailsOrder.orderType === 'DINE_IN' ? dineInOrderLabel(detailsOrder) : 'Retirada'}
               </p>
+              {detailsOrder.operatorName && (
+                <p className="text-[10px] font-bold text-slate-400">Atendente: <span className="text-slate-600">{detailsOrder.operatorName}</span></p>
+              )}
             </div>
 
             <div className="border border-slate-100 rounded-2xl divide-y divide-slate-100">
@@ -555,6 +581,9 @@ export function OrderHistoryPanel({
                 <div key={item.id} className="flex items-center justify-between px-4 py-2.5 text-xs">
                   <div className="min-w-0">
                     <p className="font-bold text-slate-700 truncate">{item.quantity}x {item.product?.name || "Produto"}</p>
+                    {extrasLabelsFromOrderItem(item).map((extra, idx) => (
+                      <p key={idx} className="text-[10px] text-slate-400 truncate">+ {extra}</p>
+                    ))}
                     {item.notes && <p className="text-[10px] text-slate-400 italic truncate">{item.notes}</p>}
                   </div>
                   <span className="font-black text-slate-800 shrink-0 ml-2">{fmt(item.price * item.quantity)}</span>

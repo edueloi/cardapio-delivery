@@ -6,6 +6,8 @@ export interface ReceiptItem {
   name: string;
   price: number;
   notes?: string;
+  /** Rótulos de adicionais do item (manuais e automáticos, ex: "Embalagem (+R$ 2,00)") — impressos junto com Obs. */
+  extras?: string[];
 }
 
 export interface ReceiptData {
@@ -20,6 +22,8 @@ export interface ReceiptData {
   consumptionType?: "EAT_IN" | "TAKEOUT" | null;
   createdAt?: Date;
   customerName?: string;
+  /** Nome do operador/atendente logado que criou ou fechou o pedido. */
+  operatorName?: string | null;
   isPreCheckout?: boolean;
   paperWidthMm?: 58 | 80;
   /** "CLIENTE" ou "ESTABELECIMENTO" — impresso em destaque junto com a senha, quando presente. */
@@ -105,9 +109,11 @@ function estimateHeight(data: ReceiptData, nameLines: string[], addressLines: st
   else if (data.counterTicketNumber != null) y += 27;
   if (data.consumptionType) y += 5;
   if (data.customerName) y += 4;
+  if (data.operatorName) y += 4;
   y += 1 + 5; // linha + espaço
   for (const item of data.items) {
     y += 4;
+    if (item.extras && item.extras.length > 0) y += item.extras.length * 4;
     if (item.notes) y += 4;
   }
   y += 1 + 5; // linha + espaço
@@ -212,6 +218,10 @@ export function buildReceiptPdf(data: ReceiptData): jsPDF {
     doc.text(`Cliente: ${data.customerName}`, width / 2, y, { align: "center" });
     y += 4;
   }
+  if (data.operatorName) {
+    doc.text(`Atendente: ${data.operatorName}`, width / 2, y, { align: "center" });
+    y += 4;
+  }
 
   y += 1;
   doc.setLineDashPattern([1, 1], 0);
@@ -225,6 +235,13 @@ export function buildReceiptPdf(data: ReceiptData): jsPDF {
     doc.text(label, margin, y, { maxWidth: contentWidth - (width === 58 ? 14 : 20) });
     doc.text(priceStr, width - margin, y, { align: "right" });
     y += 4;
+    if (item.extras && item.extras.length > 0) {
+      doc.setFont("courier", "normal");
+      for (const extra of item.extras) {
+        doc.text(`  + ${extra}`, margin, y, { maxWidth: width - margin * 2 });
+        y += 4;
+      }
+    }
     if (item.notes) {
       doc.setFont("courier", "bolditalic");
       doc.text(`  Obs: ${item.notes}`, margin, y, { maxWidth: width - margin * 2 });
