@@ -1023,7 +1023,7 @@ export default function MenuViewPage() {
                   </div>
 
                   {/* Product grid */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 items-stretch">
                     {category.products.map((product, pIdx) => (
                       <ProductCard key={product.id} product={product} delay={pIdx * 0.04} onOpen={() => openProduct(product)} />
                     ))}
@@ -2035,34 +2035,32 @@ function ProductCard({ product, delay, onOpen }: { product: Product; delay: numb
       viewport={{ once: true }}
       transition={{ delay, duration: 0.35, ease: "easeOut" }}
       whileTap={{ scale: 0.97 }}
-      className="w-full text-left group"
+      className="w-full h-full text-left group"
     >
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden hover:shadow-md hover:border-slate-200 transition-all duration-300">
-        <div className="p-3 flex items-center gap-3">
-          <div className="flex-1 min-w-0">
-            <h3 className="font-black text-slate-900 text-[14px] leading-snug line-clamp-1">{product.name}</h3>
-            {product.description && (
-              <p className="text-[11px] text-slate-400 mt-1 line-clamp-2 leading-relaxed">{product.description}</p>
-            )}
-            <div className="mt-2">
-              {hasVariants && <span className="text-[9px] font-bold text-slate-400 block leading-none mb-0.5">a partir de</span>}
-              <span className="text-[15px] font-black" style={{ color: BRAND }}>{fmt(minPrice)}</span>
-            </div>
+      <div className="h-full flex flex-col bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden hover:shadow-md hover:border-slate-200 transition-all duration-300">
+        <div className="relative w-full aspect-[4/3] bg-slate-50 shrink-0 flex items-center justify-center border-b border-slate-100">
+          {hasImage ? (
+            <img
+              src={product.imageUrl!}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
+              alt={product.name}
+              loading="lazy"
+            />
+          ) : (
+            <span className="text-4xl">🍽️</span>
+          )}
+          <div className="absolute bottom-2 right-2 w-8 h-8 rounded-full flex items-center justify-center text-white shadow-md" style={{ background: BRAND }}>
+            <Plus className="w-4 h-4" />
           </div>
-          <div className="relative w-[104px] h-[104px] rounded-2xl overflow-hidden bg-slate-50 shrink-0 flex items-center justify-center border border-slate-100">
-            {hasImage ? (
-              <img
-                src={product.imageUrl!}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
-                alt={product.name}
-                loading="lazy"
-              />
-            ) : (
-              <span className="text-3xl">🍽️</span>
-            )}
-            <div className="absolute bottom-1.5 right-1.5 w-7 h-7 rounded-full flex items-center justify-center text-white shadow-md" style={{ background: BRAND }}>
-              <Plus className="w-3.5 h-3.5" />
-            </div>
+        </div>
+        <div className="p-3 flex-1 flex flex-col">
+          <h3 className="font-black text-slate-900 text-[14px] leading-snug line-clamp-2 min-h-[2.5em]">{product.name}</h3>
+          {product.description && (
+            <p className="text-[11px] text-slate-400 mt-1 line-clamp-2 leading-relaxed">{product.description}</p>
+          )}
+          <div className="mt-auto pt-2">
+            {hasVariants && <span className="text-[9px] font-bold text-slate-400 block leading-none mb-0.5">a partir de</span>}
+            <span className="text-[15px] font-black" style={{ color: BRAND }}>{fmt(minPrice)}</span>
           </div>
         </div>
       </div>
