@@ -411,8 +411,21 @@ export async function emitirNfce(
           modFrete: 9, // sem frete
         },
         // Pagamento
+        // Grupo "card" é exigido pela SEFAZ (regra de negócio, não XSD) sempre que
+        // tPag = 03 (crédito) ou 04 (débito) — sem ele a nota é rejeitada com "Não
+        // informados os dados do cartão de crédito / débito". Único campo obrigatório
+        // do grupo é tpIntegra; usamos "2" (não integrado, tipo POS simples) como
+        // padrão seguro, já que hoje o PDV não tem garantia de que o pagamento passou
+        // por uma maquininha de fato integrada via API (TEF/POS) no momento da venda.
         pag: {
-          detPag: [{ tPag, ...(xPag ? { xPag } : {}), vPag: vNF }],
+          detPag: [
+            {
+              tPag,
+              ...(xPag ? { xPag } : {}),
+              vPag: vNF,
+              ...(tPag === "03" || tPag === "04" ? { card: { tpIntegra: "2" } } : {}),
+            },
+          ],
         },
       },
       // infNFeSupl (QR Code) é irmão de infNFe dentro de NFe, NÃO filho de infNFe —
