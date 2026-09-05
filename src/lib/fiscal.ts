@@ -366,7 +366,14 @@ export async function emitirNfce(
           // mas se a chave não existisse a lib a inseriria no fim do objeto (ordem de inserção
           // é o que o xml2js usa pra serializar), quebrando a sequência exigida pela SEFAZ.
           cDV: 0,
-          tpAmb: fiscal.ambiente === "producao" ? 2 : 1,
+          // tpAmb é o campo oficial do XSD/SEFAZ (1=Produção, 2=Homologação — convenção
+          // OPOSTA à que este app usa internamente em fiscal.ambiente, que trata
+          // "homologacao"/"producao" como string e não herda a numeração oficial). Antes
+          // enviávamos "producao"→2/"homologacao"→1, invertido, e a nota chegava no
+          // webservice certo (após o patch de setAmbiente) mas com tpAmb divergente do
+          // ambiente real do servidor — SEFAZ rejeita com "Ambiente informado diverge do
+          // Ambiente de recebimento".
+          tpAmb: fiscal.ambiente === "producao" ? 1 : 2,
           finNFe: 1,      // NF-e normal
           indFinal: 1,    // consumidor final
           indPres: 1,     // operação presencial
