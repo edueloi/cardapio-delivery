@@ -163,19 +163,25 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
     enabled: false, ambiente: "homologacao", cnpj: "", ie: "", crt: "1",
     serie: 1, proximoNumero: 1, uf: "SP", cMun: "3550308", xMun: "São Paulo",
   };
-  const [fiscal, setFiscal] = useState<FiscalConfig>(() => {
-    let parsed: FiscalConfig;
-    try { parsed = tenant?.fiscalConfig ? JSON.parse(tenant.fiscalConfig) : DEFAULT_FISCAL; }
-    catch { parsed = DEFAULT_FISCAL; }
-    // Migração transparente: configs salvas antes da separação de CSC por ambiente tinham
-    // só "csc"/"cscId" (implicitamente do ambiente configurado na época) — copia esse
-    // valor legado pro par do ambiente atual, uma única vez, sem apagar o legado.
+  // Migração transparente: configs salvas antes da separação de CSC por ambiente tinham
+  // só "csc"/"cscId" (implicitamente do ambiente configurado na época) — copia esse valor
+  // legado pro par do ambiente que estava configurado, sem apagar o legado. Extraída como
+  // função (em vez de só no inicializador do useState) porque precisa rodar TODA VEZ que
+  // "fiscal" é resincronizado a partir de "tenant" (no useEffect abaixo) — antes só rodava
+  // na primeira montagem, então um reload de tenant (ex: logo após salvar) sobrescrevia os
+  // campos novos com "undefined" de volta, aparentando "sumir" o CSC de homologação na tela
+  // (o valor legado no banco nunca foi apagado, só a exibição ficava errada).
+  function migrarFiscal(parsed: FiscalConfig): FiscalConfig {
     if (parsed.csc && !parsed.cscHomologacao && !parsed.cscProducao) {
       const key = parsed.ambiente === "producao" ? "cscProducao" : "cscHomologacao";
       const keyId = parsed.ambiente === "producao" ? "cscIdProducao" : "cscIdHomologacao";
-      parsed = { ...parsed, [key]: parsed.csc, [keyId]: parsed.cscId };
+      return { ...parsed, [key]: parsed.csc, [keyId]: parsed.cscId };
     }
     return parsed;
+  }
+  const [fiscal, setFiscal] = useState<FiscalConfig>(() => {
+    try { return migrarFiscal(tenant?.fiscalConfig ? JSON.parse(tenant.fiscalConfig) : DEFAULT_FISCAL); }
+    catch { return DEFAULT_FISCAL; }
   });
 
   const [printing, setPrinting] = useState<PrintingConfig>(() => {
@@ -193,7 +199,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
       setDelivery(parseDeliveryConfig(tenant.deliveryConfig));
       try { setPayments(tenant.paymentMethods ? JSON.parse(tenant.paymentMethods) : DEFAULT_PAYMENTS); } catch { setPayments(DEFAULT_PAYMENTS); }
       try { setStone(tenant.stoneConfig ? JSON.parse(tenant.stoneConfig) : DEFAULT_STONE); } catch { setStone(DEFAULT_STONE); }
-      try { setFiscal(tenant.fiscalConfig ? JSON.parse(tenant.fiscalConfig) : DEFAULT_FISCAL); } catch { setFiscal(DEFAULT_FISCAL); }
+      try { setFiscal(migrarFiscal(tenant.fiscalConfig ? JSON.parse(tenant.fiscalConfig) : DEFAULT_FISCAL)); } catch { setFiscal(DEFAULT_FISCAL); }
     }
   }, [tenant]);
 
