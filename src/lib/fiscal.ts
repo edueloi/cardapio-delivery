@@ -203,6 +203,24 @@ export interface NfceOrderData {
   };
 }
 
+// now.toISOString() sempre retorna a hora em UTC (ex: "2026-09-05T13:24:43.000Z"). Um bug
+// anterior só trocava o "Z" por "-03:00" mantendo os dígitos em UTC — isso muda a SEMÂNTICA
+// do timestamp (de "13:24 UTC" para "13:24 no fuso -03:00", que equivale a 16:24 UTC),
+// adiantando o relógio em 3h e fazendo a SEFAZ rejeitar com "Data-Hora de Emissão posterior
+// ao horário de recebimento" (rejeição 234). Aqui deslocamos o Date em -3h e lemos os
+// campos via getUTC*, o que dá a hora real de Brasília sem depender do timezone do SO.
+function dhEmiBrasilia(date: Date): string {
+  const shifted = new Date(date.getTime() - 3 * 60 * 60 * 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const yyyy = shifted.getUTCFullYear();
+  const MM = pad(shifted.getUTCMonth() + 1);
+  const dd = pad(shifted.getUTCDate());
+  const HH = pad(shifted.getUTCHours());
+  const mm = pad(shifted.getUTCMinutes());
+  const ss = pad(shifted.getUTCSeconds());
+  return `${yyyy}-${MM}-${dd}T${HH}:${mm}:${ss}-03:00`;
+}
+
 function mapPaymentCode(method: string): { tPag: string; xPag?: string } {
   const m = method.toUpperCase();
   if (m === "CASH") return { tPag: "01" };
@@ -230,9 +248,7 @@ export async function emitirNfce(
   const wizard = await getWizard(tenantId, fiscal);
 
   const now = new Date();
-  // toISOString() traz milissegundos (".809Z") que o XSD da NFC-e rejeita — o padrão
-  // exige segundos inteiros com offset de fuso, ex: "2026-09-05T11:51:47-03:00".
-  const dhEmi = now.toISOString().replace(/\.\d{3}Z$/, "-03:00");
+  const dhEmi = dhEmiBrasilia(now);
   const cnpjClean = fiscal.cnpj.replace(/\D/g, "");
   const ieClean = fiscal.ie.replace(/\D/g, "");
   // Documento do destinatário — aceita CPF (11 dígitos, pessoa física) ou CNPJ
