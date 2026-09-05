@@ -4,7 +4,6 @@
  * DANFE nem preenche o QR Code — ambos precisam ser montados manualmente aqui,
  * seguindo o Manual de Orientação do Contribuinte (MOC) da NFC-e.
  */
-import crypto from "crypto";
 import type { FiscalConfig } from "../types.js";
 
 export interface DanfeItem {
@@ -75,19 +74,16 @@ function extractPayment(xml: string): { method: string; amount: number } {
  * Em produção a maioria das UFs aceita a URL curta (só chave + parâmetros + hash),
  * sem os campos de conferência (dhEmi/vNF/vICMS/digVal) quando o XML já foi transmitido on-line (padrão CT-e/NFC-e "vFacil").
  */
+// QR Code v3 (NT 2025.001) — mesmo formato usado na emissão real (ver patch de
+// GerarConsulta.gerarConsulta em fiscal.ts). Como este app só emite em modo normal
+// (tpEmis=1, síncrono), não em contingência, o formato correto é o mais simples: sem
+// CSC/hash (v2) e sem assinatura digital (só exigida em contingência, tpEmis=9).
 export function buildQrCodeUrl(params: {
-  consultaUrlBase: string; // ex: getUrlChave(uf, ambiente)
+  consultaUrlBase: string; // ex: getUrlQrCode(uf, ambiente)
   chave: string;
-  tpAmb: "1" | "2";
-  csc: string;
-  cscId: string;
+  tpAmb: "1" | "2"; // convenção OFICIAL da SEFAZ: 1=produção, 2=homologação
 }): string {
-  const { consultaUrlBase, chave, tpAmb, csc, cscId } = params;
-  const cscIdPadded = cscId.padStart(6, "0");
-  // String base do hash: chave + tpAmb + idToken (cIdToken=NNNNNN)... + CSC (o CSC nunca entra na URL, só no hash)
-  const paramsStr = `${chave}|2|${tpAmb}|${cscIdPadded}`;
-  const hash = crypto.createHash("sha1").update(paramsStr + csc).digest("hex");
-  return `${consultaUrlBase}?p=${paramsStr}|${hash}`;
+  return `${params.consultaUrlBase}?p=${params.chave}|3|${params.tpAmb}`;
 }
 
 export function buildDanfeData(opts: {
@@ -99,23 +95,37 @@ export function buildDanfeData(opts: {
   chave: string;
   protocolo: string;
   xmlAutorizado: string;
-  consultaUrlBase: string;
+  consultaUrlBase: string; // URL de consulta manual por chave (getUrlChave) — exibida por extenso no cupom
+  qrCodeUrlBase: string; // endpoint específico de QR Code (getUrlQrCode) — usado no cálculo de qrCodeUrl
   customerName?: string;
   customerCpf?: string;
+  // Nomes reais dos produtos, na mesma ordem dos itens do pedido — usados só pra EXIBIÇÃO
+  // no DANFE. Em homologação o xProd do primeiro item no XML fiscal é substituído pelo
+  // texto fixo exigido pela SEFAZ ("NOTA FISCAL EMITIDA EM AMBIENTE DE HOMOLOGACAO...",
+  // ver fiscal.ts), então extrair o nome direto do XML mostraria esse texto genérico em
+  // vez do produto de verdade no cupom impresso — a exigência é sobre o XML, não sobre a
+  // representação visual.
+  realItemNames?: string[];
 }): DanfeData {
   const { fiscal, xmlAutorizado } = opts;
   const dhEmi = extractTag(xmlAutorizado, "dhEmi");
   const dhRecbto = extractTag(xmlAutorizado, "dhRecbto");
   const items = extractAllDet(xmlAutorizado);
+  if (opts.realItemNames) {
+    items.forEach((item, i) => {
+      if (opts.realItemNames![i]) item.name = opts.realItemNames![i];
+    });
+  }
   const total = parseFloat(extractTag(xmlAutorizado, "vNF") || "0");
   const payment = extractPayment(xmlAutorizado);
 
+  // tpAmb aqui usa a convenção OFICIAL da SEFAZ (1=produção, 2=homologação), OPOSTA à
+  // convenção interna deste app (fiscal.ambiente: "homologacao"/"producao" como string,
+  // sem herdar a numeração oficial) — mesma inversão já tratada em fiscal.ts.
   const qrCodeUrl = buildQrCodeUrl({
-    consultaUrlBase: opts.consultaUrlBase,
+    consultaUrlBase: opts.qrCodeUrlBase,
     chave: opts.chave,
-    tpAmb: fiscal.ambiente === "producao" ? "2" : "1",
-    csc: fiscal.csc,
-    cscId: fiscal.cscId,
+    tpAmb: fiscal.ambiente === "producao" ? "1" : "2",
   });
 
   return {

@@ -10783,6 +10783,7 @@ app.get(
     try {
       const order = await prisma.order.findFirst({
         where: { id: req.params.orderId, tenantId: tenant.id },
+        include: { items: { include: { product: true } } },
       });
       if (!order) return res.status(404).json({ error: "Pedido não encontrado." });
       if (order.nfceStatus !== "AUTHORIZED" || !order.nfceKey || !order.nfceProtocol || !order.nfceXml)
@@ -10811,7 +10812,14 @@ app.get(
       }
 
       const { buildDanfeData } = await import("./src/lib/danfe.js");
-      const { getUrlChave } = await import("./src/lib/fiscal.js");
+      const { getUrlChave, getUrlQrCode } = await import("./src/lib/fiscal.js");
+
+      // "Venda PDV" é o nome padrão de pedido de balcão sem cliente identificado (não um
+      // cliente real) — não faz sentido exibir "Cliente: Venda PDV" no cupom impresso.
+      const customerName =
+        order.customerName && order.customerName !== "Venda PDV"
+          ? order.customerName
+          : undefined;
 
       const danfe = buildDanfeData({
         fiscal,
@@ -10823,8 +10831,12 @@ app.get(
         protocolo: order.nfceProtocol,
         xmlAutorizado: xml,
         consultaUrlBase: getUrlChave(fiscal.uf, fiscal.ambiente),
-        customerName: order.customerName || undefined,
+        qrCodeUrlBase: getUrlQrCode(fiscal.uf, fiscal.ambiente),
+        customerName,
         customerCpf: order.customerCpf || undefined,
+        realItemNames: order.items.map(
+          (item: any) => item.productName ?? item.product?.name ?? ""
+        ),
       });
 
       const QRCode = (await import("qrcode")).default;
