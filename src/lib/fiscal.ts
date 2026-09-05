@@ -35,10 +35,48 @@ const originalGerarConsulta = GerarConsulta.prototype.gerarConsulta;
   mod?: string,
   ...rest: any[]
 ) {
-  const modReal = (mod === undefined || mod === "NFe") && /<mod>65<\/mod>/.test(xmlConsulta)
-    ? "NFCe"
-    : mod;
-  return originalGerarConsulta.call(this, xmlConsulta, metodo, ambienteNacional, versao, modReal, ...rest);
+  const isNFCe = /<mod>65<\/mod>/.test(xmlConsulta);
+  const modReal = (mod === undefined || mod === "NFe") && isNFCe ? "NFCe" : mod;
+
+  // nfewizard-io@1.1.2 (gerarXmlNFeAutorizacao) nunca lê NFe.infNFeSupl do objeto de
+  // entrada — o XML de <NFe> que essa função recebe já sai sem essa tag, mesmo que o
+  // objeto JS que montamos em emitirNfce a tenha (confirmado no código-fonte da lib: o
+  // xmlObject ali é um literal fixo com só "$" e "infNFe", infNFeSupl nunca é referenciado
+  // em lugar nenhum do bundle). A tipagem pública promete suporte que o runtime não
+  // entrega. Sem essa tag a SEFAZ rejeita com "Nota Fiscal sem a informação do QR-Code".
+  // Como não há como fazer a lib incluir o campo, injetamos a tag no XML aqui — este é o
+  // primeiro ponto de interceptação que já vê o XML final de <NFe> (com o <infNFe>
+  // assinado) ANTES de ele ser embutido no envelope SOAP e validado contra o XSD.
+  let xmlFinal = xmlConsulta;
+  if (isNFCe && metodo === "NFEAutorizacao" && !/<infNFeSupl>/.test(xmlConsulta)) {
+    const chaveMatch = xmlConsulta.match(/Id="NFe(\d{44})"/);
+    if (chaveMatch) {
+      const chave44 = chaveMatch[1];
+      const config = (this as any).environment?.getConfig?.();
+      const idCSC: string | undefined = config?.nfe?.idCSC != null ? String(config.nfe.idCSC) : undefined;
+      const csc: string | undefined = config?.nfe?.tokenCSC;
+      const uf: string | undefined = config?.dfe?.UF;
+      // config.nfe.ambiente aqui já está na convenção OFICIAL da lib (1=produção,
+      // 2=homologação — mesma coisa tratada no patch de setAmbiente acima), que é
+      // exatamente a convenção que o QR Code exige no parâmetro tpAmb.
+      const tpAmbOficial = config?.nfe?.ambiente;
+      if (idCSC && csc && uf && tpAmbOficial) {
+        const ambienteApp = tpAmbOficial === 1 ? "homologacao" : "producao";
+        const urlQrCode = getUrlQrCode(uf, ambienteApp);
+        const versaoQRCode = "2";
+        const hash = createHash("sha1")
+          .update(chave44 + versaoQRCode + tpAmbOficial + idCSC + csc)
+          .digest("hex")
+          .toUpperCase();
+        const qrCode = `${urlQrCode}?p=${chave44}|${versaoQRCode}|${tpAmbOficial}|${idCSC}|${hash}`;
+        const urlChave = getUrlChave(uf, ambienteApp);
+        const infNFeSupl = `<infNFeSupl><qrCode><![CDATA[${qrCode}]]></qrCode><urlChave>${urlChave}</urlChave></infNFeSupl>`;
+        xmlFinal = xmlConsulta.replace("</infNFe>", `</infNFe>${infNFeSupl}`);
+      }
+    }
+  }
+
+  return originalGerarConsulta.call(this, xmlFinal, metodo, ambienteNacional, versao, modReal, ...rest);
 };
 
 // Utility.setAmbiente (@nfewizard/shared, usado por getWebServiceUrl no fluxo de
@@ -451,9 +489,14 @@ export async function emitirNfce(
   const cNF = gerarCNF();
   const tpEmis = 1;
   // tpAmb oficial da SEFAZ (1=produção, 2=homologação) — mesma convenção usada no cálculo
-  // do QR Code e no campo tpAmb do XML (ver comentário do patch de setAmbiente).
+  // do QR Code (patch de GerarConsulta.gerarConsulta acima) e no campo tpAmb do XML.
   const tpAmbOficial = fiscal.ambiente === "producao" ? 1 : 2;
-  const { cDV, qrCode } = montarChaveEQrCode({
+  // cDV é só placeholder de POSIÇÃO no objeto (ver comentário abaixo) — a lib recalcula o
+  // valor real a partir da chave que ela mesma monta em gerarXmlNFeAutorizacao. O QR Code
+  // (que também depende da chave) é montado depois, no patch de GerarConsulta acima, a
+  // partir da chave real já corrigida pela lib — não duplicamos o cálculo aqui pra evitar
+  // qualquer chance de divergência entre os dois.
+  const { cDV } = montarChaveEQrCode({
     cUF,
     dhEmi,
     cnpj: cnpjClean,
@@ -613,14 +656,11 @@ export async function emitirNfce(
           ],
         },
       },
-      // infNFeSupl (QR Code) é irmão de infNFe dentro de NFe, NÃO filho de infNFe —
-      // o XSD (TNFe) só tem dois elementos de primeiro nível: infNFe e infNFeSupl.
-      // A sequência interna de infNFe termina em elementos opcionais (agropecuario etc.),
-      // então aninhar infNFeSupl ali dentro é rejeitado pelo validador da SEFAZ.
-      infNFeSupl: {
-        qrCode,
-        urlChave: getUrlChave(fiscal.uf, fiscal.ambiente),
-      },
+      // infNFeSupl (QR Code) NÃO é montado aqui — confirmado que nfewizard-io@1.1.2 nunca
+      // lê NFe.infNFeSupl do objeto de entrada (gerarXmlNFeAutorizacao usa um xmlObject
+      // literal fixo só com "$" e "infNFe"), então qualquer coisa colocada aqui seria
+      // silenciosamente descartada. A tag é injetada depois, direto no XML já assinado,
+      // pelo patch de GerarConsulta.gerarConsulta no topo deste arquivo.
     },
   };
 
