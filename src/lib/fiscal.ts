@@ -289,6 +289,12 @@ export async function emitirNfce(
     destDocDigits.length === 11 || destDocDigits.length === 14 ? destDocDigits : "";
   const { tPag, xPag } = mapPaymentCode(order.paymentMethod);
 
+  // Acumulado do grupo IBS/CBS de todos os itens, usado no totalizador da nota
+  // (total.IBSCBSTot) — a SEFAZ exige esse total além do grupo em cada item.
+  let vBCIBSCBSTotal = 0;
+  let vIBSUFTotal = 0;
+  let vCBSTotal = 0;
+
   const det = order.items.map((item, i) => {
     const vProd = parseFloat((item.quantity * item.unitPrice).toFixed(2));
     // nItem NÃO deve ser propriedade do objeto aqui — nItem é um ATRIBUTO XML de <det>
@@ -363,6 +369,9 @@ export async function emitirNfce(
           const pCBS = 0.9;
           const vIBSUF = parseFloat(((vProd * pIBSUF) / 100).toFixed(2));
           const vCBS = parseFloat(((vProd * pCBS) / 100).toFixed(2));
+          vBCIBSCBSTotal = parseFloat((vBCIBSCBSTotal + vProd).toFixed(2));
+          vIBSUFTotal = parseFloat((vIBSUFTotal + vIBSUF).toFixed(2));
+          vCBSTotal = parseFloat((vCBSTotal + vCBS).toFixed(2));
           return {
             IBSCBS: {
               CST: "000",
@@ -482,6 +491,28 @@ export async function emitirNfce(
             vCOFINS: 0,
             vOutro: 0,
             vNF,
+          },
+          // Totalizador do grupo IBS/CBS (Reforma Tributária) — irmão de ICMSTot dentro
+          // de <total>, exigido pela SEFAZ além do grupo já preenchido em cada item
+          // ("Total de IBS e CBS não informado" sem isso). vBCIBSCBS/vIBSUF/vCBS são os
+          // únicos campos obrigatórios de TIBSCBSMonoTot fora do minOccurs="0" — dentro de
+          // gIBS/gCBS, porém, vDif/vDevTrib são obrigatórios assim que o bloco existe.
+          IBSCBSTot: {
+            vBCIBSCBS: vBCIBSCBSTotal,
+            gIBS: {
+              gIBSUF: { vDif: 0, vDevTrib: 0, vIBSUF: vIBSUFTotal },
+              gIBSMun: { vDif: 0, vDevTrib: 0, vIBSMun: 0 },
+              vIBS: vIBSUFTotal,
+              vCredPres: 0,
+              vCredPresCondSus: 0,
+            },
+            gCBS: {
+              vDif: 0,
+              vDevTrib: 0,
+              vCBS: vCBSTotal,
+              vCredPres: 0,
+              vCredPresCondSus: 0,
+            },
           },
         },
         // Transporte (sem transportador — consumidor retira ou delivery próprio)
