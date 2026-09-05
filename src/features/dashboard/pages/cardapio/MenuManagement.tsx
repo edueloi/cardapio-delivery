@@ -330,7 +330,7 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
     // própria categoria de opções.
     selectionGroups: [] as { _key: string, sourceType: "category" | "products", categoryId: string, productIds: string[], qty: string, label: string }[],
     // Fiscal NFC-e
-    ncm: "", cfop: "5102", csosn: "400", unitCom: "UN", origem: 0, aliqIcms: 0,
+    ncm: "", cfop: "5102", csosn: "102", unitCom: "UN", origem: 0, aliqIcms: 0,
   });
   const [extraInput, setExtraInput] = useState({ label: "", price: "" });
   const [recipeIngredients, setRecipeIngredients] = useState<RecipeIngredientDraft[]>([]);
@@ -488,7 +488,7 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
       variants: prod.variants?.map((v: any) => ({ _key: v.id || crypto.randomUUID(), name: v.name, price: String(v.price), description: v.description || "", inventoryItemId: v.inventoryItemId || "", imageUrl: v.imageUrl || "" })) || [],
       extras: parsedExtras,
       selectionGroups,
-      ncm: prod.ncm || "", cfop: prod.cfop || "5102", csosn: prod.csosn || "400",
+      ncm: prod.ncm || "", cfop: prod.cfop || "5102", csosn: prod.csosn || "102",
       unitCom: prod.unitCom || "UN", origem: prod.origem ?? 0, aliqIcms: prod.aliqIcms ?? 0,
     });
     setExtraInput({ label: "", price: "" });
@@ -1498,7 +1498,6 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
                   <select value={prodForm.csosn} onChange={e => setProdForm(f => ({ ...f, csosn: e.target.value }))}
                     className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
                   >
-                    <option value="400">400 — Isento ICMS (Simples)</option>
                     <option value="102">102 — Tributada sem permissão crédito</option>
                     <option value="103">103 — Isento faixa receita bruta</option>
                     <option value="500">500 — ICMS cobrado por ST</option>

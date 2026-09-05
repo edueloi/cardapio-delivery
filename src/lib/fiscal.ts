@@ -232,7 +232,16 @@ export async function emitirNfce(
         ICMS: {
           dadosICMS: {
             orig: item.origem ?? 0,
-            CSOSN: item.csosn || "400",
+            // mountICMS (nfewizard-io) espera CSOSN com 4+ caracteres e extrai o código
+            // real via substring(1,4) — assume um dígito de padding antes do código de
+            // 3 dígitos (mesma convenção usada para CST). Um CSOSN puro de 3 dígitos
+            // (ex: "102") é cortado errado e vira "02", caindo no fallback ICMS00 vazio.
+            // "400" era o default antigo do cadastro de produto, mas não existe no mapa
+            // da lib (cai no mesmo fallback quebrado) — produtos salvos antes do fix
+            // caem aqui, então tratamos como se fosse o novo default.
+            // 102 = Tributada pelo Simples Nacional sem permissão de crédito — padrão
+            // para venda de produtos por optante do Simples Nacional (ex: lanchonete).
+            CSOSN: "0" + (item.csosn && item.csosn !== "400" ? item.csosn : "102"),
           },
         },
         PIS: {
