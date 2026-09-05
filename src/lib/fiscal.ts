@@ -9,6 +9,7 @@ import type { FiscalConfig, NfceResult } from "../types.js";
 import path from "path";
 import os from "os";
 import fs from "fs";
+import { randomInt } from "crypto";
 import forge from "node-forge";
 
 // Cache de instâncias inicializadas por tenantId
@@ -183,6 +184,15 @@ function mapPaymentCode(method: string): { tPag: string; xPag?: string } {
   return { tPag: "99", xPag: method }; // outros
 }
 
+// cNF precisa ser aleatório (não derivado de nNF/data/etc.) — existe só para evitar
+// colisão de chave de acesso entre notas com o mesmo número (comum em contingência ou
+// mudança de série). Usar um valor previsível (ex: igual a nNF) é rejeitado pela SEFAZ
+// (rejeição 217: "Código numérico (cNF) inválido") mesmo passando na validação de schema,
+// que só checa o formato de 8 dígitos.
+function gerarCNF(): string {
+  return String(randomInt(1, 100_000_000)).padStart(8, "0");
+}
+
 export async function emitirNfce(
   tenantId: string,
   fiscal: FiscalConfig,
@@ -263,7 +273,7 @@ export async function emitirNfce(
         // Identificação
         ide: {
           cUF: getCUF(fiscal.uf),
-          cNF: String(order.numero).padStart(8, "0"),
+          cNF: gerarCNF(),
           natOp: "VENDA AO CONSUMIDOR",
           mod: 65,
           serie: order.serie,
