@@ -343,7 +343,15 @@ export async function emitirNfce(
   };
 
   try {
-    const result = await (wizard as any).NFE_Autorizacao(nfeData);
+    // idLote é exigido pela SEFAZ (numérico, 1-15 dígitos) mas não faz parte do tipo
+    // público de NFE_Autorizacao nem é gerado pela lib — sem isso ela serializa
+    // "<idLote></idLote>" vazio e a nota é rejeitada na validação do XML.
+    // indSinc=1 (emissão síncrona) é o padrão exigido para NFC-e (modelo 65).
+    const result = await (wizard as any).NFE_Autorizacao({
+      idLote: String(Date.now()).slice(-15),
+      indSinc: 1,
+      ...nfeData,
+    });
 
     // result é array de XMLs autorizados
     if (!result || !result.length) {
