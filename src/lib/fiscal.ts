@@ -260,6 +260,12 @@ export async function emitirNfce(
           cMunFG: parseInt(fiscal.cMun, 10),
           tpImp: 4,       // DANFE NFC-e
           tpEmis: 1,      // emissão normal
+          // Placeholder — a lib sobrescreve com o dígito verificador calculado da chave
+          // de acesso (NFe.infNFe.ide.cDV = dv). Precisa já existir aqui, na posição exigida
+          // pelo XSD (entre tpEmis e tpAmb): reatribuir uma chave existente preserva a posição,
+          // mas se a chave não existisse a lib a inseriria no fim do objeto (ordem de inserção
+          // é o que o xml2js usa pra serializar), quebrando a sequência exigida pela SEFAZ.
+          cDV: 0,
           tpAmb: fiscal.ambiente === "producao" ? 2 : 1,
           finNFe: 1,      // NF-e normal
           indFinal: 1,    // consumidor final
