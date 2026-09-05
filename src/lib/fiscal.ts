@@ -10,7 +10,7 @@ import type { FiscalConfig, NfceResult } from "../types.js";
 import path from "path";
 import os from "os";
 import fs from "fs";
-import { randomInt, createHash } from "crypto";
+import { randomInt } from "crypto";
 import forge from "node-forge";
 
 // Bug da nfewizard-io@1.1.2: NFEAutorizacaoService.Exec (usado por wizard.NFE_Autorizacao,
@@ -47,36 +47,30 @@ const originalGerarConsulta = GerarConsulta.prototype.gerarConsulta;
   // Como não há como fazer a lib incluir o campo, injetamos a tag no XML aqui — este é o
   // primeiro ponto de interceptação que já vê o XML final de <NFe> (com o <infNFe>
   // assinado) ANTES de ele ser embutido no envelope SOAP e validado contra o XSD.
+  //
+  // Formato do QR Code: SEFAZ-SP já exige a versão 3 (NT 2025.001), confirmado pelo XSD
+  // atual (pattern só aceita "|3|", não mais "|2|..."). A v3 troca CSC/hash SHA-1 (v2, que
+  // usávamos antes) por assinatura digital RSA do certificado do emitente — mas essa
+  // assinatura só é exigida quando a nota é emitida em CONTINGÊNCIA (tpEmis=9). Como este
+  // app sempre emite em modo normal (tpEmis=1, emissão síncrona), o formato aqui é o mais
+  // simples: "<url>?p=<chave 44 dígitos>|3|<tpAmb>", sem CSC, sem hash, sem assinatura.
   let xmlFinal = xmlConsulta;
   if (isNFCe && metodo === "NFEAutorizacao" && !/<infNFeSupl>/.test(xmlConsulta)) {
     const chaveMatch = xmlConsulta.match(/Id="NFe(\d{44})"/);
     if (chaveMatch) {
       const chave44 = chaveMatch[1];
       const config = (this as any).environment?.getConfig?.();
-      // idCSC precisa ter 6 dígitos com zeros à esquerda (ex: "000001") tanto no hash
-      // quanto na URL final — é assim que a SEFAZ exibe/exige no cadastro do CSC, mesmo
-      // que o número "puro" seja só "1". Enviar sem padding faz o hash calculado divergir
-      // do da SEFAZ (rejeição 464 "Código de Hash no QR-Code difere do calculado").
-      const idCSC: string | undefined =
-        config?.nfe?.idCSC != null ? String(config.nfe.idCSC).padStart(6, "0") : undefined;
-      const csc: string | undefined = config?.nfe?.tokenCSC;
       const uf: string | undefined = config?.dfe?.UF;
       // ATENÇÃO: config.nfe.ambiente aqui é a convenção INTERNA deste app (1=homologação,
       // 2=produção — ver getWizard/NFE_LoadEnvironment), NÃO a convenção oficial da SEFAZ
       // (1=produção, 2=homologação) que o parâmetro tpAmb do QR Code exige. Precisa
-      // inverter aqui — mesma pegadinha do patch de setAmbiente acima, só que dessa vez
-      // cometida de novo por engano na primeira versão deste patch.
+      // inverter aqui — mesma pegadinha do patch de setAmbiente acima.
       const ambienteInternoApp = config?.nfe?.ambiente;
       const tpAmbOficial = ambienteInternoApp === 1 ? 2 : 1;
-      if (idCSC && csc && uf && ambienteInternoApp) {
+      if (uf && ambienteInternoApp) {
         const ambienteApp = ambienteInternoApp === 1 ? "homologacao" : "producao";
         const urlQrCode = getUrlQrCode(uf, ambienteApp);
-        const versaoQRCode = "2";
-        const hash = createHash("sha1")
-          .update(chave44 + versaoQRCode + tpAmbOficial + idCSC + csc)
-          .digest("hex")
-          .toUpperCase();
-        const qrCode = `${urlQrCode}?p=${chave44}|${versaoQRCode}|${tpAmbOficial}|${idCSC}|${hash}`;
+        const qrCode = `${urlQrCode}?p=${chave44}|3|${tpAmbOficial}`;
         const urlChave = getUrlChave(uf, ambienteApp);
         const infNFeSupl = `<infNFeSupl><qrCode><![CDATA[${qrCode}]]></qrCode><urlChave>${urlChave}</urlChave></infNFeSupl>`;
         xmlFinal = xmlConsulta.replace("</infNFe>", `</infNFe>${infNFeSupl}`);
@@ -330,13 +324,12 @@ function calcularDV(chave43: string): number {
   return resto < 2 ? 0 : 11 - resto;
 }
 
-// Monta a chave de acesso completa (44 dígitos: cUF+AAMM+CNPJ+mod+serie+nNF+tpEmis+cNF+cDV)
-// e a URL do QR Code (formato v2, hash SHA-1 do CSC) — nenhuma das duas libs (nfewizard-io
-// nem @nfewizard/shared) gera isso automaticamente, apesar do comentário antigo aqui dizer
-// o contrário: o campo infNFeSupl.qrCode é só um "pass-through" de string na lib (o tipo
-// público não tem nenhuma lógica de montagem por trás), então mandar "" nele resulta em
-// "<qrCode></qrCode>" vazio no XML, rejeitado pela SEFAZ com "sem a informação do QR-Code".
-function montarChaveEQrCode(params: {
+// Calcula o dígito verificador da chave de acesso (44 dígitos:
+// cUF+AAMM+CNPJ+mod+serie+nNF+tpEmis+cNF+cDV) — usado só como placeholder de POSIÇÃO no
+// objeto "ide" (a lib recalcula o valor real internamente a partir da mesma fórmula em
+// gerarXmlNFeAutorizacao, então isso só evita mandar "0" fixo ali). O QR Code em si (com a
+// chave real corrigida pela lib) é montado depois, no patch de GerarConsulta acima.
+function calcularCDV(params: {
   cUF: number;
   dhEmi: string; // já no formato "YYYY-MM-DDTHH:mm:ss-03:00"
   cnpj: string; // 14 dígitos, sem máscara
@@ -344,11 +337,7 @@ function montarChaveEQrCode(params: {
   nNF: number;
   tpEmis: number;
   cNF: string; // 8 dígitos
-  tpAmbOficial: number; // 1=produção, 2=homologação (convenção oficial SEFAZ)
-  idCSC: string;
-  csc: string;
-  urlQrCode: string;
-}): { chave44: string; cDV: number; qrCode: string } {
+}): number {
   const aamm = params.dhEmi.slice(2, 4) + params.dhEmi.slice(5, 7); // AAMM
   const chave43 =
     String(params.cUF) +
@@ -359,17 +348,7 @@ function montarChaveEQrCode(params: {
     String(params.nNF).padStart(9, "0") +
     String(params.tpEmis) +
     params.cNF;
-  const cDV = calcularDV(chave43);
-  const chave44 = chave43 + String(cDV);
-
-  const versaoQRCode = "2";
-  const hash = createHash("sha1")
-    .update(chave44 + versaoQRCode + params.tpAmbOficial + params.idCSC + params.csc)
-    .digest("hex")
-    .toUpperCase();
-  const qrCode = `${params.urlQrCode}?p=${chave44}|${versaoQRCode}|${params.tpAmbOficial}|${params.idCSC}|${hash}`;
-
-  return { chave44, cDV, qrCode };
+  return calcularDV(chave43);
 }
 
 export async function emitirNfce(
@@ -504,7 +483,7 @@ export async function emitirNfce(
   // (que também depende da chave) é montado depois, no patch de GerarConsulta acima, a
   // partir da chave real já corrigida pela lib — não duplicamos o cálculo aqui pra evitar
   // qualquer chance de divergência entre os dois.
-  const { cDV } = montarChaveEQrCode({
+  const cDV = calcularCDV({
     cUF,
     dhEmi,
     cnpj: cnpjClean,
@@ -512,10 +491,6 @@ export async function emitirNfce(
     nNF: order.numero,
     tpEmis,
     cNF,
-    tpAmbOficial,
-    idCSC: fiscal.cscId,
-    csc: fiscal.csc,
-    urlQrCode: getUrlQrCode(fiscal.uf, fiscal.ambiente),
   });
 
   const nfeData = {
