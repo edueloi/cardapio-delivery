@@ -48,14 +48,11 @@ const originalGerarConsulta = GerarConsulta.prototype.gerarConsulta;
   // primeiro ponto de interceptação que já vê o XML final de <NFe> (com o <infNFe>
   // assinado) ANTES de ele ser embutido no envelope SOAP e validado contra o XSD.
   let xmlFinal = xmlConsulta;
-  console.log("[Fiscal][DEBUG qrCode patch] isNFCe:", isNFCe, "| metodo:", metodo, "| jaTemSupl:", /<infNFeSupl>/.test(xmlConsulta));
   if (isNFCe && metodo === "NFEAutorizacao" && !/<infNFeSupl>/.test(xmlConsulta)) {
     const chaveMatch = xmlConsulta.match(/Id="NFe(\d{44})"/);
-    console.log("[Fiscal][DEBUG qrCode patch] chaveMatch:", chaveMatch?.[1]);
     if (chaveMatch) {
       const chave44 = chaveMatch[1];
       const config = (this as any).environment?.getConfig?.();
-      console.log("[Fiscal][DEBUG qrCode patch] config.nfe:", JSON.stringify(config?.nfe), "| config.dfe.UF:", config?.dfe?.UF);
       const idCSC: string | undefined = config?.nfe?.idCSC != null ? String(config.nfe.idCSC) : undefined;
       const csc: string | undefined = config?.nfe?.tokenCSC;
       const uf: string | undefined = config?.dfe?.UF;
