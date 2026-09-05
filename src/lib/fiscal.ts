@@ -663,20 +663,35 @@ export async function emitirNfce(
       ...nfeData,
     });
 
-    // result é array de XMLs autorizados
+    // result é um array de objetos JÁ PARSEADOS pela lib (saveFiles.salvaArquivos faz
+    // XmlParser().convertXmlToJson(xmlAutorizacao[i], 'NFEAutorizacaoFinal') internamente),
+    // não strings XML cruas como o código antigo assumia — result[0].match(...) quebrava
+    // com "xmlAutorizado.match is not a function" mesmo em caso de AUTORIZAÇÃO (cStat 100).
     if (!result || !result.length) {
       return { status: "REJECTED", motivo: "Sem resposta da SEFAZ" };
     }
 
-    const xmlAutorizado: string = result[0];
-    // Extrai chave e protocolo do XML retornado
-    const chaveMatch = xmlAutorizado.match(/chNFe>([^<]+)/);
-    const protMatch = xmlAutorizado.match(/nProt>([^<]+)/);
-    const cStatMatch = xmlAutorizado.match(/cStat>([^<]+)/);
+    const infProt = result[0]?.protNFe?.infProt ?? {};
+    const chave: string = String(infProt.chNFe ?? "").trim();
+    const protocolo: string = String(infProt.nProt ?? "").trim();
+    const cStat: string = String(infProt.cStat ?? "").trim();
+    const motivo: string = String(infProt.xMotivo ?? "").trim();
 
-    const chave = chaveMatch?.[1]?.trim() ?? "";
-    const protocolo = protMatch?.[1]?.trim() ?? "";
-    const cStat = cStatMatch?.[1]?.trim() ?? "";
+    // O XML cru autorizado é salvo em disco pela lib (armazenarXMLAutorizacao: true,
+    // pathXMLAutorizacao) nomeado pela própria chave de acesso — lido aqui só pra
+    // preencher xmlAutorizado (usado depois por danfe.ts, que faz parsing por regex sobre
+    // a string XML original, formato diferente do JSON compacto que a lib devolve aqui).
+    let xmlAutorizado = "";
+    if (chave) {
+      try {
+        xmlAutorizado = fs.readFileSync(
+          path.join(getTempDir(tenantId), "autorizado", `${chave}.xml`),
+          "utf-8"
+        );
+      } catch {
+        /* arquivo pode não existir (ex: dfe.armazenarXMLAutorizacao desligado) — segue sem o XML cru */
+      }
+    }
 
     // 100 = autorizado; 150 = autorizado fora de prazo
     if (cStat === "100" || cStat === "150") {
@@ -689,12 +704,11 @@ export async function emitirNfce(
       };
     }
 
-    const motivoMatch = xmlAutorizado.match(/xMotivo>([^<]+)/);
     return {
       status: "REJECTED",
       chave,
       protocolo,
-      motivo: motivoMatch?.[1]?.trim() ?? `cStat ${cStat}`,
+      motivo: motivo || `cStat ${cStat}`,
     };
   } catch (err: any) {
     console.error("[Fiscal] NFE_Autorizacao rejeitada/falhou:", err?.message ?? err);
