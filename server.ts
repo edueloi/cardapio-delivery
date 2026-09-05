@@ -10775,6 +10775,47 @@ app.get(
   }
 );
 
+// DELETE /api/owner/tenants/:tenantId/nfce/:orderId — remove um pedido com NFC-e
+// REJEITADA (tentativa de teste sem valor fiscal). Nunca permite excluir uma nota
+// AUTORIZADA — essa tem valor legal e só pode ser cancelada (rota /nfce/cancel), nunca
+// apagada do banco.
+app.delete(
+  "/api/owner/tenants/:tenantId/nfce/:orderId",
+  requireAuth,
+  async (req, res) => {
+    const tenant = await requireTenantById(
+      req,
+      res,
+      req.params.tenantId,
+      "finance"
+    );
+    if (!tenant) return;
+
+    try {
+      const order = await prisma.order.findFirst({
+        where: { id: req.params.orderId, tenantId: tenant.id },
+        select: { id: true, nfceStatus: true },
+      });
+      if (!order) return res.status(404).json({ error: "Pedido não encontrado." });
+      if (order.nfceStatus === "AUTHORIZED")
+        return res.status(400).json({
+          error: "NFC-e autorizada não pode ser excluída — cancele-a em vez disso.",
+        });
+
+      // OrderItem tem FK obrigatória pra Order (sem onDelete: Cascade no schema) — precisa
+      // apagar os itens antes, senão o delete do pedido falha por violação de constraint.
+      await prisma.$transaction([
+        prisma.orderItem.deleteMany({ where: { orderId: order.id } }),
+        prisma.order.delete({ where: { id: order.id } }),
+      ]);
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("[NFC-e] Erro ao excluir pedido:", err);
+      res.status(500).json({ error: err?.message ?? "Erro ao excluir pedido." });
+    }
+  }
+);
+
 // GET /api/owner/tenants/:tenantId/nfce/xml/:orderId — baixa o XML autorizado (procNFe) puro
 app.get(
   "/api/owner/tenants/:tenantId/nfce/xml/:orderId",
