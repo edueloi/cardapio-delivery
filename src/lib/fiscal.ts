@@ -10,7 +10,7 @@ import type { FiscalConfig, NfceResult } from "../types.js";
 import path from "path";
 import os from "os";
 import fs from "fs";
-import { randomInt } from "crypto";
+import { randomInt, createHash } from "crypto";
 import forge from "node-forge";
 
 // Bug da nfewizard-io@1.1.2: NFEAutorizacaoService.Exec (usado por wizard.NFE_Autorizacao,
@@ -271,6 +271,61 @@ function gerarCNF(): string {
   return String(randomInt(1, 100_000_000)).padStart(8, "0");
 }
 
+// Dígito verificador (módulo 11) dos 43 dígitos da chave de acesso — pesos de 2 a 9,
+// ciclando da direita pra esquerda; resto 0 ou 1 vira DV 0, senão DV = 11 - resto.
+function calcularDV(chave43: string): number {
+  let soma = 0;
+  let peso = 2;
+  for (let i = chave43.length - 1; i >= 0; i--) {
+    soma += parseInt(chave43[i], 10) * peso;
+    peso = peso === 9 ? 2 : peso + 1;
+  }
+  const resto = soma % 11;
+  return resto < 2 ? 0 : 11 - resto;
+}
+
+// Monta a chave de acesso completa (44 dígitos: cUF+AAMM+CNPJ+mod+serie+nNF+tpEmis+cNF+cDV)
+// e a URL do QR Code (formato v2, hash SHA-1 do CSC) — nenhuma das duas libs (nfewizard-io
+// nem @nfewizard/shared) gera isso automaticamente, apesar do comentário antigo aqui dizer
+// o contrário: o campo infNFeSupl.qrCode é só um "pass-through" de string na lib (o tipo
+// público não tem nenhuma lógica de montagem por trás), então mandar "" nele resulta em
+// "<qrCode></qrCode>" vazio no XML, rejeitado pela SEFAZ com "sem a informação do QR-Code".
+function montarChaveEQrCode(params: {
+  cUF: number;
+  dhEmi: string; // já no formato "YYYY-MM-DDTHH:mm:ss-03:00"
+  cnpj: string; // 14 dígitos, sem máscara
+  serie: number;
+  nNF: number;
+  tpEmis: number;
+  cNF: string; // 8 dígitos
+  tpAmbOficial: number; // 1=produção, 2=homologação (convenção oficial SEFAZ)
+  idCSC: string;
+  csc: string;
+  urlQrCode: string;
+}): { chave44: string; cDV: number; qrCode: string } {
+  const aamm = params.dhEmi.slice(2, 4) + params.dhEmi.slice(5, 7); // AAMM
+  const chave43 =
+    String(params.cUF) +
+    aamm +
+    params.cnpj.padStart(14, "0") +
+    "65" + // modelo NFC-e
+    String(params.serie).padStart(3, "0") +
+    String(params.nNF).padStart(9, "0") +
+    String(params.tpEmis) +
+    params.cNF;
+  const cDV = calcularDV(chave43);
+  const chave44 = chave43 + String(cDV);
+
+  const versaoQRCode = "2";
+  const hash = createHash("sha1")
+    .update(chave44 + versaoQRCode + params.tpAmbOficial + params.idCSC + params.csc)
+    .digest("hex")
+    .toUpperCase();
+  const qrCode = `${params.urlQrCode}?p=${chave44}|${versaoQRCode}|${params.tpAmbOficial}|${params.idCSC}|${hash}`;
+
+  return { chave44, cDV, qrCode };
+}
+
 export async function emitirNfce(
   tenantId: string,
   fiscal: FiscalConfig,
@@ -392,13 +447,33 @@ export async function emitirNfce(
 
   const vNF = parseFloat(order.total.toFixed(2));
 
+  const cUF = getCUF(fiscal.uf);
+  const cNF = gerarCNF();
+  const tpEmis = 1;
+  // tpAmb oficial da SEFAZ (1=produção, 2=homologação) — mesma convenção usada no cálculo
+  // do QR Code e no campo tpAmb do XML (ver comentário do patch de setAmbiente).
+  const tpAmbOficial = fiscal.ambiente === "producao" ? 1 : 2;
+  const { cDV, qrCode } = montarChaveEQrCode({
+    cUF,
+    dhEmi,
+    cnpj: cnpjClean,
+    serie: order.serie,
+    nNF: order.numero,
+    tpEmis,
+    cNF,
+    tpAmbOficial,
+    idCSC: fiscal.cscId,
+    csc: fiscal.csc,
+    urlQrCode: getUrlQrCode(fiscal.uf, fiscal.ambiente),
+  });
+
   const nfeData = {
     NFe: {
       infNFe: {
         // Identificação
         ide: {
-          cUF: getCUF(fiscal.uf),
-          cNF: gerarCNF(),
+          cUF,
+          cNF,
           natOp: "VENDA AO CONSUMIDOR",
           mod: 65,
           serie: order.serie,
@@ -408,13 +483,13 @@ export async function emitirNfce(
           idDest: 1,      // operação interna
           cMunFG: parseInt(fiscal.cMun, 10),
           tpImp: 4,       // DANFE NFC-e
-          tpEmis: 1,      // emissão normal
-          // Placeholder — a lib sobrescreve com o dígito verificador calculado da chave
-          // de acesso (NFe.infNFe.ide.cDV = dv). Precisa já existir aqui, na posição exigida
-          // pelo XSD (entre tpEmis e tpAmb): reatribuir uma chave existente preserva a posição,
-          // mas se a chave não existisse a lib a inseriria no fim do objeto (ordem de inserção
-          // é o que o xml2js usa pra serializar), quebrando a sequência exigida pela SEFAZ.
-          cDV: 0,
+          tpEmis,         // emissão normal
+          // cDV real (calculado por montarChaveEQrCode via módulo 11), consistente com a
+          // chave usada no qrCode. Precisa já existir aqui, na posição exigida pelo XSD
+          // (entre tpEmis e tpAmb) — reatribuir uma chave existente preserva a posição, mas
+          // se a chave não existisse a lib a inseriria no fim do objeto (ordem de inserção é
+          // o que o xml2js usa pra serializar), quebrando a sequência exigida pela SEFAZ.
+          cDV,
           // tpAmb é o campo oficial do XSD/SEFAZ (1=Produção, 2=Homologação — convenção
           // OPOSTA à que este app usa internamente em fiscal.ambiente, que trata
           // "homologacao"/"producao" como string e não herda a numeração oficial). Antes
@@ -422,7 +497,7 @@ export async function emitirNfce(
           // webservice certo (após o patch de setAmbiente) mas com tpAmb divergente do
           // ambiente real do servidor — SEFAZ rejeita com "Ambiente informado diverge do
           // Ambiente de recebimento".
-          tpAmb: fiscal.ambiente === "producao" ? 1 : 2,
+          tpAmb: tpAmbOficial,
           finNFe: 1,      // NF-e normal
           indFinal: 1,    // consumidor final
           indPres: 1,     // operação presencial
@@ -543,7 +618,7 @@ export async function emitirNfce(
       // A sequência interna de infNFe termina em elementos opcionais (agropecuario etc.),
       // então aninhar infNFeSupl ali dentro é rejeitado pelo validador da SEFAZ.
       infNFeSupl: {
-        qrCode: "", // preenchido automaticamente pela lib
+        qrCode,
         urlChave: getUrlChave(fiscal.uf, fiscal.ambiente),
       },
     },
@@ -665,4 +740,19 @@ export function getUrlChave(uf: string, ambiente: "homologacao" | "producao"): s
     GO: "https://go.gov.br/portalnfce",
   };
   return map[uf.toUpperCase()] ?? `https://www.nfe.fazenda.gov.br/consulta`;
+}
+
+// URL de consulta por QR-Code (endpoint específico, diferente da consulta por chave
+// digitada em getUrlChave) — confirmado em @nfewizard/shared (NFCe_SP_P/NFCe_SP_H) pra SP;
+// demais UFs usam fallback genérico até termos confirmação equivalente.
+export function getUrlQrCode(uf: string, ambiente: "homologacao" | "producao"): string {
+  const map: Record<string, { producao: string; homologacao: string }> = {
+    SP: {
+      producao: "https://www.nfce.fazenda.sp.gov.br/NFCeConsultaPublica/Paginas/ConsultaQRCode.aspx",
+      homologacao: "https://www.homologacao.nfce.fazenda.sp.gov.br/NFCeConsultaPublica/Paginas/ConsultaQRCode.aspx",
+    },
+  };
+  const entry = map[uf.toUpperCase()];
+  if (entry) return entry[ambiente];
+  return getUrlChave(uf, ambiente);
 }
