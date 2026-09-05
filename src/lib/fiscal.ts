@@ -520,19 +520,20 @@ export async function emitirNfce(
           modFrete: 9, // sem frete
         },
         // Pagamento
-        // Grupo "card" é exigido pela SEFAZ (regra de negócio, não XSD) sempre que
-        // tPag = 03 (crédito) ou 04 (débito) — sem ele a nota é rejeitada com "Não
-        // informados os dados do cartão de crédito / débito". Único campo obrigatório
-        // do grupo é tpIntegra; usamos "2" (não integrado, tipo POS simples) como
-        // padrão seguro, já que hoje o PDV não tem garantia de que o pagamento passou
-        // por uma maquininha de fato integrada via API (TEF/POS) no momento da venda.
+        // Grupo "card" é exigido pela SEFAZ (rejeição 391) sempre que tPag = 03 (crédito),
+        // 04 (débito) OU 17 (PIX) — apesar do nome "card", essa exigência cobre qualquer
+        // forma de pagamento eletrônica (inclusive PIX, tratado como pagamento
+        // instantâneo eletrônico no mesmo grupo do XSD), não só cartão físico. Único
+        // campo obrigatório do grupo é tpIntegra; usamos "2" (não integrado, tipo POS
+        // simples) como padrão seguro, já que hoje o PDV não tem garantia de que o
+        // pagamento passou por uma maquininha/API de fato integrada no momento da venda.
         pag: {
           detPag: [
             {
               tPag,
               ...(xPag ? { xPag } : {}),
               vPag: vNF,
-              ...(tPag === "03" || tPag === "04" ? { card: { tpIntegra: "2" } } : {}),
+              ...(["03", "04", "17"].includes(tPag) ? { card: { tpIntegra: "2" } } : {}),
             },
           ],
         },
