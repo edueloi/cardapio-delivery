@@ -53,7 +53,12 @@ const originalGerarConsulta = GerarConsulta.prototype.gerarConsulta;
     if (chaveMatch) {
       const chave44 = chaveMatch[1];
       const config = (this as any).environment?.getConfig?.();
-      const idCSC: string | undefined = config?.nfe?.idCSC != null ? String(config.nfe.idCSC) : undefined;
+      // idCSC precisa ter 6 dígitos com zeros à esquerda (ex: "000001") tanto no hash
+      // quanto na URL final — é assim que a SEFAZ exibe/exige no cadastro do CSC, mesmo
+      // que o número "puro" seja só "1". Enviar sem padding faz o hash calculado divergir
+      // do da SEFAZ (rejeição 464 "Código de Hash no QR-Code difere do calculado").
+      const idCSC: string | undefined =
+        config?.nfe?.idCSC != null ? String(config.nfe.idCSC).padStart(6, "0") : undefined;
       const csc: string | undefined = config?.nfe?.tokenCSC;
       const uf: string | undefined = config?.dfe?.UF;
       // ATENÇÃO: config.nfe.ambiente aqui é a convenção INTERNA deste app (1=homologação,
