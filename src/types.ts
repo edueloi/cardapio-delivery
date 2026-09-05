@@ -148,8 +148,17 @@ export interface FiscalConfig {
   // NFC-e
   serie: number;             // Série da NFC-e (geralmente 1)
   proximoNumero: number;     // Próximo número sequencial
-  csc: string;               // Código de Segurança do Contribuinte (token SEFAZ)
-  cscId: string;             // ID do CSC cadastrado na SEFAZ
+  // CSC/idCSC são registros SEPARADOS por ambiente na SEFAZ (o credenciamento e o CSC de
+  // homologação não valem em produção, e vice-versa) — por isso ficam guardados aqui em
+  // pares por ambiente, e o par certo é escolhido automaticamente conforme "ambiente"
+  // (ver getCsc/getCscId em src/lib/fiscal.ts). "csc"/"cscId" (sem sufixo) são o par
+  // LEGADO, usado como fallback só pra configs salvas antes dessa separação existir.
+  csc?: string;
+  cscId?: string;
+  cscHomologacao?: string;
+  cscIdHomologacao?: string;
+  cscProducao?: string;
+  cscIdProducao?: string;
   // UF do emitente (ex: "SP")
   uf: string;
   // cMunFG: código IBGE do município (ex: 3550308 = São Paulo)

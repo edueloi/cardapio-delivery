@@ -161,10 +161,21 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
 
   const DEFAULT_FISCAL: FiscalConfig = {
     enabled: false, ambiente: "homologacao", cnpj: "", ie: "", crt: "1",
-    serie: 1, proximoNumero: 1, csc: "", cscId: "1", uf: "SP", cMun: "3550308", xMun: "São Paulo",
+    serie: 1, proximoNumero: 1, uf: "SP", cMun: "3550308", xMun: "São Paulo",
   };
   const [fiscal, setFiscal] = useState<FiscalConfig>(() => {
-    try { return tenant?.fiscalConfig ? JSON.parse(tenant.fiscalConfig) : DEFAULT_FISCAL; } catch { return DEFAULT_FISCAL; }
+    let parsed: FiscalConfig;
+    try { parsed = tenant?.fiscalConfig ? JSON.parse(tenant.fiscalConfig) : DEFAULT_FISCAL; }
+    catch { parsed = DEFAULT_FISCAL; }
+    // Migração transparente: configs salvas antes da separação de CSC por ambiente tinham
+    // só "csc"/"cscId" (implicitamente do ambiente configurado na época) — copia esse
+    // valor legado pro par do ambiente atual, uma única vez, sem apagar o legado.
+    if (parsed.csc && !parsed.cscHomologacao && !parsed.cscProducao) {
+      const key = parsed.ambiente === "producao" ? "cscProducao" : "cscHomologacao";
+      const keyId = parsed.ambiente === "producao" ? "cscIdProducao" : "cscIdHomologacao";
+      parsed = { ...parsed, [key]: parsed.csc, [keyId]: parsed.cscId };
+    }
+    return parsed;
   });
 
   const [printing, setPrinting] = useState<PrintingConfig>(() => {
@@ -1421,28 +1432,58 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                     </div>
                   </div>
 
-                  {/* CSC */}
+                  {/* CSC — o credenciamento e o CSC são registros SEPARADOS por ambiente na
+                      SEFAZ (o de homologação não vale em produção, e vice-versa), então
+                      cada ambiente tem seu próprio par de campos aqui — trocar o Ambiente
+                      acima não apaga o CSC do outro, o sistema já escolhe o par certo
+                      automaticamente na hora de emitir (ver getCsc/getCscId em fiscal.ts). */}
                   <div>
                     <p className="text-xs font-semibold text-slate-500 mb-3">CSC — Código de Segurança do Contribuinte</p>
                     <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-xs text-slate-500 mb-3 leading-relaxed">
-                      O CSC é cadastrado no portal da SEFAZ do seu estado. Em SP: <span className="font-semibold text-slate-700">NF-e / Minha Conta</span>. Você receberá o Token e o ID do token.
+                      O CSC é cadastrado no portal da SEFAZ do seu estado (para SP: <span className="font-semibold text-slate-700">nfce.fazenda.sp.gov.br</span>, menu "Gerenciar Cód Segurança"). Homologação e produção têm portais e códigos separados — gere um CSC em cada ambiente antes de emitir notas nele.
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-4">
                       <div>
-                        <label className="text-xs font-semibold text-slate-500 block mb-1">ID do CSC</label>
-                        <input type="text" value={fiscal.cscId}
-                          onChange={e => setFiscal(f => ({ ...f, cscId: e.target.value }))}
-                          placeholder="Ex: 1"
-                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-800 focus:border-[#0D1B3E] outline-none bg-white"
-                        />
+                        <p className="text-[11px] font-bold uppercase tracking-wide text-amber-600 mb-2">Ambiente de Homologação</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="text-xs font-semibold text-slate-500 block mb-1">ID do CSC</label>
+                            <input type="text" value={fiscal.cscIdHomologacao ?? ""}
+                              onChange={e => setFiscal(f => ({ ...f, cscIdHomologacao: e.target.value }))}
+                              placeholder="Ex: 1"
+                              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-800 focus:border-[#0D1B3E] outline-none bg-white"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs font-semibold text-slate-500 block mb-1">Token CSC</label>
+                            <input type="password" value={fiscal.cscHomologacao ?? ""}
+                              onChange={e => setFiscal(f => ({ ...f, cscHomologacao: e.target.value }))}
+                              placeholder="Token UUID da SEFAZ"
+                              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-800 focus:border-[#0D1B3E] outline-none bg-white"
+                            />
+                          </div>
+                        </div>
                       </div>
                       <div>
-                        <label className="text-xs font-semibold text-slate-500 block mb-1">Token CSC</label>
-                        <input type="password" value={fiscal.csc}
-                          onChange={e => setFiscal(f => ({ ...f, csc: e.target.value }))}
-                          placeholder="Token UUID da SEFAZ"
-                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-800 focus:border-[#0D1B3E] outline-none bg-white"
-                        />
+                        <p className="text-[11px] font-bold uppercase tracking-wide text-emerald-600 mb-2">Ambiente de Produção</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="text-xs font-semibold text-slate-500 block mb-1">ID do CSC</label>
+                            <input type="text" value={fiscal.cscIdProducao ?? ""}
+                              onChange={e => setFiscal(f => ({ ...f, cscIdProducao: e.target.value }))}
+                              placeholder="Ex: 1"
+                              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-800 focus:border-[#0D1B3E] outline-none bg-white"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs font-semibold text-slate-500 block mb-1">Token CSC</label>
+                            <input type="password" value={fiscal.cscProducao ?? ""}
+                              onChange={e => setFiscal(f => ({ ...f, cscProducao: e.target.value }))}
+                              placeholder="Token UUID da SEFAZ"
+                              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-800 focus:border-[#0D1B3E] outline-none bg-white"
+                            />
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>

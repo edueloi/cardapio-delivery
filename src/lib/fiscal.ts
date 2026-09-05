@@ -188,6 +188,21 @@ function writeCertToTemp(tenantId: string, certBase64: string): string {
   return certPath;
 }
 
+// CSC/idCSC são registros separados por ambiente na SEFAZ — credenciamento e CSC de
+// homologação não valem em produção, e vice-versa (ver comentário em FiscalConfig,
+// types.ts). Escolhe o par certo conforme o ambiente ativo, caindo pro campo legado
+// csc/cscId (sem sufixo) só quando nenhum dos dois pares por ambiente estiver preenchido
+// — mantém compatibilidade com configs salvas antes dessa separação existir.
+function getCsc(fiscal: FiscalConfig): string {
+  const porAmbiente = fiscal.ambiente === "producao" ? fiscal.cscProducao : fiscal.cscHomologacao;
+  return porAmbiente || fiscal.csc || "";
+}
+
+function getCscId(fiscal: FiscalConfig): string {
+  const porAmbiente = fiscal.ambiente === "producao" ? fiscal.cscIdProducao : fiscal.cscIdHomologacao;
+  return porAmbiente || fiscal.cscId || "";
+}
+
 async function getWizard(tenantId: string, fiscal: FiscalConfig): Promise<NFeWizard> {
   const cached = wizardCache.get(tenantId);
   if (cached) return cached;
@@ -218,8 +233,8 @@ async function getWizard(tenantId: string, fiscal: FiscalConfig): Promise<NFeWiz
         // 1 = homologação, 2 = produção
         ambiente: fiscal.ambiente === "producao" ? 2 : 1,
         versaoDF: "4.00",
-        idCSC: parseInt(fiscal.cscId, 10),
-        tokenCSC: fiscal.csc,
+        idCSC: parseInt(getCscId(fiscal), 10),
+        tokenCSC: getCsc(fiscal),
         modelo: 65,
       },
       lib: {
