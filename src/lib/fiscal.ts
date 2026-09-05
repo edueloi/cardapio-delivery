@@ -403,6 +403,12 @@ export async function emitirNfce(
     // público de NFE_Autorizacao nem é gerado pela lib — sem isso ela serializa
     // "<idLote></idLote>" vazio e a nota é rejeitada na validação do XML.
     // indSinc=1 (emissão síncrona) é o padrão exigido para NFC-e (modelo 65).
+    console.log(
+      "[Fiscal] Emitindo NFC-e — mod resolvido:",
+      (BaseNFE.prototype as any).getModelo({ NFe: nfeData.NFe }),
+      "| ambiente:", fiscal.ambiente,
+      "| uf:", fiscal.uf
+    );
     const result = await (wizard as any).NFE_Autorizacao({
       idLote: String(Date.now()).slice(-15),
       indSinc: 1,
@@ -443,6 +449,7 @@ export async function emitirNfce(
       motivo: motivoMatch?.[1]?.trim() ?? `cStat ${cStat}`,
     };
   } catch (err: any) {
+    console.error("[Fiscal] NFE_Autorizacao rejeitada/falhou:", err?.message ?? err);
     return { status: "REJECTED", motivo: err?.message ?? "Erro desconhecido" };
   }
 }
