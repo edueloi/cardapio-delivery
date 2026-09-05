@@ -205,8 +205,13 @@ export async function emitirNfce(
 
   const det = order.items.map((item, i) => {
     const vProd = parseFloat((item.quantity * item.unitPrice).toFixed(2));
+    // nItem NÃO deve ser propriedade do objeto aqui — nItem é um ATRIBUTO XML de <det>
+    // (<det nItem="1">), não um elemento filho. A lib (nfewizard-io, gerarXmlNFeAutorizacao)
+    // já injeta { $: { nItem: index + 1 } } automaticamente ao montar cada item via
+    // ...det — mas se "nItem" existisse aqui como propriedade solta, ela sobrevivia ao
+    // spread ao lado de "$" e o xml2js serializava as duas coisas: o atributo (correto)
+    // E um <nItem> como elemento filho solto antes de <prod> (rejeitado pelo XSD).
     return {
-      nItem: i + 1,
       prod: {
         cProd: String(i + 1).padStart(4, "0"),
         cEAN: "SEM GTIN",
