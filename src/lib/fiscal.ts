@@ -345,23 +345,34 @@ export async function emitirNfce(
         },
         // Grupo da Reforma Tributária (IBS/CBS, NT 2025.002) — SEFAZ-SP já valida esse
         // grupo em homologação mesmo a obrigatoriedade oficial em produção para o Simples
-        // Nacional (CRT=1) só começando em 2027. A lib (nfewizard-io) ainda não tem lógica
-        // própria de montagem pra esse grupo (só os tipos existem em @nfewizard/types),
-        // então montamos o objeto na mão, na posição exigida pelo XSD (depois de
-        // ICMS/PIS/COFINS, dentro de <imposto>). CST "000"/cClassTrib "000001" = tributação
-        // regular monofásica não aplicável/período de transição, com todos os valores
-        // zerados — sem impacto fiscal real, só pra satisfazer a validação estrutural.
-        IBSCBS: {
-          CST: "000",
-          cClassTrib: "000001",
-          gIBSCBS: {
-            vBC: 0,
-            gIBSUF: { pIBSUF: 0, vIBSUF: 0 },
-            gIBSMun: { pIBSMun: 0, vIBSMun: 0 },
-            vIBS: 0,
-            gCBS: { pCBS: 0, vCBS: 0 },
-          },
-        },
+        // Nacional (CRT=1) só começando em 2027 (LC 214/2025 art. 348, III, "c" isenta
+        // optantes do Simples da cobrança em 2026). A lib (nfewizard-io) ainda não tem
+        // lógica própria de montagem pra esse grupo (só os tipos existem em
+        // @nfewizard/types), então montamos o objeto na mão, na posição exigida pelo XSD
+        // (depois de ICMS/PIS/COFINS, dentro de <imposto>). As alíquotas de 2026 são fixas
+        // por lei (art. 343/346 da LC 214/2025): pIBSUF=0,1% e pCBS=0,9% — são "alíquotas
+        // de teste" do período de transição (ensaio operacional, sem aumento real de
+        // carga: o valor recolhido é compensado/dispensado), zerar em vez de usar esses
+        // valores fixos é o que causa "Alíquota do IBS da UF inválida".
+        ...(() => {
+          const pIBSUF = 0.1;
+          const pCBS = 0.9;
+          const vIBSUF = parseFloat(((vProd * pIBSUF) / 100).toFixed(2));
+          const vCBS = parseFloat(((vProd * pCBS) / 100).toFixed(2));
+          return {
+            IBSCBS: {
+              CST: "000",
+              cClassTrib: "000001",
+              gIBSCBS: {
+                vBC: vProd,
+                gIBSUF: { pIBSUF, vIBSUF },
+                gIBSMun: { pIBSMun: 0, vIBSMun: 0 },
+                vIBS: vIBSUF,
+                gCBS: { pCBS, vCBS },
+              },
+            },
+          };
+        })(),
       },
     };
   });
