@@ -301,7 +301,13 @@ export async function emitirNfce(
       prod: {
         cProd: String(i + 1).padStart(4, "0"),
         cEAN: "SEM GTIN",
-        xProd: item.productName.slice(0, 120),
+        // Em homologação a SEFAZ exige que o xProd do PRIMEIRO item seja exatamente esse
+        // texto fixo (mesma exigência que já tratávamos só no xNome do emitente) — regra
+        // de negócio específica de homologação, não parte do XSD.
+        xProd:
+          fiscal.ambiente !== "producao" && i === 0
+            ? "NOTA FISCAL EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL"
+            : item.productName.slice(0, 120),
         NCM: item.ncm.replace(/\D/g, "").slice(0, 8).padStart(8, "0"),
         CFOP: item.cfop || "5102",
         uCom: item.unitCom || "UN",
