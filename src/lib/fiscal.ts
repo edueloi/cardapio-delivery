@@ -359,11 +359,14 @@ export async function emitirNfce(
         pag: {
           detPag: [{ tPag, ...(xPag ? { xPag } : {}), vPag: vNF }],
         },
-        // QR Code NFC-e
-        infNFeSupl: {
-          qrCode: "", // preenchido automaticamente pela lib
-          urlChave: getUrlChave(fiscal.uf, fiscal.ambiente),
-        },
+      },
+      // infNFeSupl (QR Code) é irmão de infNFe dentro de NFe, NÃO filho de infNFe —
+      // o XSD (TNFe) só tem dois elementos de primeiro nível: infNFe e infNFeSupl.
+      // A sequência interna de infNFe termina em elementos opcionais (agropecuario etc.),
+      // então aninhar infNFeSupl ali dentro é rejeitado pelo validador da SEFAZ.
+      infNFeSupl: {
+        qrCode: "", // preenchido automaticamente pela lib
+        urlChave: getUrlChave(fiscal.uf, fiscal.ambiente),
       },
     },
   };
