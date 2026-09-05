@@ -191,7 +191,9 @@ export async function emitirNfce(
   const wizard = await getWizard(tenantId, fiscal);
 
   const now = new Date();
-  const dhEmi = now.toISOString().replace("Z", "-03:00");
+  // toISOString() traz milissegundos (".809Z") que o XSD da NFC-e rejeita — o padrão
+  // exige segundos inteiros com offset de fuso, ex: "2026-09-05T11:51:47-03:00".
+  const dhEmi = now.toISOString().replace(/\.\d{3}Z$/, "-03:00");
   const cnpjClean = fiscal.cnpj.replace(/\D/g, "");
   const ieClean = fiscal.ie.replace(/\D/g, "");
   // Documento do destinatário — aceita CPF (11 dígitos, pessoa física) ou CNPJ
