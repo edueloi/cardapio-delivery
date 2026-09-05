@@ -343,6 +343,25 @@ export async function emitirNfce(
         COFINS: {
           dadosCOFINS: { CST: "07" },
         },
+        // Grupo da Reforma Tributária (IBS/CBS, NT 2025.002) — SEFAZ-SP já valida esse
+        // grupo em homologação mesmo a obrigatoriedade oficial em produção para o Simples
+        // Nacional (CRT=1) só começando em 2027. A lib (nfewizard-io) ainda não tem lógica
+        // própria de montagem pra esse grupo (só os tipos existem em @nfewizard/types),
+        // então montamos o objeto na mão, na posição exigida pelo XSD (depois de
+        // ICMS/PIS/COFINS, dentro de <imposto>). CST "000"/cClassTrib "000001" = tributação
+        // regular monofásica não aplicável/período de transição, com todos os valores
+        // zerados — sem impacto fiscal real, só pra satisfazer a validação estrutural.
+        IBSCBS: {
+          CST: "000",
+          cClassTrib: "000001",
+          gIBSCBS: {
+            vBC: 0,
+            gIBSUF: { pIBSUF: 0, vIBSUF: 0 },
+            gIBSMun: { pIBSMun: 0, vIBSMun: 0 },
+            vIBS: 0,
+            gCBS: { pCBS: 0, vCBS: 0 },
+          },
+        },
       },
     };
   });
