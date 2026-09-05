@@ -5,7 +5,7 @@
  */
 
 import { NFeWizard } from "nfewizard-io";
-import { BaseNFE } from "@nfewizard/shared";
+import { GerarConsulta } from "@nfewizard/shared";
 import type { FiscalConfig, NfceResult } from "../types.js";
 import path from "path";
 import os from "os";
@@ -13,20 +13,32 @@ import fs from "fs";
 import { randomInt } from "crypto";
 import forge from "node-forge";
 
-// Bug da nfewizard-io@1.1.2: NFEAutorizacaoService (usado por wizard.NFE_Autorizacao,
-// chamado em emitirNfce) nunca define "this.modelo" nem sobrescreve getModelo() — herda
-// sempre o fallback 'NFe' (modelo 55) de BaseNFE.getModelo(), não importa o que vá no XML
-// (NFe.infNFe.ide.mod: 65). Isso faz a lib montar a requisição apontando pro webservice de
-// NF-e normal, e a SEFAZ rejeita a NFC-e com "Modelo da NF-e diferente de 55" (o serviço
-// chamado foi o de modelo 55, mas o XML enviado é modelo 65).
-// Outras classes da mesma lib (NFEInutilizacaoService) já tratam isso lendo data.mod — só
-// replicamos a mesma lógica direto no protótipo compartilhado BaseNFE, já que
-// NFEAutorizacaoService é instanciada internamente pela lib a cada chamada (não dá pra
-// configurar de fora sem isso).
-(BaseNFE.prototype as any).getModelo = function (data: any) {
-  const mod = data?.NFe?.infNFe?.ide?.mod;
-  if (mod !== undefined) return String(mod) === "55" ? "NFe" : "NFCe";
-  return (this as any).modelo || "NFe";
+// Bug da nfewizard-io@1.1.2: NFEAutorizacaoService.Exec (usado por wizard.NFE_Autorizacao,
+// chamado em emitirNfce) chama gerarConsulta.gerarConsulta(xmlConsulta, this.metodo) com
+// só 2 argumentos — nunca passa o 5º parâmetro "mod", que por isso cai sempre no default
+// "NFe" (55). Isso faz getWebServiceUrl montar a chave "NFe_SP_H" em vez de "NFCe_SP_H" e
+// escolher o webservice de NF-e normal, mesmo com NFe.infNFe.ide.mod: 65 correto no XML —
+// SEFAZ rejeita com "Modelo da NF-e diferente de 55" (o serviço acessado é modelo 55, o
+// XML enviado é modelo 65). Um patch anterior em BaseNFE.getModelo() não resolvia porque
+// NFEAutorizacaoService.Exec nunca chama getModelo() nesse fluxo — o "mod" é hardcoded na
+// chamada, não decidido dinamicamente.
+// Como NFEAutorizacaoService não é exportada publicamente (só instanciada internamente
+// pela lib), o ponto de patch possível é GerarConsulta.gerarConsulta em si (exportada por
+// @nfewizard/shared): quando "mod" vier no default "NFe" mas o XML de fato declarar
+// mod=65, força "NFCe" antes de montar a URL.
+const originalGerarConsulta = GerarConsulta.prototype.gerarConsulta;
+(GerarConsulta.prototype as any).gerarConsulta = function (
+  xmlConsulta: string,
+  metodo: string,
+  ambienteNacional?: boolean,
+  versao?: string,
+  mod?: string,
+  ...rest: any[]
+) {
+  const modReal = (mod === undefined || mod === "NFe") && /<mod>65<\/mod>/.test(xmlConsulta)
+    ? "NFCe"
+    : mod;
+  return originalGerarConsulta.call(this, xmlConsulta, metodo, ambienteNacional, versao, modReal, ...rest);
 };
 
 // Cache de instâncias inicializadas por tenantId
@@ -404,8 +416,7 @@ export async function emitirNfce(
     // "<idLote></idLote>" vazio e a nota é rejeitada na validação do XML.
     // indSinc=1 (emissão síncrona) é o padrão exigido para NFC-e (modelo 65).
     console.log(
-      "[Fiscal] Emitindo NFC-e — mod resolvido:",
-      (BaseNFE.prototype as any).getModelo({ NFe: nfeData.NFe }),
+      "[Fiscal] Emitindo NFC-e — mod no XML:", nfeData.NFe.infNFe.ide.mod,
       "| ambiente:", fiscal.ambiente,
       "| uf:", fiscal.uf
     );
