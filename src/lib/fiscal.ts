@@ -355,6 +355,10 @@ export async function emitirNfce(
         // carga: o valor recolhido é compensado/dispensado), zerar em vez de usar esses
         // valores fixos é o que causa "Alíquota do IBS da UF inválida".
         ...(() => {
+          // O XSD exige pIBSUF/pCBS com no mínimo 2 casas decimais (padrão
+          // "0|0\.[0-9]{2,4}|...") — "0.1" como number serializa sem o zero à direita e
+          // quebra a validação ("value '0.1' is not accepted by the pattern"). Só nesses
+          // dois campos de alíquota enviamos string já formatada com toFixed(2).
           const pIBSUF = 0.1;
           const pCBS = 0.9;
           const vIBSUF = parseFloat(((vProd * pIBSUF) / 100).toFixed(2));
@@ -365,10 +369,10 @@ export async function emitirNfce(
               cClassTrib: "000001",
               gIBSCBS: {
                 vBC: vProd,
-                gIBSUF: { pIBSUF, vIBSUF },
-                gIBSMun: { pIBSMun: 0, vIBSMun: 0 },
+                gIBSUF: { pIBSUF: pIBSUF.toFixed(2), vIBSUF },
+                gIBSMun: { pIBSMun: (0).toFixed(2), vIBSMun: 0 },
                 vIBS: vIBSUF,
-                gCBS: { pCBS, vCBS },
+                gCBS: { pCBS: pCBS.toFixed(2), vCBS },
               },
             },
           };
