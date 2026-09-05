@@ -10498,97 +10498,12 @@ function injectSeoMeta(
     );
 }
 
-// Manifest do PWA varia por subdomínio: cozinha.boxsys.com.br precisa de nome/ícone
-// próprios ("Cozinha BoxSys"), senão o atalho "Adicionar à Tela de Início" no
-// celular/iPad sai com o nome e ícone genéricos do sistema (Box Sys). Precisa vir antes
-// do express.static (que serve o manifest.webmanifest genérico gerado pelo build).
-app.get("/manifest.webmanifest", (req, res) => {
-  const isKitchen = req.hostname === "cozinha.boxsys.com.br";
-  res.set("Content-Type", "application/manifest+json").json({
-    name: isKitchen ? "Cozinha BoxSys" : "Box Sys PDV",
-    short_name: isKitchen ? "Cozinha BoxSys" : "Box Sys",
-    description: isKitchen
-      ? "Painel de pedidos da cozinha BoxSys"
-      : "Cardápio digital e PDV Box Sys",
-    theme_color: "#0D1B3E",
-    background_color: "#0D1B3E",
-    display: "standalone",
-    orientation: "portrait",
-    start_url: isKitchen ? "/" : "/painel",
-    scope: "/",
-    icons: [
-      {
-        src: isKitchen ? "/images/cozinha-icon.png" : "/images/app_celular.png",
-        sizes: "192x192",
-        type: "image/png",
-        purpose: "any maskable",
-      },
-      {
-        src: isKitchen ? "/images/cozinha-icon.png" : "/images/app_celular.png",
-        sizes: "512x512",
-        type: "image/png",
-        purpose: "any maskable",
-      },
-    ],
-  });
-});
-
-if (process.env.NODE_ENV !== "production") {
-  const vite = await createViteServer({
-    server: { middlewareMode: true },
-    appType: "spa",
-  });
-
-  app.use(async (req, res, next) => {
-    // Só intercepta navegação de página real — deixa passar direto pro Vite qualquer
-    // asset/módulo interno (paths virtuais como /@vite/client e /@react-refresh, ou
-    // qualquer arquivo com extensão), senão o Vite nunca consegue servir JS/CSS com o
-    // Content-Type correto e a página inteira quebra (erro de MIME type no browser).
-    if (
-      req.method !== "GET" ||
-      req.path.startsWith("/api") ||
-      req.path.startsWith("/@") ||
-      req.path.includes(".")
-    )
-      return next();
-    try {
-      const rootIndexPath = path.join(process.cwd(), "index.html");
-      const rawHtml = fs.readFileSync(rootIndexPath, "utf-8");
-      const seo = await resolveSeoMeta(req.path, req.hostname);
-      const html = await vite.transformIndexHtml(
-        req.originalUrl,
-        injectSeoMeta(rawHtml, seo)
-      );
-      res.status(200).set({ "Content-Type": "text/html" }).send(html);
-    } catch (e) {
-      vite.ssrFixStacktrace(e as Error);
-      next(e);
-    }
-  });
-
-  app.use(vite.middlewares);
-} else {
-  const distPath = path.join(process.cwd(), "dist");
-  // index: false — sem isso, o express.static serve dist/index.html direto pra qualquer
-  // requisição de diretório (inclusive "/"), pulando o app.get("*") abaixo e servindo o
-  // HTML com os placeholders {{TITLE}}/{{DESCRIPTION}}/{{IMAGE}} nunca substituídos.
-  app.use(express.static(distPath, { index: false }));
-
-  app.get("*", async (req, res) => {
-    const seo = await resolveSeoMeta(req.path, req.hostname);
-    try {
-      const indexHtml = fs.readFileSync(
-        path.join(distPath, "index.html"),
-        "utf-8"
-      );
-      res.send(injectSeoMeta(indexHtml, seo));
-    } catch (e) {
-      res.sendFile(path.join(distPath, "index.html"));
-    }
-  });
-}
-
 // ─── NFC-e Fiscal Endpoints ───────────────────────────────────────────────────
+// Precisa ficar registrado ANTES do catch-all "app.get(\"*\", ...)" do SPA (mais abaixo)
+// — Express avalia rotas na ordem de registro, e um catch-all sem guarda de path
+// intercepta qualquer GET seguinte, mesmo de rotas de API distintas, devolvendo o
+// index.html do frontend em vez de JSON (bug real: nfce/list, nfce/status e nfce/danfe
+// nunca eram alcançados, só as rotas POST — emit/cancel — funcionavam).
 
 // POST /api/owner/tenants/:tenantId/nfce/emit — emite NFC-e para um pedido
 app.post(
@@ -10962,6 +10877,97 @@ app.patch(
     }
   }
 );
+
+// Manifest do PWA varia por subdomínio: cozinha.boxsys.com.br precisa de nome/ícone
+// próprios ("Cozinha BoxSys"), senão o atalho "Adicionar à Tela de Início" no
+// celular/iPad sai com o nome e ícone genéricos do sistema (Box Sys). Precisa vir antes
+// do express.static (que serve o manifest.webmanifest genérico gerado pelo build).
+app.get("/manifest.webmanifest", (req, res) => {
+  const isKitchen = req.hostname === "cozinha.boxsys.com.br";
+  res.set("Content-Type", "application/manifest+json").json({
+    name: isKitchen ? "Cozinha BoxSys" : "Box Sys PDV",
+    short_name: isKitchen ? "Cozinha BoxSys" : "Box Sys",
+    description: isKitchen
+      ? "Painel de pedidos da cozinha BoxSys"
+      : "Cardápio digital e PDV Box Sys",
+    theme_color: "#0D1B3E",
+    background_color: "#0D1B3E",
+    display: "standalone",
+    orientation: "portrait",
+    start_url: isKitchen ? "/" : "/painel",
+    scope: "/",
+    icons: [
+      {
+        src: isKitchen ? "/images/cozinha-icon.png" : "/images/app_celular.png",
+        sizes: "192x192",
+        type: "image/png",
+        purpose: "any maskable",
+      },
+      {
+        src: isKitchen ? "/images/cozinha-icon.png" : "/images/app_celular.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "any maskable",
+      },
+    ],
+  });
+});
+
+if (process.env.NODE_ENV !== "production") {
+  const vite = await createViteServer({
+    server: { middlewareMode: true },
+    appType: "spa",
+  });
+
+  app.use(async (req, res, next) => {
+    // Só intercepta navegação de página real — deixa passar direto pro Vite qualquer
+    // asset/módulo interno (paths virtuais como /@vite/client e /@react-refresh, ou
+    // qualquer arquivo com extensão), senão o Vite nunca consegue servir JS/CSS com o
+    // Content-Type correto e a página inteira quebra (erro de MIME type no browser).
+    if (
+      req.method !== "GET" ||
+      req.path.startsWith("/api") ||
+      req.path.startsWith("/@") ||
+      req.path.includes(".")
+    )
+      return next();
+    try {
+      const rootIndexPath = path.join(process.cwd(), "index.html");
+      const rawHtml = fs.readFileSync(rootIndexPath, "utf-8");
+      const seo = await resolveSeoMeta(req.path, req.hostname);
+      const html = await vite.transformIndexHtml(
+        req.originalUrl,
+        injectSeoMeta(rawHtml, seo)
+      );
+      res.status(200).set({ "Content-Type": "text/html" }).send(html);
+    } catch (e) {
+      vite.ssrFixStacktrace(e as Error);
+      next(e);
+    }
+  });
+
+  app.use(vite.middlewares);
+} else {
+  const distPath = path.join(process.cwd(), "dist");
+  // index: false — sem isso, o express.static serve dist/index.html direto pra qualquer
+  // requisição de diretório (inclusive "/"), pulando o app.get("*") abaixo e servindo o
+  // HTML com os placeholders {{TITLE}}/{{DESCRIPTION}}/{{IMAGE}} nunca substituídos.
+  app.use(express.static(distPath, { index: false }));
+
+  app.get("*", async (req, res) => {
+    const seo = await resolveSeoMeta(req.path, req.hostname);
+    try {
+      const indexHtml = fs.readFileSync(
+        path.join(distPath, "index.html"),
+        "utf-8"
+      );
+      res.send(injectSeoMeta(indexHtml, seo));
+    } catch (e) {
+      res.sendFile(path.join(distPath, "index.html"));
+    }
+  });
+}
+
 
 await restoreAllSessions().catch((error) => {
   console.warn("[Baileys] Falha ao restaurar sessões:", error);
