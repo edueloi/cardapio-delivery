@@ -5,7 +5,7 @@
  */
 
 import { NFeWizard } from "nfewizard-io";
-import { GerarConsulta } from "@nfewizard/shared";
+import { GerarConsulta, Utility } from "@nfewizard/shared";
 import type { FiscalConfig, NfceResult } from "../types.js";
 import path from "path";
 import os from "os";
@@ -40,6 +40,34 @@ const originalGerarConsulta = GerarConsulta.prototype.gerarConsulta;
     : mod;
   return originalGerarConsulta.call(this, xmlConsulta, metodo, ambienteNacional, versao, modReal, ...rest);
 };
+
+// Bug da @nfewizard/shared: Utility.setAmbiente (usado por getWebServiceUrl no fluxo de
+// NFe/NFC-e, o único caminho de emitirNfce) monta a chave de URL do webservice com
+// "config.nfe.ambiente === 2 ? 'H' : 'P'" — ou seja, ambiente=1 (homologação, o valor que
+// getWizard() sempre envia corretamente) cai no 'P' (produção) e a lib chama o webservice
+// de PRODUÇÃO da SEFAZ mesmo com tpAmb=1 dentro do XML. A nota vai parar num CNPJ não
+// credenciado em produção e a SEFAZ rejeita com "CNPJ Emitente não cadastrado" mesmo já
+// tendo sido feito o credenciamento em homologação. As outras 3 ocorrências do mesmo
+// padrão no mesmo arquivo da lib (getWebServiceUrlNFSe, getWebServiceUrl/NFSe,
+// getWebServiceUrl/CTe) usam a lógica correta e consistente com o resto do sistema
+// (1=homologação/2=produção): "config.nfe.ambiente === 1 ? 'P' : 'H'". Aqui replicamos
+// essa mesma lógica correta, só para o caminho de NFe/NFC-e que está com o bug.
+const originalSetAmbiente = (Utility.prototype as any).setAmbiente;
+(Utility.prototype as any).setAmbiente = function (
+  metodo: string,
+  ambienteNacional = false,
+  versao?: string,
+  mod?: string
+) {
+  const config = (this as any).environment.getConfig();
+  const ambiente = config.nfe.ambiente === 1 ? "P" : "H";
+  const versaoDF = versao !== "" ? versao : config.nfe.versaoDF;
+  if (ambienteNacional) {
+    return { chaveMae: `${mod}_AN_${ambiente}`, chaveFilha: `${metodo}_${versaoDF}` };
+  }
+  return { chaveMae: `${mod}_${config.dfe.UF}_${ambiente}`, chaveFilha: `${metodo}_${versaoDF}` };
+};
+void originalSetAmbiente;
 
 // Cache de instâncias inicializadas por tenantId
 const wizardCache = new Map<string, NFeWizard>();
