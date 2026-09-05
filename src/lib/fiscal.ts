@@ -41,17 +41,20 @@ const originalGerarConsulta = GerarConsulta.prototype.gerarConsulta;
   return originalGerarConsulta.call(this, xmlConsulta, metodo, ambienteNacional, versao, modReal, ...rest);
 };
 
-// Bug da @nfewizard/shared: Utility.setAmbiente (usado por getWebServiceUrl no fluxo de
-// NFe/NFC-e, o único caminho de emitirNfce) monta a chave de URL do webservice com
-// "config.nfe.ambiente === 2 ? 'H' : 'P'" — ou seja, ambiente=1 (homologação, o valor que
-// getWizard() sempre envia corretamente) cai no 'P' (produção) e a lib chama o webservice
-// de PRODUÇÃO da SEFAZ mesmo com tpAmb=1 dentro do XML. A nota vai parar num CNPJ não
-// credenciado em produção e a SEFAZ rejeita com "CNPJ Emitente não cadastrado" mesmo já
-// tendo sido feito o credenciamento em homologação. As outras 3 ocorrências do mesmo
-// padrão no mesmo arquivo da lib (getWebServiceUrlNFSe, getWebServiceUrl/NFSe,
-// getWebServiceUrl/CTe) usam a lógica correta e consistente com o resto do sistema
-// (1=homologação/2=produção): "config.nfe.ambiente === 1 ? 'P' : 'H'". Aqui replicamos
-// essa mesma lógica correta, só para o caminho de NFe/NFC-e que está com o bug.
+// Utility.setAmbiente (@nfewizard/shared, usado por getWebServiceUrl no fluxo de
+// NFe/NFC-e, o único caminho de emitirNfce) monta a chave de URL do webservice assumindo
+// a convenção OFICIAL da SEFAZ (1=produção, 2=homologação): "ambiente === 2 ? 'H' : 'P'".
+// Essa lib está correta nesse ponto (confere com as outras 3 ocorrências do mesmo padrão
+// no mesmo arquivo: getWebServiceUrlNFSe, getWebServiceUrl/NFSe, getWebServiceUrl/CTe,
+// todas usando "=== 1 ? 'P' : 'H'"). O problema é que ESTE app usa a convenção INVERSA
+// internamente (fiscal.ts, FiscalConfig, getUrlChave etc. tratam 1=homologação,
+// 2=produção) — então "ambiente: 1" (que getWizard() envia pra homologação) chega na lib
+// como "1=produção" e ela chama o webservice de PRODUÇÃO mesmo com tpAmb=1 no XML. A nota
+// cai num CNPJ não credenciado em produção e a SEFAZ rejeita com "CNPJ Emitente não
+// cadastrado" mesmo já feito o credenciamento em homologação. Em vez de inverter a
+// convenção em todo o resto do app (getWizard, tpAmb no XML, getUrlChave, etc.), o patch
+// aqui só recalcula a chave com a convenção deste app (1=homologação → 'H'), mantendo
+// tudo mais como já está.
 const originalSetAmbiente = (Utility.prototype as any).setAmbiente;
 (Utility.prototype as any).setAmbiente = function (
   metodo: string,
@@ -60,7 +63,7 @@ const originalSetAmbiente = (Utility.prototype as any).setAmbiente;
   mod?: string
 ) {
   const config = (this as any).environment.getConfig();
-  const ambiente = config.nfe.ambiente === 1 ? "P" : "H";
+  const ambiente = config.nfe.ambiente === 1 ? "H" : "P";
   const versaoDF = versao !== "" ? versao : config.nfe.versaoDF;
   if (ambienteNacional) {
     return { chaveMae: `${mod}_AN_${ambiente}`, chaveFilha: `${metodo}_${versaoDF}` };
