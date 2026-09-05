@@ -10709,10 +10709,18 @@ app.get(
     const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
     const pageSize = Math.min(100, Math.max(1, parseInt(String(req.query.pageSize ?? "20"), 10) || 20));
     const status = typeof req.query.status === "string" ? req.query.status : undefined;
+    const from = typeof req.query.from === "string" ? req.query.from : undefined;
+    const to = typeof req.query.to === "string" ? req.query.to : undefined;
 
     const where = {
       tenantId: tenant.id,
       nfceStatus: status ? status : { not: null },
+      ...((from || to) && {
+        createdAt: {
+          ...(from && { gte: new Date(`${from}T00:00:00`) }),
+          ...(to && { lte: new Date(`${to}T23:59:59.999`) }),
+        },
+      }),
     } as any;
 
     const [total, orders] = await Promise.all([
@@ -10764,6 +10772,42 @@ app.get(
     if (!order)
       return res.status(404).json({ error: "Pedido não encontrado." });
     res.json(order);
+  }
+);
+
+// GET /api/owner/tenants/:tenantId/nfce/xml/:orderId — baixa o XML autorizado (procNFe) puro
+app.get(
+  "/api/owner/tenants/:tenantId/nfce/xml/:orderId",
+  requireAuth,
+  async (req, res) => {
+    const tenant = await requireTenantById(
+      req,
+      res,
+      req.params.tenantId,
+      "finance"
+    );
+    if (!tenant) return;
+
+    try {
+      const order = await prisma.order.findFirst({
+        where: { id: req.params.orderId, tenantId: tenant.id },
+        select: { nfceStatus: true, nfceKey: true, nfceXml: true },
+      });
+      if (!order) return res.status(404).json({ error: "Pedido não encontrado." });
+      if (order.nfceStatus !== "AUTHORIZED" || !order.nfceKey || !order.nfceXml)
+        return res.status(400).json({ error: "NFC-e não autorizada para este pedido." });
+
+      const { xml } = JSON.parse(order.nfceXml as string) as { xml: string };
+      res
+        .set({
+          "Content-Type": "application/xml; charset=utf-8",
+          "Content-Disposition": `attachment; filename="NFCe${order.nfceKey}.xml"`,
+        })
+        .send(xml);
+    } catch (err: any) {
+      console.error("[NFC-e] Erro ao baixar XML:", err);
+      res.status(500).json({ error: err?.message ?? "Erro ao baixar XML." });
+    }
   }
 );
 
