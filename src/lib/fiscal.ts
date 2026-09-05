@@ -201,7 +201,6 @@ export async function emitirNfce(
   const destDocDigits = order.customerCpf?.replace(/\D/g, "") ?? "";
   const destDocClean =
     destDocDigits.length === 11 || destDocDigits.length === 14 ? destDocDigits : "";
-  const destIsCnpj = destDocClean.length === 14;
   const { tPag, xPag } = mapPaymentCode(order.paymentMethod);
 
   const det = order.items.map((item, i) => {
@@ -273,12 +272,13 @@ export async function emitirNfce(
           procEmi: 0,     // emissão pelo contribuinte
           verProc: "1.0.0.0",
         },
-        // Emitente
+        // Emitente — ordem exigida pelo XSD (TEmit): CNPJ/CPF, xNome, xFant?, enderEmit,
+        // IE, IEST?, IM?, CNAE?, CRT. enderEmit precisa vir ANTES de IE/CRT, não depois
+        // (mesma classe de bug do cDV: a lib reconstrói só a chave de documento via
+        // Object.assign, o resto mantém a ordem de inserção deste objeto).
         emit: {
           CNPJCPF: cnpjClean,
           xNome: fiscal.ambiente === "producao" ? order.emitName.slice(0, 60) : "NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL",
-          IE: ieClean,
-          CRT: parseInt(fiscal.crt, 10),
           enderEmit: {
             xLgr: order.emitAddress.street || "Nao informado",
             nro: order.emitAddress.number || "S/N",
@@ -290,17 +290,20 @@ export async function emitirNfce(
             cPais: 1058,
             xPais: "Brasil",
           },
+          IE: ieClean,
+          CRT: parseInt(fiscal.crt, 10),
         },
         // Destinatário — CPF (Nota Fiscal Paulista) ou CNPJ (compra em nome de empresa),
-        // ambos opcionais. Para CNPJ, indIEDest=9 declara "não contribuinte" — não temos
-        // captura de Inscrição Estadual do destinatário no PDV, então esse é o valor
-        // seguro pra não travar a autorização por falta de IE.
+        // ambos opcionais. indIEDest é obrigatório no XSD sempre que "dest" existe (não é
+        // opcional lá) — usamos 9 ("não contribuinte") tanto para CPF quanto CNPJ, já que
+        // em venda a consumidor final o destinatário nunca é contribuinte de ICMS e não
+        // capturamos Inscrição Estadual do destinatário no PDV.
         ...(destDocClean
           ? {
               dest: {
                 CNPJCPF: destDocClean,
                 xNome: order.customerName?.slice(0, 60) || undefined,
-                ...(destIsCnpj ? { indIEDest: 9 } : {}),
+                indIEDest: 9,
               },
             }
           : {}),
