@@ -5,12 +5,29 @@
  */
 
 import { NFeWizard } from "nfewizard-io";
+import { BaseNFE } from "@nfewizard/shared";
 import type { FiscalConfig, NfceResult } from "../types.js";
 import path from "path";
 import os from "os";
 import fs from "fs";
 import { randomInt } from "crypto";
 import forge from "node-forge";
+
+// Bug da nfewizard-io@1.1.2: NFEAutorizacaoService (usado por wizard.NFE_Autorizacao,
+// chamado em emitirNfce) nunca define "this.modelo" nem sobrescreve getModelo() — herda
+// sempre o fallback 'NFe' (modelo 55) de BaseNFE.getModelo(), não importa o que vá no XML
+// (NFe.infNFe.ide.mod: 65). Isso faz a lib montar a requisição apontando pro webservice de
+// NF-e normal, e a SEFAZ rejeita a NFC-e com "Modelo da NF-e diferente de 55" (o serviço
+// chamado foi o de modelo 55, mas o XML enviado é modelo 65).
+// Outras classes da mesma lib (NFEInutilizacaoService) já tratam isso lendo data.mod — só
+// replicamos a mesma lógica direto no protótipo compartilhado BaseNFE, já que
+// NFEAutorizacaoService é instanciada internamente pela lib a cada chamada (não dá pra
+// configurar de fora sem isso).
+(BaseNFE.prototype as any).getModelo = function (data: any) {
+  const mod = data?.NFe?.infNFe?.ide?.mod;
+  if (mod !== undefined) return String(mod) === "55" ? "NFe" : "NFCe";
+  return (this as any).modelo || "NFe";
+};
 
 // Cache de instâncias inicializadas por tenantId
 const wizardCache = new Map<string, NFeWizard>();
