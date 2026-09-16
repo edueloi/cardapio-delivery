@@ -269,7 +269,7 @@ export function GridTable<T>({
                 ))
               ) : data.length === 0 ? (
                 <tr>
-                  <td colSpan={columns.length + (isSelectable ? 1 : 0)} className="py-12 bg-white text-center text-xs font-bold text-zinc-400 uppercase tracking-widest">
+                  <td colSpan={columns.length + (isSelectable ? 1 : 0)} className="py-8 bg-white text-center text-xs font-bold text-zinc-400 uppercase tracking-widest">
                     {emptyMessage}
                   </td>
                 </tr>

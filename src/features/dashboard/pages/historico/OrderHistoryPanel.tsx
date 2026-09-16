@@ -534,6 +534,7 @@ export function OrderHistoryPanel({
             icon={History}
             title="Nenhum pedido encontrado"
             description="Tente ajustar os filtros de data ou busca"
+            className="border-none bg-transparent py-4"
           />
         }
         noDesktopCard={false}
