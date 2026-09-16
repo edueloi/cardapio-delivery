@@ -1082,7 +1082,7 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
           </div>
         }
       >
-        <div className="p-4 sm:p-5 space-y-3">
+        <div className="space-y-3">
           {/* Identificação */}
           <ContentCard padding="md" className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
