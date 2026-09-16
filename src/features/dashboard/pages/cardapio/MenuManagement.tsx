@@ -1054,15 +1054,15 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
         size="lg"
         mobileStyle="fullscreen"
         footer={
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-3">
             {editingProduct && (
-              <div className="flex gap-2 flex-wrap pb-1 border-b border-slate-100">
+              <div className="flex gap-2 flex-wrap">
                 <button
                   type="button"
                   onClick={duplicateProductToCatalog}
                   className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors border border-blue-100"
                 >
-                  <span>📋</span> Duplicar no Catálogo
+                  <span>📋</span> Duplicar no catálogo
                 </button>
                 {canManageInventory && (
                   <button
@@ -1070,107 +1070,88 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
                     onClick={duplicateProductToInventory}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors border border-amber-100"
                   >
-                    <span>📦</span> Criar no Estoque
+                    <span>📦</span> Criar no estoque
                   </button>
                 )}
               </div>
             )}
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end pt-3 border-t border-slate-100">
               <Button variant="outline" onClick={closeProdModal}>Cancelar</Button>
               <Button onClick={saveProduct}>{editingProduct ? "Salvar alterações" : "Adicionar produto"}</Button>
             </div>
           </div>
         }
       >
-        <div className="p-4 sm:p-5 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input label="Nome do produto" placeholder="Ex: Pastel de carne" value={prodForm.name} onChange={e => setProdForm({ ...prodForm, name: e.target.value })} />
-            <CurrencyInput label="Preço base (R$)" value={prodForm.price} onChange={v => setProdForm({ ...prodForm, price: v })} />
-          </div>
-          <Input label="Descrição (opcional)" placeholder="Ingredientes, detalhes..." value={prodForm.description} onChange={e => setProdForm({ ...prodForm, description: e.target.value })} />
-
-          <ImageUploader label="Foto do produto" value={prodForm.imageUrl} onChange={val => setProdForm({ ...prodForm, imageUrl: val })} description="Fotos de alta qualidade convertem mais vendas." />
-
-          {/* Vínculo de estoque */}
-          <InventoryLinkField
-            inventoryItems={inventoryItems}
-            inventoryCategories={inventoryCategories}
-            value={prodForm.inventoryItemId}
-            onChange={val => setProdForm({ ...prodForm, inventoryItemId: val })}
-            autoDisable={prodForm.autoDisableWhenOutOfStock}
-            onAutoDisableChange={val => setProdForm({ ...prodForm, autoDisableWhenOutOfStock: val })}
-            allCategories={localCategories}
-            editingProductId={editingProduct?.id}
-          />
-
-          {/* Vínculo de receita de produção */}
-          <RecipeIngredientsField
-            inventoryItems={inventoryItems}
-            inventoryCategories={inventoryCategories}
-            value={recipeIngredients}
-            onChange={setRecipeIngredients}
-          />
-
-          <div className="flex items-center justify-between py-1 border-t border-slate-100">
-            <div>
-              <p className="text-sm font-bold text-slate-700">Produto ativo no cardápio</p>
-              <p className="text-xs text-slate-400">Clientes conseguem ver e pedir este produto</p>
+        <div className="p-4 sm:p-5 space-y-3">
+          {/* Identificação */}
+          <ContentCard padding="md" className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input label="Nome do produto" placeholder="Ex: Pastel de carne" value={prodForm.name} onChange={e => setProdForm({ ...prodForm, name: e.target.value })} />
+              <CurrencyInput label="Preço base (R$)" value={prodForm.price} onChange={v => setProdForm({ ...prodForm, price: v })} />
             </div>
-            <button
-              type="button"
-              onClick={() => setProdForm(f => ({ ...f, available: !f.available }))}
-              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${prodForm.available ? 'bg-green-500' : 'bg-slate-200'}`}
-            >
-              <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition duration-200 ${prodForm.available ? 'translate-x-5' : 'translate-x-0'}`} />
-            </button>
-          </div>
+            <Input label="Descrição (opcional)" placeholder="Ingredientes, detalhes..." value={prodForm.description} onChange={e => setProdForm({ ...prodForm, description: e.target.value })} />
+            <ImageUploader label="Foto do produto" value={prodForm.imageUrl} onChange={val => setProdForm({ ...prodForm, imageUrl: val })} description="Fotos de alta qualidade convertem mais vendas." />
+          </ContentCard>
 
-          <div className="flex items-center justify-between py-1 border-t border-slate-100">
-            <div>
-              <p className="text-sm font-bold text-slate-700">Exclusivo PDV</p>
-              <p className="text-xs text-slate-400">Visível apenas no PDV, não aparece no cardápio online</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setProdForm(f => ({ ...f, pdvOnly: !f.pdvOnly }))}
-              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${prodForm.pdvOnly ? 'bg-blue-500' : 'bg-slate-200'}`}
-            >
-              <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition duration-200 ${prodForm.pdvOnly ? 'translate-x-5' : 'translate-x-0'}`} />
-            </button>
-          </div>
+          {/* Estoque e insumos */}
+          <ContentCard padding="md" className="space-y-4">
+            <InventoryLinkField
+              inventoryItems={inventoryItems}
+              inventoryCategories={inventoryCategories}
+              value={prodForm.inventoryItemId}
+              onChange={val => setProdForm({ ...prodForm, inventoryItemId: val })}
+              autoDisable={prodForm.autoDisableWhenOutOfStock}
+              onAutoDisableChange={val => setProdForm({ ...prodForm, autoDisableWhenOutOfStock: val })}
+              allCategories={localCategories}
+              editingProductId={editingProduct?.id}
+            />
+            <RecipeIngredientsField
+              inventoryItems={inventoryItems}
+              inventoryCategories={inventoryCategories}
+              value={recipeIngredients}
+              onChange={setRecipeIngredients}
+            />
+          </ContentCard>
 
-          <div className="flex items-center justify-between py-1 border-t border-slate-100">
-            <div>
-              <p className="text-sm font-bold text-slate-700">Vai para a cozinha</p>
-              <p className="text-xs text-slate-400">Ative para itens que precisam de preparo — bebidas/embalagens ficam desativadas por padrão</p>
+          {/* Status e visibilidade */}
+          <ContentCard padding="md" className="space-y-1">
+            <div className="flex items-center justify-between py-2">
+              <div className="min-w-0 pr-3">
+                <p className="text-sm font-bold text-slate-700">Produto ativo no cardápio</p>
+                <p className="text-xs text-slate-400">Clientes conseguem ver e pedir este produto</p>
+              </div>
+              <Switch checked={prodForm.available} onCheckedChange={(v) => setProdForm(f => ({ ...f, available: v }))} />
             </div>
-            <button
-              type="button"
-              onClick={() => setProdForm(f => ({ ...f, kitchenPrint: !f.kitchenPrint }))}
-              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${prodForm.kitchenPrint === true ? 'bg-orange-500' : 'bg-slate-200'}`}
-            >
-              <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition duration-200 ${prodForm.kitchenPrint === true ? 'translate-x-5' : 'translate-x-0'}`} />
-            </button>
-          </div>
+
+            <div className="flex items-center justify-between py-2 border-t border-slate-100">
+              <div className="min-w-0 pr-3">
+                <p className="text-sm font-bold text-slate-700">Exclusivo PDV</p>
+                <p className="text-xs text-slate-400">Visível apenas no PDV, não aparece no cardápio online</p>
+              </div>
+              <Switch checked={prodForm.pdvOnly} onCheckedChange={(v) => setProdForm(f => ({ ...f, pdvOnly: v }))} />
+            </div>
+
+            <div className="flex items-center justify-between py-2 border-t border-slate-100">
+              <div className="min-w-0 pr-3">
+                <p className="text-sm font-bold text-slate-700">Vai para a cozinha</p>
+                <p className="text-xs text-slate-400">Ative para itens que precisam de preparo — bebidas/embalagens ficam desativadas por padrão</p>
+              </div>
+              <Switch checked={prodForm.kitchenPrint === true} onCheckedChange={(v) => setProdForm(f => ({ ...f, kitchenPrint: v }))} />
+            </div>
+          </ContentCard>
 
           {/* Disponibilidade Automática */}
-          <div className="border-t border-zinc-100 pt-4">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <p className="text-sm font-bold text-slate-700">Disponibilidade Automática</p>
+          <ContentCard padding="md">
+            <div className="flex items-center justify-between">
+              <div className="min-w-0 pr-3">
+                <p className="text-sm font-bold text-slate-700">Disponibilidade automática</p>
                 <p className="text-xs text-slate-400">Produto aparece/some do cardápio online automaticamente</p>
               </div>
-              <button
-                type="button"
-                onClick={() => setProdForm(f => ({ ...f, scheduleRuleEnabled: !f.scheduleRuleEnabled }))}
-                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${prodForm.scheduleRuleEnabled ? 'bg-amber-500' : 'bg-slate-200'}`}
-              >
-                <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition duration-200 ${prodForm.scheduleRuleEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
-              </button>
+              <Switch checked={prodForm.scheduleRuleEnabled} onCheckedChange={(v) => setProdForm(f => ({ ...f, scheduleRuleEnabled: v }))} />
             </div>
 
             {prodForm.scheduleRuleEnabled && (
-              <div className="space-y-3 bg-amber-50 border border-amber-200 rounded-2xl p-3">
+              <div className="space-y-3 bg-amber-50 border border-amber-200 rounded-2xl p-3 mt-3">
                 {/* Tipo de regra */}
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-widest text-amber-800 mb-2">Tipo de regra</p>
@@ -1275,10 +1256,10 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
                 )}
               </div>
             )}
-          </div>
+          </ContentCard>
 
           {/* Adicionais / Extras */}
-          <div>
+          <ContentCard padding="md">
             <div className="flex items-center justify-between mb-2">
               <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">Adicionais / Observações</span>
             </div>
@@ -1355,7 +1336,7 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
               </div>
             )}
             <p className="text-[11px] text-slate-400 mt-2">Vincular um adicional ao estoque (ex: "Embalagem de viagem") desconta o item automaticamente sempre que o cliente selecionar esse adicional.</p>
-          </div>
+          </ContentCard>
 
           {/* Grupos de seleção embutidos — cada um deixa o cliente escolher N itens de uma
               categoria/lista, sem mudar o preço fixo do produto (ex: numa marmita, um grupo
@@ -1364,7 +1345,7 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
               duas coisas resolvem "escolher o sabor"; juntas, o cliente escolhe a mesma coisa
               duas vezes (bug visto em produção no "1 espeto tradicional", cadastrado com
               variações E grupo ao mesmo tempo). */}
-          <div>
+          <ContentCard padding="md">
             {prodForm.variants.length > 0 && prodForm.selectionGroups.length > 0 && (
               <p className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2">
                 Este produto já tem variações — remova-as ou remova os grupos de seleção abaixo. Os dois juntos fazem o cliente escolher o sabor duas vezes.
@@ -1463,15 +1444,15 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
                 ))}
               </div>
             )}
-          </div>
+          </ContentCard>
 
           {/* Dados Fiscais NFC-e */}
           <details className="group">
-            <summary className="flex items-center gap-2 cursor-pointer select-none text-[11px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors list-none">
+            <summary className="flex items-center gap-2 cursor-pointer select-none text-[11px] font-black uppercase tracking-widest text-slate-500 hover:text-[#0D1B3E] transition-colors list-none px-1">
               <FileText className="w-3.5 h-3.5" />
-              Dados Fiscais (NFC-e)
+              Dados fiscais (NFC-e)
             </summary>
-            <div className="mt-3 p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
+            <ContentCard padding="md" className="mt-3 space-y-3">
               <p className="text-[10px] text-slate-400 font-medium">Preencha apenas se o módulo fiscal (NFC-e) estiver ativo nas configurações da loja.</p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div>
@@ -1530,14 +1511,14 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
                   />
                 </div>
               </div>
-            </div>
+            </ContentCard>
           </details>
 
           {/* Variantes — desabilitado quando o grupo de seleção está ativo (os dois juntos
               fazem o cliente escolher o sabor duas vezes, ver nota acima). */}
-          <div>
+          <ContentCard padding="md">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">Tamanhos / Variantes</span>
+              <span className="text-[11px] font-black uppercase tracking-widest text-slate-500">Tamanhos / Variantes</span>
               {prodForm.selectionGroups.length > 0 ? (
                 <span className="text-[10px] font-bold text-slate-400">Remova os grupos de seleção para usar variações</span>
               ) : (
@@ -1577,7 +1558,7 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
                 </div>
               ))}
             </div>
-          </div>
+          </ContentCard>
         </div>
       </Modal>
 

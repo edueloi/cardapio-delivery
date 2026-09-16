@@ -92,7 +92,7 @@ export function ImageUploader({ value, onChange, label, description }: { value: 
 
   return (
     <div className="space-y-2">
-      <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest px-1">{label}</label>
+      <label className="block text-[11px] font-black uppercase text-slate-600 tracking-widest px-1">{label}</label>
       <div className="flex flex-col sm:flex-row items-start gap-4">
         <div className="relative w-24 h-24 rounded-3xl bg-slate-100 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden group shrink-0 shadow-inner">
           {uploading ? (
@@ -273,7 +273,7 @@ export function InventoryLinkField({
 
   return (
     <div className="space-y-2">
-      <label className="block text-[11px] font-black uppercase tracking-widest text-slate-400">Vincular ao estoque (opcional)</label>
+      <label className="block text-[11px] font-black uppercase tracking-widest text-slate-600">Vincular ao estoque <span className="text-slate-400 font-bold normal-case">(opcional)</span></label>
 
       <button
         type="button"
@@ -662,19 +662,23 @@ export function RecipeIngredientsField({
   };
 
   return (
-    <div className="space-y-2">
-      <label className="block text-[11px] font-black uppercase tracking-widest text-orange-600">Insumos usados (opcional)</label>
+    <div className="space-y-2.5 rounded-2xl border border-amber-100 bg-amber-50/40 p-3.5">
+      <div className="flex items-center gap-2">
+        <Package className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+        <label className="text-[11px] font-black uppercase tracking-widest text-amber-700">Insumos usados</label>
+        <span className="text-[9px] font-bold text-slate-400 uppercase">(Opcional)</span>
+      </div>
       <p className="text-[11px] text-slate-500 -mt-1">Ao vender este produto, as quantidades abaixo são descontadas do estoque automaticamente.</p>
 
       <div className="space-y-2">
         {value.map(ing => {
           const item = itemById.get(ing.inventoryItemId);
           return (
-            <div key={ing._key} className="flex items-center gap-2 bg-orange-50/60 border border-orange-200 rounded-xl px-2.5 py-2">
+            <div key={ing._key} className="flex items-center gap-2 bg-white border border-amber-200 rounded-xl px-2.5 py-2 shadow-sm">
               <button
                 type="button"
                 onClick={() => setPickerOpenFor(ing._key)}
-                className="flex-1 min-w-0 text-left text-sm font-bold text-slate-800 truncate hover:text-orange-600"
+                className="flex-1 min-w-0 text-left text-sm font-bold text-slate-800 truncate hover:text-amber-700"
               >
                 {item ? item.name : <span className="text-slate-400 font-semibold">Escolher item do estoque...</span>}
               </button>
@@ -684,12 +688,12 @@ export function RecipeIngredientsField({
                 placeholder="Qtd"
                 value={ing.quantity}
                 onChange={e => updateIngredient(ing._key, { quantity: e.target.value })}
-                className="w-16 bg-white border border-orange-200 rounded-lg px-2 py-1.5 text-sm font-bold text-center focus:outline-none focus:ring-2 focus:ring-orange-400"
+                className="w-16 bg-zinc-50 border border-zinc-200 rounded-lg px-2 py-1.5 text-sm font-bold text-center focus:outline-none focus:ring-2 focus:ring-amber-400"
               />
               <select
                 value={ing.unit}
                 onChange={e => updateIngredient(ing._key, { unit: e.target.value })}
-                className="bg-white border border-orange-200 rounded-lg px-1.5 py-1.5 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-orange-400"
+                className="bg-zinc-50 border border-zinc-200 rounded-lg px-1.5 py-1.5 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-amber-400"
               >
                 {RECIPE_UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
               </select>
@@ -709,7 +713,7 @@ export function RecipeIngredientsField({
       <button
         type="button"
         onClick={addIngredient}
-        className="w-full flex items-center justify-center gap-1.5 border-2 border-dashed border-orange-200 rounded-xl px-3 py-2 text-xs font-black uppercase tracking-wide text-orange-600 hover:bg-orange-50 transition-colors"
+        className="w-full flex items-center justify-center gap-1.5 border-2 border-dashed border-amber-300 rounded-xl px-3 py-2 text-xs font-black uppercase tracking-wide text-amber-700 hover:bg-amber-100/50 transition-colors"
       >
         <Plus className="w-3.5 h-3.5" /> Adicionar insumo
       </button>
@@ -723,7 +727,7 @@ export function RecipeIngredientsField({
         onClose={() => setPickerOpenFor(null)}
         inventoryItems={inventoryItems}
         inventoryCategories={inventoryCategories}
-        accent="orange"
+        accent="amber"
         onPick={(item) => {
           if (pickerOpenFor) {
             updateIngredient(pickerOpenFor, { inventoryItemId: item.id, unit: item.stockUnit || item.unit || "un" });
