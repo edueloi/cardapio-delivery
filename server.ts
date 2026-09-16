@@ -10545,8 +10545,32 @@ app.post(
           .status(409)
           .json({ error: "NFC-e já autorizada para este pedido." });
 
-      // Determina próximo número e incrementa
-      const numero = fiscal.proximoNumero || 1;
+      // Reserva o próximo número de forma atômica ANTES de emitir — se só incrementarmos
+      // depois de autorizado (como era antes), duas emissões concorrentes (duplo clique,
+      // reprocessamento) leem o mesmo proximoNumero e tentam emitir com o MESMO número,
+      // e a SEFAZ rejeita a segunda com "Duplicidade de NF-e com diferença na Chave de
+      // Acesso" (foi exatamente o que aconteceu: nota 101 já autorizada, mas o contador
+      // nunca avançou, então a próxima tentativa reusou 101 e colidiu). O updateMany com
+      // WHERE no valor lido garante compare-and-swap: só uma requisição consegue avançar
+      // o contador para este número; a perdedora vê count=0 e tenta de novo com o valor
+      // atualizado. Se a emissão falhar depois de reservado, o número fica pulado (nunca
+      // reaproveitado) — aceitável e seguro, ao contrário de duplicar.
+      let numero = fiscal.proximoNumero || 1;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const reserved = await prisma.tenant.updateMany({
+          where: { id: tenant.id, fiscalConfig: JSON.stringify(fiscal) },
+          data: { fiscalConfig: JSON.stringify({ ...fiscal, proximoNumero: numero + 1 }) },
+        });
+        if (reserved.count > 0) break;
+        // Outra requisição reservou primeiro — relê o config atual e tenta o próximo número.
+        const fresh = await prisma.tenant.findUnique({ where: { id: tenant.id }, select: { fiscalConfig: true } });
+        const freshFiscal = JSON.parse(fresh?.fiscalConfig as string) as import("./src/types.js").FiscalConfig;
+        Object.assign(fiscal, freshFiscal);
+        numero = fiscal.proximoNumero || 1;
+        if (attempt === 4) {
+          return res.status(409).json({ error: "Não foi possível reservar um número de NFC-e — tente novamente." });
+        }
+      }
 
       // Monta items fiscais — prioriza o snapshot congelado no pedido (não muda mesmo
       // que o produto seja editado ou excluído depois), com o produto vivo como
@@ -10605,7 +10629,9 @@ app.post(
         emitAddress,
       });
 
-      // Atualiza pedido com resultado
+      // Atualiza pedido com resultado — o número sequencial já foi reservado
+      // atomicamente ANTES da emissão (ver bloco de reserva acima), então não há mais
+      // incremento condicional aqui: autorizada ou rejeitada, o número não é reutilizado.
       await prisma.order.update({
         where: { id: orderId },
         data: {
@@ -10618,15 +10644,6 @@ app.post(
             : null,
         },
       });
-
-      // Se autorizada, avança o número sequencial no fiscal_config
-      if (result.status === "AUTHORIZED") {
-        const updatedFiscal = { ...fiscal, proximoNumero: numero + 1 };
-        await prisma.tenant.update({
-          where: { id: tenant.id },
-          data: { fiscalConfig: JSON.stringify(updatedFiscal) },
-        });
-      }
 
       res.json(result);
     } catch (err: any) {

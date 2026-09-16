@@ -4380,21 +4380,21 @@ export default function PDVPanel({
           >
             <motion.div
               initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }}
-              className="bg-[#0D1B3E] w-full max-w-sm rounded-[1.75rem] sm:rounded-[2rem] p-5 sm:p-8 space-y-5 sm:space-y-6 shadow-2xl border border-white/5 max-h-[90vh] overflow-y-auto"
+              className="bg-[#0D1B3E] w-full max-w-[22rem] rounded-2xl p-5 space-y-4 shadow-2xl border border-white/5 max-h-[90vh] overflow-y-auto"
             >
-              <div className="text-center space-y-2">
-                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-red-500/10 text-red-400 flex items-center justify-center mx-auto">
-                  <Lock className="w-6 h-6 sm:w-7 sm:h-7" />
+              <div className="text-center space-y-1">
+                <div className="w-10 h-10 rounded-xl bg-red-500/10 text-red-400 flex items-center justify-center mx-auto">
+                  <Lock className="w-5 h-5" />
                 </div>
-                <h3 className="text-base sm:text-lg font-black text-white uppercase tracking-widest">Fechar Caixa</h3>
-                <p className="text-xs text-white/40">Confira o dinheiro em caixa antes de confirmar o fechamento.</p>
+                <h3 className="text-sm font-black text-white uppercase tracking-widest">Fechar Caixa</h3>
+                <p className="text-[11px] text-white/40">Confira o dinheiro em caixa antes de confirmar.</p>
               </div>
               {cashError && (
-                <div className="bg-red-500/10 border border-red-500/20 text-red-300 text-xs font-bold rounded-xl px-4 py-2.5 text-center">
+                <div className="bg-red-500/10 border border-red-500/20 text-red-300 text-xs font-bold rounded-xl px-3 py-2 text-center">
                   {cashError}
                 </div>
               )}
-              <div className="bg-white/5 rounded-2xl p-4 space-y-2 border border-white/10">
+              <div className="bg-white/5 rounded-xl p-3 space-y-1.5 border border-white/10">
                 <div className="flex justify-between text-xs">
                   <span className="text-white/40">Fundo de abertura</span>
                   <span className="font-bold text-white tabular-nums">{fmt(currentCash.openingBalance)}</span>
@@ -4416,7 +4416,7 @@ export default function PDVPanel({
                   </button>
                 </div>
                 <div className="relative">
-                  <span className="absolute left-4 sm:left-5 top-1/2 -translate-y-1/2 text-lg sm:text-2xl font-black text-white/30">R$</span>
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-black text-white/30">R$</span>
                   <input
                     type="text"
                     inputMode="numeric"
@@ -4424,23 +4424,23 @@ export default function PDVPanel({
                     value={formatCurrencyDigits(closingBalanceInput)}
                     onChange={(e) => setClosingBalanceInput(maskCurrencyDigits(e.target.value))}
                     placeholder="0,00"
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 sm:py-4 pl-11 sm:pl-14 pr-4 sm:pr-5 text-xl sm:text-2xl font-black text-white text-center focus:border-red-400 outline-none [appearance:textfield]"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-11 pr-4 text-xl font-black text-white text-center focus:border-red-400 outline-none [appearance:textfield]"
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2.5">
                 <button
                   onClick={() => { setShowCloseCashModal(false); setCashError(""); }}
-                  className="bg-white/5 hover:bg-white/10 text-white/60 font-black py-3.5 rounded-2xl text-[10px] uppercase tracking-widest transition-all"
+                  className="bg-white/5 hover:bg-white/10 text-white/60 font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all whitespace-nowrap"
                 >
                   Cancelar
                 </button>
                 <button
                   disabled={cashActionLoading}
                   onClick={handleCloseCash}
-                  className="bg-red-500 hover:bg-red-400 disabled:opacity-50 text-white font-black py-3.5 rounded-2xl text-[10px] uppercase tracking-widest transition-all"
+                  className="bg-red-500 hover:bg-red-400 disabled:opacity-50 text-white font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all whitespace-nowrap"
                 >
-                  {cashActionLoading ? "Fechando..." : "Confirmar Fechamento"}
+                  {cashActionLoading ? "Fechando..." : "Confirmar"}
                 </button>
               </div>
             </motion.div>
