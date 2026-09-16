@@ -278,6 +278,11 @@ export interface NfceOrderData {
   items: NfceOrderItem[];
   total: number;
   paymentMethod: string; // CASH | PIX | CREDIT | DEBIT | VR | STONE_*
+  // Valor efetivamente recebido do cliente (só relevante para CASH) — quando maior que o
+  // total, a SEFAZ exige o campo vTroco no XML ("Ausência de troco quando o valor dos
+  // pagamentos informados for maior que o total da nota"). Opcional porque a maioria dos
+  // métodos (PIX/cartão) sempre recebe exatamente o valor da nota, sem troco.
+  amountPaid?: number;
   customerName?: string;
   customerCpf?: string; // opcional — CPF (11 dígitos) ou CNPJ (14 dígitos) do destinatário
   emitName: string;     // razão social / nome do estabelecimento emitente
@@ -652,6 +657,15 @@ export async function emitirNfce(
               ...(["03", "04", "17"].includes(tPag) ? { card: { tpIntegra: "2" } } : {}),
             },
           ],
+          // vTroco é obrigatório sempre que o valor recebido exceder o total da nota
+          // (rejeição SEFAZ "Ausência de troco quando o valor dos pagamentos informados
+          // for maior que o total da nota") — calculado aqui a partir da diferença real
+          // entre o que foi recebido e vNF, não confiando em um campo de troco já pronto
+          // (pode não ter sido persistido/enviado em vendas antigas).
+          ...(() => {
+            const troco = order.amountPaid ? parseFloat((order.amountPaid - vNF).toFixed(2)) : 0;
+            return troco > 0 ? { vTroco: troco } : {};
+          })(),
         },
       },
       // infNFeSupl (QR Code) NÃO é montado aqui — confirmado que nfewizard-io@1.1.2 nunca

@@ -10581,12 +10581,24 @@ app.post(
         /* endereço inválido — segue com campos vazios, fiscal.ts aplica fallback */
       }
 
+      // amountReceived (valor recebido em dinheiro) vem do paymentDetail salvo na hora da
+      // venda (PDVPanel envia isso em paymentMetadata) — sem isso, o troco nunca chega no
+      // XML e a SEFAZ rejeita vendas em dinheiro com valor pago maior que o total.
+      let amountPaid: number | undefined;
+      try {
+        const detail = order.paymentDetail ? JSON.parse(order.paymentDetail as string) : null;
+        if (detail && typeof detail.amountReceived === "number") amountPaid = detail.amountReceived;
+      } catch {
+        /* paymentDetail inválido/ausente — segue sem amountPaid, fiscal.ts trata como sem troco */
+      }
+
       const result = await emitirNfce(tenant.id, fiscal, {
         numero,
         serie: fiscal.serie || 1,
         items: fiscalItems,
         total: order.total,
         paymentMethod: order.paymentMethod,
+        amountPaid,
         customerName: order.customerName || undefined,
         customerCpf: order.customerCpf || undefined,
         emitName: tenant.name,
