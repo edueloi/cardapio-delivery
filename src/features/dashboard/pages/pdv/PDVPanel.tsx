@@ -6,7 +6,7 @@ import {
   ChevronRight, ChevronDown, ArrowLeft,
   Utensils, Tag, User, Phone, Percent,
   Printer, Hash, AlertCircle, Smartphone, Lock, ExternalLink, Download, Zap,
-  MoreHorizontal, DoorOpen, DoorClosed, Maximize2, Minimize2, Split, Truck, MessageSquarePlus, Pencil
+  MoreHorizontal, DoorClosed, Maximize2, Minimize2, Split, Truck, MessageSquarePlus, Pencil
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import type { Tenant, Product, ProductExtra, Order, PaymentConfig, PaymentMethodConfig, StoneConfig, Customer, PrintingConfig } from "../../../../types";
@@ -55,6 +55,23 @@ const maskPhone = (v: string) => {
 };
 
 const isPhoneComplete = (v: string) => v.replace(/\D/g, "").length === 11;
+
+// Denominações de cédulas e moedas em circulação no Brasil, da maior pra menor — ordem
+// que o operador normalmente segue ao contar a gaveta na abertura de caixa.
+const CASH_DENOMINATIONS: { value: number; label: string; kind: "bill" | "coin" }[] = [
+  { value: 200, label: "R$ 200", kind: "bill" },
+  { value: 100, label: "R$ 100", kind: "bill" },
+  { value: 50, label: "R$ 50", kind: "bill" },
+  { value: 20, label: "R$ 20", kind: "bill" },
+  { value: 10, label: "R$ 10", kind: "bill" },
+  { value: 5, label: "R$ 5", kind: "bill" },
+  { value: 2, label: "R$ 2", kind: "bill" },
+  { value: 1, label: "R$ 1", kind: "coin" },
+  { value: 0.5, label: "50 centavos", kind: "coin" },
+  { value: 0.25, label: "25 centavos", kind: "coin" },
+  { value: 0.1, label: "10 centavos", kind: "coin" },
+  { value: 0.05, label: "5 centavos", kind: "coin" },
+];
 
 // Máscara monetária estilo caixa eletrônico: digita os centavos, o valor "empurra" pra esquerda.
 // Trabalha sempre com o valor em centavos (string de dígitos) para não perder precisão.
@@ -272,12 +289,15 @@ export default function PDVPanel({
   const cashRequired = tenant.requireCashRegister !== false;
   const [currentCash, setCurrentCash] = useState<{ id: string; openingBalance: number; openedAt: string; expectedBalance: number } | null>(null);
   const [cashLoading, setCashLoading] = useState(true);
-  const [showOpenCashModal, setShowOpenCashModal] = useState(false);
   const [showCloseCashModal, setShowCloseCashModal] = useState(false);
   const [openingBalanceInput, setOpeningBalanceInput] = useState("");
   const [closingBalanceInput, setClosingBalanceInput] = useState("");
   const [cashActionLoading, setCashActionLoading] = useState(false);
   const [cashError, setCashError] = useState("");
+  // Tela de abertura de caixa (cheia, some os produtos por trás) — "simple" é digitar o
+  // valor direto, "count" é contar cédulas/moedas uma a uma e somar automaticamente.
+  const [cashOpenMode, setCashOpenMode] = useState<"simple" | "count">("simple");
+  const [cashCounts, setCashCounts] = useState<Record<number, string>>({});
 
   // Busca cliente cadastrado por nome, telefone ou CPF (com debounce) — usada no "Adicionar
   // cliente" do PDV pra vincular a venda a um cadastro já existente (fidelidade) sem o
@@ -401,16 +421,22 @@ export default function PDVPanel({
     return () => { socket.off("order-created", handler); };
   }, [printingConfig.autoPrintOnOrderCreate, printOrderAuto]);
 
+  const cashCountedTotal = CASH_DENOMINATIONS.reduce(
+    (sum, d) => sum + d.value * (Number(cashCounts[d.value]) || 0), 0,
+  );
+  const cashOpeningAmount = cashOpenMode === "count" ? cashCountedTotal : digitsToNumber(openingBalanceInput);
+
   const handleOpenCash = async () => {
     setCashActionLoading(true);
     setCashError("");
     try {
       await apiJson(`/api/tenants/${tenant.slug}/cash/open`, {
         method: "POST",
-        body: JSON.stringify({ openingBalance: digitsToNumber(openingBalanceInput) }),
+        body: JSON.stringify({ openingBalance: cashOpeningAmount }),
       });
       setShowOpenCashModal(false);
       setOpeningBalanceInput("");
+      setCashCounts({});
       await fetchCurrentCash();
     } catch (err: any) {
       setCashError(err?.message ?? "Erro ao abrir o caixa.");
@@ -1298,7 +1324,6 @@ export default function PDVPanel({
         if (showCheckout) setShowCheckout(false);
         else if (showComandaModal) setShowComandaModal(false);
         else if (orderDetailsView) setOrderDetailsView(null);
-        else if (showOpenCashModal) setShowOpenCashModal(false);
         else if (showCloseCashModal) setShowCloseCashModal(false);
         else if (showPriceCheckModal) setShowPriceCheckModal(false);
         else if (showMoreOptionsMenu) setShowMoreOptionsMenu(false);
@@ -1330,7 +1355,7 @@ export default function PDVPanel({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [isWaiterMode, checkoutItems.length, cart.length, currentCash, showCheckout, showComandaModal, orderDetailsView, showOpenCashModal, showCloseCashModal, showPriceCheckModal, showMoreOptionsMenu]);
+  }, [isWaiterMode, checkoutItems.length, cart.length, currentCash, showCheckout, showComandaModal, orderDetailsView, showCloseCashModal, showPriceCheckModal, showMoreOptionsMenu]);
 
   const handleLoadTable = (tableId: string) => {
     setCart([]);
@@ -1845,6 +1870,116 @@ export default function PDVPanel({
 
   const cartItemCount = existingContextItemCount + pendingCartItemCount;
 
+  // Caixa fechado (e a loja exige caixa) bloqueia a tela inteira do PDV — antes só
+  // desabilitava o botão de finalizar venda, deixando a grade de produtos visível por
+  // trás como se desse pra operar normalmente. Igual ao store-stock: nada de produto
+  // aparece até abrir o caixa, com opção de digitar o valor ou contar cédulas/moedas.
+  if (!isWaiterMode && !cashLoading && cashRequired && !currentCash) {
+    return (
+      <div className="h-full w-full flex items-center justify-center bg-slate-100 overflow-y-auto py-6 px-4">
+        <div className={`w-full bg-[#0D1B3E] rounded-[1.75rem] sm:rounded-[2rem] p-5 sm:p-8 space-y-5 sm:space-y-6 shadow-2xl border border-white/5 my-auto transition-all ${
+          cashOpenMode === "count" ? "max-w-4xl" : "max-w-sm"
+        }`}>
+          <div className="text-center space-y-2">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto">
+              <Banknote className="w-6 h-6 sm:w-7 sm:h-7" />
+            </div>
+            <h3 className="text-base sm:text-lg font-black text-white uppercase tracking-widest">Caixa Fechado</h3>
+            <p className="text-xs text-white/40">Abra o caixa informando o fundo de troco para começar a vender.</p>
+          </div>
+
+          <div className="flex bg-white/5 border border-white/10 rounded-xl p-1 gap-1 max-w-sm mx-auto">
+            <button
+              onClick={() => setCashOpenMode("simple")}
+              className={`flex-1 h-8 rounded-lg text-[10px] font-black uppercase tracking-wide transition-all ${
+                cashOpenMode === "simple" ? "bg-white text-[#0D1B3E]" : "text-white/40"
+              }`}
+            >
+              Digitar valor
+            </button>
+            <button
+              onClick={() => setCashOpenMode("count")}
+              className={`flex-1 h-8 rounded-lg text-[10px] font-black uppercase tracking-wide transition-all ${
+                cashOpenMode === "count" ? "bg-white text-[#0D1B3E]" : "text-white/40"
+              }`}
+            >
+              Contar cédulas
+            </button>
+          </div>
+
+          {cashError && (
+            <div className="bg-red-500/10 border border-red-500/20 text-red-300 text-xs font-bold rounded-xl px-4 py-2.5 text-center">
+              {cashError}
+            </div>
+          )}
+
+          {cashOpenMode === "simple" ? (
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase tracking-widest text-white/40">Fundo de Caixa</label>
+              <div className="relative">
+                <span className="absolute left-4 sm:left-5 top-1/2 -translate-y-1/2 text-lg sm:text-2xl font-black text-white/30">R$</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoFocus
+                  value={formatCurrencyDigits(openingBalanceInput)}
+                  onChange={(e) => setOpeningBalanceInput(maskCurrencyDigits(e.target.value))}
+                  placeholder="0,00"
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 sm:py-4 pl-11 sm:pl-14 pr-4 sm:pr-5 text-xl sm:text-2xl font-black text-white text-center focus:border-emerald-400 outline-none [appearance:textfield]"
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <label className="text-[10px] font-black uppercase tracking-widest text-white/40 block">
+                Quantidade de cada cédula/moeda
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-[50vh] sm:max-h-80 overflow-y-auto pr-0.5">
+                {CASH_DENOMINATIONS.map((d) => {
+                  const qty = Number(cashCounts[d.value]) || 0;
+                  const subtotal = qty * d.value;
+                  return (
+                    <div key={d.value} className={`flex items-center gap-2 px-3 py-2 rounded-xl border transition-colors ${
+                      qty > 0 ? "border-emerald-400/40 bg-emerald-500/5" : "border-white/10 bg-white/5"
+                    }`}>
+                      <span className={`text-[9px] font-black uppercase tracking-wide px-1.5 py-1 rounded shrink-0 ${
+                        d.kind === "bill" ? "bg-emerald-500/15 text-emerald-300" : "bg-amber-500/15 text-amber-300"
+                      }`}>
+                        {d.kind === "bill" ? "Nota" : "Moeda"}
+                      </span>
+                      <span className="text-[12px] font-bold text-white/80 flex-1 min-w-0 truncate">{d.label}</span>
+                      <input
+                        type="text" inputMode="numeric" placeholder="0"
+                        value={cashCounts[d.value] ?? ""}
+                        onChange={(e) => setCashCounts((prev) => ({ ...prev, [d.value]: e.target.value.replace(/\D/g, "") }))}
+                        className="w-14 h-9 px-2 rounded-lg bg-white/5 border border-white/10 text-[13px] font-mono font-bold text-center text-white shrink-0 focus:outline-none focus:border-emerald-400"
+                      />
+                      <span className="text-[10px] font-mono font-bold text-white/40 w-16 text-right shrink-0">
+                        {subtotal > 0 ? fmt(subtotal) : "—"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                <span className="text-[10px] font-black uppercase tracking-widest text-emerald-300">Total contado</span>
+                <span className="text-[18px] font-mono font-black text-emerald-300">{fmt(cashCountedTotal)}</span>
+              </div>
+            </div>
+          )}
+
+          <button
+            disabled={cashActionLoading}
+            onClick={handleOpenCash}
+            className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-black py-3.5 rounded-2xl text-[10px] uppercase tracking-widest transition-all"
+          >
+            {cashActionLoading ? "Abrindo..." : `Abrir Caixa · ${fmt(cashOpeningAmount)}`}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative flex flex-col lg:flex-row gap-2 lg:gap-4 h-full min-h-0">
       {/* ── Success flash + NFC-e ── */}
@@ -1941,30 +2076,21 @@ export default function PDVPanel({
       <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
         {/* Atalhos de tela — abrir em nova janela (só no dashboard) e fullscreen do navegador (sempre) */}
 
-        {/* Cash register status bar */}
-        {!isWaiterMode && !cashLoading && cashRequired && (
-          <div className={`flex items-center justify-between gap-3 px-3 py-1.5 border-b shrink-0 ${
-            currentCash ? "bg-emerald-50/60 border-emerald-100" : "bg-red-50/60 border-red-100"
-          }`}>
+        {/* Cash register status bar — só chega aqui com caixa aberto (o bloqueio de tela
+            cheia acima intercepta o caso fechado antes de renderizar este trecho) */}
+        {!isWaiterMode && !cashLoading && cashRequired && currentCash && (
+          <div className="flex items-center justify-between gap-3 px-3 py-1.5 border-b shrink-0 bg-emerald-50/60 border-emerald-100">
             <div className="flex items-center gap-2 min-w-0">
-              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${currentCash ? "bg-emerald-500 animate-pulse" : "bg-red-500"}`} />
-              {currentCash ? (
-                <p className="text-[10px] font-black uppercase tracking-wide text-emerald-700 truncate">
-                  Caixa aberto <span className="font-bold normal-case text-emerald-600/80">· Fundo {fmt(currentCash.openingBalance)} · Esperado {fmt(currentCash.expectedBalance)}</span>
-                </p>
-              ) : (
-                <p className="text-[10px] font-black uppercase tracking-wide text-red-700">Caixa fechado — abra para começar a vender</p>
-              )}
+              <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-emerald-500 animate-pulse" />
+              <p className="text-[10px] font-black uppercase tracking-wide text-emerald-700 truncate">
+                Caixa aberto <span className="font-bold normal-case text-emerald-600/80">· Fundo {fmt(currentCash.openingBalance)} · Esperado {fmt(currentCash.expectedBalance)}</span>
+              </p>
             </div>
             <button
-              onClick={() => currentCash ? setShowCloseCashModal(true) : setShowOpenCashModal(true)}
-              className={`shrink-0 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest transition-colors ${
-                currentCash
-                  ? "bg-white text-red-600 border border-red-200 hover:bg-red-50"
-                  : "bg-[#0D1B3E] text-white hover:bg-[#0D1B3E]/90"
-              }`}
+              onClick={() => setShowCloseCashModal(true)}
+              className="shrink-0 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest transition-colors bg-white text-red-600 border border-red-200 hover:bg-red-50"
             >
-              {currentCash ? "Fechar Caixa" : "Abrir Caixa"}
+              Fechar Caixa
             </button>
           </div>
         )}
@@ -2896,13 +3022,13 @@ export default function PDVPanel({
                 </button>
               </div>
               <div className="p-3 space-y-1">
-                {cashRequired && (
+                {cashRequired && currentCash && (
                   <button
-                    onClick={() => { setShowMoreOptionsMenu(false); currentCash ? setShowCloseCashModal(true) : setShowOpenCashModal(true); }}
+                    onClick={() => { setShowMoreOptionsMenu(false); setShowCloseCashModal(true); }}
                     className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 transition-colors text-left"
                   >
-                    {currentCash ? <DoorClosed className="w-4 h-4 text-red-500 shrink-0" /> : <DoorOpen className="w-4 h-4 text-emerald-500 shrink-0" />}
-                    <span className="text-sm font-bold text-slate-700">{currentCash ? "Fechar Caixa" : "Abrir Caixa"}</span>
+                    <DoorClosed className="w-4 h-4 text-red-500 shrink-0" />
+                    <span className="text-sm font-bold text-slate-700">Fechar Caixa</span>
                   </button>
                 )}
                 {(selectedTableId || selectedComandaId || cart.length > 0) && (
@@ -4241,64 +4367,6 @@ export default function PDVPanel({
                 ) : null}
               </div>
               </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── Abrir Caixa Modal ── */}
-      <AnimatePresence>
-        {showOpenCashModal && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-center justify-center p-4"
-          >
-            <motion.div
-              initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }}
-              className="bg-[#0D1B3E] w-full max-w-sm rounded-[1.75rem] sm:rounded-[2rem] p-5 sm:p-8 space-y-5 sm:space-y-6 shadow-2xl border border-white/5 max-h-[90vh] overflow-y-auto"
-            >
-              <div className="text-center space-y-2">
-                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto">
-                  <Banknote className="w-6 h-6 sm:w-7 sm:h-7" />
-                </div>
-                <h3 className="text-base sm:text-lg font-black text-white uppercase tracking-widest">Abrir Caixa</h3>
-                <p className="text-xs text-white/40">Informe o valor em dinheiro disponível para o fundo de troco.</p>
-              </div>
-              {cashError && (
-                <div className="bg-red-500/10 border border-red-500/20 text-red-300 text-xs font-bold rounded-xl px-4 py-2.5 text-center">
-                  {cashError}
-                </div>
-              )}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase tracking-widest text-white/40">Fundo de Caixa</label>
-                <div className="relative">
-                  <span className="absolute left-4 sm:left-5 top-1/2 -translate-y-1/2 text-lg sm:text-2xl font-black text-white/30">R$</span>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    autoFocus
-                    value={formatCurrencyDigits(openingBalanceInput)}
-                    onChange={(e) => setOpeningBalanceInput(maskCurrencyDigits(e.target.value))}
-                    placeholder="0,00"
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 sm:py-4 pl-11 sm:pl-14 pr-4 sm:pr-5 text-xl sm:text-2xl font-black text-white text-center focus:border-emerald-400 outline-none [appearance:textfield]"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={() => { setShowOpenCashModal(false); setCashError(""); }}
-                  className="bg-white/5 hover:bg-white/10 text-white/60 font-black py-3.5 rounded-2xl text-[10px] uppercase tracking-widest transition-all"
-                >
-                  Cancelar
-                </button>
-                <button
-                  disabled={cashActionLoading}
-                  onClick={handleOpenCash}
-                  className="bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-black py-3.5 rounded-2xl text-[10px] uppercase tracking-widest transition-all"
-                >
-                  {cashActionLoading ? "Abrindo..." : "Abrir Caixa"}
-                </button>
-              </div>
-            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
