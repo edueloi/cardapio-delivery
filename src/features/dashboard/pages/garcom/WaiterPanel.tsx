@@ -500,12 +500,12 @@ function ComandaModal({
         {/* Itens já lançados nesta mesa */}
         {allItemsLaunched.length > 0 && (
           <div className="px-4 sm:px-5 pt-2">
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Já lançado</p>
-            <div className="space-y-1 max-h-28 overflow-y-auto mb-2">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Já lançado</p>
+            <div className="rounded-xl border border-slate-100 bg-slate-50/60 divide-y divide-slate-100 max-h-28 overflow-y-auto">
               {allItemsLaunched.map((item, idx) => (
-                <div key={idx} className="flex items-center justify-between text-xs">
+                <div key={idx} className="flex items-center justify-between text-xs px-3 py-1.5">
                   <span className="text-slate-600 font-bold">{item.quantity}x {item.product?.name}</span>
-                  <span className="text-slate-400">{fmt(item.price * item.quantity)}</span>
+                  <span className="text-slate-400 font-semibold tabular-nums">{fmt(item.price * item.quantity)}</span>
                 </div>
               ))}
             </div>
@@ -522,22 +522,27 @@ function ComandaModal({
           />
         </div>
 
-        <div className="flex gap-2 px-4 sm:px-5 pt-2 overflow-x-auto shrink-0">
-          <button
-            onClick={() => setSelectedCategoryId(null)}
-            className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest whitespace-nowrap ${!selectedCategoryId ? "bg-[#0D1B3E] text-white" : "bg-slate-100 text-slate-500"}`}
-          >
-            Tudo
-          </button>
-          {tenant.categories?.map((cat) => (
+        <div className="relative shrink-0">
+          <div className="flex gap-2 px-4 sm:px-5 pt-2 pb-1 overflow-x-auto">
             <button
-              key={cat.id}
-              onClick={() => setSelectedCategoryId(cat.id)}
-              className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest whitespace-nowrap ${selectedCategoryId === cat.id ? "bg-[#0D1B3E] text-white" : "bg-slate-100 text-slate-500"}`}
+              onClick={() => setSelectedCategoryId(null)}
+              className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest whitespace-nowrap shrink-0 transition-colors ${!selectedCategoryId ? "bg-[#0D1B3E] text-white" : "bg-slate-100 text-slate-500"}`}
             >
-              {cat.name}
+              Tudo
             </button>
-          ))}
+            {tenant.categories?.map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => setSelectedCategoryId(cat.id)}
+                className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest whitespace-nowrap shrink-0 transition-colors ${selectedCategoryId === cat.id ? "bg-[#0D1B3E] text-white" : "bg-slate-100 text-slate-500"}`}
+              >
+                {cat.name}
+              </button>
+            ))}
+          </div>
+          {/* Fade nas bordas indicando que dá pra rolar mais categorias pro lado —
+              sem isso a última pílula corta abruptamente na borda do modal. */}
+          <div className="pointer-events-none absolute right-0 top-0 bottom-1 w-8 bg-gradient-to-l from-white to-transparent" />
         </div>
 
         {/* Lista de produtos — mesmo estilo visual do cardápio digital, compacto */}
@@ -551,11 +556,13 @@ function ComandaModal({
                 onClick={() => addToCart(p)}
                 className="flex flex-col bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden hover:shadow-md hover:border-slate-200 transition-all text-left"
               >
-                <div className="relative w-full aspect-[4/3] shrink-0 overflow-hidden bg-slate-100 flex items-center justify-center">
+                <div className="relative w-full aspect-[4/3] shrink-0 overflow-hidden">
                   {p.imageUrl ? (
                     <img src={p.imageUrl} alt={p.name} loading="lazy" className="w-full h-full object-cover" />
                   ) : (
-                    <span className="text-3xl">🍽️</span>
+                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#0D1B3E]/5 to-[#C9A227]/10">
+                      <Utensils className="w-7 h-7 text-[#0D1B3E]/20" strokeWidth={1.5} />
+                    </div>
                   )}
                   <div className="absolute top-2 right-2 w-6 h-6 rounded-lg bg-[#C9A227] text-white flex items-center justify-center shadow">
                     <Plus className="w-3.5 h-3.5" />
