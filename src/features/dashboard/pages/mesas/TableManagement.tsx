@@ -75,37 +75,34 @@ export function TableManagement({
         {/* Balcão Section */}
         <section className="space-y-4">
           <h4 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Ponto de Venda Geral</h4>
-          <div className="max-w-sm bg-amber-50 border border-amber-100 rounded-[2rem] p-6 space-y-4 shadow-sm">
-            <div className="flex justify-between items-center">
-              <div>
-                <h4 className="text-2xl font-black text-amber-900">Balcão</h4>
-                <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Pedido sem mesa fixa</p>
-              </div>
-              <div className="w-10 h-10 rounded-full bg-amber-200 flex items-center justify-center text-amber-700">
-                <Monitor className="w-5 h-5" />
-              </div>
-            </div>
-
-            <div className="aspect-square bg-white rounded-2xl flex flex-col items-center justify-center border-2 border-dashed border-amber-200 p-4">
+          <div className="max-w-md bg-amber-50 border border-amber-100 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
+            <div className="w-20 h-20 shrink-0 bg-white rounded-xl flex items-center justify-center border border-amber-200 p-1.5">
               <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(counterUrl)}`}
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(counterUrl)}`}
                 alt="QR Balcão"
-                className="w-full h-full object-contain"
+                className="w-full h-full object-contain mix-blend-multiply"
               />
             </div>
 
-            <div className="flex gap-2">
-              <Button
-                variant="primary"
-                size="sm"
-                className="flex-1 text-[10px] bg-amber-600 border-amber-600 hover:bg-amber-700"
+            <div className="flex-1 min-w-0 space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 shrink-0 rounded-full bg-amber-200 flex items-center justify-center text-amber-700">
+                  <Monitor className="w-3.5 h-3.5" />
+                </div>
+                <div className="min-w-0">
+                  <h4 className="text-sm font-black text-amber-900 leading-tight truncate">Balcão</h4>
+                  <p className="text-[9px] font-black text-amber-600 uppercase tracking-widest">Pedido sem mesa fixa</p>
+                </div>
+              </div>
+              <button
                 onClick={() => {
                   const link = `https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&data=${encodeURIComponent(counterUrl)}`;
                   window.open(link, '_blank');
                 }}
+                className="text-[9px] font-black uppercase text-white bg-amber-600 hover:bg-amber-700 transition-colors px-3 py-1.5 rounded-lg"
               >
                 Imprimir QR Balcão
-              </Button>
+              </button>
             </div>
           </div>
         </section>
