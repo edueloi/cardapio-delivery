@@ -10,6 +10,7 @@ import { Server } from "socket.io";
 import { registerSocketEvents } from "./src/backend/realtime/register-socket-events";
 import { createUploadMiddleware } from "./src/backend/http/upload";
 import { createTenantAccess } from "./src/backend/http/tenant-access";
+import { createTenantService } from "./src/backend/services/tenant-service";
 import { prisma as _prisma } from "./src/lib/prisma";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const prisma = _prisma as any;
@@ -22,6 +23,7 @@ const {
   requireTenantFromOrder,
   requireTenantFromInventoryItem,
 } = createTenantAccess(prisma);
+const { ensureWppSetup, awardLoyaltyPoints } = createTenantService(prisma);
 import {
   authMiddleware,
   createAuthSession,
@@ -112,60 +114,6 @@ function serializeAccount(account: any) {
       : null,
     isSuperAdmin: !!account.isSuperAdmin,
   };
-}
-
-async function ensureWppSetup(tenantId: string, tenantName: string) {
-  const [instance, config] = await Promise.all([
-    prisma.wppInstance.upsert({
-      where: { tenantId },
-      create: {
-        tenantId,
-        instanceName: `${tenantName} Bot`,
-        status: "not_configured",
-      },
-      update: {},
-    }),
-    prisma.wppBotConfig.upsert({
-      where: { tenantId },
-      create: {
-        tenantId,
-        botEnabled: true,
-        autoReplyEnabled: true,
-        sendOrderCreated: true,
-        sendStatusUpdates: true,
-      },
-      update: {},
-    }),
-  ]);
-
-  return { instance, config };
-}
-
-// Soma pontos de fidelidade ao cliente com base no valor gasto, se o módulo estiver ativo
-// para o tenant. Silencioso em qualquer falha — pontuação nunca deve travar o fluxo do pedido.
-// Retorna os pontos ganhos e o novo saldo (usados para notificar o cliente via WhatsApp).
-async function awardLoyaltyPoints(
-  tenantLoyaltyConfigRaw: string | null | undefined,
-  customerId: string,
-  orderTotal: number
-): Promise<{ pointsEarned: number; newBalance: number } | null> {
-  if (!tenantLoyaltyConfigRaw || !customerId) return null;
-  try {
-    const config = JSON.parse(tenantLoyaltyConfigRaw);
-    if (!config?.enabled) return null;
-    const pointsPerReal = Number(config.pointsPerReal) || 0;
-    if (pointsPerReal <= 0) return null;
-    const pointsEarned = Math.floor(orderTotal * pointsPerReal);
-    if (pointsEarned <= 0) return null;
-    const updated = await prisma.customer.update({
-      where: { id: customerId },
-      data: { loyaltyPoints: { increment: pointsEarned } },
-    });
-    return { pointsEarned, newBalance: updated.loyaltyPoints };
-  } catch (err) {
-    console.error("[Loyalty] Falha ao somar pontos:", err);
-    return null;
-  }
 }
 
 app.use(cors() as any);
