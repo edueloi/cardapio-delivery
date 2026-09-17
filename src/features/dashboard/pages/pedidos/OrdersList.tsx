@@ -26,7 +26,7 @@ import {
   Utensils,
   X,
 } from "lucide-react";
-import { PaymentBadge, useToast } from "../../../../components";
+import { PaymentBadge, useToast, Modal, ModalFooter, Button, Input } from "../../../../components";
 import { apiFetch, apiJson } from "../../../../lib/api";
 import { Order, dineInOrderLabel, type DanfeData } from "../../../../types";
 import { playOrderDelayedSound } from "../../../../lib/notificationSound";
@@ -262,7 +262,7 @@ function DelayedOrdersAlert({ orders }: { orders: Order[] }) {
   );
 }
 
-function KanbanCard({ order, categoryMap, updateStatus, isExpanded, toggleOrder, isOverlay, onBillDelivery, tenant, drivers, onAssignDriver }: { order: Order, categoryMap: any, updateStatus: any, isExpanded: boolean, toggleOrder: () => void, isOverlay?: boolean, onBillDelivery?: (order: Order) => void, tenant?: import("../../../../types").Tenant | null, drivers?: import("../../../../types").DeliveryDriver[], onAssignDriver?: (orderId: string, driverId: string | null) => void }) {
+function KanbanCard({ order, categoryMap, updateStatus, isExpanded, toggleOrder, isOverlay, onBillDelivery, onCancelPaid, tenant, drivers, onAssignDriver }: { order: Order, categoryMap: any, updateStatus: any, isExpanded: boolean, toggleOrder: () => void, isOverlay?: boolean, onBillDelivery?: (order: Order) => void, onCancelPaid?: (order: Order) => void, tenant?: import("../../../../types").Tenant | null, drivers?: import("../../../../types").DeliveryDriver[], onAssignDriver?: (orderId: string, driverId: string | null) => void }) {
   const isDelayed = Date.now() - new Date(order.createdAt).getTime() > 30 * 60000 && order.status !== 'DELIVERED' && order.status !== 'CANCELLED';
   const isPaid = order.billed === true;
   const needsBilling = order.orderType === 'DELIVERY' && order.status === 'DELIVERED' && !isPaid;
@@ -507,6 +507,11 @@ function KanbanCard({ order, categoryMap, updateStatus, isExpanded, toggleOrder,
             Chamar novamente
           </button>
         )}
+        {isPaid && (
+          <button type="button" onClick={(e) => { e.stopPropagation(); onCancelPaid?.(order); }} className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-white border border-red-200 hover:bg-red-50 text-red-600 text-[9px] font-black uppercase tracking-widest rounded-xl transition-colors">
+            Cancelar e estornar
+          </button>
+        )}
       </div>
 
       {/* Expanded Details */}
@@ -672,6 +677,10 @@ export function OrdersList({
   const [billingOrder, setBillingOrder] = useState<Order | null>(null);
   const [billingPaymentMethod, setBillingPaymentMethod] = useState<"CASH" | "CREDIT" | "DEBIT" | "PIX">("CASH");
   const [isBilling, setIsBilling] = useState(false);
+  const [cancelOrder, setCancelOrder] = useState<Order | null>(null);
+  const [cancelPassword, setCancelPassword] = useState("");
+  const [restockInventory, setRestockInventory] = useState(true);
+  const [cancelling, setCancelling] = useState(false);
   const toast = useToast();
 
   // Pré-seleciona a forma de pagamento que o cliente já escolheu ao fazer o pedido —
@@ -705,6 +714,17 @@ export function OrdersList({
     }
   };
 
+  const handleCancelPaid = async () => {
+    if (!cancelOrder || !cancelPassword) return;
+    setCancelling(true);
+    try {
+      await apiJson(`/api/orders/${cancelOrder.id}/cancel`, { method: "POST", body: JSON.stringify({ password: cancelPassword, restockInventory }) });
+      toast.success(restockInventory ? "Pedido cancelado, estornado e devolvido ao estoque." : "Pedido cancelado e estornado; estoque mantido como perda.");
+      setCancelOrder(null); setCancelPassword("");
+    } catch (err: any) { toast.error(err?.message || "Não foi possível cancelar o pedido."); }
+    finally { setCancelling(false); }
+  };
+
   // Helper for Kanban Column
   const KanbanColumn = ({ id, title, count, orders, borderColor, textColor, droppable = true, onBillDelivery }: { id: string, title: string, count: number, orders: Order[], borderColor: string, textColor: string, droppable?: boolean, onBillDelivery?: (order: Order) => void }) => {
     const { isOver, setNodeRef } = useDroppable({ id, disabled: !droppable });
@@ -735,6 +755,7 @@ export function OrdersList({
                   isExpanded={expandedOrders.has(order.id)}
                   toggleOrder={() => toggleOrder(order.id, order.status === "DELIVERED" || order.status === "CANCELLED")}
                   onBillDelivery={onBillDelivery}
+                  onCancelPaid={(order) => { setCancelOrder(order); setCancelPassword(""); setRestockInventory(true); }}
                   tenant={tenant}
                   drivers={drivers}
                   onAssignDriver={handleAssignDriver}
@@ -879,6 +900,15 @@ export function OrdersList({
           </motion.div>
         )}
       </AnimatePresence>
+      <Modal isOpen={!!cancelOrder} onClose={() => setCancelOrder(null)} title="Cancelar pedido pago" size="sm"
+        footer={<ModalFooter><Button variant="ghost" onClick={() => setCancelOrder(null)}>Voltar</Button><Button variant="danger" loading={cancelling} disabled={!cancelPassword} onClick={handleCancelPaid}>Confirmar cancelamento</Button></ModalFooter>}
+      >
+        <div className="space-y-4 p-1">
+          <p className="text-sm text-slate-600">O pagamento será estornado no caixa aberto atual e o pedido continuará registrado como cancelado.</p>
+          <label className="flex items-start gap-3 rounded-xl border border-slate-200 p-3 cursor-pointer"><input type="checkbox" checked={restockInventory} onChange={(e) => setRestockInventory(e.target.checked)} className="mt-0.5" /><span className="text-xs text-slate-600"><strong className="block text-slate-800">Devolver produtos ao estoque</strong>Desmarque se os itens foram consumidos, preparados ou perdidos.</span></label>
+          <Input label="Senha do proprietário" type="password" value={cancelPassword} onChange={(e) => setCancelPassword(e.target.value)} />
+        </div>
+      </Modal>
     </DndContext>
   );
 }

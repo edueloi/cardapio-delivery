@@ -38,6 +38,16 @@ const MOVEMENT_META: Record<string, { label: string; color: string; bg: string; 
   PAYMENT_VR:     { label: "VR/Ticket",  color: "text-emerald-700", bg: "bg-emerald-100",textBg:"bg-emerald-50",icon: Receipt,         isOut: false },
 };
 
+// Estornos ficam como movimentos próprios: não apagam a venda original e permitem
+// conferir exatamente quando e de que forma o dinheiro foi devolvido.
+Object.assign(MOVEMENT_META, {
+  REFUND_CASH: { label: "Estorno em dinheiro", color: "text-red-700", bg: "bg-red-100", textBg: "bg-red-50", icon: ArrowUpCircle, isOut: true },
+  REFUND_PIX: { label: "Estorno Pix", color: "text-red-700", bg: "bg-red-100", textBg: "bg-red-50", icon: ArrowUpCircle, isOut: true },
+  REFUND_CREDIT: { label: "Estorno crédito", color: "text-red-700", bg: "bg-red-100", textBg: "bg-red-50", icon: ArrowUpCircle, isOut: true },
+  REFUND_DEBIT: { label: "Estorno débito", color: "text-red-700", bg: "bg-red-100", textBg: "bg-red-50", icon: ArrowUpCircle, isOut: true },
+  REFUND_VR: { label: "Estorno VR/Ticket", color: "text-red-700", bg: "bg-red-100", textBg: "bg-red-50", icon: ArrowUpCircle, isOut: true },
+});
+
 const PAYMENT_METHODS = ["PAYMENT_CASH", "PAYMENT_PIX", "PAYMENT_CREDIT", "PAYMENT_DEBIT", "PAYMENT_VR"] as const;
 
 function todayISO() { return new Date().toISOString().split("T")[0]; }
@@ -117,7 +127,7 @@ function MethodChip({ type, value, total }: { type: string; value: number; total
 // Quando o movimento vem de uma venda (m.order presente), a linha fica clicável e
 // expande o detalhamento: valor bruto dos itens, desconto, taxa de maquininha/serviço
 // (e se foi repassada ao cliente), valor líquido, e a lista de itens vendidos.
-function MovementRow({ m }: { m: CashMovement }) {
+function MovementRow({ m, onCancelOrder }: { m: CashMovement; onCancelOrder?: (order: any) => void }) {
   const [expanded, setExpanded] = useState(false);
   const meta = MOVEMENT_META[m.type] || MOVEMENT_META.PAYMENT_CASH;
   const Icon = meta.icon;
@@ -163,6 +173,11 @@ function MovementRow({ m }: { m: CashMovement }) {
                   </div>
                 ))}
               </div>
+              {m.type.startsWith("PAYMENT_") && (
+                <button onClick={() => onCancelOrder?.(order)} className="w-full rounded-xl border border-red-200 bg-white py-2 text-[10px] font-black uppercase tracking-widest text-red-600 hover:bg-red-50">
+                  Cancelar pedido e estornar
+                </button>
+              )}
 
               <div className="h-px bg-slate-200" />
 
@@ -216,7 +231,7 @@ function MovementRow({ m }: { m: CashMovement }) {
 }
 
 // ─── Card de histórico ───────────────────────────────────────────────────────
-function HistoryCard({ h }: { h: CashRegister & { movements?: CashMovement[] } }) {
+function HistoryCard({ h, onCancelOrder }: { h: CashRegister & { movements?: CashMovement[] }; onCancelOrder?: (order: any) => void }) {
   const diff = h.closingBalance != null && h.expectedBalance != null ? h.closingBalance - h.expectedBalance : null;
   const vendas = h.movements?.filter(m => m.type.startsWith("PAYMENT_")).reduce((s, m) => s + m.amount, 0) ?? 0;
   const sangrias = h.movements?.filter(m => m.type === "SANGRIA").reduce((s, m) => s + m.amount, 0) ?? 0;
@@ -277,7 +292,7 @@ function HistoryCard({ h }: { h: CashRegister & { movements?: CashMovement[] } }
       {/* Movimentos */}
       {h.movements && h.movements.length > 0 && (
         <div className="border-t border-slate-50 py-1">
-          {h.movements.map(m => <MovementRow key={m.id} m={m} />)}
+          {h.movements.map(m => <MovementRow key={m.id} m={m} onCancelOrder={onCancelOrder} />)}
         </div>
       )}
       {h.notes && (
@@ -313,6 +328,10 @@ export default function CashFlowPanel({ slug, tenant }: CashFlowPanelProps) {
   const [movementAmount,    setMovementAmount]    = useState("");
   const [movementDesc,      setMovementDesc]      = useState("");
   const [movementLoading,   setMovementLoading]   = useState(false);
+  const [cancelOrder, setCancelOrder] = useState<any | null>(null);
+  const [cancelPassword, setCancelPassword] = useState("");
+  const [restockInventory, setRestockInventory] = useState(true);
+  const [cancelling, setCancelling] = useState(false);
 
   const fetchCaixa = useCallback(async () => {
     const [cashRes, movRes] = await Promise.all([
@@ -351,12 +370,16 @@ export default function CashFlowPanel({ slug, tenant }: CashFlowPanelProps) {
   const paymentTotals = useMemo(() =>
     movements.reduce<Record<string, number>>((acc, m) => {
       if (m.type.startsWith("PAYMENT_")) acc[m.type] = (acc[m.type] || 0) + m.amount;
+      if (m.type.startsWith("REFUND_")) {
+        const paymentType = m.type.replace("REFUND_", "PAYMENT_");
+        acc[paymentType] = (acc[paymentType] || 0) - m.amount;
+      }
       return acc;
     }, {}), [movements]);
 
   const totalSangrias    = useMemo(() => movements.filter(m => m.type === "SANGRIA").reduce((s, m) => s + m.amount, 0), [movements]);
   const totalSuprimentos = useMemo(() => movements.filter(m => m.type === "SUPRIMENTO").reduce((s, m) => s + m.amount, 0), [movements]);
-  const totalVendas      = useMemo(() => movements.filter(m => m.type.startsWith("PAYMENT_")).reduce((s, m) => s + m.amount, 0), [movements]);
+  const totalVendas      = useMemo(() => movements.reduce((s, m) => s + (m.type.startsWith("PAYMENT_") ? m.amount : m.type.startsWith("REFUND_") ? -m.amount : 0), 0), [movements]);
   const expectedBalance  = (currentCash?.openingBalance ?? 0) + (paymentTotals["PAYMENT_CASH"] ?? 0) + totalSuprimentos - totalSangrias;
   const diffBalance      = closingBalance ? parseFloat(closingBalance) - expectedBalance : 0;
   const isOpen           = currentCash?.status === "OPEN";
@@ -416,6 +439,17 @@ export default function CashFlowPanel({ slug, tenant }: CashFlowPanelProps) {
       fetchCaixa();
     } catch { toast.error("Erro ao registrar movimento."); }
     finally { setMovementLoading(false); }
+  };
+
+  const handleCancelOrder = async () => {
+    if (!cancelOrder || !cancelPassword) return;
+    setCancelling(true);
+    try {
+      await apiJson(`/api/orders/${cancelOrder.id}/cancel`, { method: "POST", body: JSON.stringify({ password: cancelPassword, restockInventory }) });
+      toast.success(restockInventory ? "Pedido cancelado, estornado e devolvido ao estoque." : "Pedido cancelado e estornado; estoque mantido como perda.");
+      setCancelOrder(null); setCancelPassword(""); await fetchAll();
+    } catch (err: any) { toast.error(err?.message || "Não foi possível cancelar o pedido."); }
+    finally { setCancelling(false); }
   };
 
   const setPreset = (preset: "today" | "week" | "month" | "last-month") => {
@@ -588,7 +622,7 @@ export default function CashFlowPanel({ slug, tenant }: CashFlowPanelProps) {
             ) : (
               <div className="py-1 max-h-[400px] overflow-y-auto">
                 <AnimatePresence>
-                  {movements.map(m => <MovementRow key={m.id} m={m} />)}
+                  {movements.map(m => <MovementRow key={m.id} m={m} onCancelOrder={(order) => { setCancelOrder(order); setCancelPassword(""); setRestockInventory(true); }} />)}
                 </AnimatePresence>
               </div>
             )}
@@ -650,7 +684,7 @@ export default function CashFlowPanel({ slug, tenant }: CashFlowPanelProps) {
             </div>
           ) : (
             <div className="space-y-3">
-              {history.map(h => <HistoryCard key={h.id} h={h} />)}
+              {history.map(h => <HistoryCard key={h.id} h={h} onCancelOrder={(order) => { setCancelOrder(order); setCancelPassword(""); setRestockInventory(true); }} />)}
             </div>
           )}
         </motion.div>
@@ -720,6 +754,16 @@ export default function CashFlowPanel({ slug, tenant }: CashFlowPanelProps) {
           </div>
           <Input label="Valor (R$)" type="number" placeholder="0,00" value={movementAmount} onChange={e => setMovementAmount(e.target.value)} />
           <Input label="Descrição (opcional)" placeholder="Ex: Depósito banco..." value={movementDesc} onChange={e => setMovementDesc(e.target.value)} />
+        </div>
+      </Modal>
+
+      <Modal isOpen={!!cancelOrder} onClose={() => setCancelOrder(null)} title="Cancelar pedido pago" size="sm"
+        footer={<ModalFooter><Button variant="ghost" onClick={() => setCancelOrder(null)}>Voltar</Button><Button variant="danger" loading={cancelling} disabled={!cancelPassword} onClick={handleCancelOrder}>Confirmar cancelamento</Button></ModalFooter>}
+      >
+        <div className="space-y-4 p-1">
+          <p className="text-sm text-slate-600">O estorno será registrado no caixa aberto atual. A venda original continuará no histórico para auditoria.</p>
+          <label className="flex items-start gap-3 rounded-xl border border-slate-200 p-3 cursor-pointer"><input type="checkbox" checked={restockInventory} onChange={(e) => setRestockInventory(e.target.checked)} className="mt-0.5" /><span className="text-xs text-slate-600"><strong className="block text-slate-800">Devolver produtos ao estoque</strong>Desmarque se os itens foram consumidos, preparados ou perdidos.</span></label>
+          <Input label="Senha do proprietário" type="password" value={cancelPassword} onChange={(e) => setCancelPassword(e.target.value)} />
         </div>
       </Modal>
     </PageWrapper>

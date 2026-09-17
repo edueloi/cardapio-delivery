@@ -4341,7 +4341,7 @@ app.post("/api/orders/:id/cancel", requireAuth, async (req, res) => {
       });
   }
 
-  const { password } = req.body;
+  const { password, restockInventory = false } = req.body;
   const account = currentAccount(req);
   const fullAccount = account
     ? await prisma.account.findUnique({ where: { id: account.id } })
@@ -4359,15 +4359,47 @@ app.post("/api/orders/:id/cancel", requireAuth, async (req, res) => {
     return res.status(400).json({ error: "Pedido já está cancelado." });
 
   try {
-    const updatedOrder = await prisma.order.update({
+    if (order.nfceStatus === "AUTHORIZED") {
+      return res.status(400).json({ error: "Este pedido possui NFC-e autorizada. Cancele a NFC-e antes de cancelar a venda." });
+    }
+
+    const orderWithItems = await prisma.order.findUnique({
       where: { id: order.id },
-      data: { status: "CANCELLED" },
+      include: { tenant: true, items: { include: { product: true, productVariant: true } } },
     });
-    io.to(`tenant-${order.tenantId}`).emit(
-      "order-status-updated",
-      updatedOrder
-    );
-    res.json(updatedOrder);
+    if (!orderWithItems) return res.status(404).json({ error: "Pedido não encontrado." });
+
+    // Mantém a venda original e cria o estorno no caixa aberto atual: isso preserva
+    // a auditoria, inclusive se o pagamento ocorreu em um caixa já fechado.
+    const paymentMovements = await prisma.cashMovement.findMany({
+      where: { tenantId: order.tenantId, orderId: order.id, type: { startsWith: "PAYMENT_" } },
+    });
+    const currentCash = paymentMovements.length
+      ? await prisma.cashRegister.findFirst({ where: { tenantId: order.tenantId, status: "OPEN" }, orderBy: { openedAt: "desc" } })
+      : null;
+    if (paymentMovements.length && !currentCash) {
+      return res.status(400).json({ error: "Abra o caixa para registrar o estorno deste pedido pago." });
+    }
+
+    const result = await prisma.$transaction(async (tx: any) => {
+      const touchedInventoryIds = restockInventory ? await restockCancelledOrder(tx, orderWithItems) : [];
+      const updatedOrder = await tx.order.update({ where: { id: order.id }, data: { status: "CANCELLED" } });
+      if (currentCash && paymentMovements.length) {
+        await tx.cashMovement.createMany({ data: paymentMovements.map((movement) => ({
+          cashRegisterId: currentCash.id,
+          tenantId: order.tenantId,
+          type: movement.type.replace("PAYMENT_", "REFUND_"),
+          amount: movement.amount,
+          description: `Estorno pedido #${order.id.slice(-6).toUpperCase()}`,
+          orderId: order.id,
+          operatorName: fullAccount.name || null,
+        })) });
+      }
+      return { updatedOrder, touchedInventoryIds };
+    });
+    for (const inventoryItemId of result.touchedInventoryIds) await emitInventoryRestockSideEffects(order.tenantId, inventoryItemId);
+    io.to(`tenant-${order.tenantId}`).emit("order-status-updated", result.updatedOrder);
+    res.json(result.updatedOrder);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Falha ao cancelar pedido." });
@@ -6425,7 +6457,7 @@ app.get("/api/tenants/:slug/cash/current", requireAuth, async (req, res) => {
     });
     const cashDelta = cashMovements.reduce((sum, m) => {
       if (m.type === "PAYMENT_CASH" || m.type === "SUPRIMENTO") return sum + m.amount;
-      if (m.type === "SANGRIA") return sum - m.amount;
+      if (m.type === "REFUND_CASH" || m.type === "SANGRIA") return sum - m.amount;
       return sum;
     }, 0);
 
@@ -6512,10 +6544,10 @@ app.post("/api/tenants/:slug/cash/close", requireAuth, async (req, res) => {
       select: { type: true, amount: true, description: true, orderId: true },
     });
 
-    const paymentMovements = allMovements.filter((m) => m.type.startsWith("PAYMENT_"));
+    const paymentMovements = allMovements.filter((m) => m.type.startsWith("PAYMENT_") || m.type.startsWith("REFUND_"));
     const cashDelta = allMovements.reduce((sum, m) => {
       if (m.type === "PAYMENT_CASH" || m.type === "SUPRIMENTO") return sum + m.amount;
-      if (m.type === "SANGRIA") return sum - m.amount;
+      if (m.type === "REFUND_CASH" || m.type === "SANGRIA") return sum - m.amount;
       return sum;
     }, 0);
     const expectedBalance = currentCash.openingBalance + cashDelta;
@@ -6558,7 +6590,7 @@ app.post("/api/tenants/:slug/cash/close", requireAuth, async (req, res) => {
         }
         continue;
       }
-      addToMethod(m.type.replace(/^PAYMENT_/, ""), m.amount);
+      addToMethod(m.type.replace(/^(PAYMENT_|REFUND_)/, ""), m.type.startsWith("REFUND_") ? -m.amount : m.amount);
     }
     const salesByMethod = Array.from(byMethod.entries()).map(([method, v]) => ({
       method,
