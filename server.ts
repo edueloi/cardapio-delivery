@@ -9,18 +9,26 @@ import { createServer as createViteServer } from "vite";
 import { Server } from "socket.io";
 import { registerSocketEvents } from "./src/backend/realtime/register-socket-events";
 import { createUploadMiddleware } from "./src/backend/http/upload";
+import { createTenantAccess } from "./src/backend/http/tenant-access";
 import { prisma as _prisma } from "./src/lib/prisma";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const prisma = _prisma as any;
+const {
+  currentAccount,
+  currentSessionToken,
+  requireTenantById,
+  requireTenantBySlug,
+  requireTenantFromProduct,
+  requireTenantFromOrder,
+  requireTenantFromInventoryItem,
+} = createTenantAccess(prisma);
 import {
   authMiddleware,
   createAuthSession,
   deleteAuthSession,
   getAuthorizedTenantById,
-  getAuthorizedTenantBySlug,
   hashPassword,
   listAccountTenants,
-  membershipCanAccess,
   requireAuth,
   type AuthenticatedRequest,
   verifyPassword,
@@ -106,14 +114,6 @@ function serializeAccount(account: any) {
   };
 }
 
-function currentAccount(req: express.Request) {
-  return (req as AuthenticatedRequest).account ?? null;
-}
-
-function currentSessionToken(req: express.Request) {
-  return (req as AuthenticatedRequest).sessionToken ?? null;
-}
-
 async function ensureWppSetup(tenantId: string, tenantName: string) {
   const [instance, config] = await Promise.all([
     prisma.wppInstance.upsert({
@@ -141,76 +141,6 @@ async function ensureWppSetup(tenantId: string, tenantName: string) {
   return { instance, config };
 }
 
-async function requireTenantById(
-  req: express.Request,
-  res: express.Response,
-  tenantId: string,
-  tabId?: string | string[]
-) {
-  const account = currentAccount(req);
-  if (!account) {
-    res.status(401).json({ error: "Login obrigatório." });
-    return null;
-  }
-
-  const result = await getAuthorizedTenantById(account.id, tenantId);
-  if (!result) {
-    res
-      .status(403)
-      .json({ error: "Você não tem acesso a este estabelecimento." });
-    return null;
-  }
-
-  const tabIds = tabId ? (Array.isArray(tabId) ? tabId : [tabId]) : [];
-  if (
-    tabIds.length > 0 &&
-    !tabIds.some((t) => membershipCanAccess(result.membership, t))
-  ) {
-    res
-      .status(403)
-      .json({ error: "Você não tem permissão para acessar esta área." });
-    return null;
-  }
-
-  (req as AuthenticatedRequest).membership = result.membership;
-  return result.tenant;
-}
-
-async function requireTenantBySlug(
-  req: express.Request,
-  res: express.Response,
-  slug: string,
-  tabId?: string | string[]
-) {
-  const account = currentAccount(req);
-  if (!account) {
-    res.status(401).json({ error: "Login obrigatório." });
-    return null;
-  }
-
-  const result = await getAuthorizedTenantBySlug(account.id, slug);
-  if (!result) {
-    res
-      .status(403)
-      .json({ error: "Você não tem acesso a este estabelecimento." });
-    return null;
-  }
-
-  const tabIds = tabId ? (Array.isArray(tabId) ? tabId : [tabId]) : [];
-  if (
-    tabIds.length > 0 &&
-    !tabIds.some((t) => membershipCanAccess(result.membership, t))
-  ) {
-    res
-      .status(403)
-      .json({ error: "Você não tem permissão para acessar esta área." });
-    return null;
-  }
-
-  (req as AuthenticatedRequest).membership = result.membership;
-  return result.tenant;
-}
-
 // Soma pontos de fidelidade ao cliente com base no valor gasto, se o módulo estiver ativo
 // para o tenant. Silencioso em qualquer falha — pontuação nunca deve travar o fluxo do pedido.
 // Retorna os pontos ganhos e o novo saldo (usados para notificar o cliente via WhatsApp).
@@ -236,78 +166,6 @@ async function awardLoyaltyPoints(
     console.error("[Loyalty] Falha ao somar pontos:", err);
     return null;
   }
-}
-
-async function requireTenantFromProduct(
-  req: express.Request,
-  res: express.Response,
-  productId: string
-) {
-  const product = await prisma.product.findUnique({
-    where: { id: productId },
-    include: { tenant: true },
-  });
-
-  if (!product) {
-    res.status(404).json({ error: "Produto não encontrado." });
-    return null;
-  }
-
-  const tenant = await requireTenantById(req, res, product.tenantId, "menu");
-  if (!tenant) return null;
-
-  return { product, tenant };
-}
-
-async function requireTenantFromOrder(
-  req: express.Request,
-  res: express.Response,
-  orderId: string
-) {
-  const order = await prisma.order.findUnique({
-    where: { id: orderId },
-    include: {
-      tenant: true,
-      items: {
-        include: {
-          product: true,
-          productVariant: true,
-        },
-      },
-    },
-  });
-
-  if (!order) {
-    res.status(404).json({ error: "Pedido não encontrado." });
-    return null;
-  }
-
-  const tenant = await requireTenantById(req, res, order.tenantId, [
-    "live-orders",
-    "waiter",
-    "kds",
-    "pos",
-  ]);
-  if (!tenant) return null;
-
-  return { order, tenant };
-}
-
-async function requireTenantFromInventoryItem(
-  req: express.Request,
-  res: express.Response,
-  itemId: string
-) {
-  const item = await prisma.inventoryItem.findUnique({ where: { id: itemId } });
-  if (!item) {
-    res.status(404).json({ error: "Item não encontrado." });
-    return null;
-  }
-
-  const tenant = await requireTenantById(req, res, item.tenantId, "inventory");
-  if (!tenant) return null;
-
-  return { item, tenant };
 }
 
 app.use(cors() as any);
