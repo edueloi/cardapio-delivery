@@ -233,7 +233,7 @@ function MovementRow({ m, onCancelOrder }: { m: CashMovement; onCancelOrder?: (o
 // ─── Card de histórico ───────────────────────────────────────────────────────
 function HistoryCard({ h, onCancelOrder }: { h: CashRegister & { movements?: CashMovement[] }; onCancelOrder?: (order: any) => void }) {
   const diff = h.closingBalance != null && h.expectedBalance != null ? h.closingBalance - h.expectedBalance : null;
-  const vendas = h.movements?.filter(m => m.type.startsWith("PAYMENT_")).reduce((s, m) => s + m.amount, 0) ?? 0;
+  const vendas = h.movements?.reduce((sum, m) => sum + (m.type.startsWith("PAYMENT_") ? m.amount : m.type.startsWith("REFUND_") ? -m.amount : 0), 0) ?? 0;
   const sangrias = h.movements?.filter(m => m.type === "SANGRIA").reduce((s, m) => s + m.amount, 0) ?? 0;
   const isOk = diff == null || Math.abs(diff) < 0.01;
 
@@ -275,6 +275,20 @@ function HistoryCard({ h, onCancelOrder }: { h: CashRegister & { movements?: Cas
           )}
         </div>
       </div>
+      {h.paymentBreakdown && Object.keys(h.paymentBreakdown).length > 0 && (
+        <div className="border-t border-slate-50 px-5 py-3">
+          <p className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Conferência por pagamento</p>
+          <div className="space-y-1.5">
+            {Object.entries(h.paymentBreakdown).map(([method, values]) => (
+              <div key={method} className="grid grid-cols-[1fr_auto_auto] gap-3 text-[11px] tabular-nums">
+                <span className="font-bold text-slate-600">{MOVEMENT_META[`PAYMENT_${method}`]?.label || method}</span>
+                <span className="text-slate-400">Esp. {fmt(values.expected)}{values.fee ? ` · taxa ${fmt(values.fee)}` : ""}</span>
+                {values.counted != null ? <span className={Math.abs(values.difference || 0) < 0.01 ? "text-green-600" : "text-red-600"}>Cont. {fmt(values.counted)}</span> : <span className="text-slate-300">Não contado</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {/* Stats */}
       <div className="grid grid-cols-4 divide-x divide-slate-50">
         {[
@@ -322,6 +336,7 @@ export default function CashFlowPanel({ slug, tenant }: CashFlowPanelProps) {
   const [openingBalance,    setOpeningBalance]    = useState("0");
   const [openLoading,       setOpenLoading]       = useState(false);
   const [closingBalance,    setClosingBalance]    = useState("");
+  const [countedByMethod,   setCountedByMethod]   = useState<Record<string, string>>({});
   const [closeNotes,        setCloseNotes]        = useState("");
   const [closeLoading,      setCloseLoading]      = useState(false);
   const [movementType,      setMovementType]      = useState<"SANGRIA" | "SUPRIMENTO">("SANGRIA");
@@ -424,8 +439,13 @@ export default function CashFlowPanel({ slug, tenant }: CashFlowPanelProps) {
   const handleCloseCash = async () => {
     setCloseLoading(true);
     try {
-      await apiJson(`/api/tenants/${slug}/cash/close`, { method: "POST", body: JSON.stringify({ closingBalance: parseFloat(closingBalance || "0"), notes: closeNotes }) });
-      setShowCloseModal(false); setClosingBalance(""); setCloseNotes("");
+      const countedBreakdown = Object.fromEntries(
+        Object.entries(countedByMethod)
+          .filter(([, value]) => value.trim() !== "")
+          .map(([method, value]) => [method, parseFloat(value)])
+      );
+      await apiJson(`/api/tenants/${slug}/cash/close`, { method: "POST", body: JSON.stringify({ closingBalance: parseFloat(closingBalance), countedBreakdown, notes: closeNotes }) });
+      setShowCloseModal(false); setClosingBalance(""); setCountedByMethod({}); setCloseNotes("");
       fetchAll();
     } catch { toast.error("Erro ao fechar caixa."); }
     finally { setCloseLoading(false); }
@@ -702,7 +722,7 @@ export default function CashFlowPanel({ slug, tenant }: CashFlowPanelProps) {
 
       {/* ══ MODAL: Fechar Caixa ══ */}
       <Modal isOpen={showCloseModal} onClose={() => setShowCloseModal(false)} title="Fechar Caixa" size="sm"
-        footer={<ModalFooter><Button variant="ghost" onClick={() => setShowCloseModal(false)}>Cancelar</Button><Button variant="danger" loading={closeLoading} onClick={handleCloseCash} iconLeft={<Lock className="w-4 h-4" />}>Confirmar Fechamento</Button></ModalFooter>}
+        footer={<ModalFooter><Button variant="ghost" onClick={() => setShowCloseModal(false)}>Cancelar</Button><Button variant="danger" loading={closeLoading} disabled={closingBalance.trim() === ""} onClick={handleCloseCash} iconLeft={<Lock className="w-4 h-4" />}>Confirmar Fechamento</Button></ModalFooter>}
       >
         <div className="space-y-4 p-1">
           <div className="bg-slate-50 rounded-2xl p-4 space-y-2.5 text-sm">
@@ -732,6 +752,22 @@ export default function CashFlowPanel({ slug, tenant }: CashFlowPanelProps) {
                 : <><AlertCircle className="w-4 h-4" /> Sobra {fmt(diffBalance)}</>}
             </div>
           )}
+          <div className="rounded-2xl border border-slate-100 p-4 space-y-3">
+            <div>
+              <p className="text-xs font-black text-slate-700">Conferir outros pagamentos</p>
+              <p className="text-[10px] text-slate-400">Opcional: informe o total do comprovante Pix ou da maquininha para registrar qualquer diferença.</p>
+            </div>
+            {Object.entries(paymentTotals).filter(([type]) => type !== "PAYMENT_CASH").map(([type, expected]) => {
+              const method = type.replace("PAYMENT_", "");
+              const counted = countedByMethod[method];
+              const difference = counted?.trim() ? parseFloat(counted) - expected : null;
+              return <div key={type} className="grid grid-cols-[1fr_105px] gap-3 items-end">
+                <div><p className="text-xs font-bold text-slate-600">{MOVEMENT_META[type]?.label || method}</p><p className="text-[10px] text-slate-400">Esperado: {fmt(expected)}</p></div>
+                <Input label="Conferido (R$)" type="number" placeholder="Opcional" value={counted ?? ""} onChange={e => setCountedByMethod(values => ({ ...values, [method]: e.target.value }))} />
+                {difference != null && Number.isFinite(difference) && <p className={`col-span-2 -mt-2 text-right text-[10px] font-bold ${Math.abs(difference) < 0.01 ? "text-green-600" : "text-red-600"}`}>{Math.abs(difference) < 0.01 ? "Confere" : `${difference < 0 ? "Falta" : "Sobra"} ${fmt(Math.abs(difference))}`}</p>}
+              </div>;
+            })}
+          </div>
           <Input label="Observações (opcional)" placeholder="Ex: motivo de diferença..." value={closeNotes} onChange={e => setCloseNotes(e.target.value)} />
         </div>
       </Modal>

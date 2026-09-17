@@ -713,6 +713,13 @@ export interface CashRegister {
   openingBalance: number;
   closingBalance?: number;
   expectedBalance?: number;
+  paymentBreakdown?: Record<string, {
+    expected: number;
+    counted?: number;
+    difference?: number;
+    fee?: number;
+    net?: number;
+  }> | null;
   status: 'OPEN' | 'CLOSED';
   notes?: string;
   operatorName?: string | null;

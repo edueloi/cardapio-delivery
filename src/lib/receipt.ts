@@ -335,6 +335,13 @@ export interface CashClosingSummary {
   ordersCount: number;
   grossTotal: number;
   salesByMethod: Array<{ method: string; total: number }>;
+  paymentBreakdown?: Record<string, {
+    expected: number;
+    counted?: number;
+    difference?: number;
+    fee?: number;
+    net?: number;
+  }>;
   movements: Array<{ type: string; amount: number; description?: string | null }>;
   /** true = resumo do caixa ainda aberto (sem contagem física ainda) — impresso a
    * qualquer momento do dia, não só no fechamento. Some com "Contado"/"Falta/Sobra"
@@ -372,6 +379,7 @@ export function buildCashClosingReportPdf(
   let lines = 14; // cabeçalho + totais fixos
   lines += summary.salesByMethod.length;
   lines += sangrias.length + suprimentos.length + 2;
+  lines += summary.paymentBreakdown ? Object.keys(summary.paymentBreakdown).length * 2 + 2 : 0;
 
   const doc = new jsPDF({ unit: "mm", format: [width, 20 + lines * 4.5] });
   let y = 8;
@@ -391,6 +399,25 @@ export function buildCashClosingReportPdf(
   doc.text(`${summary.isPreview ? "Gerado em" : "Fechamento"}: ${closedStr}`, margin, y); y += 4;
 
   y += 1;
+  if (summary.paymentBreakdown && Object.keys(summary.paymentBreakdown).length > 0) {
+    doc.setFont("courier", "bold");
+    doc.text("Confer\u00eancia por pagamento:", margin, y);
+    doc.setFont("courier", "normal");
+    y += 4;
+    for (const [method, value] of Object.entries(summary.paymentBreakdown)) {
+      doc.text(`  ${cashMethodLabel(method)} esp.`, margin, y);
+      doc.text(fmtMoney(value.expected), width - margin, y, { align: "right" });
+      y += 4;
+      if (value.counted !== undefined) {
+        const difference = value.difference ?? value.counted - value.expected;
+        doc.text(`    contado: ${fmtMoney(value.counted)}`, margin, y);
+        doc.text(Math.abs(difference) < 0.01 ? "Confere" : `${difference < 0 ? "Falta" : "Sobra"} ${fmtMoney(Math.abs(difference))}`, width - margin, y, { align: "right" });
+        y += 4;
+      }
+    }
+    y += 1;
+  }
+
   doc.line(margin, y, width - margin, y);
   y += 5;
 

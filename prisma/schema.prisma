@@ -437,6 +437,7 @@ model CashRegister {
   openingBalance  Float     @map("opening_balance")
   closingBalance  Float?    @map("closing_balance")
   expectedBalance Float?    @map("expected_balance")
+  paymentBreakdown Json?    @map("payment_breakdown") // conferência por forma de pagamento no fechamento
   status          String    @default("OPEN") // OPEN, CLOSED
   notes           String?
   operatorName    String?   @map("operator_name") // legado — mantido por compatibilidade, mas openedByName/Email são a fonte confiável agora

@@ -47,6 +47,11 @@ const migrations = [
     run: "ALTER TABLE cash_registers ADD COLUMN operator_name VARCHAR(191) NULL",
   },
   {
+    name: 'add_cash_registers_payment_breakdown',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'cash_registers' AND COLUMN_NAME = 'payment_breakdown'",
+    run: "ALTER TABLE cash_registers ADD COLUMN payment_breakdown JSON NULL",
+  },
+  {
     name: 'add_orders_customer_id',
     check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'customer_id'",
     run: "ALTER TABLE orders ADD COLUMN customer_id VARCHAR(191) NULL",

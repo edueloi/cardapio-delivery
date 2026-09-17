@@ -6537,6 +6537,13 @@ app.post("/api/tenants/:slug/cash/close", requireAuth, async (req, res) => {
     });
 
     const paymentMovements = allMovements.filter((m) => m.type.startsWith("PAYMENT_") || m.type.startsWith("REFUND_"));
+    const closingBalance = Number(req.body.closingBalance);
+    if (!Number.isFinite(closingBalance) || closingBalance < 0) {
+      return res.status(400).json({ error: "Informe o valor contado em dinheiro para fechar o caixa." });
+    }
+    const countedBreakdown = req.body.countedBreakdown && typeof req.body.countedBreakdown === "object"
+      ? req.body.countedBreakdown as Record<string, unknown>
+      : {};
     const cashDelta = allMovements.reduce((sum, m) => {
       if (m.type === "PAYMENT_CASH" || m.type === "SUPRIMENTO") return sum + m.amount;
       if (m.type === "REFUND_CASH" || m.type === "SANGRIA") return sum - m.amount;
@@ -6550,15 +6557,14 @@ app.post("/api/tenants/:slug/cash/close", requireAuth, async (req, res) => {
     const splitOrderIds = paymentMovements
       .filter((m) => m.type === "PAYMENT_SPLIT" && m.orderId)
       .map((m) => m.orderId as string);
-    const splitOrders = splitOrderIds.length
+    const orderIdsForBreakdown = [...new Set(paymentMovements.map((m) => m.orderId).filter((id): id is string => !!id))];
+    const paymentOrders = orderIdsForBreakdown.length
       ? await prisma.order.findMany({
-          where: { id: { in: splitOrderIds } },
-          select: { id: true, paymentDetail: true },
+          where: { id: { in: orderIdsForBreakdown } },
+          select: { id: true, paymentMethod: true, paymentDetail: true, feeAmount: true, feePassedToCustomer: true },
         })
       : [];
-    const splitDetailByOrderId = new Map<string, string | null>(
-      splitOrders.map((o) => [o.id, o.paymentDetail])
-    );
+    const paymentOrderById = new Map(paymentOrders.map((o) => [o.id, o]));
 
     // Resumo de vendas do turno pra imprimir junto com o fechamento — o dono usa isso pra
     // bater caixa (total por forma de pagamento, qtd de pedidos, sangrias/suprimentos), sem
@@ -6572,7 +6578,7 @@ app.post("/api/tenants/:slug/cash/close", requireAuth, async (req, res) => {
     };
     for (const m of paymentMovements) {
       if (m.type === "PAYMENT_SPLIT") {
-        const detailRaw = m.orderId ? splitDetailByOrderId.get(m.orderId) : null;
+        const detailRaw = m.orderId ? paymentOrderById.get(m.orderId)?.paymentDetail : null;
         let splits: Array<{ method: string; amount: number }> = [];
         try { splits = detailRaw ? JSON.parse(detailRaw).splits || [] : []; } catch {}
         if (splits.length > 0) {
@@ -6591,15 +6597,61 @@ app.post("/api/tenants/:slug/cash/close", requireAuth, async (req, res) => {
 
     const movementsSinceOpen = allMovements.filter((m) => m.type === "SANGRIA" || m.type === "SUPRIMENTO");
 
+    // A conferência fica gravada junto ao fechamento: dinheiro é contado na gaveta;
+    // os demais métodos são opcionais, mas permitem bater PIX e relatórios da máquina.
+    // Estorno reduz o esperado sem apagar o pagamento original, preservando a auditoria.
+    const methodTotals = new Map<string, number>();
+    for (const entry of salesByMethod) methodTotals.set(entry.method, entry.total);
+    const feeByMethod = new Map<string, number>();
+    for (const order of paymentOrders) {
+      const fee = Number(order.feeAmount || 0);
+      if (fee <= 0) continue;
+      const parts = splitPaymentBreakdown(order.paymentMethod, order.paymentDetail, 0);
+      const usableParts = parts.length > 0 && parts[0].method ? parts : [];
+      if (usableParts.length > 0) {
+        const totalParts = usableParts.reduce((sum, part) => sum + Number(part.amount || 0), 0);
+        for (const part of usableParts) {
+          if (part.method === "CASH" || totalParts <= 0) continue;
+          feeByMethod.set(part.method, (feeByMethod.get(part.method) || 0) + fee * (part.amount / totalParts));
+        }
+      } else {
+        const paymentMovement = paymentMovements.find((m) => m.orderId === order.id && m.type.startsWith("PAYMENT_"));
+        const method = paymentMovement?.type.replace("PAYMENT_", "");
+        if (method && method !== "CASH") feeByMethod.set(method, (feeByMethod.get(method) || 0) + fee);
+      }
+    }
+    const roundMoney = (value: number) => Math.round(value * 100) / 100;
+    const paymentBreakdown: Record<string, { expected: number; counted?: number; difference?: number; fee?: number; net?: number }> = {
+      CASH: {
+        expected: roundMoney(expectedBalance),
+        counted: roundMoney(closingBalance),
+        difference: roundMoney(closingBalance - expectedBalance),
+      },
+    };
+    for (const [method, rawExpected] of methodTotals) {
+      if (method === "CASH") continue;
+      const expected = roundMoney(rawExpected);
+      const rawCounted = countedBreakdown[method];
+      const counted = typeof rawCounted === "number" ? rawCounted : Number(rawCounted);
+      const hasCount = rawCounted !== undefined && rawCounted !== "" && Number.isFinite(counted) && counted >= 0;
+      const fee = roundMoney(feeByMethod.get(method) || 0);
+      paymentBreakdown[method] = {
+        expected,
+        ...(fee > 0 ? { fee, net: roundMoney(expected - fee) } : {}),
+        ...(hasCount ? { counted: roundMoney(counted), difference: roundMoney(counted - expected) } : {}),
+      };
+    }
+
     const closingSummary = {
       openedAt: currentCash.openedAt,
       closedAt: new Date(),
       openingBalance: currentCash.openingBalance,
       expectedBalance,
-      ordersCount: paymentMovements.length,
-      grossTotal: paymentMovements.reduce((sum, m) => sum + m.amount, 0),
+      ordersCount: new Set(paymentMovements.filter((m) => m.type.startsWith("PAYMENT_")).map((m) => m.orderId || m.description)).size,
+      grossTotal: Array.from(methodTotals.values()).reduce((sum, amount) => sum + amount, 0),
       salesByMethod,
       movements: movementsSinceOpen,
+      paymentBreakdown,
     };
 
     const closingAccount = currentAccount(req);
@@ -6608,8 +6660,9 @@ app.post("/api/tenants/:slug/cash/close", requireAuth, async (req, res) => {
       data: {
         status: "CLOSED",
         closedAt: new Date(),
-        closingBalance: parseFloat(req.body.closingBalance),
+        closingBalance: roundMoney(closingBalance),
         expectedBalance,
+        paymentBreakdown,
         notes: req.body.notes,
         closedByAccountId: closingAccount?.id || null,
         closedByName: closingAccount?.name || null,
