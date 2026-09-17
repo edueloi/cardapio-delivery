@@ -33,10 +33,15 @@ export function parseSelectionGroups(product: Product | null | undefined): Produ
 
 export function getSelectionGroupOptions(tenant: Tenant | null | undefined, group: ProductSelectionGroup): Product[] {
   if (!tenant?.categories) return [];
+  // No cardápio público, opções de combo podem ser "somente PDV" para não aparecerem
+  // como produtos avulsos. O servidor as entrega separadamente só para este seletor.
+  const hiddenComboOptions = ((tenant as any).selectionGroupProducts || []) as Product[];
   if (group.sourceType === "category") {
-    return tenant.categories.find((c) => c.id === group.categoryId)?.products || [];
+    const options = hiddenComboOptions.filter((p: any) => p.categoryId === group.categoryId);
+    return options.length ? options : tenant.categories.find((c) => c.id === group.categoryId)?.products || [];
   }
-  return tenant.categories.flatMap((c) => c.products).filter((p) => group.productIds?.includes(p.id));
+  const allProducts = [...tenant.categories.flatMap((c) => c.products), ...hiddenComboOptions];
+  return allProducts.filter((p, index, list) => group.productIds?.includes(p.id) && list.findIndex((candidate) => candidate.id === p.id) === index);
 }
 
 export function formatSelectionGroupNote(group: ProductSelectionGroup, selectedIds: string[], options: Product[]): string {

@@ -2824,9 +2824,51 @@ app.get("/api/tenants/:slug", async (req, res) => {
         ? false
         : isWithinBusinessHours(tenant.businessHours);
 
+    // Os itens usados dentro de um combo podem estar marcados como "somente PDV"
+    // para não poluir a vitrine. Ainda assim, eles precisam chegar ao seletor de
+    // escolhas do produto-pai no balcão, mesa e delivery.
+    const selectionCategoryIds = new Set<string>();
+    const selectionProductIds = new Set<string>();
+    for (const category of filteredCategories) {
+      for (const product of category.products) {
+        if (!product.selectionGroup) continue;
+        try {
+          const rawGroups = JSON.parse(product.selectionGroup);
+          const groups = Array.isArray(rawGroups) ? rawGroups : [rawGroups];
+          for (const group of groups) {
+            if (group?.sourceType === "category" && group.categoryId) selectionCategoryIds.add(group.categoryId);
+            if (group?.sourceType === "products" && Array.isArray(group.productIds)) group.productIds.forEach((id: string) => selectionProductIds.add(id));
+          }
+        } catch {
+          // Configuração antiga ou inválida: o produto continua disponível, só não
+          // há opções adicionais para resolver neste retorno público.
+        }
+      }
+    }
+    const selectionGroupProducts = (selectionCategoryIds.size || selectionProductIds.size)
+      ? await prisma.product.findMany({
+          where: {
+            tenantId: tenant.id,
+            available: true,
+            OR: [
+              ...(selectionCategoryIds.size ? [{ categoryId: { in: [...selectionCategoryIds] } }] : []),
+              ...(selectionProductIds.size ? [{ id: { in: [...selectionProductIds] } }] : []),
+            ],
+          },
+          orderBy: { sortOrder: "asc" },
+          include: { variants: { include: { inventoryItem: true } }, inventoryItem: true },
+        })
+      : [];
+    const visibleSelectionGroupProducts = selectionGroupProducts.filter((product) => {
+      if (product.inventoryItem && product.inventoryItem.quantity <= 0) return false;
+      if (product.scheduleRule && !isProductActiveNow(product.scheduleRule)) return false;
+      return true;
+    });
+
     res.json({
       ...tenant,
       categories: filteredCategories,
+      selectionGroupProducts: visibleSelectionGroupProducts,
       effectiveIsOpen,
       isDeliveryOpen: tenant.isDeliveryOpen ?? true,
     });
