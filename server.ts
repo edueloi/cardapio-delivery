@@ -3,11 +3,12 @@ import cors from "cors";
 import express from "express";
 import fs from "fs";
 import { createServer } from "http";
-import multer from "multer";
 import path from "path";
 import { randomBytes } from "crypto";
 import { createServer as createViteServer } from "vite";
 import { Server } from "socket.io";
+import { registerSocketEvents } from "./src/backend/realtime/register-socket-events";
+import { createUploadMiddleware } from "./src/backend/http/upload";
 import { prisma as _prisma } from "./src/lib/prisma";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const prisma = _prisma as any;
@@ -62,60 +63,9 @@ const io = new Server(httpServer, {
   },
 });
 
-io.on("connection", (socket) => {
-  console.log("Client connected:", socket.id);
+registerSocketEvents(io);
 
-  socket.on("join-tenant", (tenantId) => {
-    socket.join(`tenant-${tenantId}`);
-    console.log(`Socket ${socket.id} joined tenant room: ${tenantId}`);
-  });
-
-  socket.on("join-table", (tableRoom) => {
-    // tableRoom format: "tenantId-mesa-tableId"
-    socket.join(tableRoom);
-    console.log(`Socket ${socket.id} joined table room: ${tableRoom}`);
-  });
-
-  socket.on("request-checkout", ({ tenantId, tableId, customerName }) => {
-    console.log(`Table ${tableId} of tenant ${tenantId} requested checkout`);
-    io.to(`tenant-${tenantId}`).emit("checkout-requested", {
-      tableId,
-      customerName,
-    });
-  });
-
-  socket.on(
-    "request-waiter",
-    ({ tenantId, tableId, customerName, note, requestBill }) => {
-      console.log(`Table ${tableId} called waiter (bill=${requestBill})`);
-      io.to(`tenant-${tenantId}`).emit("waiter-called", {
-        tableId,
-        customerName,
-        note,
-        requestBill,
-      });
-    }
-  );
-
-  socket.on("disconnect", () => {
-    console.log("Client disconnected:", socket.id);
-  });
-});
-
-const uploadDir = path.join(process.cwd(), "uploads");
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadDir),
-  filename: (_req, file, cb) => {
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  },
-});
-
-const upload = multer({ storage });
+const { uploadDir, upload } = createUploadMiddleware();
 
 function sanitizeSlug(value: string): string {
   return String(value || "")
