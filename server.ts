@@ -6604,6 +6604,9 @@ app.post("/api/tenants/:slug/cash/close", requireAuth, async (req, res) => {
     for (const entry of salesByMethod) methodTotals.set(entry.method, entry.total);
     const feeByMethod = new Map<string, number>();
     for (const order of paymentOrders) {
+      // Um estorno pode ocorrer em outra sessão. Nesse caso a taxa pertence à venda
+      // original, não ao caixa que apenas devolveu o valor.
+      if (!paymentMovements.some((movement) => movement.orderId === order.id && movement.type.startsWith("PAYMENT_"))) continue;
       const fee = Number(order.feeAmount || 0);
       if (fee <= 0) continue;
       const parts = splitPaymentBreakdown(order.paymentMethod, order.paymentDetail, 0);

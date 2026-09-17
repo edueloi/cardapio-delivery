@@ -379,7 +379,7 @@ export function buildCashClosingReportPdf(
   let lines = 14; // cabeçalho + totais fixos
   lines += summary.salesByMethod.length;
   lines += sangrias.length + suprimentos.length + 2;
-  lines += summary.paymentBreakdown ? Object.keys(summary.paymentBreakdown).length * 2 + 2 : 0;
+  lines += summary.paymentBreakdown ? Object.keys(summary.paymentBreakdown).length * 3 + 2 : 0;
 
   const doc = new jsPDF({ unit: "mm", format: [width, 20 + lines * 4.5] });
   let y = 8;
@@ -408,6 +408,11 @@ export function buildCashClosingReportPdf(
       doc.text(`  ${cashMethodLabel(method)} esp.`, margin, y);
       doc.text(fmtMoney(value.expected), width - margin, y, { align: "right" });
       y += 4;
+      if (value.fee && value.fee > 0) {
+        doc.text(`    taxa: -${fmtMoney(value.fee)}`, margin, y);
+        doc.text(`l\u00edquido: ${fmtMoney(value.net ?? value.expected - value.fee)}`, width - margin, y, { align: "right" });
+        y += 4;
+      }
       if (value.counted !== undefined) {
         const difference = value.difference ?? value.counted - value.expected;
         doc.text(`    contado: ${fmtMoney(value.counted)}`, margin, y);

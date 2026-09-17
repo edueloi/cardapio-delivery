@@ -3,7 +3,7 @@ import {
   Wallet, ArrowDownCircle, ArrowUpCircle, Lock, Unlock,
   TrendingUp, Banknote, CreditCard, QrCode, Receipt, History,
   CheckCircle2, CalendarDays, Filter, AlertCircle, RefreshCw,
-  ArrowLeftRight, ChevronRight, ChevronDown, Tag, Percent,
+  ArrowLeftRight, ChevronRight, ChevronDown, Tag, Percent, Printer,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -231,11 +231,13 @@ function MovementRow({ m, onCancelOrder }: { m: CashMovement; onCancelOrder?: (o
 }
 
 // ─── Card de histórico ───────────────────────────────────────────────────────
-function HistoryCard({ h, onCancelOrder }: { h: CashRegister & { movements?: CashMovement[] }; onCancelOrder?: (order: any) => void }) {
+function HistoryCard({ h, onCancelOrder, onPrint }: { h: CashRegister & { movements?: CashMovement[] }; onCancelOrder?: (order: any) => void; onPrint?: (register: CashRegister & { movements?: CashMovement[] }) => void }) {
   const diff = h.closingBalance != null && h.expectedBalance != null ? h.closingBalance - h.expectedBalance : null;
   const vendas = h.movements?.reduce((sum, m) => sum + (m.type.startsWith("PAYMENT_") ? m.amount : m.type.startsWith("REFUND_") ? -m.amount : 0), 0) ?? 0;
-  const sangrias = h.movements?.filter(m => m.type === "SANGRIA").reduce((s, m) => s + m.amount, 0) ?? 0;
+  const vendasDinheiro = h.movements?.reduce((sum, m) => sum + (m.type === "PAYMENT_CASH" ? m.amount : m.type === "REFUND_CASH" ? -m.amount : 0), 0) ?? 0;
   const isOk = diff == null || Math.abs(diff) < 0.01;
+  const breakdown = h.paymentBreakdown || {};
+  const totalFees = Object.values(breakdown).reduce((sum, value) => sum + (value.fee || 0), 0);
 
   return (
     <div className="rounded-2xl border border-slate-100 bg-white overflow-hidden">
@@ -273,29 +275,42 @@ function HistoryCard({ h, onCancelOrder }: { h: CashRegister & { movements?: Cas
               {diff > 0 ? "+" : ""}{fmt(diff)}
             </span>
           )}
+          <button type="button" onClick={() => onPrint?.(h)} className="mt-2 inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-slate-400 hover:text-[#C9A227]">
+            <Printer className="h-3.5 w-3.5" /> Imprimir
+          </button>
         </div>
       </div>
       {h.paymentBreakdown && Object.keys(h.paymentBreakdown).length > 0 && (
         <div className="border-t border-slate-50 px-5 py-3">
           <p className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Conferência por pagamento</p>
-          <div className="space-y-1.5">
+          <div className="overflow-x-auto rounded-xl border border-slate-100">
+            <table className="w-full min-w-[620px] text-[11px] tabular-nums">
+              <thead className="bg-slate-50 text-[9px] font-black uppercase tracking-wider text-slate-400"><tr><th className="px-3 py-2 text-left">Método</th><th className="px-3 py-2 text-right">Esperado</th><th className="px-3 py-2 text-right">Taxa</th><th className="px-3 py-2 text-right">Líquido</th><th className="px-3 py-2 text-right">Contado</th><th className="px-3 py-2 text-right">Diferença</th></tr></thead>
+              <tbody>
             {Object.entries(h.paymentBreakdown).map(([method, values]) => (
-              <div key={method} className="grid grid-cols-[1fr_auto_auto] gap-3 text-[11px] tabular-nums">
-                <span className="font-bold text-slate-600">{MOVEMENT_META[`PAYMENT_${method}`]?.label || method}</span>
-                <span className="text-slate-400">Esp. {fmt(values.expected)}{values.fee ? ` · taxa ${fmt(values.fee)}` : ""}</span>
-                {values.counted != null ? <span className={Math.abs(values.difference || 0) < 0.01 ? "text-green-600" : "text-red-600"}>Cont. {fmt(values.counted)}</span> : <span className="text-slate-300">Não contado</span>}
-              </div>
+              <tr key={method} className="border-t border-slate-100">
+                <td className="px-3 py-2 font-bold text-slate-600">{MOVEMENT_META[`PAYMENT_${method}`]?.label || method}</td>
+                <td className="px-3 py-2 text-right text-slate-600">{fmt(values.expected)}</td>
+                <td className="px-3 py-2 text-right text-amber-600">{values.fee ? `−${fmt(values.fee)}` : "—"}</td>
+                <td className="px-3 py-2 text-right text-slate-600">{values.net != null ? fmt(values.net) : "—"}</td>
+                <td className="px-3 py-2 text-right text-slate-600">{values.counted != null ? fmt(values.counted) : "—"}</td>
+                <td className={`px-3 py-2 text-right font-bold ${values.difference == null ? "text-slate-300" : Math.abs(values.difference) < 0.01 ? "text-green-600" : values.difference < 0 ? "text-red-600" : "text-orange-600"}`}>{values.difference != null ? `${values.difference > 0 ? "+" : ""}${fmt(values.difference)}` : "—"}</td>
+              </tr>
             ))}
+              </tbody>
+              {totalFees > 0 && <tfoot><tr className="border-t-2 border-slate-200 bg-slate-50"><td className="px-3 py-2 text-[9px] font-black uppercase tracking-wider text-slate-600">Total de taxas</td><td colSpan={2} className="px-3 py-2 text-right font-bold text-amber-600">−{fmt(totalFees)}</td><td colSpan={3} className="px-3 py-2 text-right font-bold text-slate-700">Líquido: {fmt(vendas - totalFees)}</td></tr></tfoot>}
+            </table>
           </div>
         </div>
       )}
       {/* Stats */}
-      <div className="grid grid-cols-4 divide-x divide-slate-50">
+      <div className="grid grid-cols-2 sm:grid-cols-5 divide-x divide-y sm:divide-y-0 divide-slate-50">
         {[
           { label: "Fundo", value: fmt(h.openingBalance), color: "text-slate-700" },
-          { label: "Vendas", value: fmt(vendas), color: "text-green-700" },
-          { label: "Sangrias", value: fmt(sangrias), color: "text-red-600" },
+          { label: "Vendas dinheiro", value: fmt(vendasDinheiro), color: "text-green-700" },
+          { label: "Esperado", value: fmt(h.expectedBalance ?? 0), color: "text-[#C9A227]" },
           { label: "Contado", value: fmt(h.closingBalance ?? 0), color: isOk ? "text-green-700" : "text-red-600" },
+          { label: diff == null ? "Diferença" : diff < 0 ? "Falta" : diff > 0 ? "Sobra" : "Confere", value: diff == null ? "—" : fmt(Math.abs(diff)), color: isOk ? "text-green-700" : "text-red-600" },
         ].map(({ label, value, color }) => (
           <div key={label} className="px-4 py-3 text-center">
             <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">{label}</p>
@@ -459,6 +474,34 @@ export default function CashFlowPanel({ slug, tenant }: CashFlowPanelProps) {
       fetchCaixa();
     } catch { toast.error("Erro ao registrar movimento."); }
     finally { setMovementLoading(false); }
+  };
+
+  const handlePrintHistoryClosing = (register: CashRegister & { movements?: CashMovement[] }) => {
+    const totals = (register.movements || []).reduce<Record<string, number>>((acc, movement) => {
+      if (movement.type.startsWith("PAYMENT_")) acc[movement.type] = (acc[movement.type] || 0) + movement.amount;
+      if (movement.type.startsWith("REFUND_")) {
+        const paymentType = movement.type.replace("REFUND_", "PAYMENT_");
+        acc[paymentType] = (acc[paymentType] || 0) - movement.amount;
+      }
+      return acc;
+    }, {});
+    const payments = Object.entries(totals).map(([type, total]) => ({ method: type.replace("PAYMENT_", ""), total }));
+    const orderIds = new Set((register.movements || []).filter((m) => m.type.startsWith("PAYMENT_")).map((m) => m.orderId || m.description));
+    const summaryData = {
+      openedAt: register.openedAt,
+      closedAt: register.closedAt,
+      openingBalance: register.openingBalance,
+      closingBalance: register.closingBalance ?? 0,
+      expectedBalance: register.expectedBalance ?? 0,
+      ordersCount: orderIds.size,
+      grossTotal: payments.reduce((sum, entry) => sum + entry.total, 0),
+      salesByMethod: payments,
+      movements: (register.movements || []).filter((m) => m.type === "SANGRIA" || m.type === "SUPRIMENTO").map((m) => ({ type: m.type, amount: m.amount, description: m.description })),
+      paymentBreakdown: register.paymentBreakdown || undefined,
+    };
+    const desktop = (window as any).pdvDesktop;
+    if (desktop?.printCashClosingReport) desktop.printCashClosingReport(tenant.name, summaryData);
+    else printCashClosingReportPdf(tenant.name, summaryData, (tenant.receiptPaperWidth === 58 ? 58 : 80) as 58 | 80);
   };
 
   const handleCancelOrder = async () => {
@@ -704,7 +747,7 @@ export default function CashFlowPanel({ slug, tenant }: CashFlowPanelProps) {
             </div>
           ) : (
             <div className="space-y-3">
-              {history.map(h => <HistoryCard key={h.id} h={h} onCancelOrder={(order) => { setCancelOrder(order); setCancelPassword(""); setRestockInventory(true); }} />)}
+              {history.map(h => <HistoryCard key={h.id} h={h} onPrint={handlePrintHistoryClosing} onCancelOrder={(order) => { setCancelOrder(order); setCancelPassword(""); setRestockInventory(true); }} />)}
             </div>
           )}
         </motion.div>
