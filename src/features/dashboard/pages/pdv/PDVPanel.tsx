@@ -990,7 +990,7 @@ export default function PDVPanel({
     if (!product?.extras) return [];
     try {
       const parsed = JSON.parse(product.extras);
-      return Array.isArray(parsed) ? parsed : [];
+      return Array.isArray(parsed) ? parsed.filter((extra: ProductExtra) => !extra.autoApplyOnTakeout) : [];
     } catch {
       return [];
     }

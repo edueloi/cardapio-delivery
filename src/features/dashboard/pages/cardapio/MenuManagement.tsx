@@ -844,6 +844,16 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
   const addSelectionGroupField = () => setProdForm(prev => ({ ...prev, selectionGroups: [...prev.selectionGroups, { _key: crypto.randomUUID(), sourceType: "category" as const, categoryId: "", productIds: [] as string[], qty: "1", label: "" }] }));
   const removeSelectionGroupField = (i: number) => setProdForm(prev => ({ ...prev, selectionGroups: prev.selectionGroups.filter((_, idx) => idx !== i) }));
   const updateSelectionGroupField = (i: number, field: string, value: any) => setProdForm(prev => ({ ...prev, selectionGroups: prev.selectionGroups.map((g, idx) => idx === i ? { ...g, [field]: value } : g) }));
+  const addTakeoutKit = () => setProdForm(prev => {
+    if (prev.extras.some(extra => extra.autoApplyOnTakeout)) return prev;
+    return {
+      ...prev,
+      extras: [...prev.extras, {
+        id: crypto.randomUUID(), label: "Kit para viagem", price: "0",
+        stockLinks: [], autoApplyOnTakeout: true,
+      }],
+    };
+  });
 
   const categories = localCategories;
   const visibleCategories = categories
@@ -1262,8 +1272,16 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
           <ContentCard padding="md">
             <div className="flex items-center justify-between mb-2">
               <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">Adicionais / Observações</span>
+              {!prodForm.extras.some(extra => extra.autoApplyOnTakeout) && (
+                <button type="button" onClick={addTakeoutKit} className="text-xs font-black text-[#C9A227] hover:underline">+ Configurar modo viagem</button>
+              )}
             </div>
             <p className="text-xs text-slate-400 mb-3">Ex: Gelo, Limão, Sem Cebola, Molho extra. O cliente seleciona antes de adicionar ao carrinho.</p>
+            {prodForm.extras.some(extra => extra.autoApplyOnTakeout) && (
+              <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                <strong>Modo viagem ativo.</strong> O kit abaixo será incluído automaticamente somente ao selecionar <strong>Para viagem</strong>; ele não aparecerá como adicional para o cliente.
+              </div>
+            )}
             <div className="flex gap-2 mb-3">
               <input
                 placeholder="Nome (ex: Gelo)"
@@ -1300,7 +1318,7 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
                     <div key={ex.id} className="bg-amber-50/60 border border-amber-200 rounded-xl px-3 py-2">
                       <div className="flex items-center gap-2">
                         <span className="flex-1 text-sm font-bold text-amber-900 truncate">
-                          {ex.label}{parseFloat(ex.price) > 0 ? ` +R$${parseFloat(ex.price).toFixed(2)}` : ' (grátis)'}
+                          {ex.autoApplyOnTakeout ? "Kit para viagem" : ex.label}{parseFloat(ex.price) > 0 ? ` +R$${parseFloat(ex.price).toFixed(2)}` : ' (grátis)'}
                         </span>
                         <button
                           type="button"
@@ -1326,7 +1344,7 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
                               onChange={e => setProdForm(prev => ({ ...prev, extras: prev.extras.map(x => x.id === ex.id ? { ...x, autoApplyOnTakeout: e.target.checked } : x) }))}
                               className="accent-amber-500"
                             />
-                            Aplicar automaticamente em pedidos para viagem (sem precisar selecionar)
+                            Ativar como kit de viagem: consumir estes itens automaticamente ao selecionar “Para viagem”
                           </label>
                         )}
                       </div>
@@ -1335,7 +1353,7 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
                 })}
               </div>
             )}
-            <p className="text-[11px] text-slate-400 mt-2">Vincular um adicional ao estoque (ex: "Embalagem de viagem") desconta o item automaticamente sempre que o cliente selecionar esse adicional.</p>
+            <p className="text-[11px] text-slate-400 mt-2">No modo viagem, vincule aqui embalagem, sacola, lacre, canudo ou qualquer outro insumo e informe a quantidade. A baixa acontece automaticamente junto com a venda.</p>
           </ContentCard>
 
           {/* Grupos de seleção embutidos — cada um deixa o cliente escolher N itens de uma

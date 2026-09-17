@@ -1105,7 +1105,7 @@ export default function TableMenuView() {
                       <div className="space-y-6">
                         {(() => {
                           let parsedExtras: { id: string, label: string, price: number }[] = [];
-                          try { parsedExtras = selectedProduct.extras ? JSON.parse(selectedProduct.extras) : []; } catch {}
+                          try { parsedExtras = selectedProduct.extras ? JSON.parse(selectedProduct.extras) : []; parsedExtras = parsedExtras.filter((ex: any) => !ex.autoApplyOnTakeout); } catch {}
                           return parsedExtras.length > 0 ? (
                             <div className="space-y-3">
                               <div className="flex items-center justify-between">
