@@ -434,7 +434,6 @@ export default function PDVPanel({
         method: "POST",
         body: JSON.stringify({ openingBalance: cashOpeningAmount }),
       });
-      setShowOpenCashModal(false);
       setOpeningBalanceInput("");
       setCashCounts({});
       await fetchCurrentCash();
