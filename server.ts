@@ -173,6 +173,7 @@ registerOrderRoutes({
   requireTenantFromOrder,
   updateOrderStatus,
   emitInventoryRestockSideEffects,
+  deductSelectedExtrasStock,
 });
 
 registerLoyaltyIfoodRoutes({

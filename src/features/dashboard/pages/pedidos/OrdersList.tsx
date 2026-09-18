@@ -268,6 +268,35 @@ function KanbanCard({ order, categoryMap, updateStatus, isExpanded, toggleOrder,
   const needsBilling = order.orderType === 'DELIVERY' && order.status === 'DELIVERED' && !isPaid;
   const toast = useToast();
   const [reannouncing, setReannouncing] = useState(false);
+  const [changingConsumption, setChangingConsumption] = useState(false);
+  const [consumptionMenuOpen, setConsumptionMenuOpen] = useState(false);
+
+  // Corrige "Local"/"Para viagem" depois que o pedido já foi lançado (ex: operador
+  // esqueceu de marcar no balcão) — reaplica/reverte o kit de embalagem automático
+  // no estoque na hora, sem precisar excluir e recriar o pedido inteiro.
+  const handleChangeConsumptionType = async (e: any, nextType: "EAT_IN" | "TAKEOUT") => {
+    e.stopPropagation();
+    setConsumptionMenuOpen(false);
+    if (nextType === order.consumptionType) return;
+    setChangingConsumption(true);
+    try {
+      const res = await apiFetch(`/api/orders/${order.id}/consumption-type`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ consumptionType: nextType }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data?.error || "Não foi possível alterar o tipo de consumo.");
+        return;
+      }
+      toast.success(nextType === "TAKEOUT" ? "Pedido marcado como Para viagem." : "Pedido marcado como Local.");
+    } catch {
+      toast.error("Não foi possível alterar o tipo de consumo.");
+    } finally {
+      setChangingConsumption(false);
+    }
+  };
 
   const handleReannounce = async (e: any) => {
     e.stopPropagation();
@@ -371,10 +400,45 @@ function KanbanCard({ order, categoryMap, updateStatus, isExpanded, toggleOrder,
                 </span>
               )}
               {order.consumptionType && (
-                <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 border border-amber-200 rounded-md text-[8px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0">
-                  {order.consumptionType === "EAT_IN" ? <Utensils className="w-2.5 h-2.5" /> : <Package className="w-2.5 h-2.5" />}
-                  {order.consumptionType === "EAT_IN" ? "Local" : "Viagem"}
-                </span>
+                <div className="relative shrink-0">
+                  <button
+                    type="button"
+                    disabled={changingConsumption}
+                    onClick={(e) => { e.stopPropagation(); setConsumptionMenuOpen((v) => !v); }}
+                    className="px-1.5 py-0.5 bg-amber-100 text-amber-800 border border-amber-200 rounded-md text-[8px] font-black uppercase tracking-widest flex items-center gap-1 hover:bg-amber-200 transition-colors disabled:opacity-50"
+                    title="Corrigir Local/Para viagem"
+                  >
+                    {order.consumptionType === "EAT_IN" ? <Utensils className="w-2.5 h-2.5" /> : <Package className="w-2.5 h-2.5" />}
+                    {order.consumptionType === "EAT_IN" ? "Local" : "Viagem"}
+                  </button>
+                  <AnimatePresence>
+                    {consumptionMenuOpen && (
+                      <>
+                        <div className="fixed inset-0 z-[90]" onClick={(e) => { e.stopPropagation(); setConsumptionMenuOpen(false); }} />
+                        <motion.div
+                          initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+                          transition={{ duration: 0.12 }}
+                          className="absolute left-0 top-full mt-1 z-[91] bg-white border border-slate-200 rounded-xl shadow-lg py-1 min-w-[140px]"
+                        >
+                          <button
+                            type="button"
+                            onClick={(e) => handleChangeConsumptionType(e, "EAT_IN")}
+                            className={`w-full flex items-center gap-2 px-3 py-2 text-[11px] font-bold text-left transition-colors ${order.consumptionType === "EAT_IN" ? "text-amber-700 bg-amber-50" : "text-slate-600 hover:bg-slate-50"}`}
+                          >
+                            <Utensils className="w-3 h-3" /> Local
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => handleChangeConsumptionType(e, "TAKEOUT")}
+                            className={`w-full flex items-center gap-2 px-3 py-2 text-[11px] font-bold text-left transition-colors ${order.consumptionType === "TAKEOUT" ? "text-amber-700 bg-amber-50" : "text-slate-600 hover:bg-slate-50"}`}
+                          >
+                            <Package className="w-3 h-3" /> Para viagem
+                          </button>
+                        </motion.div>
+                      </>
+                    )}
+                  </AnimatePresence>
+                </div>
               )}
             </div>
             <p className="text-[10px] text-slate-400 font-medium mt-0.5 truncate">

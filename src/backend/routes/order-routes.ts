@@ -53,6 +53,12 @@ export interface RegisterOrderRoutesOptions {
     tenantId: string,
     inventoryItemId: string,
   ) => Promise<void>;
+  deductSelectedExtrasStock: (
+    tenantId: string,
+    tenantWhatsapp: string | null | undefined,
+    item: { selectedExtras?: string | null; quantity: number },
+    orderId: string,
+  ) => Promise<void>;
 }
 
 export function registerOrderRoutes({
@@ -66,6 +72,7 @@ export function registerOrderRoutes({
   requireTenantFromOrder,
   updateOrderStatus,
   emitInventoryRestockSideEffects,
+  deductSelectedExtrasStock,
 }: RegisterOrderRoutesOptions) {
   app.post("/api/orders", async (req, res) => {
     console.log("Incoming Order Body:", JSON.stringify(req.body, null, 2));
@@ -249,6 +256,14 @@ export function registerOrderRoutes({
         });
       });
 
+      // Dá baixa nos insumos vinculados aos adicionais selecionados (ex: kit de embalagem
+      // do "Para viagem") — faltava aqui: só o PDV descontava isso, então um pedido criado
+      // pelo cardápio público/balcão digital já marcado como TAKEOUT nunca consumia a
+      // embalagem do estoque, mesmo o cliente levando o produto embalado de verdade.
+      for (const item of order.items) {
+        await deductSelectedExtrasStock(tenantId, order.tenant?.whatsapp, item, order.id);
+      }
+
       io.to(`tenant-${tenant.id}`).emit("new-order", order);
       io.to(`tenant-${tenant.id}`).emit("order-created", order);
       if (order.tableId) {
@@ -370,6 +385,86 @@ export function registerOrderRoutes({
     } catch (error) {
       console.error(error);
       res.status(500).json({ error: "Failed to update order status" });
+    }
+  });
+
+  // Corrige "Local"/"Para viagem" depois que o pedido já foi lançado (ex: operador
+  // esqueceu de marcar no balcão, ou o cliente mudou de ideia). Reaplica os adicionais
+  // com autoApplyOnTakeout (o kit de embalagem) e ajusta o estoque na hora — sem isso,
+  // corrigir manualmente exigiria excluir e recriar o pedido inteiro. Só toca nos
+  // adicionais automáticos do kit de viagem; nunca remove um adicional que o cliente
+  // escolheu manualmente (ex: "Sem cebola").
+  app.patch("/api/orders/:id/consumption-type", requireAuth, async (req, res) => {
+    const tenantOrder = await requireTenantFromOrder(req, res, req.params.id);
+    if (!tenantOrder) return;
+
+    const { order, tenant } = tenantOrder;
+    const { consumptionType } = req.body as { consumptionType?: string };
+
+    if (consumptionType !== "EAT_IN" && consumptionType !== "TAKEOUT") {
+      return res.status(400).json({ error: "Informe se é para comer no local ou para viagem." });
+    }
+    if (consumptionType === order.consumptionType) {
+      return res.json(order);
+    }
+
+    try {
+      for (const item of order.items) {
+        // resolveSelectedExtras só deve receber o que foi escolhido MANUALMENTE — os
+        // autoApplyOnTakeout ela mesma adiciona a partir do consumptionType. O snapshot
+        // salvo em selectedExtras já inclui o kit de viagem resolvido de antes, então
+        // precisamos tirá-lo daqui antes de recalcular, senão ele nunca é reconhecido
+        // como algo que pode sair ao voltar para EAT_IN (ficava preso pra sempre).
+        let savedExtras: any[] = [];
+        try { savedExtras = item.selectedExtras ? JSON.parse(item.selectedExtras) : []; } catch { savedExtras = []; }
+        const manuallySelected = savedExtras.filter((e: any) => !e?.autoApplyOnTakeout);
+
+        const previousExtras = resolveSelectedExtras(item.product?.extras, manuallySelected, order.consumptionType);
+        const nextExtras = resolveSelectedExtras(item.product?.extras, manuallySelected, consumptionType);
+
+        const previousIds = new Set(previousExtras.map((e) => e.id));
+        const nextIds = new Set(nextExtras.map((e) => e.id));
+
+        // Só o kit automático de viagem entra/sai sozinho — o que o cliente escolheu
+        // manualmente (não tem autoApplyOnTakeout) nunca muda aqui.
+        const added = nextExtras.filter((e) => e.autoApplyOnTakeout && !previousIds.has(e.id));
+        const removed = previousExtras.filter((e) => e.autoApplyOnTakeout && !nextIds.has(e.id));
+
+        for (const extra of added) {
+          await deductSelectedExtrasStock(
+            tenant.id,
+            tenant.whatsapp,
+            { selectedExtras: JSON.stringify([extra]), quantity: item.quantity },
+            order.id
+          );
+        }
+        for (const extra of removed) {
+          await restockSelectedExtras(
+            prisma,
+            tenant.id,
+            order.id,
+            { selectedExtras: JSON.stringify([extra]) },
+            item.quantity
+          );
+        }
+
+        await prisma.orderItem.update({
+          where: { id: item.id },
+          data: { selectedExtras: nextExtras.length > 0 ? JSON.stringify(nextExtras) : null },
+        });
+      }
+
+      const updatedOrder = await prisma.order.update({
+        where: { id: order.id },
+        data: { consumptionType },
+        include: { items: { include: { product: true, productVariant: true } }, tenant: true },
+      });
+
+      io.to(`tenant-${tenant.id}`).emit("order-status-updated", updatedOrder);
+      res.json(updatedOrder);
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Falha ao atualizar o tipo de consumo do pedido." });
     }
   });
 
