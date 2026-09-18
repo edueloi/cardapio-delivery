@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { Suspense, useState, useEffect, useCallback, useMemo } from "react";
 import {
   Wallet, ArrowDownCircle, ArrowUpCircle, Lock, Unlock,
   TrendingUp, Banknote, CreditCard, QrCode, Receipt, History,
-  CheckCircle2, CalendarDays, Filter, AlertCircle, RefreshCw,
-  ArrowLeftRight, ChevronRight, ChevronDown, Tag, Percent, Printer,
+  CheckCircle2, AlertCircle, RefreshCw,
+  ArrowLeftRight, ChevronRight, ChevronDown, Tag, Percent,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -11,10 +11,13 @@ import {
   Modal, ModalFooter, Button, Input, EmptyState, Switch,
   useToast,
 } from "../../../../components";
-import { DatePicker } from "../../../../components/DatePicker";
 import { apiFetch, apiJson } from "../../../../lib/api";
 import { printCashClosingReportPdf } from "../../../../lib/receipt";
 import type { Tenant, CashRegister, CashMovement } from "../../../../types";
+
+// Carregado sob demanda: recharts + exceljs só pesam no bundle quando a aba
+// Histórico é de fato aberta, não no carregamento inicial do Financeiro.
+const CashHistoryPanel = React.lazy(() => import("./CashHistoryPanel"));
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
@@ -230,113 +233,11 @@ function MovementRow({ m, onCancelOrder }: { m: CashMovement; onCancelOrder?: (o
   );
 }
 
-// ─── Card de histórico ───────────────────────────────────────────────────────
-function HistoryCard({ h, onCancelOrder, onPrint }: { h: CashRegister & { movements?: CashMovement[] }; onCancelOrder?: (order: any) => void; onPrint?: (register: CashRegister & { movements?: CashMovement[] }) => void }) {
-  const diff = h.closingBalance != null && h.expectedBalance != null ? h.closingBalance - h.expectedBalance : null;
-  const vendas = h.movements?.reduce((sum, m) => sum + (m.type.startsWith("PAYMENT_") ? m.amount : m.type.startsWith("REFUND_") ? -m.amount : 0), 0) ?? 0;
-  const vendasDinheiro = h.movements?.reduce((sum, m) => sum + (m.type === "PAYMENT_CASH" ? m.amount : m.type === "REFUND_CASH" ? -m.amount : 0), 0) ?? 0;
-  const isOk = diff == null || Math.abs(diff) < 0.01;
-  const breakdown = h.paymentBreakdown || {};
-  const totalFees = Object.values(breakdown).reduce((sum, value) => sum + (value.fee || 0), 0);
-
-  return (
-    <div className="rounded-2xl border border-slate-100 bg-white overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center gap-4 px-5 py-4 border-b border-slate-50">
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isOk ? "bg-green-100" : "bg-red-50"}`}>
-          <History className={`w-4 h-4 ${isOk ? "text-green-600" : "text-red-500"}`} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold text-slate-800">
-            {new Date(h.openedAt).toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })}
-          </p>
-          <p className="text-[11px] text-slate-400">
-            {fmtTime(h.openedAt)} → {h.closedAt ? fmtTime(h.closedAt) : "Aberto"}
-          </p>
-          <p className="text-[10px] text-slate-400 mt-0.5 space-y-0.5">
-            {(h.openedByName || h.operatorName) && (
-              <span className="block">
-                Abriu: <strong className="text-slate-500">{h.openedByName || h.operatorName}</strong>
-                {h.openedByEmail ? ` (${h.openedByEmail})` : ""}
-              </span>
-            )}
-            {h.closedByName && (
-              <span className="block">
-                Fechou: <strong className="text-slate-500">{h.closedByName}</strong>
-                {h.closedByEmail ? ` (${h.closedByEmail})` : ""}
-              </span>
-            )}
-          </p>
-        </div>
-        <div className="text-right shrink-0">
-          <p className="text-sm font-black text-slate-800">{fmt(vendas)}</p>
-          {diff !== null && (
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full inline-block mt-0.5 ${isOk ? "bg-green-50 text-green-600" : diff < 0 ? "bg-red-50 text-red-600" : "bg-orange-50 text-orange-600"}`}>
-              {diff > 0 ? "+" : ""}{fmt(diff)}
-            </span>
-          )}
-          <button type="button" onClick={() => onPrint?.(h)} className="mt-2 inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-slate-400 hover:text-[#C9A227]">
-            <Printer className="h-3.5 w-3.5" /> Imprimir
-          </button>
-        </div>
-      </div>
-      {h.paymentBreakdown && Object.keys(h.paymentBreakdown).length > 0 && (
-        <div className="border-t border-slate-50 px-5 py-3">
-          <p className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Conferência por pagamento</p>
-          <div className="overflow-x-auto rounded-xl border border-slate-100">
-            <table className="w-full min-w-[620px] text-[11px] tabular-nums">
-              <thead className="bg-slate-50 text-[9px] font-black uppercase tracking-wider text-slate-400"><tr><th className="px-3 py-2 text-left">Método</th><th className="px-3 py-2 text-right">Esperado</th><th className="px-3 py-2 text-right">Taxa</th><th className="px-3 py-2 text-right">Líquido</th><th className="px-3 py-2 text-right">Contado</th><th className="px-3 py-2 text-right">Diferença</th></tr></thead>
-              <tbody>
-            {Object.entries(h.paymentBreakdown).map(([method, values]) => (
-              <tr key={method} className="border-t border-slate-100">
-                <td className="px-3 py-2 font-bold text-slate-600">{MOVEMENT_META[`PAYMENT_${method}`]?.label || method}</td>
-                <td className="px-3 py-2 text-right text-slate-600">{fmt(values.expected)}</td>
-                <td className="px-3 py-2 text-right text-amber-600">{values.fee ? `−${fmt(values.fee)}` : "—"}</td>
-                <td className="px-3 py-2 text-right text-slate-600">{values.net != null ? fmt(values.net) : "—"}</td>
-                <td className="px-3 py-2 text-right text-slate-600">{values.counted != null ? fmt(values.counted) : "—"}</td>
-                <td className={`px-3 py-2 text-right font-bold ${values.difference == null ? "text-slate-300" : Math.abs(values.difference) < 0.01 ? "text-green-600" : values.difference < 0 ? "text-red-600" : "text-orange-600"}`}>{values.difference != null ? `${values.difference > 0 ? "+" : ""}${fmt(values.difference)}` : "—"}</td>
-              </tr>
-            ))}
-              </tbody>
-              {totalFees > 0 && <tfoot><tr className="border-t-2 border-slate-200 bg-slate-50"><td className="px-3 py-2 text-[9px] font-black uppercase tracking-wider text-slate-600">Total de taxas</td><td colSpan={2} className="px-3 py-2 text-right font-bold text-amber-600">−{fmt(totalFees)}</td><td colSpan={3} className="px-3 py-2 text-right font-bold text-slate-700">Líquido: {fmt(vendas - totalFees)}</td></tr></tfoot>}
-            </table>
-          </div>
-        </div>
-      )}
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 divide-x divide-y sm:divide-y-0 divide-slate-50">
-        {[
-          { label: "Fundo", value: fmt(h.openingBalance), color: "text-slate-700" },
-          { label: "Vendas dinheiro", value: fmt(vendasDinheiro), color: "text-green-700" },
-          { label: "Esperado", value: fmt(h.expectedBalance ?? 0), color: "text-[#C9A227]" },
-          { label: "Contado", value: fmt(h.closingBalance ?? 0), color: isOk ? "text-green-700" : "text-red-600" },
-          { label: diff == null ? "Diferença" : diff < 0 ? "Falta" : diff > 0 ? "Sobra" : "Confere", value: diff == null ? "—" : fmt(Math.abs(diff)), color: isOk ? "text-green-700" : "text-red-600" },
-        ].map(({ label, value, color }) => (
-          <div key={label} className="px-4 py-3 text-center">
-            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">{label}</p>
-            <p className={`text-sm font-black ${color}`}>{value}</p>
-          </div>
-        ))}
-      </div>
-      {/* Movimentos */}
-      {h.movements && h.movements.length > 0 && (
-        <div className="border-t border-slate-50 py-1">
-          {h.movements.map(m => <MovementRow key={m.id} m={m} onCancelOrder={onCancelOrder} />)}
-        </div>
-      )}
-      {h.notes && (
-        <p className="px-5 pb-3 text-xs text-slate-400 italic">{h.notes}</p>
-      )}
-    </div>
-  );
-}
-
 // ─── Componente principal ────────────────────────────────────────────────────
 export default function CashFlowPanel({ slug, tenant }: CashFlowPanelProps) {
   const toast = useToast();
   const [currentCash, setCurrentCash] = useState<CashRegister | null>(null);
   const [movements,   setMovements]   = useState<CashMovement[]>([]);
-  const [history,     setHistory]     = useState<(CashRegister & { movements?: CashMovement[] })[]>([]);
   const [summary,     setSummary]     = useState<Summary | null>(null);
   const [loading,     setLoading]     = useState(true);
   const [activeTab,   setActiveTab]   = useState<"caixa" | "historico">("caixa");
@@ -380,22 +281,14 @@ export default function CashFlowPanel({ slug, tenant }: CashFlowPanelProps) {
     setSummary(res.ok ? await res.json() : null);
   }, [slug, dateFrom, dateTo]);
 
-  const fetchHistorico = useCallback(async () => {
-    const params = new URLSearchParams();
-    if (dateFrom) params.set("from", dateFrom);
-    if (dateTo)   params.set("to",   dateTo);
-    const res = await apiFetch(`/api/tenants/${slug}/cash/history?${params}`);
-    setHistory(res.ok ? await res.json() : []);
-  }, [slug, dateFrom, dateTo]);
-
   const fetchAll = useCallback(async () => {
     setLoading(true);
-    try { await Promise.all([fetchCaixa(), fetchResumo(), fetchHistorico()]); }
+    try { await Promise.all([fetchCaixa(), fetchResumo()]); }
     finally { setLoading(false); }
-  }, [fetchCaixa, fetchResumo, fetchHistorico]);
+  }, [fetchCaixa, fetchResumo]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
-  useEffect(() => { if (!loading) { fetchResumo(); fetchHistorico(); } }, [dateFrom, dateTo]);
+  useEffect(() => { if (!loading) { fetchResumo(); } }, [dateFrom, dateTo]);
 
   const paymentTotals = useMemo(() =>
     movements.reduce<Record<string, number>>((acc, m) => {
@@ -476,34 +369,6 @@ export default function CashFlowPanel({ slug, tenant }: CashFlowPanelProps) {
     finally { setMovementLoading(false); }
   };
 
-  const handlePrintHistoryClosing = (register: CashRegister & { movements?: CashMovement[] }) => {
-    const totals = (register.movements || []).reduce<Record<string, number>>((acc, movement) => {
-      if (movement.type.startsWith("PAYMENT_")) acc[movement.type] = (acc[movement.type] || 0) + movement.amount;
-      if (movement.type.startsWith("REFUND_")) {
-        const paymentType = movement.type.replace("REFUND_", "PAYMENT_");
-        acc[paymentType] = (acc[paymentType] || 0) - movement.amount;
-      }
-      return acc;
-    }, {});
-    const payments = Object.entries(totals).map(([type, total]) => ({ method: type.replace("PAYMENT_", ""), total }));
-    const orderIds = new Set((register.movements || []).filter((m) => m.type.startsWith("PAYMENT_")).map((m) => m.orderId || m.description));
-    const summaryData = {
-      openedAt: register.openedAt,
-      closedAt: register.closedAt,
-      openingBalance: register.openingBalance,
-      closingBalance: register.closingBalance ?? 0,
-      expectedBalance: register.expectedBalance ?? 0,
-      ordersCount: orderIds.size,
-      grossTotal: payments.reduce((sum, entry) => sum + entry.total, 0),
-      salesByMethod: payments,
-      movements: (register.movements || []).filter((m) => m.type === "SANGRIA" || m.type === "SUPRIMENTO").map((m) => ({ type: m.type, amount: m.amount, description: m.description })),
-      paymentBreakdown: register.paymentBreakdown || undefined,
-    };
-    const desktop = (window as any).pdvDesktop;
-    if (desktop?.printCashClosingReport) desktop.printCashClosingReport(tenant.name, summaryData);
-    else printCashClosingReportPdf(tenant.name, summaryData, (tenant.receiptPaperWidth === 58 ? 58 : 80) as 58 | 80);
-  };
-
   const handleCancelOrder = async () => {
     if (!cancelOrder || !cancelPassword) return;
     setCancelling(true);
@@ -513,23 +378,6 @@ export default function CashFlowPanel({ slug, tenant }: CashFlowPanelProps) {
       setCancelOrder(null); setCancelPassword(""); await fetchAll();
     } catch (err: any) { toast.error(err?.message || "Não foi possível cancelar o pedido."); }
     finally { setCancelling(false); }
-  };
-
-  const setPreset = (preset: "today" | "week" | "month" | "last-month") => {
-    const now = new Date();
-    if (preset === "today") {
-      setDateFrom(todayISO()); setDateTo(todayISO());
-    } else if (preset === "week") {
-      const start = new Date(now); start.setDate(now.getDate() - now.getDay());
-      setDateFrom(start.toISOString().split("T")[0]); setDateTo(todayISO());
-    } else if (preset === "month") {
-      setDateFrom(firstOfMonthISO()); setDateTo(todayISO());
-    } else {
-      const first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const last  = new Date(now.getFullYear(), now.getMonth(), 0);
-      setDateFrom(first.toISOString().split("T")[0]);
-      setDateTo(last.toISOString().split("T")[0]);
-    }
   };
 
   if (loading) {
@@ -695,61 +543,14 @@ export default function CashFlowPanel({ slug, tenant }: CashFlowPanelProps) {
 
       {/* ══════ TAB: HISTÓRICO ══════ */}
       {activeTab === "historico" && (
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
-
-          {/* Filtros */}
-          <div className="bg-white rounded-2xl border border-slate-100 p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <Filter className="w-4 h-4 text-slate-400" />
-              <p className="text-sm font-bold text-slate-700">Filtrar período</p>
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+          <Suspense fallback={
+            <div className="flex items-center justify-center h-64">
+              <div className="w-8 h-8 border-4 border-[#C9A227] border-t-transparent rounded-full animate-spin" />
             </div>
-            <div className="flex flex-wrap gap-2 mb-4">
-              {[
-                { id: "today", label: "Hoje" },
-                { id: "week",  label: "Esta semana" },
-                { id: "month", label: "Este mês" },
-                { id: "last-month", label: "Mês anterior" },
-              ].map(p => (
-                <button key={p.id} onClick={() => setPreset(p.id as any)}
-                  className="px-3 py-1.5 rounded-full border border-slate-200 text-[11px] font-semibold text-slate-500 hover:border-[#C9A227] hover:text-[#C9A227] transition-all"
-                >{p.label}</button>
-              ))}
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <DatePicker label="De" value={dateFrom} onChange={setDateFrom} max={dateTo ?? undefined} />
-              <DatePicker label="Até" value={dateTo} onChange={setDateTo} min={dateFrom ?? undefined} />
-            </div>
-          </div>
-
-          {/* KPIs do período */}
-          {summary && (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {[
-                { label: "Receita Total",    value: fmt(summary.totalRevenue),    color: "text-green-700",   bg: "bg-green-50 border-green-100",  icon: TrendingUp },
-                { label: "Pedidos",          value: summary.orderCount.toString(),color: "text-blue-700",    bg: "bg-blue-50 border-blue-100",    icon: Receipt },
-                { label: "Sangrias",         value: fmt(summary.totalSangrias),   color: "text-red-600",     bg: "bg-red-50 border-red-100",      icon: ArrowUpCircle },
-                { label: "Saldo Líquido",    value: fmt(summary.netBalance),      color: "text-[#C9A227]",   bg: "bg-amber-50 border-amber-100",  icon: Wallet },
-              ].map(({ label, value, color, bg, icon: Icon }) => (
-                <div key={label} className={`rounded-2xl border p-4 ${bg}`}>
-                  <Icon className={`w-5 h-5 mb-2 ${color}`} />
-                  <p className={`text-xl font-black ${color}`}>{value}</p>
-                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mt-1">{label}</p>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Lista de fechamentos */}
-          {history.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-slate-300">
-              <History className="w-10 h-10 mb-3" />
-              <p className="text-sm font-medium">Nenhum fechamento no período</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {history.map(h => <HistoryCard key={h.id} h={h} onPrint={handlePrintHistoryClosing} onCancelOrder={(order) => { setCancelOrder(order); setCancelPassword(""); setRestockInventory(true); }} />)}
-            </div>
-          )}
+          }>
+            <CashHistoryPanel tenant={tenant} />
+          </Suspense>
         </motion.div>
       )}
 

@@ -405,7 +405,10 @@ export function registerCashRoutes({
 
     try {
       const { from, to } = req.query as { from?: string; to?: string };
-      const where: any = { tenantId: tenant.id, status: "CLOSED" };
+      // Sem filtrar por status: a tela de Histórico de Caixa também precisa listar
+      // a sessão aberta atual (com o contador "Caixas Abertos" e o filtro de status
+      // "Aberto/Fechado/Todos") — filtrar CLOSED aqui sempre zerava esse contador.
+      const where: any = { tenantId: tenant.id };
       if (from || to) {
         where.openedAt = {};
         if (from) where.openedAt.gte = new Date(from + "T00:00:00");
