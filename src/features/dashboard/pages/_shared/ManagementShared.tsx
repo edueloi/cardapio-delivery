@@ -92,7 +92,7 @@ export function ImageUploader({ value, onChange, label, description }: { value: 
 
   return (
     <div className="space-y-2">
-      <label className="block text-[11px] font-black uppercase text-slate-600 tracking-widest px-1">{label}</label>
+      {label && <label className="block text-[11px] font-black uppercase text-slate-600 tracking-widest px-1">{label}</label>}
       <div className="flex flex-col sm:flex-row items-start gap-4">
         <div className="relative w-24 h-24 rounded-3xl bg-slate-100 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden group shrink-0 shadow-inner">
           {uploading ? (
@@ -305,70 +305,70 @@ export function InventoryLinkField({
       )}
 
       {/* Modal de seleção */}
-      <Modal isOpen={open} onClose={() => { setOpen(false); setSearch(""); setCategoryFilter("all"); }} title="Vincular ao Estoque" size="md" mobileStyle="bottom-sheet"
+      <Modal isOpen={open} onClose={() => { setOpen(false); setSearch(""); setCategoryFilter("all"); }} title="Vincular ao Estoque" size="sm" mobileStyle="bottom-sheet"
         footer={<ModalFooter><Button variant="ghost" onClick={() => { onChange(""); setOpen(false); setSearch(""); setCategoryFilter("all"); }}>Remover vínculo</Button><Button variant="outline" onClick={() => { setOpen(false); setSearch(""); setCategoryFilter("all"); }}>Fechar</Button></ModalFooter>}
       >
-        <div className="space-y-3 p-1">
-          <input
-            autoFocus
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar item..."
-            className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400"
-          />
-          {inventoryCategories.length > 0 && (
-            <select
-              value={categoryFilter}
-              onChange={e => setCategoryFilter(e.target.value)}
-              className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400"
-            >
-              <option value="all">Todas as categorias</option>
-              {inventoryCategories.map((cat: any) => (
-                <option key={cat.id} value={cat.id}>{cat.name}</option>
-              ))}
-            </select>
-          )}
-          <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
+        <div className="space-y-2 p-1">
+          <div className="flex gap-2">
+            <input
+              autoFocus
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar item..."
+              className="flex-1 min-w-0 bg-zinc-50 border border-zinc-200 rounded-lg px-2.5 py-1.5 text-[13px] font-semibold focus:outline-none focus:ring-2 focus:ring-amber-400"
+            />
+            {inventoryCategories.length > 0 && (
+              <select
+                value={categoryFilter}
+                onChange={e => setCategoryFilter(e.target.value)}
+                className="w-32 shrink-0 bg-zinc-50 border border-zinc-200 rounded-lg px-2 py-1.5 text-[12px] font-semibold focus:outline-none focus:ring-2 focus:ring-amber-400"
+              >
+                <option value="all">Categorias</option>
+                {inventoryCategories.map((cat: any) => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
+              </select>
+            )}
+          </div>
+          <div className="max-h-[55vh] overflow-y-auto rounded-lg border border-zinc-100 divide-y divide-zinc-100">
             <button
               type="button"
               onClick={() => { onChange(""); setOpen(false); setSearch(""); setCategoryFilter("all"); }}
-              className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-left transition-colors ${!value ? "bg-amber-50 border border-amber-200 text-amber-800" : "hover:bg-slate-50 text-slate-500"}`}
+              className={`w-full flex items-center px-2.5 py-2 text-[13px] font-semibold text-left transition-colors ${!value ? "bg-amber-50 text-amber-800" : "hover:bg-slate-50 text-slate-500"}`}
             >
               Sem vínculo de estoque
             </button>
             {groupedFiltered.map(group => (
               <div key={group.label}>
                 {categoryFilter === "all" && (
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1 mb-1">{group.label}</p>
+                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 bg-slate-50/80 px-2.5 py-1 sticky top-0">{group.label}</p>
                 )}
-                <div className="space-y-2">
-                  {group.items.map((item: any) => {
-                    const alreadyUsed = usedItemIds.has(item.id);
-                    const isSelected = value === item.id;
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        disabled={alreadyUsed && !isSelected}
-                        onClick={() => { onChange(item.id); setOpen(false); setSearch(""); setCategoryFilter("all"); }}
-                        className={`w-full flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm text-left transition-colors ${
-                          isSelected ? "bg-amber-50 border border-amber-200" :
-                          alreadyUsed ? "opacity-50 cursor-not-allowed bg-slate-50" :
-                          "hover:bg-slate-50 border border-transparent"
-                        }`}
-                      >
-                        <div className="flex-1 min-w-0">
-                          <p className="font-black text-slate-800 truncate">{item.name}</p>
-                          <p className={`text-[10px] font-black uppercase ${item.quantity <= 0 ? "text-red-500" : item.quantity < 5 ? "text-amber-500" : "text-green-600"}`}>
-                            {item.quantity <= 0 ? "Esgotado" : `${item.quantity} ${item.unit || 'un'}`}
-                          </p>
-                          {alreadyUsed && !isSelected && <p className="text-[10px] text-slate-400 font-semibold">Já vinculado a outro produto</p>}
-                        </div>
-                        {isSelected && <CheckCircle2 className="w-4 h-4 text-amber-500 shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </div>
+                {group.items.map((item: any) => {
+                  const alreadyUsed = usedItemIds.has(item.id);
+                  const isSelected = value === item.id;
+                  const statusLabel = item.quantity <= 0 ? "Esgotado" : `${item.quantity} ${item.unit || 'un'}`;
+                  const statusColor = item.quantity <= 0 ? "text-red-500" : item.quantity < 5 ? "text-amber-500" : "text-green-600";
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      disabled={alreadyUsed && !isSelected}
+                      onClick={() => { onChange(item.id); setOpen(false); setSearch(""); setCategoryFilter("all"); }}
+                      className={`w-full flex items-center gap-2 px-2.5 py-2 text-left transition-colors ${
+                        isSelected ? "bg-amber-50" :
+                        alreadyUsed ? "opacity-45 cursor-not-allowed" :
+                        "hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] font-semibold text-slate-800 truncate leading-tight">{item.name}</p>
+                        {alreadyUsed && !isSelected && <p className="text-[10px] text-slate-400 leading-tight">Já vinculado a outro produto</p>}
+                      </div>
+                      <span className={`text-[10px] font-bold uppercase shrink-0 ${statusColor}`}>{statusLabel}</span>
+                      {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
+                    </button>
+                  );
+                })}
               </div>
             ))}
             {filtered.length === 0 && (
@@ -448,22 +448,22 @@ export function ProductionLinkField({
       )}
 
       {/* Modal de seleção */}
-      <Modal isOpen={open} onClose={() => { setOpen(false); setSearch(""); }} title="Vincular à Produção" size="md" mobileStyle="bottom-sheet"
+      <Modal isOpen={open} onClose={() => { setOpen(false); setSearch(""); }} title="Vincular à Produção" size="sm" mobileStyle="bottom-sheet"
         footer={<ModalFooter><Button variant="ghost" onClick={() => { onChange(""); setOpen(false); setSearch(""); }}>Remover vínculo</Button><Button variant="outline" onClick={() => { setOpen(false); setSearch(""); }}>Fechar</Button></ModalFooter>}
       >
-        <div className="space-y-3 p-1">
+        <div className="space-y-2 p-1">
           <input
             autoFocus
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Buscar receita..."
-            className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-orange-400"
+            className="w-full bg-zinc-50 border border-zinc-200 rounded-lg px-2.5 py-1.5 text-[13px] font-semibold focus:outline-none focus:ring-2 focus:ring-orange-400"
           />
-          <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
+          <div className="max-h-[55vh] overflow-y-auto rounded-lg border border-zinc-100 divide-y divide-zinc-100">
             <button
               type="button"
               onClick={() => { onChange(""); setOpen(false); setSearch(""); }}
-              className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-left transition-colors ${!value ? "bg-orange-50 border border-orange-200 text-orange-800" : "hover:bg-slate-50 text-slate-500"}`}
+              className={`w-full flex items-center px-2.5 py-2 text-[13px] font-semibold text-left transition-colors ${!value ? "bg-orange-50 text-orange-800" : "hover:bg-slate-50 text-slate-500"}`}
             >
               Sem vínculo de produção
             </button>
@@ -476,21 +476,21 @@ export function ProductionLinkField({
                   type="button"
                   disabled={alreadyUsed && !isSelected}
                   onClick={() => { onChange(recipe.id); setOpen(false); setSearch(""); }}
-                  className={`w-full flex items-start justify-between gap-3 rounded-xl px-3 py-2.5 text-sm text-left transition-colors ${
-                    isSelected ? "bg-orange-50 border border-orange-200" :
-                    alreadyUsed ? "opacity-50 cursor-not-allowed bg-slate-50" :
-                    "hover:bg-slate-50 border border-transparent"
+                  className={`w-full flex items-start gap-2 px-2.5 py-2 text-left transition-colors ${
+                    isSelected ? "bg-orange-50" :
+                    alreadyUsed ? "opacity-45 cursor-not-allowed" :
+                    "hover:bg-slate-50"
                   }`}
                 >
                   <div className="flex-1 min-w-0">
-                    <p className="font-black text-slate-800">{recipe.name}</p>
-                    <p className="text-[10px] text-orange-600 font-semibold">Rende {recipe.outputQuantity} {recipe.outputUnit}</p>
+                    <p className="text-[13px] font-semibold text-slate-800 leading-tight">{recipe.name}</p>
+                    <p className="text-[10px] text-orange-600 font-semibold leading-tight">Rende {recipe.outputQuantity} {recipe.outputUnit}</p>
                     {recipe.ingredients?.length > 0 && (
-                      <p className="text-[10px] text-slate-400 truncate">Insumos: {recipe.ingredients.map((i: any) => i.itemName).join(", ")}</p>
+                      <p className="text-[10px] text-slate-400 truncate leading-tight">Insumos: {recipe.ingredients.map((i: any) => i.itemName).join(", ")}</p>
                     )}
-                    {alreadyUsed && !isSelected && <p className="text-[10px] text-slate-400 font-semibold">Já vinculado a outro produto</p>}
+                    {alreadyUsed && !isSelected && <p className="text-[10px] text-slate-400 leading-tight">Já vinculado a outro produto</p>}
                   </div>
-                  {isSelected && <CheckCircle2 className="w-4 h-4 text-orange-500 shrink-0 mt-0.5" />}
+                  {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-orange-500 shrink-0 mt-0.5" />}
                 </button>
               );
             })}
@@ -568,51 +568,51 @@ export function InventoryItemPickerModal({
       isOpen={isOpen}
       onClose={handleClose}
       title={title}
-      size="md"
-      mobileStyle="bottom-sheet"
+      size="sm"
+      mobileStyle="center"
       footer={<ModalFooter><Button variant="outline" onClick={handleClose}>Fechar</Button></ModalFooter>}
     >
-      <div className="space-y-2.5 p-1">
-        <input
-          autoFocus
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Buscar item..."
-          className={`w-full bg-zinc-50 border ${colors.border} rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 ${colors.ring}`}
-        />
-        {inventoryCategories.length > 0 && (
-          <select
-            value={categoryFilter}
-            onChange={e => setCategoryFilter(e.target.value)}
-            className={`w-full bg-zinc-50 border ${colors.border} rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 ${colors.ring}`}
-          >
-            <option value="all">Todas as categorias</option>
-            {inventoryCategories.map((cat: any) => (
-              <option key={cat.id} value={cat.id}>{cat.name}</option>
-            ))}
-          </select>
-        )}
-        <div className="space-y-2.5 max-h-[50vh] overflow-y-auto pr-1">
+      <div className="space-y-2 p-1">
+        <div className="flex gap-2">
+          <input
+            autoFocus
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar item..."
+            className={`flex-1 min-w-0 bg-zinc-50 border ${colors.border} rounded-lg px-2.5 py-1.5 text-[13px] font-semibold focus:outline-none focus:ring-2 ${colors.ring}`}
+          />
+          {inventoryCategories.length > 0 && (
+            <select
+              value={categoryFilter}
+              onChange={e => setCategoryFilter(e.target.value)}
+              className={`w-32 shrink-0 bg-zinc-50 border ${colors.border} rounded-lg px-2 py-1.5 text-[12px] font-semibold focus:outline-none focus:ring-2 ${colors.ring}`}
+            >
+              <option value="all">Categorias</option>
+              {inventoryCategories.map((cat: any) => (
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
+              ))}
+            </select>
+          )}
+        </div>
+        <div className="max-h-[55vh] overflow-y-auto rounded-lg border border-zinc-100 divide-y divide-zinc-100">
           {groupedFiltered.map(group => (
             <div key={group.label}>
               {categoryFilter === "all" && (
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1 mb-1">{group.label}</p>
+                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 bg-slate-50/80 px-2.5 py-1 sticky top-0">{group.label}</p>
               )}
-              <div className="space-y-1.5">
-                {group.items.map((item: any) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => { onPick(item); handleClose(); }}
-                    className="w-full flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm text-left hover:bg-slate-50 border border-transparent transition-colors"
-                  >
-                    <p className="flex-1 min-w-0 font-black text-slate-800 truncate text-[13px]">{item.name}</p>
-                    <p className={`text-[10px] font-black uppercase shrink-0 ${item.quantity <= 0 ? "text-red-500" : item.quantity < 5 ? "text-amber-500" : "text-green-600"}`}>
-                      {item.quantity <= 0 ? "Esgotado" : `${item.quantity} ${item.unit || 'un'}`}
-                    </p>
-                  </button>
-                ))}
-              </div>
+              {group.items.map((item: any) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => { onPick(item); handleClose(); }}
+                  className="w-full flex items-center gap-2 px-2.5 py-2 text-left hover:bg-slate-50 transition-colors"
+                >
+                  <p className="flex-1 min-w-0 text-[13px] font-semibold text-slate-800 truncate leading-tight">{item.name}</p>
+                  <span className={`text-[10px] font-bold uppercase shrink-0 ${item.quantity <= 0 ? "text-red-500" : item.quantity < 5 ? "text-amber-500" : "text-green-600"}`}>
+                    {item.quantity <= 0 ? "Esgotado" : `${item.quantity} ${item.unit || 'un'}`}
+                  </span>
+                </button>
+              ))}
             </div>
           ))}
           {filtered.length === 0 && (

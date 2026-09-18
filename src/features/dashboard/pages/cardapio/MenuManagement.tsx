@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import {
   DndContext,
   DragOverlay,
@@ -18,8 +18,9 @@ import {
   CheckCircle2,
   CircleDollarSign,
   Eye,
-  FileText,
+  Image as ImageIcon,
   List,
+  Luggage,
   Package,
   Plus,
   Search,
@@ -32,7 +33,6 @@ import {
   Badge,
   Button,
   ConfirmModal,
-  ContentCard,
   CurrencyInput,
   FilterLineSegmented,
   Input,
@@ -49,8 +49,6 @@ import { apiFetch } from "../../../../lib/api";
 import { ProductExtraStockLink, Tenant } from "../../../../types";
 import { canAccess, type MyMembership } from "../../types";
 import {
-  ImageUploader,
-  InventoryLinkField,
   RecipeIngredientDraft,
   RecipeIngredientsField,
   StockLinksField,
@@ -286,6 +284,263 @@ function SortableCategoryCard({
   );
 }
 
+const MAX_UPLOAD_SIZE_MB = 5;
+
+// Foto do produto — empilhada (foto grande em cima, texto embaixo), feita sob medida
+// pra coluna estreita de identidade do modal de produto. O ImageUploader compartilhado
+// é flex-row em telas sm:, o que espreme demais o texto numa coluna de 260px.
+function ProductPhotoField({ value, onChange }: { value: string; onChange: (val: string) => void }) {
+  const toast = useToast();
+  const [uploading, setUploading] = useState(false);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (file.size > MAX_UPLOAD_SIZE_MB * 1024 * 1024) {
+      toast.error(`Imagem muito grande (máx. ${MAX_UPLOAD_SIZE_MB}MB). Escolha um arquivo menor.`);
+      return;
+    }
+    setUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const res = await apiFetch("/api/upload", { method: "POST", body: formData });
+      if (!res.ok) {
+        if (res.status === 413) throw new Error(`Imagem muito grande (máx. ${MAX_UPLOAD_SIZE_MB}MB).`);
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Erro ao enviar imagem.");
+      }
+      const data = await res.json();
+      if (data.url) onChange(data.url);
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao enviar imagem");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="relative w-full aspect-square rounded-2xl bg-white border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden group shadow-inner">
+        {uploading ? (
+          <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        ) : value ? (
+          <>
+            <img src={value} className="w-full h-full object-cover" alt="Preview" />
+            <div
+              onClick={() => onChange("")}
+              className="absolute inset-0 bg-red-600/80 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer"
+            >
+              <div className="flex flex-col items-center gap-1">
+                <Trash2 className="w-5 h-5" />
+                <span className="text-[9px] font-black uppercase tracking-widest">Remover</span>
+              </div>
+            </div>
+          </>
+        ) : (
+          <label className="cursor-pointer flex flex-col items-center gap-1.5 w-full h-full justify-center hover:bg-slate-50 transition-colors">
+            <ImageIcon className="w-7 h-7 text-slate-300" />
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Trocar foto</span>
+            <input type="file" className="hidden" accept="image/*" onChange={handleFileChange} />
+          </label>
+        )}
+      </div>
+      <p className="text-[10px] text-slate-400 leading-tight">Fotos de alta qualidade convertem mais vendas. Recomendado: quadrada, até {MAX_UPLOAD_SIZE_MB}MB.</p>
+    </div>
+  );
+}
+
+// Modal de escolha de item do estoque — construído do zero (sem o Modal genérico
+// compartilhado) porque o mobileStyle="bottom-sheet" do componente base sobe de baixo
+// mesmo em telas largas; aqui é sempre centralizado com fade+scale.
+function StockPickerModal({
+  open, onClose, inventoryItems, inventoryCategories, usedItemIds, value, onPick,
+}: {
+  open: boolean;
+  onClose: () => void;
+  inventoryItems: any[];
+  inventoryCategories: any[];
+  usedItemIds: Set<string>;
+  value: string;
+  onPick: (id: string) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+
+  useEffect(() => {
+    if (open) { setSearch(""); setCategoryFilter("all"); }
+  }, [open]);
+
+  const saleItems = inventoryItems.filter(item => item.usage !== "INTERNAL");
+  const categoryById = new Map(inventoryCategories.map((cat: any) => [cat.id, cat]));
+  const filtered = saleItems.filter(item =>
+    (!search || item.name.toLowerCase().includes(search.toLowerCase())) &&
+    (categoryFilter === "all" || item.categoryId === categoryFilter)
+  );
+  const groupedFiltered = (() => {
+    const groups = new Map<string, { label: string; items: any[] }>();
+    for (const item of filtered) {
+      const key = item.categoryId || "_none";
+      if (!groups.has(key)) groups.set(key, { label: categoryById.get(item.categoryId)?.name || "Sem categoria", items: [] });
+      groups.get(key)!.items.push(item);
+    }
+    return Array.from(groups.values()).sort((a, b) => a.label.localeCompare(b.label));
+  })();
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
+            onClick={onClose}
+            className="fixed inset-0 z-[110] bg-zinc-900/45 backdrop-blur-[2px]"
+          />
+          <div className="fixed inset-0 z-[111] flex items-center justify-center p-4 pointer-events-none">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ type: "spring", damping: 28, stiffness: 340 }}
+              className="w-full max-w-[420px] max-h-[70vh] bg-white rounded-2xl shadow-2xl border border-zinc-200/60 flex flex-col overflow-hidden pointer-events-auto"
+            >
+              <div className="flex items-center justify-between px-4 py-3.5 border-b border-zinc-100 shrink-0">
+                <h3 className="text-sm font-black text-zinc-900 uppercase tracking-wide">Escolher item do estoque</h3>
+                <button onClick={onClose} aria-label="Fechar" className="p-1.5 -mr-1 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition-colors">
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="p-3 flex gap-2 border-b border-zinc-100 shrink-0">
+                <input
+                  autoFocus
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Buscar item..."
+                  className="flex-1 min-w-0 bg-zinc-50 border border-zinc-200 rounded-lg px-2.5 py-1.5 text-[13px] font-semibold focus:outline-none focus:ring-2 focus:ring-amber-400"
+                />
+                {inventoryCategories.length > 0 && (
+                  <select
+                    value={categoryFilter}
+                    onChange={e => setCategoryFilter(e.target.value)}
+                    className="w-32 shrink-0 bg-zinc-50 border border-zinc-200 rounded-lg px-2 py-1.5 text-[12px] font-semibold focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  >
+                    <option value="all">Categorias</option>
+                    {inventoryCategories.map((cat: any) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+                  </select>
+                )}
+              </div>
+              <div className="flex-1 overflow-y-auto divide-y divide-zinc-100">
+                <button
+                  type="button"
+                  onClick={() => { onPick(""); onClose(); }}
+                  className={`w-full flex items-center px-3 py-2.5 text-[13px] font-semibold text-left transition-colors ${!value ? "bg-amber-50 text-amber-800" : "hover:bg-slate-50 text-slate-500"}`}
+                >
+                  Sem vínculo de estoque
+                </button>
+                {groupedFiltered.map(group => (
+                  <div key={group.label}>
+                    {categoryFilter === "all" && (
+                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 bg-slate-50/80 px-3 py-1.5">{group.label}</p>
+                    )}
+                    {group.items.map((item: any) => {
+                      const alreadyUsed = usedItemIds.has(item.id);
+                      const isSelected = value === item.id;
+                      const statusLabel = item.quantity <= 0 ? "Esgotado" : `${item.quantity} ${item.unit || "un"}`;
+                      const statusColor = item.quantity <= 0 ? "text-red-500" : item.quantity < 5 ? "text-amber-500" : "text-green-600";
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          disabled={alreadyUsed && !isSelected}
+                          onClick={() => { onPick(item.id); onClose(); }}
+                          className={`w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors ${isSelected ? "bg-amber-50" : alreadyUsed ? "opacity-45 cursor-not-allowed" : "hover:bg-slate-50"}`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[13px] font-semibold text-slate-800 truncate leading-tight">{item.name}</p>
+                            {alreadyUsed && !isSelected && <p className="text-[10px] text-slate-400 leading-tight">Já vinculado a outro produto</p>}
+                          </div>
+                          <span className={`text-[10px] font-bold uppercase shrink-0 ${statusColor}`}>{statusLabel}</span>
+                          {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
+                {filtered.length === 0 && <p className="text-center text-sm text-slate-400 py-8">Nenhum item encontrado</p>}
+              </div>
+            </motion.div>
+          </div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
+// Campo de vínculo de estoque — abre o StockPickerModal acima. Substitui o
+// InventoryLinkField compartilhado (que embutia um Modal com bottom-sheet).
+function StockLinkField({
+  inventoryItems, inventoryCategories, value, onChange, autoDisable, onAutoDisableChange, allCategories, editingProductId,
+}: {
+  inventoryItems: any[];
+  inventoryCategories: any[];
+  value: string;
+  onChange: (val: string) => void;
+  autoDisable: boolean;
+  onAutoDisableChange: (val: boolean) => void;
+  allCategories: any[];
+  editingProductId?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const saleItems = inventoryItems.filter(item => item.usage !== "INTERNAL");
+  const selectedItem = saleItems.find(i => i.id === value);
+  const allProducts = allCategories.flatMap((c: any) => c.products || []);
+  const usedItemIds = new Set(
+    allProducts.filter((p: any) => p.id !== editingProductId && p.inventoryItemId).map((p: any) => p.inventoryItemId)
+  );
+
+  return (
+    <div className="space-y-2">
+      <label className="block text-[11px] font-black uppercase tracking-widest text-slate-600">Vincular ao estoque <span className="text-slate-400 font-bold normal-case">(opcional)</span></label>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="w-full flex items-center justify-between gap-3 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2.5 text-sm font-bold text-left hover:border-amber-300 hover:bg-amber-50/30 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-400"
+      >
+        {selectedItem ? (
+          <div className="flex-1 min-w-0">
+            <span className="text-slate-800 truncate block">{selectedItem.name}</span>
+            <span className={`text-[10px] font-black uppercase ${selectedItem.quantity <= 0 ? "text-red-500" : selectedItem.quantity < 5 ? "text-amber-500" : "text-green-600"}`}>
+              {selectedItem.quantity <= 0 ? "Esgotado" : `${selectedItem.quantity} ${selectedItem.unit || "un"}`}
+            </span>
+          </div>
+        ) : (
+          <span className="text-slate-400">Sem vínculo de estoque</span>
+        )}
+        <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+      </button>
+      {value && (
+        <label className="flex items-center gap-2.5 cursor-pointer select-none">
+          <input type="checkbox" checked={autoDisable} onChange={e => onAutoDisableChange(e.target.checked)} className="w-4 h-4 rounded accent-amber-500" />
+          <span className="text-xs font-semibold text-slate-600">Desativar automaticamente quando o estoque zerar</span>
+        </label>
+      )}
+      {saleItems.length === 0 && <p className="text-[11px] text-slate-400 italic">Nenhum item de venda cadastrado no estoque.</p>}
+      <StockPickerModal
+        open={open}
+        onClose={() => setOpen(false)}
+        inventoryItems={inventoryItems}
+        inventoryCategories={inventoryCategories}
+        usedItemIds={usedItemIds}
+        value={value}
+        onPick={onChange}
+      />
+    </div>
+  );
+}
+
+type ProdTab = "estoque" | "visibilidade" | "horario" | "adicionais" | "viagem" | "selecao" | "variantes" | "fiscal";
+
 export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant | null, refresh: () => void, membership?: MyMembership | null }) {
   const canManageInventory = canAccess(membership ?? null, "inventory");
   const toast = useToast();
@@ -309,6 +564,14 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
   // Product modal
   const [prodModal, setProdModal] = useState<{ open: boolean; categoryId: string | null }>({ open: false, categoryId: null });
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
+  const [prodTab, setProdTab] = useState<ProdTab>("estoque");
+  // Modal construído do zero (sem o Modal genérico) — precisa bloquear o scroll do
+  // body manualmente, já que o componente compartilhado fazia isso por trás.
+  useEffect(() => {
+    if (prodModal.open) document.body.style.overflow = "hidden";
+    else document.body.style.overflow = "";
+    return () => { document.body.style.overflow = ""; };
+  }, [prodModal.open]);
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
   const [inventoryCategories, setInventoryCategories] = useState<any[]>([]);
   const [productionRecipes, setProductionRecipes] = useState<any[]>([]);
@@ -411,6 +674,7 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
     setProdForm({ name: "", description: "", price: "", imageUrl: "", inventoryItemId: "", recipeId: "", available: true, pdvOnly: false, kitchenPrint: false, autoDisableWhenOutOfStock: false, scheduleRuleEnabled: false, scheduleRuleType: "weekday", scheduleRuleWeekdays: [], scheduleRuleStartTime: "", scheduleRuleEndTime: "", scheduleRuleStartDate: "", scheduleRuleEndDate: "", variants: [], extras: [], selectionGroups: [], ncm: "", cfop: "5102", csosn: "400", unitCom: "UN", origem: 0, aliqIcms: 0 });
     setExtraInput({ label: "", price: "" });
     setRecipeIngredients([]);
+    setProdTab("estoque");
     setProdModal({ open: true, categoryId });
   };
 
@@ -501,6 +765,7 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
         unit: ing.unit || "un",
       })) || []
     );
+    setProdTab("estoque");
     setProdModal({ open: true, categoryId: prod.categoryId });
   };
 
@@ -874,6 +1139,37 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
 
   const fmt = (n: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
 
+  // ── Modal de produto: aba "Viagem" é o adicional com autoApplyOnTakeout=true,
+  // separado dos demais extras (que o cliente escolhe) desde que a UI ganhou aba própria.
+  const takeoutExtraIndex = prodForm.extras.findIndex(e => e.autoApplyOnTakeout);
+  const takeoutExtra = takeoutExtraIndex >= 0 ? prodForm.extras[takeoutExtraIndex] : null;
+  const visibleExtras = prodForm.extras.filter(e => !e.autoApplyOnTakeout);
+  const enableTakeoutKit = (enabled: boolean) => {
+    if (enabled) { if (!takeoutExtra) addTakeoutKit(); return; }
+    if (takeoutExtra) setProdForm(prev => ({ ...prev, extras: prev.extras.filter(e => e.id !== takeoutExtra.id) }));
+  };
+  const updateTakeoutExtra = (patch: Partial<typeof prodForm.extras[number]>) => {
+    if (!takeoutExtra) return;
+    setProdForm(prev => ({ ...prev, extras: prev.extras.map(x => x.id === takeoutExtra.id ? { ...x, ...patch } : x) }));
+  };
+
+  const prodTabCounts: Partial<Record<ProdTab, number>> = {
+    adicionais: visibleExtras.length,
+    viagem: takeoutExtra?.stockLinks.length || 0,
+    selecao: prodForm.selectionGroups.length,
+    variantes: prodForm.variants.length,
+  };
+  const PROD_TABS: { id: ProdTab; label: string; icon?: React.ReactNode }[] = [
+    { id: "estoque", label: "Estoque" },
+    { id: "visibilidade", label: "Visibilidade" },
+    { id: "horario", label: "Horário" },
+    { id: "adicionais", label: "Adicionais" },
+    { id: "viagem", label: "Viagem", icon: <Luggage className="w-3.5 h-3.5" /> },
+    { id: "selecao", label: "Seleção" },
+    { id: "variantes", label: "Variantes" },
+    { id: "fiscal", label: "Fiscal" },
+  ];
+
   return (
     <div className="space-y-4">
 
@@ -1056,529 +1352,611 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
         </div>
       </Modal>
 
-      {/* Modal: produto */}
-      <Modal
-        isOpen={prodModal.open}
-        onClose={closeProdModal}
-        title={editingProduct ? "Editar produto" : "Novo produto"}
-        size="lg"
-        mobileStyle="fullscreen"
-        footer={
-          <div className="flex flex-col gap-3">
-            {editingProduct && (
-              <div className="flex gap-2 flex-wrap">
-                <button
-                  type="button"
-                  onClick={duplicateProductToCatalog}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors border border-blue-100"
-                >
-                  <span>📋</span> Duplicar no catálogo
-                </button>
-                {canManageInventory && (
+      {/* Modal: produto — construído do zero (sem o Modal genérico compartilhado, que
+          delega o scroll ao seu próprio body e "engole" o header/footer fixos quando o
+          conteúdo interno é maior que o viewport). Identidade fixa à esquerda com scroll
+          próprio, abas fixas à direita com scroll próprio, header e footer sempre visíveis. */}
+      <AnimatePresence>
+        {prodModal.open && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
+              onClick={closeProdModal}
+              className="fixed inset-0 z-[100] bg-zinc-900/45 backdrop-blur-[2px]"
+            />
+            <div className="fixed inset-0 z-[101] flex items-end sm:items-center justify-center p-0 sm:p-6 pointer-events-none">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.97, y: 16 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.97, y: 16 }}
+                transition={{ type: "spring", damping: 28, stiffness: 320, mass: 0.7 }}
+                className="w-full sm:max-w-[1040px] h-[100dvh] sm:h-auto sm:max-h-[min(86vh,820px)] bg-white sm:rounded-3xl shadow-2xl border border-zinc-200/60 overflow-hidden flex flex-col sm:grid sm:grid-cols-[300px_minmax(0,1fr)] sm:grid-rows-[minmax(0,1fr)] pointer-events-auto"
+              >
+          {/* Coluna: identidade do produto — scroll próprio, foto grande */}
+          <div className="bg-slate-50/60 border-b sm:border-b-0 sm:border-r border-slate-100 p-5 flex flex-col gap-4 overflow-y-auto min-h-0">
+            <ProductPhotoField value={prodForm.imageUrl} onChange={val => setProdForm({ ...prodForm, imageUrl: val })} />
+            <Input label="Nome do produto" placeholder="Ex: Pastel de carne" value={prodForm.name} onChange={e => setProdForm({ ...prodForm, name: e.target.value })} />
+            <CurrencyInput label="Preço base (R$)" value={prodForm.price} onChange={v => setProdForm({ ...prodForm, price: v })} />
+            <div className="space-y-1.5">
+              <label className="block text-[11px] font-black uppercase tracking-widest text-slate-600">Descrição (opcional)</label>
+              <textarea
+                placeholder="Ingredientes, detalhes..."
+                value={prodForm.description}
+                onChange={e => setProdForm({ ...prodForm, description: e.target.value })}
+                rows={4}
+                className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
+              />
+            </div>
+            <span className={`inline-flex items-center gap-1.5 text-[11px] font-black px-2.5 py-1 rounded-full w-fit ${prodForm.available ? "bg-green-50 text-green-700" : "bg-slate-200 text-slate-500"}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${prodForm.available ? "bg-green-500" : "bg-slate-400"}`} />
+              {prodForm.available ? "Ativo no cardápio" : "Inativo"}
+            </span>
+          </div>
+
+          {/* Coluna: abas — header e barra de abas fixos, conteúdo com scroll próprio */}
+          <div className="flex flex-col min-h-0 overflow-hidden">
+            <div className="flex items-start justify-between gap-3 px-5 pt-5 shrink-0">
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{editingProduct ? "Editar produto" : "Novo produto"}</p>
+                <h2 className="text-base font-black text-slate-800 truncate">{prodForm.name || "Sem nome"}</h2>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                {editingProduct && (
                   <button
                     type="button"
-                    onClick={duplicateProductToInventory}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors border border-amber-100"
+                    onClick={() => { closeProdModal(); setDeleteProductConfirm(editingProduct.id); }}
+                    title="Excluir produto"
+                    className="p-2 rounded-full text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
                   >
-                    <span>📦</span> Criar no estoque
+                    <Trash2 className="w-4 h-4" />
                   </button>
                 )}
+                <button type="button" onClick={closeProdModal} title="Fechar" className="p-2 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
               </div>
-            )}
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end pt-3 border-t border-slate-100">
-              <Button variant="outline" onClick={closeProdModal}>Cancelar</Button>
-              <Button onClick={saveProduct}>{editingProduct ? "Salvar alterações" : "Adicionar produto"}</Button>
-            </div>
-          </div>
-        }
-      >
-        <div className="space-y-3">
-          {/* Identificação */}
-          <ContentCard padding="md" className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Input label="Nome do produto" placeholder="Ex: Pastel de carne" value={prodForm.name} onChange={e => setProdForm({ ...prodForm, name: e.target.value })} />
-              <CurrencyInput label="Preço base (R$)" value={prodForm.price} onChange={v => setProdForm({ ...prodForm, price: v })} />
-            </div>
-            <Input label="Descrição (opcional)" placeholder="Ingredientes, detalhes..." value={prodForm.description} onChange={e => setProdForm({ ...prodForm, description: e.target.value })} />
-            <ImageUploader label="Foto do produto" value={prodForm.imageUrl} onChange={val => setProdForm({ ...prodForm, imageUrl: val })} description="Fotos de alta qualidade convertem mais vendas." />
-          </ContentCard>
-
-          {/* Estoque e insumos */}
-          <ContentCard padding="md" className="space-y-4">
-            <InventoryLinkField
-              inventoryItems={inventoryItems}
-              inventoryCategories={inventoryCategories}
-              value={prodForm.inventoryItemId}
-              onChange={val => setProdForm({ ...prodForm, inventoryItemId: val })}
-              autoDisable={prodForm.autoDisableWhenOutOfStock}
-              onAutoDisableChange={val => setProdForm({ ...prodForm, autoDisableWhenOutOfStock: val })}
-              allCategories={localCategories}
-              editingProductId={editingProduct?.id}
-            />
-            <RecipeIngredientsField
-              inventoryItems={inventoryItems}
-              inventoryCategories={inventoryCategories}
-              value={recipeIngredients}
-              onChange={setRecipeIngredients}
-            />
-          </ContentCard>
-
-          {/* Status e visibilidade */}
-          <ContentCard padding="md" className="space-y-1">
-            <div className="flex items-center justify-between py-2">
-              <div className="min-w-0 pr-3">
-                <p className="text-sm font-bold text-slate-700">Produto ativo no cardápio</p>
-                <p className="text-xs text-slate-400">Clientes conseguem ver e pedir este produto</p>
-              </div>
-              <Switch checked={prodForm.available} onCheckedChange={(v) => setProdForm(f => ({ ...f, available: v }))} />
             </div>
 
-            <div className="flex items-center justify-between py-2 border-t border-slate-100">
-              <div className="min-w-0 pr-3">
-                <p className="text-sm font-bold text-slate-700">Exclusivo PDV</p>
-                <p className="text-xs text-slate-400">Visível apenas no PDV, não aparece no cardápio online</p>
-              </div>
-              <Switch checked={prodForm.pdvOnly} onCheckedChange={(v) => setProdForm(f => ({ ...f, pdvOnly: v }))} />
+            <div className="flex gap-1 px-5 pt-3 border-b border-slate-100 overflow-x-auto overflow-y-hidden shrink-0">
+              {PROD_TABS.map(tab => {
+                const count = prodTabCounts[tab.id];
+                const active = prodTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setProdTab(tab.id)}
+                    className={`relative flex items-center gap-1.5 whitespace-nowrap px-2.5 py-2 text-[12px] font-bold transition-colors ${active ? "text-slate-800" : "text-slate-400 hover:text-slate-600"}`}
+                  >
+                    {tab.icon}
+                    {tab.label}
+                    {!!count && (
+                      <span className={`inline-flex items-center justify-center min-w-[15px] h-[15px] px-1 rounded-full text-[10px] font-black ${active ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-400"}`}>
+                        {count}
+                      </span>
+                    )}
+                    {active && <span className="absolute left-0 right-0 -bottom-px h-0.5 bg-[#C9A227] rounded-full" />}
+                  </button>
+                );
+              })}
             </div>
 
-            <div className="flex items-center justify-between py-2 border-t border-slate-100">
-              <div className="min-w-0 pr-3">
-                <p className="text-sm font-bold text-slate-700">Vai para a cozinha</p>
-                <p className="text-xs text-slate-400">Ative para itens que precisam de preparo — bebidas/embalagens ficam desativadas por padrão</p>
-              </div>
-              <Switch checked={prodForm.kitchenPrint === true} onCheckedChange={(v) => setProdForm(f => ({ ...f, kitchenPrint: v }))} />
-            </div>
-          </ContentCard>
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 min-h-0">
+              {/* ESTOQUE */}
+              {prodTab === "estoque" && (
+                <>
+                  <StockLinkField
+                    inventoryItems={inventoryItems}
+                    inventoryCategories={inventoryCategories}
+                    value={prodForm.inventoryItemId}
+                    onChange={val => setProdForm({ ...prodForm, inventoryItemId: val })}
+                    autoDisable={prodForm.autoDisableWhenOutOfStock}
+                    onAutoDisableChange={val => setProdForm({ ...prodForm, autoDisableWhenOutOfStock: val })}
+                    allCategories={localCategories}
+                    editingProductId={editingProduct?.id}
+                  />
+                  <RecipeIngredientsField
+                    inventoryItems={inventoryItems}
+                    inventoryCategories={inventoryCategories}
+                    value={recipeIngredients}
+                    onChange={setRecipeIngredients}
+                  />
+                </>
+              )}
 
-          {/* Disponibilidade Automática */}
-          <ContentCard padding="md">
-            <div className="flex items-center justify-between">
-              <div className="min-w-0 pr-3">
-                <p className="text-sm font-bold text-slate-700">Disponibilidade automática</p>
-                <p className="text-xs text-slate-400">Produto aparece/some do cardápio online automaticamente</p>
-              </div>
-              <Switch checked={prodForm.scheduleRuleEnabled} onCheckedChange={(v) => setProdForm(f => ({ ...f, scheduleRuleEnabled: v }))} />
-            </div>
-
-            {prodForm.scheduleRuleEnabled && (
-              <div className="space-y-3 bg-amber-50 border border-amber-200 rounded-2xl p-3 mt-3">
-                {/* Tipo de regra */}
+              {/* VISIBILIDADE */}
+              {prodTab === "visibilidade" && (
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-amber-800 mb-2">Tipo de regra</p>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {([
-                      { value: "weekday",   label: "Dia da semana" },
-                      { value: "daterange", label: "Período (datas)" },
-                      { value: "both",      label: "Os dois" },
-                    ] as const).map(opt => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => setProdForm(f => ({ ...f, scheduleRuleType: opt.value }))}
-                        className={`text-[10px] font-black py-1.5 px-2 rounded-lg border-2 transition-all ${prodForm.scheduleRuleType === opt.value ? "border-amber-400 bg-white text-amber-700" : "border-amber-200 text-slate-500 hover:border-amber-300"}`}
-                      >
-                        {opt.label}
-                      </button>
+                  <div className="flex items-center justify-between py-2">
+                    <div className="min-w-0 pr-3">
+                      <p className="text-[13px] font-bold text-slate-700 leading-tight">Produto ativo no cardápio</p>
+                      <p className="text-[11px] text-slate-400 leading-tight">Clientes conseguem ver e pedir este produto</p>
+                    </div>
+                    <Switch size="sm" checked={prodForm.available} onCheckedChange={(v) => setProdForm(f => ({ ...f, available: v }))} />
+                  </div>
+                  <div className="flex items-center justify-between py-2 border-t border-slate-100">
+                    <div className="min-w-0 pr-3">
+                      <p className="text-[13px] font-bold text-slate-700 leading-tight">Exclusivo PDV</p>
+                      <p className="text-[11px] text-slate-400 leading-tight">Visível apenas no PDV, não aparece no cardápio online</p>
+                    </div>
+                    <Switch size="sm" checked={prodForm.pdvOnly} onCheckedChange={(v) => setProdForm(f => ({ ...f, pdvOnly: v }))} />
+                  </div>
+                  <div className="flex items-center justify-between py-2 border-t border-slate-100">
+                    <div className="min-w-0 pr-3">
+                      <p className="text-[13px] font-bold text-slate-700 leading-tight">Vai para a cozinha</p>
+                      <p className="text-[11px] text-slate-400 leading-tight">Ative para itens que precisam de preparo — bebidas/embalagens ficam desativadas por padrão</p>
+                    </div>
+                    <Switch size="sm" checked={prodForm.kitchenPrint === true} onCheckedChange={(v) => setProdForm(f => ({ ...f, kitchenPrint: v }))} />
+                  </div>
+                </div>
+              )}
+
+              {/* HORARIO */}
+              {prodTab === "horario" && (
+                <div>
+                  <div className="flex items-center justify-between pb-1">
+                    <div className="min-w-0 pr-3">
+                      <p className="text-[13px] font-bold text-slate-700 leading-tight">Disponibilidade automática</p>
+                      <p className="text-[11px] text-slate-400 leading-tight">Produto aparece/some do cardápio online automaticamente</p>
+                    </div>
+                    <Switch size="sm" checked={prodForm.scheduleRuleEnabled} onCheckedChange={(v) => setProdForm(f => ({ ...f, scheduleRuleEnabled: v }))} />
+                  </div>
+
+                  {prodForm.scheduleRuleEnabled && (
+                    <div className="space-y-3 bg-amber-50 border border-amber-200 rounded-2xl p-3 mt-3">
+                      {/* Tipo de regra */}
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-amber-800 mb-2">Tipo de regra</p>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {([
+                            { value: "weekday",   label: "Dia da semana" },
+                            { value: "daterange", label: "Período (datas)" },
+                            { value: "both",      label: "Os dois" },
+                          ] as const).map(opt => (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => setProdForm(f => ({ ...f, scheduleRuleType: opt.value }))}
+                              className={`text-[10px] font-black py-1.5 px-2 rounded-lg border-2 transition-all ${prodForm.scheduleRuleType === opt.value ? "border-amber-400 bg-white text-amber-700" : "border-amber-200 text-slate-500 hover:border-amber-300"}`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Dias da semana */}
+                      {(prodForm.scheduleRuleType === "weekday" || prodForm.scheduleRuleType === "both") && (
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-amber-800 mb-2">Dias ativos</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"].map((label, idx) => {
+                              const active = prodForm.scheduleRuleWeekdays.includes(idx);
+                              return (
+                                <button
+                                  key={label}
+                                  type="button"
+                                  onClick={() => setProdForm(f => ({
+                                    ...f,
+                                    scheduleRuleWeekdays: active
+                                      ? f.scheduleRuleWeekdays.filter(d => d !== idx)
+                                      : [...f.scheduleRuleWeekdays, idx]
+                                  }))}
+                                  className={`w-10 h-8 text-xs font-black rounded-lg border-2 transition-all ${active ? "border-amber-400 bg-amber-400 text-white" : "border-amber-200 bg-white text-slate-500 hover:border-amber-300"}`}
+                                >
+                                  {label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Horário nos dias ativos */}
+                      {(prodForm.scheduleRuleType === "weekday" || prodForm.scheduleRuleType === "both") && (
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-amber-800 mb-2">Horário (opcional)</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[10px] text-slate-500 font-bold block mb-1">Aparece às</label>
+                              <input
+                                type="time"
+                                value={prodForm.scheduleRuleStartTime}
+                                onChange={e => setProdForm(f => ({ ...f, scheduleRuleStartTime: e.target.value }))}
+                                className="w-full bg-white border border-amber-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400/30"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-slate-500 font-bold block mb-1">Some às</label>
+                              <input
+                                type="time"
+                                value={prodForm.scheduleRuleEndTime}
+                                onChange={e => setProdForm(f => ({ ...f, scheduleRuleEndTime: e.target.value }))}
+                                className="w-full bg-white border border-amber-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400/30"
+                              />
+                            </div>
+                          </div>
+                          <p className="text-[10px] text-slate-400 italic mt-1.5">Deixe em branco para ficar visível o dia todo (00:00–23:59).</p>
+                        </div>
+                      )}
+
+                      {/* Período de datas */}
+                      {(prodForm.scheduleRuleType === "daterange" || prodForm.scheduleRuleType === "both") && (
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-amber-800 mb-2">Período de visibilidade</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[10px] text-slate-500 font-bold block mb-1">Data início</label>
+                              <input
+                                type="date"
+                                value={prodForm.scheduleRuleStartDate}
+                                onChange={e => setProdForm(f => ({ ...f, scheduleRuleStartDate: e.target.value }))}
+                                className="w-full bg-white border border-amber-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400/30"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-slate-500 font-bold block mb-1">Data fim</label>
+                              <input
+                                type="date"
+                                value={prodForm.scheduleRuleEndDate}
+                                onChange={e => setProdForm(f => ({ ...f, scheduleRuleEndDate: e.target.value }))}
+                                className="w-full bg-white border border-amber-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400/30"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ADICIONAIS — apenas os que o cliente escolhe; o kit de viagem mora na aba própria */}
+              {prodTab === "adicionais" && (
+                <div>
+                  <p className="text-xs text-slate-400 mb-3">Ex: Gelo, Limão, Sem Cebola, Molho extra. O cliente seleciona antes de adicionar ao carrinho.</p>
+                  <div className="flex gap-2 mb-3">
+                    <input
+                      placeholder="Nome (ex: Gelo)"
+                      value={extraInput.label}
+                      onChange={e => setExtraInput(prev => ({ ...prev, label: e.target.value }))}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && extraInput.label.trim()) {
+                          e.preventDefault();
+                          setProdForm(prev => ({ ...prev, extras: [...prev.extras, { id: crypto.randomUUID(), label: extraInput.label.trim(), price: extraInput.price, stockLinks: [], autoApplyOnTakeout: false }] }));
+                          setExtraInput({ label: "", price: "" });
+                        }
+                      }}
+                      className="flex-1 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 min-w-0"
+                    />
+                    <input
+                      placeholder="R$ (0 = grátis)"
+                      value={extraInput.price}
+                      onChange={e => setExtraInput(prev => ({ ...prev, price: e.target.value }))}
+                      className="w-28 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+                    <button
+                      onClick={() => {
+                        if (!extraInput.label.trim()) return;
+                        setProdForm(prev => ({ ...prev, extras: [...prev.extras, { id: crypto.randomUUID(), label: extraInput.label.trim(), price: extraInput.price, stockLinks: [], autoApplyOnTakeout: false }] }));
+                        setExtraInput({ label: "", price: "" });
+                      }}
+                      className="px-3 py-2 bg-amber-500 text-white rounded-xl text-sm font-black hover:bg-amber-600"
+                    >+</button>
+                  </div>
+                  {visibleExtras.length > 0 && (
+                    <div className="space-y-2">
+                      {visibleExtras.map((ex) => (
+                        <div key={ex.id} className="bg-amber-50/60 border border-amber-200 rounded-xl px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <span className="flex-1 text-sm font-bold text-amber-900 truncate">
+                              {ex.label}{parseFloat(ex.price) > 0 ? ` +R$${parseFloat(ex.price).toFixed(2)}` : ' (grátis)'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setProdForm(prev => ({ ...prev, extras: prev.extras.filter(e => e.id !== ex.id) }))}
+                              className="p-1 text-slate-400 hover:text-red-500 shrink-0"
+                              title="Remover adicional"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <div className="mt-2 pt-2 border-t border-amber-200/70">
+                            <StockLinksField
+                              value={ex.stockLinks}
+                              onChange={links => setProdForm(prev => ({ ...prev, extras: prev.extras.map(x => x.id === ex.id ? { ...x, stockLinks: links } : x) }))}
+                              inventoryItems={inventoryItems}
+                              inventoryCategories={inventoryCategories}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* VIAGEM — kit consumido automaticamente ao escolher "Para viagem", separado
+                  dos adicionais que o cliente escolhe (antes era um botão perdido ali dentro). */}
+              {prodTab === "viagem" && (
+                <div>
+                  <div className="flex items-center justify-between pb-1">
+                    <div className="min-w-0 pr-3">
+                      <p className="text-[13px] font-bold text-slate-700 leading-tight">Kit para viagem</p>
+                      <p className="text-[11px] text-slate-400 leading-tight">Consome os itens abaixo automaticamente quando o cliente escolhe "Para viagem" — não aparece como opção pro cliente</p>
+                    </div>
+                    <Switch size="sm" checked={!!takeoutExtra} onCheckedChange={enableTakeoutKit} />
+                  </div>
+
+                  {takeoutExtra && (
+                    <div className="mt-3">
+                      <StockLinksField
+                        value={takeoutExtra.stockLinks}
+                        onChange={links => updateTakeoutExtra({ stockLinks: links })}
+                        inventoryItems={inventoryItems}
+                        inventoryCategories={inventoryCategories}
+                      />
+                      <p className="text-[11px] text-slate-400 mt-2">Vincule aqui embalagem, sacola, lacre, canudo ou qualquer outro insumo e informe a quantidade. A baixa acontece automaticamente junto com a venda.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* SELEÇÃO — grupos de seleção embutidos: cada um deixa o cliente escolher N
+                  itens de uma categoria/lista, sem mudar o preço fixo do produto (ex: numa
+                  marmita, um grupo "Guarnição" escolhe 1, outro "Arroz" escolhe 1). Incompatível
+                  com variações — as duas coisas resolvem "escolher o sabor"; juntas, o cliente
+                  escolhe a mesma coisa duas vezes (bug visto em produção no "1 espeto
+                  tradicional", cadastrado com variações E grupo ao mesmo tempo). */}
+              {prodTab === "selecao" && (
+                <div>
+                  {prodForm.variants.length > 0 && prodForm.selectionGroups.length > 0 && (
+                    <p className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2">
+                      Este produto já tem variações — remova-as ou remova os grupos de seleção abaixo. Os dois juntos fazem o cliente escolher o sabor duas vezes.
+                    </p>
+                  )}
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">Cliente escolhe itens (preço fixo)</span>
+                    <button
+                      type="button"
+                      disabled={prodForm.variants.length > 0}
+                      onClick={addSelectionGroupField}
+                      className={`text-xs font-black hover:underline ${prodForm.variants.length > 0 ? "text-slate-300 cursor-not-allowed" : "text-[#C9A227]"}`}
+                    >+ Adicionar grupo</button>
+                  </div>
+                  <p className="text-xs text-slate-400 mb-3">Ex: numa marmita, um grupo "Guarnição" (escolhe 1), outro "Arroz" (escolhe 1) — cada grupo puxa de uma categoria já cadastrada, sem alterar o preço do produto.</p>
+
+                  {prodForm.selectionGroups.length > 0 && (
+                    <div className="space-y-3">
+                      {prodForm.selectionGroups.map((g, idx) => (
+                        <div key={g._key} className="p-4 bg-slate-50/60 rounded-2xl border border-slate-200 space-y-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <input
+                              type="text"
+                              placeholder={`Rótulo do grupo ${idx + 1} (ex: Guarnição)`}
+                              value={g.label}
+                              onChange={e => updateSelectionGroupField(idx, "label", e.target.value)}
+                              className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
+                            />
+                            <button type="button" onClick={() => removeSelectionGroupField(idx)} className="p-2 text-slate-300 hover:text-red-500 shrink-0">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+
+                          <div className="flex gap-2 p-1 bg-slate-100 rounded-xl">
+                            <button
+                              type="button"
+                              onClick={() => updateSelectionGroupField(idx, "sourceType", "category")}
+                              className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${g.sourceType === "category" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                            >Categoria inteira</button>
+                            <button
+                              type="button"
+                              onClick={() => updateSelectionGroupField(idx, "sourceType", "products")}
+                              className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${g.sourceType === "products" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                            >Itens específicos</button>
+                          </div>
+
+                          {g.sourceType === "category" ? (
+                            <div>
+                              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Categoria de onde vêm as opções</label>
+                              <select
+                                value={g.categoryId}
+                                onChange={e => updateSelectionGroupField(idx, "categoryId", e.target.value)}
+                                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
+                              >
+                                <option value="">Selecione...</option>
+                                {localCategories.filter(c => c.id !== prodModal.categoryId).map(c => (
+                                  <option key={c.id} value={c.id}>{c.name} ({c.products?.length || 0} itens)</option>
+                                ))}
+                              </select>
+                            </div>
+                          ) : (
+                            <div>
+                              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Selecione os itens que entram como opção</label>
+                              <div className="max-h-48 overflow-y-auto space-y-1 bg-white rounded-xl border border-slate-200 p-2">
+                                {localCategories.flatMap(c => c.products || []).map((p: any) => {
+                                  const checked = g.productIds.includes(p.id);
+                                  return (
+                                    <label key={p.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        checked={checked}
+                                        onChange={() => updateSelectionGroupField(idx, "productIds", checked
+                                          ? g.productIds.filter(id => id !== p.id)
+                                          : [...g.productIds, p.id])}
+                                        className="w-3.5 h-3.5 rounded accent-amber-500"
+                                      />
+                                      <span className="text-xs font-bold text-slate-700">{p.name}</span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                          <div>
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Quantos itens o cliente escolhe neste grupo</label>
+                            <input
+                              type="number"
+                              min={1}
+                              value={g.qty}
+                              onChange={e => updateSelectionGroupField(idx, "qty", e.target.value.replace(/\D/g, ""))}
+                              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* VARIANTES — desabilitado quando o grupo de seleção está ativo (os dois juntos
+                  fazem o cliente escolher o sabor duas vezes, ver nota acima). */}
+              {prodTab === "variantes" && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-black uppercase tracking-widest text-slate-500">Tamanhos / Variantes</span>
+                    {prodForm.selectionGroups.length > 0 ? (
+                      <span className="text-[10px] font-bold text-slate-400">Remova os grupos de seleção para usar variações</span>
+                    ) : (
+                      <button onClick={addVariantField} className="text-xs font-black text-[#C9A227] hover:underline">+ Adicionar</button>
+                    )}
+                  </div>
+                  <div className="space-y-3">
+                    {prodForm.variants.map((v, idx) => (
+                      <div key={v._key} className="flex gap-2 items-start bg-zinc-50/60 border border-zinc-100 rounded-xl p-2">
+                        <VariantImageUploader
+                          value={v.imageUrl}
+                          onChange={(val) => updateVariantField(idx, 'imageUrl', val)}
+                        />
+                        <div className="flex-1 min-w-0 space-y-1.5">
+                          <div className="flex gap-2 items-center">
+                            <input placeholder="Nome (ex: 500ml)" value={v.name} onChange={e => updateVariantField(idx, 'name', e.target.value)}
+                              className="flex-1 bg-white border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 min-w-0" />
+                            <input placeholder="R$" value={v.price} onChange={e => updateVariantField(idx, 'price', e.target.value)}
+                              className="w-20 bg-white border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                            <button onClick={() => removeVariantField(idx)} className="p-2 text-slate-300 hover:text-red-500 shrink-0">
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <select
+                            value={v.inventoryItemId}
+                            onChange={e => updateVariantField(idx, 'inventoryItemId', e.target.value)}
+                            className="w-full bg-white border border-zinc-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                          >
+                            <option value="">Sem vínculo de estoque (opcional)</option>
+                            {inventoryItems.filter((item: any) => item.usage !== 'INTERNAL').map((item: any) => (
+                              <option key={item.id} value={item.id}>
+                                {item.name} — {item.quantity <= 0 ? "Esgotado" : `${item.quantity} ${item.unit || 'un'}`}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
                     ))}
                   </div>
                 </div>
-
-                {/* Dias da semana */}
-                {(prodForm.scheduleRuleType === "weekday" || prodForm.scheduleRuleType === "both") && (
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-amber-800 mb-2">Dias ativos</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"].map((label, idx) => {
-                        const active = prodForm.scheduleRuleWeekdays.includes(idx);
-                        return (
-                          <button
-                            key={label}
-                            type="button"
-                            onClick={() => setProdForm(f => ({
-                              ...f,
-                              scheduleRuleWeekdays: active
-                                ? f.scheduleRuleWeekdays.filter(d => d !== idx)
-                                : [...f.scheduleRuleWeekdays, idx]
-                            }))}
-                            className={`w-10 h-8 text-xs font-black rounded-lg border-2 transition-all ${active ? "border-amber-400 bg-amber-400 text-white" : "border-amber-200 bg-white text-slate-500 hover:border-amber-300"}`}
-                          >
-                            {label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Horário nos dias ativos */}
-                {(prodForm.scheduleRuleType === "weekday" || prodForm.scheduleRuleType === "both") && (
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-amber-800 mb-2">Horário (opcional)</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-[10px] text-slate-500 font-bold block mb-1">Aparece às</label>
-                        <input
-                          type="time"
-                          value={prodForm.scheduleRuleStartTime}
-                          onChange={e => setProdForm(f => ({ ...f, scheduleRuleStartTime: e.target.value }))}
-                          className="w-full bg-white border border-amber-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400/30"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-slate-500 font-bold block mb-1">Some às</label>
-                        <input
-                          type="time"
-                          value={prodForm.scheduleRuleEndTime}
-                          onChange={e => setProdForm(f => ({ ...f, scheduleRuleEndTime: e.target.value }))}
-                          className="w-full bg-white border border-amber-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400/30"
-                        />
-                      </div>
-                    </div>
-                    <p className="text-[10px] text-slate-400 italic mt-1.5">Deixe em branco para ficar visível o dia todo (00:00–23:59).</p>
-                  </div>
-                )}
-
-                {/* Período de datas */}
-                {(prodForm.scheduleRuleType === "daterange" || prodForm.scheduleRuleType === "both") && (
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-amber-800 mb-2">Período de visibilidade</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-[10px] text-slate-500 font-bold block mb-1">Data início</label>
-                        <input
-                          type="date"
-                          value={prodForm.scheduleRuleStartDate}
-                          onChange={e => setProdForm(f => ({ ...f, scheduleRuleStartDate: e.target.value }))}
-                          className="w-full bg-white border border-amber-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400/30"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-slate-500 font-bold block mb-1">Data fim</label>
-                        <input
-                          type="date"
-                          value={prodForm.scheduleRuleEndDate}
-                          onChange={e => setProdForm(f => ({ ...f, scheduleRuleEndDate: e.target.value }))}
-                          className="w-full bg-white border border-amber-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400/30"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </ContentCard>
-
-          {/* Adicionais / Extras */}
-          <ContentCard padding="md">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">Adicionais / Observações</span>
-              {!prodForm.extras.some(extra => extra.autoApplyOnTakeout) && (
-                <button type="button" onClick={addTakeoutKit} className="text-xs font-black text-[#C9A227] hover:underline">+ Configurar modo viagem</button>
               )}
-            </div>
-            <p className="text-xs text-slate-400 mb-3">Ex: Gelo, Limão, Sem Cebola, Molho extra. O cliente seleciona antes de adicionar ao carrinho.</p>
-            {prodForm.extras.some(extra => extra.autoApplyOnTakeout) && (
-              <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
-                <strong>Modo viagem ativo.</strong> O kit abaixo será incluído automaticamente somente ao selecionar <strong>Para viagem</strong>; ele não aparecerá como adicional para o cliente.
-              </div>
-            )}
-            <div className="flex gap-2 mb-3">
-              <input
-                placeholder="Nome (ex: Gelo)"
-                value={extraInput.label}
-                onChange={e => setExtraInput(prev => ({ ...prev, label: e.target.value }))}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && extraInput.label.trim()) {
-                    e.preventDefault();
-                    setProdForm(prev => ({ ...prev, extras: [...prev.extras, { id: crypto.randomUUID(), label: extraInput.label.trim(), price: extraInput.price, stockLinks: [], autoApplyOnTakeout: false }] }));
-                    setExtraInput({ label: "", price: "" });
-                  }
-                }}
-                className="flex-1 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 min-w-0"
-              />
-              <input
-                placeholder="R$ (0 = grátis)"
-                value={extraInput.price}
-                onChange={e => setExtraInput(prev => ({ ...prev, price: e.target.value }))}
-                className="w-28 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400"
-              />
-              <button
-                onClick={() => {
-                  if (!extraInput.label.trim()) return;
-                  setProdForm(prev => ({ ...prev, extras: [...prev.extras, { id: crypto.randomUUID(), label: extraInput.label.trim(), price: extraInput.price, stockLinks: [], autoApplyOnTakeout: false }] }));
-                  setExtraInput({ label: "", price: "" });
-                }}
-                className="px-3 py-2 bg-amber-500 text-white rounded-xl text-sm font-black hover:bg-amber-600"
-              >+</button>
-            </div>
-            {prodForm.extras.length > 0 && (
-              <div className="space-y-2">
-                {prodForm.extras.map((ex) => {
-                  return (
-                    <div key={ex.id} className="bg-amber-50/60 border border-amber-200 rounded-xl px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <span className="flex-1 text-sm font-bold text-amber-900 truncate">
-                          {ex.autoApplyOnTakeout ? "Kit para viagem" : ex.label}{parseFloat(ex.price) > 0 ? ` +R$${parseFloat(ex.price).toFixed(2)}` : ' (grátis)'}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setProdForm(prev => ({ ...prev, extras: prev.extras.filter(e => e.id !== ex.id) }))}
-                          className="p-1 text-slate-400 hover:text-red-500 shrink-0"
-                          title="Remover adicional"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                      <div className="mt-2 pt-2 border-t border-amber-200/70">
-                        <StockLinksField
-                          value={ex.stockLinks}
-                          onChange={links => setProdForm(prev => ({ ...prev, extras: prev.extras.map(x => x.id === ex.id ? { ...x, stockLinks: links } : x) }))}
-                          inventoryItems={inventoryItems}
-                          inventoryCategories={inventoryCategories}
-                        />
-                        {ex.stockLinks.length > 0 && (
-                          <label className="flex items-center gap-1.5 w-full text-[11px] font-bold text-slate-600 cursor-pointer select-none mt-2">
-                            <input
-                              type="checkbox"
-                              checked={!!ex.autoApplyOnTakeout}
-                              onChange={e => setProdForm(prev => ({ ...prev, extras: prev.extras.map(x => x.id === ex.id ? { ...x, autoApplyOnTakeout: e.target.checked } : x) }))}
-                              className="accent-amber-500"
-                            />
-                            Ativar como kit de viagem: consumir estes itens automaticamente ao selecionar “Para viagem”
-                          </label>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            <p className="text-[11px] text-slate-400 mt-2">No modo viagem, vincule aqui embalagem, sacola, lacre, canudo ou qualquer outro insumo e informe a quantidade. A baixa acontece automaticamente junto com a venda.</p>
-          </ContentCard>
 
-          {/* Grupos de seleção embutidos — cada um deixa o cliente escolher N itens de uma
-              categoria/lista, sem mudar o preço fixo do produto (ex: numa marmita, um grupo
-              "Guarnição" escolhe 1, outro "Arroz" escolhe 1, outro "Feijão" escolhe 1 — cada
-              um sua própria categoria de opções cadastrada). Incompatível com variações — as
-              duas coisas resolvem "escolher o sabor"; juntas, o cliente escolhe a mesma coisa
-              duas vezes (bug visto em produção no "1 espeto tradicional", cadastrado com
-              variações E grupo ao mesmo tempo). */}
-          <ContentCard padding="md">
-            {prodForm.variants.length > 0 && prodForm.selectionGroups.length > 0 && (
-              <p className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2">
-                Este produto já tem variações — remova-as ou remova os grupos de seleção abaixo. Os dois juntos fazem o cliente escolher o sabor duas vezes.
-              </p>
-            )}
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">Cliente escolhe itens (preço fixo)</span>
-              <button
-                type="button"
-                disabled={prodForm.variants.length > 0}
-                onClick={addSelectionGroupField}
-                className={`text-xs font-black hover:underline ${prodForm.variants.length > 0 ? "text-slate-300 cursor-not-allowed" : "text-[#C9A227]"}`}
-              >+ Adicionar grupo</button>
-            </div>
-            <p className="text-xs text-slate-400 mb-3">Ex: numa marmita, um grupo "Guarnição" (escolhe 1), outro "Arroz" (escolhe 1) — cada grupo puxa de uma categoria já cadastrada, sem alterar o preço do produto.</p>
-
-            {prodForm.selectionGroups.length > 0 && (
-              <div className="space-y-3">
-                {prodForm.selectionGroups.map((g, idx) => (
-                  <div key={g._key} className="p-4 bg-amber-50/50 rounded-2xl border border-amber-100 space-y-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <input
-                        type="text"
-                        placeholder={`Rótulo do grupo ${idx + 1} (ex: Guarnição)`}
-                        value={g.label}
-                        onChange={e => updateSelectionGroupField(idx, "label", e.target.value)}
-                        className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
-                      />
-                      <button type="button" onClick={() => removeSelectionGroupField(idx)} className="p-2 text-slate-300 hover:text-red-500 shrink-0">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => updateSelectionGroupField(idx, "sourceType", "category")}
-                        className={`flex-1 px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wide transition-colors ${g.sourceType === "category" ? "bg-[#0D1B3E] text-white" : "bg-white border border-slate-200 text-slate-500"}`}
-                      >Categoria inteira</button>
-                      <button
-                        type="button"
-                        onClick={() => updateSelectionGroupField(idx, "sourceType", "products")}
-                        className={`flex-1 px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wide transition-colors ${g.sourceType === "products" ? "bg-[#0D1B3E] text-white" : "bg-white border border-slate-200 text-slate-500"}`}
-                      >Itens específicos</button>
-                    </div>
-
-                    {g.sourceType === "category" ? (
-                      <div>
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Categoria de onde vêm as opções</label>
-                        <select
-                          value={g.categoryId}
-                          onChange={e => updateSelectionGroupField(idx, "categoryId", e.target.value)}
-                          className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
-                        >
-                          <option value="">Selecione...</option>
-                          {localCategories.filter(c => c.id !== prodModal.categoryId).map(c => (
-                            <option key={c.id} value={c.id}>{c.name} ({c.products?.length || 0} itens)</option>
-                          ))}
-                        </select>
-                      </div>
-                    ) : (
-                      <div>
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Selecione os itens que entram como opção</label>
-                        <div className="max-h-48 overflow-y-auto space-y-1 bg-white rounded-xl border border-slate-200 p-2">
-                          {localCategories.flatMap(c => c.products || []).map((p: any) => {
-                            const checked = g.productIds.includes(p.id);
-                            return (
-                              <label key={p.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={() => updateSelectionGroupField(idx, "productIds", checked
-                                    ? g.productIds.filter(id => id !== p.id)
-                                    : [...g.productIds, p.id])}
-                                  className="w-3.5 h-3.5 rounded accent-amber-500"
-                                />
-                                <span className="text-xs font-bold text-slate-700">{p.name}</span>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
+              {/* FISCAL */}
+              {prodTab === "fiscal" && (
+                <div>
+                  <p className="text-[10px] text-slate-400 font-medium mb-3">Preencha apenas se o módulo fiscal (NFC-e) estiver ativo nas configurações da loja.</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     <div>
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Quantos itens o cliente escolhe neste grupo</label>
-                      <input
-                        type="number"
-                        min={1}
-                        value={g.qty}
-                        onChange={e => updateSelectionGroupField(idx, "qty", e.target.value.replace(/\D/g, ""))}
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">NCM</label>
+                      <input type="text" maxLength={10} value={prodForm.ncm}
+                        onChange={e => setProdForm(f => ({ ...f, ncm: e.target.value.replace(/\D/g, "") }))}
+                        placeholder="00000000"
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">CFOP</label>
+                      <select value={prodForm.cfop} onChange={e => setProdForm(f => ({ ...f, cfop: e.target.value }))}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
+                      >
+                        <option value="5102">5102 — Venda mercadoria adquirida</option>
+                        <option value="5405">5405 — Venda c/ ST</option>
+                        <option value="5101">5101 — Venda de produção própria</option>
+                        <option value="5933">5933 — Simples Nacional — serviço</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">CSOSN</label>
+                      <select value={prodForm.csosn} onChange={e => setProdForm(f => ({ ...f, csosn: e.target.value }))}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
+                      >
+                        <option value="102">102 — Tributada sem permissão crédito</option>
+                        <option value="103">103 — Isento faixa receita bruta</option>
+                        <option value="500">500 — ICMS cobrado por ST</option>
+                        <option value="900">900 — Outros</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Unidade</label>
+                      <select value={prodForm.unitCom} onChange={e => setProdForm(f => ({ ...f, unitCom: e.target.value }))}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
+                      >
+                        {["UN","KG","G","L","ML","CX","PC","PT","PAR","DZ"].map(u => <option key={u} value={u}>{u}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Origem</label>
+                      <select value={prodForm.origem} onChange={e => setProdForm(f => ({ ...f, origem: Number(e.target.value) }))}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
+                      >
+                        <option value={0}>0 — Nacional</option>
+                        <option value={1}>1 — Estrangeira (importação direta)</option>
+                        <option value={2}>2 — Estrangeira (mercado interno)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Alíq. ICMS %</label>
+                      <input type="number" min={0} max={100} step={0.01} value={prodForm.aliqIcms}
+                        onChange={e => setProdForm(f => ({ ...f, aliqIcms: parseFloat(e.target.value) || 0 }))}
                         className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
                       />
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </ContentCard>
-
-          {/* Dados Fiscais NFC-e */}
-          <details className="group">
-            <summary className="flex items-center gap-2 cursor-pointer select-none text-[11px] font-black uppercase tracking-widest text-slate-500 hover:text-[#0D1B3E] transition-colors list-none px-1">
-              <FileText className="w-3.5 h-3.5" />
-              Dados fiscais (NFC-e)
-            </summary>
-            <ContentCard padding="md" className="mt-3 space-y-3">
-              <p className="text-[10px] text-slate-400 font-medium">Preencha apenas se o módulo fiscal (NFC-e) estiver ativo nas configurações da loja.</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">NCM</label>
-                  <input type="text" maxLength={10} value={prodForm.ncm}
-                    onChange={e => setProdForm(f => ({ ...f, ncm: e.target.value.replace(/\D/g, "") }))}
-                    placeholder="00000000"
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
-                  />
                 </div>
-                <div>
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">CFOP</label>
-                  <select value={prodForm.cfop} onChange={e => setProdForm(f => ({ ...f, cfop: e.target.value }))}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
-                  >
-                    <option value="5102">5102 — Venda mercadoria adquirida</option>
-                    <option value="5405">5405 — Venda c/ ST</option>
-                    <option value="5101">5101 — Venda de produção própria</option>
-                    <option value="5933">5933 — Simples Nacional — serviço</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">CSOSN</label>
-                  <select value={prodForm.csosn} onChange={e => setProdForm(f => ({ ...f, csosn: e.target.value }))}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
-                  >
-                    <option value="102">102 — Tributada sem permissão crédito</option>
-                    <option value="103">103 — Isento faixa receita bruta</option>
-                    <option value="500">500 — ICMS cobrado por ST</option>
-                    <option value="900">900 — Outros</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Unidade</label>
-                  <select value={prodForm.unitCom} onChange={e => setProdForm(f => ({ ...f, unitCom: e.target.value }))}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
-                  >
-                    {["UN","KG","G","L","ML","CX","PC","PT","PAR","DZ"].map(u => <option key={u} value={u}>{u}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Origem</label>
-                  <select value={prodForm.origem} onChange={e => setProdForm(f => ({ ...f, origem: Number(e.target.value) }))}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
-                  >
-                    <option value={0}>0 — Nacional</option>
-                    <option value={1}>1 — Estrangeira (importação direta)</option>
-                    <option value={2}>2 — Estrangeira (mercado interno)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Alíq. ICMS %</label>
-                  <input type="number" min={0} max={100} step={0.01} value={prodForm.aliqIcms}
-                    onChange={e => setProdForm(f => ({ ...f, aliqIcms: parseFloat(e.target.value) || 0 }))}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
-                  />
-                </div>
-              </div>
-            </ContentCard>
-          </details>
-
-          {/* Variantes — desabilitado quando o grupo de seleção está ativo (os dois juntos
-              fazem o cliente escolher o sabor duas vezes, ver nota acima). */}
-          <ContentCard padding="md">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-black uppercase tracking-widest text-slate-500">Tamanhos / Variantes</span>
-              {prodForm.selectionGroups.length > 0 ? (
-                <span className="text-[10px] font-bold text-slate-400">Remova os grupos de seleção para usar variações</span>
-              ) : (
-                <button onClick={addVariantField} className="text-xs font-black text-[#C9A227] hover:underline">+ Adicionar</button>
               )}
             </div>
-            <div className="space-y-3">
-              {prodForm.variants.map((v, idx) => (
-                <div key={v._key} className="flex gap-2 items-start bg-zinc-50/60 border border-zinc-100 rounded-xl p-2">
-                  <VariantImageUploader
-                    value={v.imageUrl}
-                    onChange={(val) => updateVariantField(idx, 'imageUrl', val)}
-                  />
-                  <div className="flex-1 min-w-0 space-y-1.5">
-                    <div className="flex gap-2 items-center">
-                      <input placeholder="Nome (ex: 500ml)" value={v.name} onChange={e => updateVariantField(idx, 'name', e.target.value)}
-                        className="flex-1 bg-white border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 min-w-0" />
-                      <input placeholder="R$" value={v.price} onChange={e => updateVariantField(idx, 'price', e.target.value)}
-                        className="w-20 bg-white border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400" />
-                      <button onClick={() => removeVariantField(idx)} className="p-2 text-slate-300 hover:text-red-500 shrink-0">
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                    <select
-                      value={v.inventoryItemId}
-                      onChange={e => updateVariantField(idx, 'inventoryItemId', e.target.value)}
-                      className="w-full bg-white border border-zinc-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-400"
+
+            {/* Footer fixo — uma linha só: ações secundárias à esquerda, principais à direita */}
+            <div className="shrink-0 border-t border-slate-100 px-5 py-3 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2.5 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:pb-3">
+              {editingProduct ? (
+                <div className="flex gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={duplicateProductToCatalog}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors border border-blue-100"
+                  >
+                    <span>📋</span> Duplicar
+                  </button>
+                  {canManageInventory && (
+                    <button
+                      type="button"
+                      onClick={duplicateProductToInventory}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors border border-amber-100"
                     >
-                      <option value="">Sem vínculo de estoque (opcional)</option>
-                      {inventoryItems.filter((item: any) => item.usage !== 'INTERNAL').map((item: any) => (
-                        <option key={item.id} value={item.id}>
-                          {item.name} — {item.quantity <= 0 ? "Esgotado" : `${item.quantity} ${item.unit || 'un'}`}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                      <span>📦</span> Criar no estoque
+                    </button>
+                  )}
                 </div>
-              ))}
+              ) : <div />}
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button variant="outline" onClick={closeProdModal}>Cancelar</Button>
+                <Button onClick={saveProduct}>{editingProduct ? "Salvar alterações" : "Adicionar produto"}</Button>
+              </div>
             </div>
-          </ContentCard>
-        </div>
-      </Modal>
+          </div>
+              </motion.div>
+            </div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Modal: confirmar exclusão de produto */}
       <ConfirmModal
