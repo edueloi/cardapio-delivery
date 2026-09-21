@@ -790,10 +790,22 @@ export default function PDVPanel({
       );
     }
     if (selectedComandaId) {
+      // counterTicketNumber é uma senha sequencial que se repete todo dia — sem
+      // restringir ao mesmo dia do pedido-base selecionado, um pedido de outro dia
+      // que ficou pendurado sem status final (nunca virou DELIVERED/CANCELLED/MERGED)
+      // era resgatado aqui só por coincidir a mesma senha, e seus itens apareciam
+      // misturados no carrinho da comanda de hoje — produto que ninguém pediu surgindo
+      // do nada (mesmo bug de mistura de dias já corrigido no bill-context/na lista de
+      // comandas, mas que faltava aqui, onde os itens de fato são montados).
+      const baseCreatedAt = selectedComandaBaseOrder?.createdAt ? new Date(selectedComandaBaseOrder.createdAt) : null;
+      const baseDayStart = baseCreatedAt ? new Date(baseCreatedAt.getFullYear(), baseCreatedAt.getMonth(), baseCreatedAt.getDate()) : null;
+      const baseDayEnd = baseDayStart ? new Date(baseDayStart.getTime() + 24 * 60 * 60 * 1000) : null;
       return orders.filter(
         (order) =>
           (
-            (selectedComandaBaseOrder?.counterTicketNumber != null && order.counterTicketNumber === selectedComandaBaseOrder.counterTicketNumber) ||
+            (selectedComandaBaseOrder?.counterTicketNumber != null &&
+              order.counterTicketNumber === selectedComandaBaseOrder.counterTicketNumber &&
+              (!baseDayStart || !baseDayEnd || (new Date(order.createdAt) >= baseDayStart && new Date(order.createdAt) < baseDayEnd))) ||
             order.id === selectedComandaId
           ) &&
           order.orderType === "DINE_IN" &&
@@ -802,7 +814,7 @@ export default function PDVPanel({
       );
     }
     return [];
-  }, [orders, selectedComandaBaseOrder?.counterTicketNumber, selectedComandaId, selectedTableId]);
+  }, [orders, selectedComandaBaseOrder?.counterTicketNumber, selectedComandaBaseOrder?.createdAt, selectedComandaId, selectedTableId]);
 
   const existingContextItems = useMemo(
     () =>
@@ -1526,6 +1538,8 @@ export default function PDVPanel({
             operatorName,
             cardBrand: normalizedCardBrand,
             installments: paymentMethod === "CREDIT" ? installments : 1,
+            discount: discountValue ? parseFloat(discountValue) : 0,
+            discountType,
           }),
         });
 
@@ -3066,11 +3080,19 @@ export default function PDVPanel({
       {orderDetailsView && (() => {
           const isTable = orderDetailsView.type === "table";
           const title = isTable ? `Mesa ${orderDetailsView.tableId}` : dineInOrderLabel(orderDetailsView.comanda);
+          // counterTicketNumber se repete todo dia — sem restringir ao mesmo dia da
+          // comanda aberta, um pedido de outro dia pendurado com a mesma senha aparecia
+          // misturado aqui (mesma causa do bug corrigido em currentContextOrders).
+          const comandaCreatedAt = !isTable && orderDetailsView.comanda.createdAt ? new Date(orderDetailsView.comanda.createdAt) : null;
+          const comandaDayStart = comandaCreatedAt ? new Date(comandaCreatedAt.getFullYear(), comandaCreatedAt.getMonth(), comandaCreatedAt.getDate()) : null;
+          const comandaDayEnd = comandaDayStart ? new Date(comandaDayStart.getTime() + 24 * 60 * 60 * 1000) : null;
           const relatedOrders = isTable
             ? orders.filter((o) => o.tableId === orderDetailsView.tableId && o.status !== "CANCELLED" && o.status !== "DELIVERED" && o.status !== "MERGED" && !o.billed)
             : orders.filter((o) =>
                 (
-                  (orderDetailsView.comanda.counterTicketNumber != null && o.counterTicketNumber === orderDetailsView.comanda.counterTicketNumber) ||
+                  (orderDetailsView.comanda.counterTicketNumber != null &&
+                    o.counterTicketNumber === orderDetailsView.comanda.counterTicketNumber &&
+                    (!comandaDayStart || !comandaDayEnd || (new Date(o.createdAt) >= comandaDayStart && new Date(o.createdAt) < comandaDayEnd))) ||
                   o.id === orderDetailsView.comanda.id
                 ) &&
                 o.status !== "CANCELLED" &&

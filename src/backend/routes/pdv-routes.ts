@@ -662,6 +662,8 @@ export function registerPdvRoutes({
           cardBrand,
           installments,
           operatorName: reqOperatorName,
+          discount,
+          discountType,
         } = req.body;
         const account = currentAccount(req);
         const operatorName =
@@ -704,10 +706,24 @@ export function registerPdvRoutes({
             .status(400)
             .json({ error: "Nenhum pedido em aberto encontrado." });
 
-        const totalToBill = orders.reduce(
+        const subtotalToBill = orders.reduce(
           (acc: number, o: any) => acc + o.total,
           0
         );
+
+        // Desconto aplicado no momento de fechar a mesa/comanda (não no lançamento de
+        // cada item individual) — sem isso, o campo de desconto do rodapé do carrinho
+        // era descartado em silêncio sempre que o operador fechava uma comanda já
+        // lançada (carrinho vazio, só faturando o que já estava na mesa), e a nota
+        // saía sem o desconto combinado com o cliente.
+        let discountAmount = 0;
+        if (discount && parseFloat(discount) > 0) {
+          discountAmount =
+            discountType === "PERCENT"
+              ? subtotalToBill * (parseFloat(discount) / 100)
+              : Math.min(parseFloat(discount), subtotalToBill);
+        }
+        const totalToBill = Math.max(0, subtotalToBill - discountAmount);
 
         const currentCash = await prisma.cashRegister.findFirst({
           where: { tenantId: tenant.id, status: "OPEN" },
@@ -718,9 +734,15 @@ export function registerPdvRoutes({
             .status(400)
             .json({ error: "Abra o caixa antes de faturar." });
 
-        // Atualiza os pedidos com os dados de pagamento (mas mantém o status!)
+        // Atualiza os pedidos com os dados de pagamento (mas mantém o status!) — o
+        // desconto do fechamento vai inteiro no PRIMEIRO pedido da comanda (não
+        // rateado entre todos): é esse pedido que a notinha impressa usa como base
+        // (lastOrderRef pega sempre orders[0]), então ratear faria a nota mostrar só
+        // uma fração do desconto combinado com o cliente quando a mesa tem mais de
+        // um pedido lançado.
         const updatedOrders = await Promise.all(
-          orders.map(async (order: any) => {
+          orders.map(async (order: any, idx: number) => {
+            const share = idx === 0 ? discountAmount : 0;
             const updated = await prisma.order.update({
               where: { id: order.id },
               data: {
@@ -733,6 +755,11 @@ export function registerPdvRoutes({
                       installments,
                     })
                   : order.paymentDetail,
+                ...(share > 0 && {
+                  discount: share,
+                  discountType: discountType || "FIXED",
+                  total: Math.max(0, order.total - share),
+                }),
               },
             });
             return updated;
