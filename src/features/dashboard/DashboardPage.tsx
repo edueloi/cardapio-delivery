@@ -146,6 +146,20 @@ export default function DashboardPage() {
       });
     };
 
+    // Comandas de balcão abandonadas há mais de 12h são canceladas automaticamente
+    // pelo servidor (expireStaleComandaOrders) — sem isso, quem estivesse com o
+    // painel de pedidos/PDV aberto continuaria vendo a comanda como ativa até dar
+    // F5, mesmo já cancelada no banco.
+    const handleOrdersExpired = ({ orderIds }: { orderIds: string[] }) => {
+      if (!Array.isArray(orderIds) || orderIds.length === 0) return;
+      const expiredSet = new Set(orderIds);
+      setOrders((prev) =>
+        Array.isArray(prev)
+          ? prev.map((order) => (expiredSet.has(order.id) ? { ...order, status: "CANCELLED" } : order))
+          : prev
+      );
+    };
+
     const handleInventoryUpdate = ({ id, quantity }: { id: string; quantity: number }) => {
       setTenant(prev => {
         if (!prev) return prev;
@@ -201,6 +215,7 @@ export default function DashboardPage() {
 
     socket.on("new-order", handleNewOrder);
     socket.on("order-status-updated", handleOrderStatusUpdated);
+    socket.on("orders-expired", handleOrdersExpired);
     socket.on("inventory-update", handleInventoryUpdate);
     socket.on("checkout-requested", handleCheckoutRequested);
     socket.on("waiter-called", handleWaiterCalled);
@@ -210,6 +225,7 @@ export default function DashboardPage() {
     return () => {
       socket.off("new-order", handleNewOrder);
       socket.off("order-status-updated", handleOrderStatusUpdated);
+      socket.off("orders-expired", handleOrdersExpired);
       socket.off("inventory-update", handleInventoryUpdate);
       socket.off("checkout-requested", handleCheckoutRequested);
       socket.off("waiter-called", handleWaiterCalled);

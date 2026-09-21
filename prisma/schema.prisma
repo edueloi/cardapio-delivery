@@ -748,7 +748,15 @@ model Order {
   source          String  @default("DIRECT") @map("source") // DIRECT (PDV/cardápio/whatsapp), IFOOD, etc — origem do pedido
   externalOrderId String? @map("external_order_id") // ID do pedido no sistema de origem (ex: id do pedido no iFood)
   tableId      String?  @map("table_id")
-  counterTicketNumber Int? @map("counter_ticket_number") // senha sequencial diária — só para pedidos de balcão (tableId nulo, orderType DINE_IN)
+  counterTicketNumber Int? @map("counter_ticket_number") // senha sequencial diária — só para pedidos de balcão (tableId nulo, orderType DINE_IN). Reseta todo dia — NUNCA usar sozinha pra agrupar pedidos, ver comandaGroupId.
+  // Identificador interno (nunca exibido ao cliente/operador) que agrupa todos os
+  // pedidos de uma mesma comanda de balcão, mesmo lançados em momentos/dias
+  // diferentes — gerado uma vez quando a comanda nasce, herdado por cada "adicionar
+  // mais itens" à mesma comanda. Ao contrário de counterTicketNumber (que reseta
+  // todo dia e por isso exige sempre filtrar por data também), este id nunca colide
+  // e nunca precisa de filtro adicional: buscar "pedidos desta comanda" por ele é
+  // seguro por si só. Substitui gradualmente as buscas por counterTicketNumber+data.
+  comandaGroupId String? @map("comanda_group_id")
   consumptionType String? @map("consumption_type") // EAT_IN | TAKEOUT — só pedidos de Balcão (comer no local ou para viagem)
   kitchenReady Boolean  @default(false) @map("kitchen_ready")
   paymentMethod String  @default("CASH") @map("payment_method")
@@ -795,6 +803,7 @@ model Order {
   driver DeliveryDriver? @relation(fields: [driverId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, source, externalOrderId])
+  @@index([tenantId, comandaGroupId])
   @@map("orders")
 }
 

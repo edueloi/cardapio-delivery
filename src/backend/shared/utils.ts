@@ -266,3 +266,21 @@ export function buildPaymentCashMovements(opts: {
     },
   ];
 }
+
+// counterTicketNumber é uma senha sequencial que reseta todo dia (não é um id único
+// global) — qualquer busca por ela SEMPRE precisa restringir a um único dia, senão
+// um pedido de outro dia que ficou pendurado sem status final (nunca virou
+// DELIVERED/CANCELLED/MERGED) é resgatado só por coincidir a mesma senha, e seus
+// itens/valores aparecem misturados na comanda de hoje (bug relatado por cliente:
+// comanda mostrava "2 itens, R$30" na lista, mas abria com 6 itens e R$112 — pedido
+// de outro dia colado na senha de hoje). Centralizado aqui em vez de repetir
+// `createdAt: { gte, lt }` em cada rota, pra nenhuma nova query esquecer disso.
+export function counterTicketSameDayWhere(
+  counterTicketNumber: number,
+  referenceDate: Date | string = new Date()
+): { counterTicketNumber: number; createdAt: { gte: Date; lt: Date } } {
+  const ref = new Date(referenceDate);
+  const dayStart = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate());
+  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+  return { counterTicketNumber, createdAt: { gte: dayStart, lt: dayEnd } };
+}

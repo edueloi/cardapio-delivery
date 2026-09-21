@@ -12,6 +12,7 @@ import {
   restockOrderItemRecipe,
   restockSelectedExtras,
   recalculateOpenOrderAmounts,
+  expireStaleComandaOrders,
 } from "../shared/order-helpers";
 
 export interface RegisterOrderRoutesOptions {
@@ -853,6 +854,18 @@ export function registerOrderRoutes({
     if (!tenant) return;
 
     try {
+      // Expiração "lazy" de comandas de balcão abandonadas (mesmo padrão de
+      // runLazyGeneration em recurring.ts) — roda a cada carregamento da lista de
+      // pedidos do PDV, sem precisar de cron/scheduler separado. Ver comentário em
+      // expireStaleComandaOrders (order-helpers.ts) pro porquê disso existir.
+      const expiredOrderIds = await expireStaleComandaOrders(prisma, tenant.id).catch((err) => {
+        console.error("Falha ao expirar comandas abandonadas:", err);
+        return [] as string[];
+      });
+      if (expiredOrderIds.length > 0) {
+        io.to(`tenant-${tenant.id}`).emit("orders-expired", { orderIds: expiredOrderIds });
+      }
+
       const orders = await prisma.order.findMany({
         where: { tenantId: tenant.id },
         include: {

@@ -506,6 +506,60 @@ export async function restockCancelledOrder(tx: any, order: any) {
   return Array.from(touchedInventoryIds);
 }
 
+// Comandas de balcão abandonadas (garçom lançou errado, cliente desistiu sem avisar,
+// esqueceram de fechar) ficam "penduradas" pra sempre em PENDING/PREPARING/
+// AWAITING_PAYMENT se ninguém cancelar manualmente — nada no sistema fecha isso
+// sozinho. É essa a causa raiz de fundo do bug relatado por cliente onde uma comanda
+// de hoje "herdava" itens de uma comanda de outro dia com a mesma senha sequencial:
+// senha reseta todo dia, então um pedido de ontem ainda tecnicamente aberto virava
+// candidato a ser resgatado hoje. Expirar automaticamente (virar CANCELLED sozinho)
+// depois de tempo suficiente pra nenhum atendimento real durar isso elimina a
+// possibilidade — mesmo que comandaGroupId e os filtros de data já blindem as
+// buscas, um pedido que nunca deveria ter ficado aberto por dias é o problema real.
+// Rodado "lazy" (chamado a cada carregamento de pedidos do PDV, como as recorrências
+// financeiras em recurring.ts) em vez de precisar de um cron/scheduler separado.
+const STALE_COMANDA_HOURS = 12;
+
+export async function expireStaleComandaOrders(
+  prisma: any,
+  tenantId: string,
+  now: Date = new Date()
+): Promise<string[]> {
+  const cutoff = new Date(now.getTime() - STALE_COMANDA_HOURS * 60 * 60 * 1000);
+  const staleOrders = await prisma.order.findMany({
+    where: {
+      tenantId,
+      orderType: "DINE_IN",
+      tableId: null,
+      billed: false,
+      status: { in: ["PENDING", "PREPARING", "AWAITING_PAYMENT"] },
+      createdAt: { lt: cutoff },
+    },
+    include: {
+      items: { include: { product: true, productVariant: true } },
+    },
+  });
+
+  const expiredIds: string[] = [];
+  for (const order of staleOrders) {
+    await prisma.$transaction(async (tx: any) => {
+      // Confirma o status na mesma transação (evita expirar um pedido que acabou de
+      // ser fechado/pago entre o findMany acima e este update — corrida rara, mas
+      // possível se esta função rodar concorrentemente em duas requisições).
+      const current = await tx.order.findUnique({ where: { id: order.id }, select: { status: true, billed: true } });
+      if (!current || current.billed || !["PENDING", "PREPARING", "AWAITING_PAYMENT"].includes(current.status)) return;
+
+      await restockCancelledOrder(tx, order);
+      await tx.order.update({
+        where: { id: order.id },
+        data: { status: "CANCELLED", notes: [order.notes, "Cancelado automaticamente: comanda abandonada por mais de 12h sem fechamento."].filter(Boolean).join(" — ") },
+      });
+      expiredIds.push(order.id);
+    });
+  }
+  return expiredIds;
+}
+
 export interface OrderHelpersDeps {
   io: Server;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -1,11 +1,12 @@
 import type { Express, Request, RequestHandler, Response } from "express";
 import type { Server } from "socket.io";
+import { randomUUID } from "crypto";
 import { type AuthenticatedRequest } from "../auth";
 import {
   deductStockFIFO,
   resolveSelectedExtras,
 } from "../shared/order-helpers";
-import { buildPaymentCashMovements } from "../shared/utils";
+import { buildPaymentCashMovements, counterTicketSameDayWhere } from "../shared/utils";
 
 export interface RegisterPdvRoutesOptions {
   app: Express;
@@ -355,6 +356,12 @@ export function registerPdvRoutes({
       // tela de comandas do PDV, mesmo sendo de gente/pedidos completamente diferentes.
       const order = await prisma.$transaction(async (tx) => {
         let counterTicketNumber: number | null = null;
+        // Identifica de forma definitiva (nunca reseta, nunca colide) a qual comanda
+        // este lançamento pertence — ver comentário do campo no schema.prisma. Herdado
+        // do pedido-base quando "adicionar mais itens" reaproveita a mesma senha;
+        // gerado novo só quando não há nenhum pedido-base pra herdar de (comanda
+        // realmente nova, ou senha sequencial desativada nas configurações).
+        let comandaGroupId: string | null = null;
         if (usesCounterTicket) {
           await tx.$executeRawUnsafe(
             "SELECT id FROM tenants WHERE id = ? FOR UPDATE",
@@ -375,14 +382,18 @@ export function registerPdvRoutes({
           // "Adicionar mais itens": aqui é fila (painel/cozinha chamam por número), então um
           // lançamento novo tem que pegar a PRÓXIMA senha da fila, nunca reaproveitar uma
           // anterior — senão atropela quem já está na frente.
-          const collision = requested
+          const existingBase = requested
             ? await tx.order.findFirst({
-                where: { tenantId: tenant.id, counterTicketNumber: requested, createdAt: { gte: startOfDay } },
-                select: { id: true },
+                where: { tenantId: tenant.id, ...counterTicketSameDayWhere(requested) },
+                select: { id: true, comandaGroupId: true },
+                orderBy: { createdAt: "asc" },
               })
             : null;
-          if (requested && !collision) {
+          if (requested && !existingBase) {
             counterTicketNumber = requested;
+          } else if (existingBase) {
+            counterTicketNumber = requested;
+            comandaGroupId = existingBase.comandaGroupId;
           } else {
             const lastTicket = await tx.order.findFirst({
               where: {
@@ -396,12 +407,14 @@ export function registerPdvRoutes({
             counterTicketNumber = (lastTicket?.counterTicketNumber ?? 0) + 1;
           }
         }
+        if (!comandaGroupId && isCounterComanda) comandaGroupId = randomUUID();
 
         return tx.order.create({
           data: {
             tenantId: tenant.id,
             customerName: customerName || (isCounterComanda ? "" : "Venda PDV"),
             customerPhone: customerPhone || "00000000000",
+            comandaGroupId,
             orderType: orderType || "TAKEAWAY",
             tableId: tableId || null,
             counterTicketNumber,
@@ -676,15 +689,22 @@ export function registerPdvRoutes({
           return res.status(400).json({ error: "Informe a mesa ou senha." });
         }
 
-        // Busca os pedidos abertos no contexto. Restrito ao dia atual + billed:false:
-        // counterTicketNumber é uma senha sequencial que se repete todo dia — sem o filtro
-        // de data, um pedido de outro dia que ficou pendurado sem status finalizado (nunca
-        // virou DELIVERED/CANCELLED/MERGED) seria resgatado aqui só por coincidir a mesma
-        // senha, e teria seu valor somado junto ao faturamento de hoje (caixa não bate,
-        // produtos de um pedido que "não existe" aparecem misturados). billed:false evita
-        // faturar de novo um pedido que outra requisição (duplo clique/reenvio) já processou.
-        const startOfToday = new Date();
-        startOfToday.setHours(0, 0, 0, 0);
+        // Resolve o comandaGroupId real da senha antes de buscar os pedidos — ele nunca
+        // colide nem reseta (ao contrário de counterTicketNumber), então é a forma
+        // definitiva de saber quais pedidos pertencem a esta comanda. Pedidos anteriores
+        // à migration que introduziu esse campo não têm comandaGroupId — nesse caso o
+        // filtro por senha+mesmo-dia (counterTicketSameDayWhere) continua sendo usado
+        // como aproximação, exatamente como já funcionava antes.
+        const comandaGroupId = !tableId
+          ? (await prisma.order.findFirst({
+              where: { tenantId: tenant.id, ...counterTicketSameDayWhere(Number(counterTicketNumber)) },
+              select: { comandaGroupId: true },
+              orderBy: { createdAt: "asc" },
+            }))?.comandaGroupId ?? null
+          : null;
+
+        // Busca os pedidos abertos no contexto. billed:false evita faturar de novo um
+        // pedido que outra requisição (duplo clique/reenvio) já processou.
         const orders = await prisma.order.findMany({
           where: {
             tenantId: tenant.id,
@@ -694,9 +714,8 @@ export function registerPdvRoutes({
             ...(tableId
               ? { tableId }
               : {
-                  counterTicketNumber: Number(counterTicketNumber),
+                  ...(comandaGroupId ? { comandaGroupId } : counterTicketSameDayWhere(Number(counterTicketNumber))),
                   tableId: null,
-                  createdAt: { gte: startOfToday },
                 }),
           },
         });

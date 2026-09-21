@@ -1256,6 +1256,16 @@ const migrations = [
     check: "SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'order_items' AND CONSTRAINT_NAME = 'order_items_product_id_fkey' AND DELETE_RULE = 'SET NULL'",
     run: "ALTER TABLE order_items ADD CONSTRAINT order_items_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL ON UPDATE CASCADE",
   },
+  {
+    name: 'add_orders_comanda_group_id',
+    check: "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'comanda_group_id'",
+    run: "ALTER TABLE orders ADD COLUMN comanda_group_id VARCHAR(191) NULL",
+  },
+  {
+    name: 'add_orders_comanda_group_id_idx',
+    check: "SELECT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND INDEX_NAME = 'orders_tenant_id_comanda_group_id_idx'",
+    run: "CREATE INDEX orders_tenant_id_comanda_group_id_idx ON orders(tenant_id, comanda_group_id)",
+  },
 ];
 
 async function run() {

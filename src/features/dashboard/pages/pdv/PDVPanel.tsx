@@ -790,13 +790,15 @@ export default function PDVPanel({
       );
     }
     if (selectedComandaId) {
-      // counterTicketNumber é uma senha sequencial que se repete todo dia — sem
-      // restringir ao mesmo dia do pedido-base selecionado, um pedido de outro dia
-      // que ficou pendurado sem status final (nunca virou DELIVERED/CANCELLED/MERGED)
-      // era resgatado aqui só por coincidir a mesma senha, e seus itens apareciam
-      // misturados no carrinho da comanda de hoje — produto que ninguém pediu surgindo
-      // do nada (mesmo bug de mistura de dias já corrigido no bill-context/na lista de
-      // comandas, mas que faltava aqui, onde os itens de fato são montados).
+      // comandaGroupId (quando presente) é a fonte de verdade: nunca reseta nem
+      // colide, ao contrário de counterTicketNumber (senha sequencial que se repete
+      // todo dia). Pedidos criados antes dessa coluna existir não têm esse campo —
+      // pra esses, mantemos o filtro por senha + mesmo dia do pedido-base como
+      // aproximação. Sem alguma dessas duas travas, um pedido de outro dia pendurado
+      // sem status final (nunca virou DELIVERED/CANCELLED/MERGED) era resgatado aqui
+      // só por coincidir a mesma senha, e seus itens apareciam misturados no carrinho
+      // da comanda de hoje — produto que ninguém pediu surgindo do nada.
+      const baseGroupId = selectedComandaBaseOrder?.comandaGroupId ?? null;
       const baseCreatedAt = selectedComandaBaseOrder?.createdAt ? new Date(selectedComandaBaseOrder.createdAt) : null;
       const baseDayStart = baseCreatedAt ? new Date(baseCreatedAt.getFullYear(), baseCreatedAt.getMonth(), baseCreatedAt.getDate()) : null;
       const baseDayEnd = baseDayStart ? new Date(baseDayStart.getTime() + 24 * 60 * 60 * 1000) : null;
@@ -805,7 +807,9 @@ export default function PDVPanel({
           (
             (selectedComandaBaseOrder?.counterTicketNumber != null &&
               order.counterTicketNumber === selectedComandaBaseOrder.counterTicketNumber &&
-              (!baseDayStart || !baseDayEnd || (new Date(order.createdAt) >= baseDayStart && new Date(order.createdAt) < baseDayEnd))) ||
+              (baseGroupId
+                ? order.comandaGroupId === baseGroupId
+                : (!baseDayStart || !baseDayEnd || (new Date(order.createdAt) >= baseDayStart && new Date(order.createdAt) < baseDayEnd)))) ||
             order.id === selectedComandaId
           ) &&
           order.orderType === "DINE_IN" &&
@@ -3080,9 +3084,11 @@ export default function PDVPanel({
       {orderDetailsView && (() => {
           const isTable = orderDetailsView.type === "table";
           const title = isTable ? `Mesa ${orderDetailsView.tableId}` : dineInOrderLabel(orderDetailsView.comanda);
-          // counterTicketNumber se repete todo dia — sem restringir ao mesmo dia da
-          // comanda aberta, um pedido de outro dia pendurado com a mesma senha aparecia
-          // misturado aqui (mesma causa do bug corrigido em currentContextOrders).
+          // comandaGroupId (quando presente) é a fonte de verdade — nunca reseta nem
+          // colide. counterTicketNumber se repete todo dia; pedidos anteriores à
+          // migration que introduziu comandaGroupId caem no fallback por senha+dia
+          // (mesma causa do bug corrigido em currentContextOrders).
+          const comandaGroupIdRef = !isTable ? orderDetailsView.comanda.comandaGroupId ?? null : null;
           const comandaCreatedAt = !isTable && orderDetailsView.comanda.createdAt ? new Date(orderDetailsView.comanda.createdAt) : null;
           const comandaDayStart = comandaCreatedAt ? new Date(comandaCreatedAt.getFullYear(), comandaCreatedAt.getMonth(), comandaCreatedAt.getDate()) : null;
           const comandaDayEnd = comandaDayStart ? new Date(comandaDayStart.getTime() + 24 * 60 * 60 * 1000) : null;
@@ -3092,7 +3098,9 @@ export default function PDVPanel({
                 (
                   (orderDetailsView.comanda.counterTicketNumber != null &&
                     o.counterTicketNumber === orderDetailsView.comanda.counterTicketNumber &&
-                    (!comandaDayStart || !comandaDayEnd || (new Date(o.createdAt) >= comandaDayStart && new Date(o.createdAt) < comandaDayEnd))) ||
+                    (comandaGroupIdRef
+                      ? o.comandaGroupId === comandaGroupIdRef
+                      : (!comandaDayStart || !comandaDayEnd || (new Date(o.createdAt) >= comandaDayStart && new Date(o.createdAt) < comandaDayEnd)))) ||
                   o.id === orderDetailsView.comanda.id
                 ) &&
                 o.status !== "CANCELLED" &&

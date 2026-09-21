@@ -635,7 +635,8 @@ export interface Order {
   status: 'PENDING' | 'PREPARING' | 'SHIPPED' | 'AWAITING_PAYMENT' | 'DELIVERED' | 'CANCELLED' | 'MERGED';
   orderType: 'DELIVERY' | 'PICKUP' | 'TAKEAWAY' | 'DINE_IN';
   tableId?: string | null;
-  counterTicketNumber?: number | null; // senha sequencial diária — só para pedidos de balcão (sem mesa)
+  counterTicketNumber?: number | null; // senha sequencial diária — só para pedidos de balcão (sem mesa). Reseta todo dia — nunca usar sozinha pra agrupar pedidos, ver comandaGroupId.
+  comandaGroupId?: string | null; // id interno (nunca exibido) que agrupa todos os pedidos de uma mesma comanda de balcão, mesmo lançados em dias diferentes — nunca reseta nem colide, ao contrário de counterTicketNumber
   consumptionType?: 'EAT_IN' | 'TAKEOUT' | null; // comer no local ou para viagem — só pedidos de Balcão
   kitchenReady?: boolean;
   paymentMethod: 'PIX' | 'CREDIT' | 'DEBIT' | 'MEAL' | 'FOOD' | 'CASH' | 'VR' | 'SPLIT' | 'STONE_CREDIT' | 'STONE_DEBIT' | 'STONE_PIX';
