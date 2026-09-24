@@ -141,7 +141,7 @@ export function registerPdvRoutes({
       // Fetch products and calculate totals
       const productIds = validatedItems.map((i: any) => i.productId);
       const products = await prisma.product.findMany({
-        where: { id: { in: productIds } },
+        where: { id: { in: productIds }, tenantId: tenant.id, available: true },
         include: { variants: true },
       });
       const productMap = Object.fromEntries(products.map((p) => [p.id, p]));
@@ -153,7 +153,7 @@ export function registerPdvRoutes({
         if (!product)
           return res
             .status(400)
-            .json({ error: `Produto ${item.productId} não encontrado.` });
+            .json({ error: "Um dos produtos selecionados não está mais disponível." });
         // Preço nunca confia no valor vindo do cliente — resolve pela variante (se houver)
         // ou pelo preço base do produto, sempre a partir do que está salvo no banco.
         let price = product.price;

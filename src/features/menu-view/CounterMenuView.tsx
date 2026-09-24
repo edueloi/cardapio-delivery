@@ -113,6 +113,16 @@ export default function CounterMenuView() {
     }
   }, [tenant, selectedCategoryId]);
 
+  // Carrinho salvo antes de um produto ser desativado não pode continuar oferecendo
+  // esse item ao cliente. Complementos de grupos são tratados separadamente pelo picker.
+  useEffect(() => {
+    if (!tenant) return;
+    const availableIds = new Set(tenant.categories?.flatMap((category) =>
+      category.products.filter((product) => product.available !== false).map((product) => product.id),
+    ));
+    setCart((current) => current.filter((item) => availableIds.has(item.productId)));
+  }, [tenant]);
+
   useEffect(() => {
     fetch(`/api/tenants/${slug}`)
       .then(r => r.json())
@@ -319,7 +329,7 @@ export default function CounterMenuView() {
 
   const openPromotionProduct = (promo: any) => {
     if (!promo.product) return;
-    const found = tenant?.categories?.flatMap(c => c.products).find(p => p.id === promo.product.id);
+    const found = tenant?.categories?.flatMap(c => c.products).find(p => p.id === promo.product.id && p.available !== false);
     if (found) {
       setSelectedProduct(found);
       setSelectedVariant(found.variants && found.variants.length > 0 ? found.variants[0] : null);
@@ -881,7 +891,7 @@ export default function CounterMenuView() {
               <div className="p-4 lg:p-0 space-y-8 lg:space-y-12">
                 {tenant.categories?.filter(cat =>
                   (!selectedCategoryId || cat.id === selectedCategoryId || !isDesktop) &&
-                  (!searchTerm || cat.products.some(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.description?.toLowerCase().includes(searchTerm.toLowerCase())))
+                  cat.products.some(p => p.available !== false && (!searchTerm || p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.description?.toLowerCase().includes(searchTerm.toLowerCase())))
                 ).map(cat => (
                   <section id={`cat-${cat.id}`} key={cat.id} className={`space-y-4 lg:space-y-6 ${selectedCategoryId && selectedCategoryId !== cat.id && !searchTerm ? 'lg:hidden' : ''}`}>
                     <h2 className="text-[11px] font-black text-amber-500 uppercase tracking-[0.2em] flex items-center gap-3">
@@ -892,9 +902,9 @@ export default function CounterMenuView() {
                     {/* Mobile/Tablet: 2-column grid of cards */}
                     <div className="grid grid-cols-2 gap-3 lg:hidden">
                       {cat.products.filter(p =>
-                        !searchTerm ||
+                        p.available !== false && (!searchTerm ||
                         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        p.description?.toLowerCase().includes(searchTerm.toLowerCase())
+                        p.description?.toLowerCase().includes(searchTerm.toLowerCase()))
                       ).map(p => (
                         <motion.button
                           key={p.id}
@@ -931,9 +941,9 @@ export default function CounterMenuView() {
                     {/* Desktop: cards */}
                     <div className="hidden lg:grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5">
                       {cat.products.filter(p =>
-                        !searchTerm ||
+                        p.available !== false && (!searchTerm ||
                         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        p.description?.toLowerCase().includes(searchTerm.toLowerCase())
+                        p.description?.toLowerCase().includes(searchTerm.toLowerCase()))
                       ).map(p => (
                         <motion.div
                           key={p.id}

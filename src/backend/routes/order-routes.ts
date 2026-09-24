@@ -136,7 +136,12 @@ export function registerOrderRoutes({
           include: { variants: true },
         });
 
-        if (!product) continue;
+        // O cardápio pode ficar aberto no celular enquanto o operador desativa um
+        // produto. A API é a última proteção: item inativo, de outra loja ou removido
+        // nunca pode ser vendido como produto principal, mesmo vindo de um carrinho antigo.
+        if (!product || product.tenantId !== tenantId || !product.available) {
+          return res.status(400).json({ error: "Um dos produtos selecionados não está mais disponível." });
+        }
 
         let itemPrice = product.price;
         if (item.productVariantId) {
