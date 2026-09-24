@@ -394,13 +394,17 @@ export default function PDVPanel({
     const isDineIn = order.orderType === "DINE_IN";
     const isPaid = order.billed === true || order.status === "DELIVERED";
 
-    // Comanda/mesa ainda aberta não é recibo de pagamento. Imprime só a via interna
-    // para produção; no fechamento sai a via definitiva do cliente. Assim não há uma
-    // terceira via quando a comanda é cobrada.
+    // Comanda/mesa ainda aberta não é recibo de pagamento. A configuração controla
+    // somente a cópia adicional: com ela desligada sai uma via; ligada, saem a via
+    // do cliente e a via do estabelecimento. No fechamento sai o comprovante final
+    // com pagamento, desconto e demais ajustes.
     if (isDineIn && !isPaid) {
-      const copyLabel = printingConfig.autoPrintEstablishmentCopy ? "ESTABELECIMENTO" : "CLIENTE";
-      const openingCopy = buildReceiptDataFromOrder(order, copyLabel);
-      if (openingCopy) doPrint(openingCopy);
+      const clientCopy = buildReceiptDataFromOrder(order, "CLIENTE");
+      if (clientCopy) doPrint(clientCopy);
+      if (printingConfig.autoPrintEstablishmentCopy) {
+        const establishmentCopy = buildReceiptDataFromOrder(order, "ESTABELECIMENTO");
+        if (establishmentCopy) doPrint(establishmentCopy);
+      }
       return;
     }
 
