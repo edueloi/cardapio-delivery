@@ -171,7 +171,7 @@ export const Modal: React.FC<ModalProps> = ({
                     isSheet ? "pt-5 pb-4 sm:py-5" : "py-4 sm:py-5"
                   )}
                 >
-                  <div className="text-sm sm:text-[15px] font-black text-zinc-900 uppercase tracking-wide truncate pr-4 font-display">
+                  <div className="min-w-0 flex-1 truncate pr-4 text-sm font-black uppercase tracking-wide text-zinc-900 font-display sm:text-[15px]">
                     {title}
                   </div>
                   {!hideCloseButton && (

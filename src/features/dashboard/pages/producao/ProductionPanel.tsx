@@ -28,7 +28,6 @@ import {
   ContentCard,
   Divider,
   EmptyState,
-  FilterLineSegmented,
   FormRow,
   GridTable,
   IconButton,
@@ -238,7 +237,7 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
   if (!tenant) return null;
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       {/* Hero */}
       <div className="overflow-hidden rounded-2xl border border-[#0D1B3E]/10 bg-[radial-gradient(circle_at_top_left,_rgba(201,162,39,0.24),_transparent_42%),linear-gradient(135deg,#0D1B3E_0%,#142751_55%,#1e3570_100%)] p-4 text-white shadow-[0_20px_50px_-30px_rgba(13,27,62,0.7)] sm:p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -246,7 +245,7 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
             <Badge color="primary" size="sm" className="bg-white/12 text-white border-white/10">
               Engenharia de produção integrada
             </Badge>
-            <h2 className="text-lg font-black tracking-tight sm:text-xl">Central de Produção</h2>
+            <h2 className="break-words text-lg font-black tracking-tight sm:text-xl">Central de Produção</h2>
             <p className="max-w-xl text-xs font-medium leading-relaxed text-slate-300 sm:text-sm">
               Monte fichas técnicas, converta unidades automaticamente e registre o custo completo de cada produção.
             </p>
@@ -302,31 +301,31 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
       )}
 
       {/* Abas */}
-      <div className="flex gap-1 rounded-2xl border border-slate-200 bg-slate-100/70 p-1">
+      <div className="grid grid-cols-2 gap-1 rounded-2xl border border-slate-200 bg-slate-100/70 p-1">
         <button
           onClick={() => setActiveTab("recipes")}
-          className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-black transition-all ${
+          className={`flex min-w-0 items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-xs font-black transition-all sm:gap-2 sm:px-4 sm:text-sm ${
             activeTab === "recipes"
               ? "bg-white text-slate-900 shadow-sm"
               : "text-slate-500 hover:text-slate-700"
           }`}
         >
           <ChefHat className="h-4 w-4" />
-          <span>Fichas Técnicas</span>
+          <span className="truncate">Fichas Técnicas</span>
           <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${activeTab === "recipes" ? "bg-slate-100 text-slate-600" : "bg-white/60 text-slate-400"}`}>
             {recipes.length}
           </span>
         </button>
         <button
           onClick={() => setActiveTab("history")}
-          className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-black transition-all ${
+          className={`flex min-w-0 items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-xs font-black transition-all sm:gap-2 sm:px-4 sm:text-sm ${
             activeTab === "history"
               ? "bg-white text-slate-900 shadow-sm"
               : "text-slate-500 hover:text-slate-700"
           }`}
         >
           <History className="h-4 w-4" />
-          <span>Histórico</span>
+          <span className="truncate">Histórico</span>
           <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${activeTab === "history" ? "bg-slate-100 text-slate-600" : "bg-white/60 text-slate-400"}`}>
             {runs.length}
           </span>
@@ -345,16 +344,25 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full sm:w-[260px]"
               />
-              <FilterLineSegmented
-                options={[
+              <div className="grid w-full grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 sm:flex sm:w-auto">
+                {([
                   { value: "all", label: `Todas (${recipes.length})` },
                   { value: "active", label: "Ativas" },
                   { value: "critical", label: "Críticas" },
                   { value: "inactive", label: "Inativas" },
-                ]}
-                value={filter}
-                onChange={(value) => setFilter(value as RecipeFilter)}
-              />
+                ] as const).map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setFilter(option.value)}
+                    className={`min-w-0 rounded-lg px-2 py-1.5 text-[10px] font-bold transition-all sm:px-2.5 ${
+                      filter === option.value ? "bg-white text-amber-600 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    <span className="block truncate">{option.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
             {loading ? (
@@ -795,21 +803,21 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
 
 function SummaryTile({ label, value, icon }: { label: string; value: string; icon: ReactNode }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+    <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">{label}</p>
+        <p className="min-w-0 break-words text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">{label}</p>
         <div className="rounded-xl bg-white p-2 text-[#0D1B3E] shadow-sm">{icon}</div>
       </div>
-      <p className="mt-3 text-lg font-black tracking-tight text-slate-900">{value}</p>
+      <p className="mt-3 break-words text-lg font-black tracking-tight text-slate-900">{value}</p>
     </div>
   );
 }
 
 function MetricPill({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-3">
-      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">{label}</p>
-      <p className="mt-1 text-sm font-black text-slate-900">{value}</p>
+    <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3">
+      <p className="break-words text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">{label}</p>
+      <p className="mt-1 break-words text-sm font-black text-slate-900">{value}</p>
     </div>
   );
 }
