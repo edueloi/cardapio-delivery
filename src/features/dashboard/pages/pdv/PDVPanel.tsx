@@ -404,14 +404,6 @@ export default function PDVPanel({
     }
   }, [printingConfig]);
 
-  const printFinalComandaReceipt = useCallback((order: any) => {
-    const data = buildReceiptDataFromOrder(order, "CLIENTE");
-    if (!data) return;
-    const desktop = (window as any).pdvDesktop;
-    if (desktop?.printReceipt) desktop.printReceipt(data);
-    else printReceiptPdf(data);
-  }, []);
-
   // Toda venda/lançamento criado a partir DESTA aba já imprime na hora, logo depois da
   // chamada HTTP ter sucesso (ver handleCheckout/handleCreateComanda/handleLaunchOrder) —
   // sem precisar do socket. O Set global evita imprimir de novo quando o "order-created"
@@ -1564,11 +1556,9 @@ export default function PDVPanel({
         // só no de venda nova) — clicar nele não fazia nada, silenciosamente.
         const finalReceiptOrder = billResult?.receiptOrder ?? billResult?.orders?.[0] ?? null;
         lastOrderRef.current = finalReceiptOrder;
-        // O ticket impresso ao abrir a comanda é uma prévia, sem pagamento. Ao concluir
-        // a cobrança, imprime a via final com itens, desconto e forma de pagamento.
-        if (printingConfig.autoPrintOnOrderCreate && finalReceiptOrder) {
-          printFinalComandaReceipt(finalReceiptOrder);
-        }
+        // Ao fechar, deixa a via final (com pagamento, desconto e demais ajustes)
+        // disponível no botão Imprimir da tela de sucesso. Não dispara sozinha: as
+        // vias automáticas já foram emitidas na abertura, evitando uma terceira folha.
 
         // Limpa a seleção visual (não chama onClearComanda para não dar MERGED e apagar da cozinha)
         if (selectedTableId) setSelectedTableId(null);
