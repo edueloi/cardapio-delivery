@@ -392,6 +392,17 @@ export default function PDVPanel({
       else printReceiptPdf(data);
     };
     const isDineIn = order.orderType === "DINE_IN";
+    const isPaid = order.billed === true || order.status === "DELIVERED";
+
+    // Comanda/mesa ainda aberta não é recibo de pagamento. Imprime só a via interna
+    // para produção; no fechamento sai a via definitiva do cliente. Assim não há uma
+    // terceira via quando a comanda é cobrada.
+    if (isDineIn && !isPaid) {
+      const establishmentCopy = buildReceiptDataFromOrder(order, "ESTABELECIMENTO");
+      if (establishmentCopy) doPrint(establishmentCopy);
+      return;
+    }
+
     const clientCopy = buildReceiptDataFromOrder(order, isDineIn ? "CLIENTE" : undefined);
     if (clientCopy) doPrint(clientCopy);
     if (isDineIn && printingConfig.autoPrintEstablishmentCopy) {
@@ -399,6 +410,14 @@ export default function PDVPanel({
       if (establishmentCopy) doPrint(establishmentCopy);
     }
   }, [printingConfig]);
+
+  const printFinalComandaReceipt = useCallback((order: any) => {
+    const data = buildReceiptDataFromOrder(order, "CLIENTE");
+    if (!data) return;
+    const desktop = (window as any).pdvDesktop;
+    if (desktop?.printReceipt) desktop.printReceipt(data);
+    else printReceiptPdf(data);
+  }, []);
 
   // Toda venda/lançamento criado a partir DESTA aba já imprime na hora, logo depois da
   // chamada HTTP ter sucesso (ver handleCheckout/handleCreateComanda/handleLaunchOrder) —
@@ -1555,7 +1574,7 @@ export default function PDVPanel({
         // O ticket impresso ao abrir a comanda é uma prévia, sem pagamento. Ao concluir
         // a cobrança, imprime a via final com itens, desconto e forma de pagamento.
         if (printingConfig.autoPrintOnOrderCreate && finalReceiptOrder) {
-          printOrderAuto(finalReceiptOrder);
+          printFinalComandaReceipt(finalReceiptOrder);
         }
 
         // Limpa a seleção visual (não chama onClearComanda para não dar MERGED e apagar da cozinha)
