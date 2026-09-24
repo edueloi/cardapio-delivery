@@ -398,8 +398,9 @@ export default function PDVPanel({
     // para produção; no fechamento sai a via definitiva do cliente. Assim não há uma
     // terceira via quando a comanda é cobrada.
     if (isDineIn && !isPaid) {
-      const establishmentCopy = buildReceiptDataFromOrder(order, "ESTABELECIMENTO");
-      if (establishmentCopy) doPrint(establishmentCopy);
+      const copyLabel = printingConfig.autoPrintEstablishmentCopy ? "ESTABELECIMENTO" : "CLIENTE";
+      const openingCopy = buildReceiptDataFromOrder(order, copyLabel);
+      if (openingCopy) doPrint(openingCopy);
       return;
     }
 
@@ -1459,7 +1460,7 @@ export default function PDVPanel({
       onOrderCreated?.();
 
       if (createdOrder?.id) {
-        if (printingConfig.autoPrintOnOrderCreate) {
+        if (printingConfig.autoPrintOnOrderCreate && !globalAutoPrintedOrderIds.has(createdOrder.id)) {
           globalAutoPrintedOrderIds.add(createdOrder.id);
           printOrderAuto(createdOrder);
         }
@@ -1500,7 +1501,7 @@ export default function PDVPanel({
           ...(isWaiterMode ? { source: "waiter" } : {}),
         }),
       });
-      if (printingConfig.autoPrintOnOrderCreate && launchedOrder?.id) {
+      if (printingConfig.autoPrintOnOrderCreate && launchedOrder?.id && !globalAutoPrintedOrderIds.has(launchedOrder.id)) {
         globalAutoPrintedOrderIds.add(launchedOrder.id);
         printOrderAuto(launchedOrder);
       }
@@ -1637,7 +1638,7 @@ export default function PDVPanel({
         body: JSON.stringify(orderData),
       }) as { id: string; [key: string]: unknown };
       lastOrderRef.current = order;
-      if (printingConfig.autoPrintOnOrderCreate && (order as any).id) {
+      if (printingConfig.autoPrintOnOrderCreate && (order as any).id && !globalAutoPrintedOrderIds.has((order as any).id)) {
         globalAutoPrintedOrderIds.add((order as any).id);
         printOrderAuto(order);
       }
