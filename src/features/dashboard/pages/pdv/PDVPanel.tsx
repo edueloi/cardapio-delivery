@@ -1525,7 +1525,7 @@ export default function PDVPanel({
 
     if (isPayingExistingContext && !isStone) {
       try {
-        const billResult = await apiJson<{ orders?: any[] }>(`/api/tenants/${tenant.slug}/pdv/bill-context`, {
+        const billResult = await apiJson<{ orders?: any[]; receiptOrder?: any }>(`/api/tenants/${tenant.slug}/pdv/bill-context`, {
           method: "POST",
           body: JSON.stringify({
             tableId: selectedTableId || undefined,
@@ -1550,7 +1550,13 @@ export default function PDVPanel({
         // Sem isso, o botão "Imprimir" da tela de sucesso ficava sem pedido pra imprimir
         // (lastOrderRef nunca era preenchido nesse fluxo de fechar mesa/comanda existente,
         // só no de venda nova) — clicar nele não fazia nada, silenciosamente.
-        lastOrderRef.current = billResult?.orders?.[0] ?? null;
+        const finalReceiptOrder = billResult?.receiptOrder ?? billResult?.orders?.[0] ?? null;
+        lastOrderRef.current = finalReceiptOrder;
+        // O ticket impresso ao abrir a comanda é uma prévia, sem pagamento. Ao concluir
+        // a cobrança, imprime a via final com itens, desconto e forma de pagamento.
+        if (printingConfig.autoPrintOnOrderCreate && finalReceiptOrder) {
+          printOrderAuto(finalReceiptOrder);
+        }
 
         // Limpa a seleção visual (não chama onClearComanda para não dar MERGED e apagar da cozinha)
         if (selectedTableId) setSelectedTableId(null);

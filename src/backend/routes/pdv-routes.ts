@@ -780,6 +780,7 @@ export function registerPdvRoutes({
                   total: Math.max(0, order.total - share),
                 }),
               },
+              include: { items: { include: { product: true, productVariant: true } } },
             });
             return updated;
           })
@@ -807,7 +808,7 @@ export function registerPdvRoutes({
                 orderId: orders[0].id,
                 operatorName,
               })
-            : orders.map((order: any) => ({
+            : updatedOrders.map((order: any) => ({
                 cashRegisterId: currentCash.id,
                 tenantId: tenant.id,
                 type: `PAYMENT_${paymentMethod || "CASH"}`,
@@ -827,7 +828,19 @@ export function registerPdvRoutes({
         }
         if (tableId) io.to(`${tenant.id}-mesa-${tableId}`).emit("table-update");
 
-        res.json({ success: true, total: totalToBill, orders: updatedOrders });
+        // A via final da comanda precisa trazer todos os itens e o total efetivamente
+        // cobrado. O primeiro pedido ainda é a referência para auditoria, mas não pode
+        // fazer a notinha do cliente omitir itens de lançamentos posteriores.
+        const receiptOrder = updatedOrders.length > 0
+          ? {
+              ...updatedOrders[0],
+              items: updatedOrders.flatMap((order: any) => order.items || []),
+              total: totalToBill,
+              discount: discountAmount,
+            }
+          : null;
+
+        res.json({ success: true, total: totalToBill, orders: updatedOrders, receiptOrder });
       } catch (error) {
         console.error(error);
         res.status(500).json({ error: "Falha ao faturar contexto." });
