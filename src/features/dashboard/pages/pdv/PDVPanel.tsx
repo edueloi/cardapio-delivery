@@ -391,26 +391,14 @@ export default function PDVPanel({
       if (desktop?.printReceipt) desktop.printReceipt(data);
       else printReceiptPdf(data);
     };
-    const isDineIn = order.orderType === "DINE_IN";
-    const isPaid = order.billed === true || order.status === "DELIVERED";
-
-    // Comanda/mesa ainda aberta não é recibo de pagamento. A configuração controla
-    // somente a cópia adicional: com ela desligada sai uma via; ligada, saem a via
-    // do cliente e a via do estabelecimento. No fechamento sai o comprovante final
-    // com pagamento, desconto e demais ajustes.
-    if (isDineIn && !isPaid) {
-      const clientCopy = buildReceiptDataFromOrder(order, "CLIENTE");
-      if (clientCopy) doPrint(clientCopy);
-      if (printingConfig.autoPrintEstablishmentCopy) {
-        const establishmentCopy = buildReceiptDataFromOrder(order, "ESTABELECIMENTO");
-        if (establishmentCopy) doPrint(establishmentCopy);
-      }
-      return;
-    }
-
-    const clientCopy = buildReceiptDataFromOrder(order, isDineIn ? "CLIENTE" : undefined);
+    // A segunda via é uma regra geral de impressão automática. Quando ativada nas
+    // configurações, vale para qualquer origem (PDV, balcão, cardápio e delivery).
+    const clientCopy = buildReceiptDataFromOrder(
+      order,
+      printingConfig.autoPrintEstablishmentCopy ? "CLIENTE" : undefined,
+    );
     if (clientCopy) doPrint(clientCopy);
-    if (isDineIn && printingConfig.autoPrintEstablishmentCopy) {
+    if (printingConfig.autoPrintEstablishmentCopy) {
       const establishmentCopy = buildReceiptDataFromOrder(order, "ESTABELECIMENTO");
       if (establishmentCopy) doPrint(establishmentCopy);
     }

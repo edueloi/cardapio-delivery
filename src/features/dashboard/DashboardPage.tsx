@@ -5,12 +5,19 @@ import { apiFetch, apiJson, AuthError } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import socket from "../../lib/socket";
 import { playNotificationSound, playNewOrderSound, playKitchenReadySound } from "../../lib/notificationSound";
+import { printReceiptPdf } from "../../lib/receipt";
 import type { Order, Tenant } from "../../types";
 import DashboardContent from "./DashboardContent";
+import { buildReceiptDataFromOrder } from "./pages/pedidos/OrdersList";
 import { DASHBOARD_NAVIGATION } from "./config/navigation";
 import { type DashboardOrderTabId, type DashboardTabId, type MyMembership, PATH_TO_TAB, TAB_TO_PATH, canAccess, ALL_PERMISSION_TABS } from "./types";
 import { motion, AnimatePresence } from "motion/react";
 import { AlertCircle, Bell, BellRing, CheckCircle2, ChefHat, Clock, Receipt, ShoppingBag, X } from "lucide-react";
+
+// A impressão automática deve continuar funcionando em qualquer aba do Electron.
+// O painel do PDV mantém seu próprio fluxo porque também dispara a impressão no retorno
+// imediato da venda; fora dele, este guard central evita depender da aba Pedidos aberta.
+const automaticallyPrintedOrderIds = new Set<string>();
 
 export default function DashboardPage() {
   const { slug, tab: tabParam, orderId } = useParams<{ slug: string; tab?: string; orderId?: string }>();
@@ -233,6 +240,32 @@ export default function DashboardPage() {
       socket.off("comanda-ready", handleComandaReady);
     };
   }, [slug]);
+
+  useEffect(() => {
+    if (!tenant || activeTab === "pos") return;
+
+    let printingConfig: { autoPrintOnOrderCreate?: boolean; autoPrintEstablishmentCopy?: boolean } = {};
+    try { printingConfig = tenant.printingConfig ? JSON.parse(tenant.printingConfig) : {}; } catch {}
+    if (!printingConfig.autoPrintOnOrderCreate) return;
+
+    const handler = (order: any) => {
+      if (!order?.id || automaticallyPrintedOrderIds.has(order.id)) return;
+      automaticallyPrintedOrderIds.add(order.id);
+
+      const desktop = (window as any).pdvDesktop;
+      const print = (copyLabel?: "CLIENTE" | "ESTABELECIMENTO") => {
+        const receipt = buildReceiptDataFromOrder(order, tenant, copyLabel);
+        if (desktop?.printReceipt) desktop.printReceipt(receipt);
+        else printReceiptPdf(receipt);
+      };
+
+      print(printingConfig.autoPrintEstablishmentCopy ? "CLIENTE" : undefined);
+      if (printingConfig.autoPrintEstablishmentCopy) print("ESTABELECIMENTO");
+    };
+
+    socket.on("order-created", handler);
+    return () => { socket.off("order-created", handler); };
+  }, [activeTab, tenant]);
 
   const updateStatus = async (id: string, status: string) => {
     try {

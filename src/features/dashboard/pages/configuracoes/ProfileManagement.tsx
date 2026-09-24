@@ -530,7 +530,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                   <div className="flex items-center justify-between gap-4 py-5">
                     <div>
                       <p className="text-sm font-semibold text-slate-800">2ª Via para o Estabelecimento</p>
-                      <p className="text-xs text-slate-500 mt-1">Em pedidos de PDV, comanda e mesa, imprime uma segunda via (marcada "VIA DO ESTABELECIMENTO") além da via do cliente. Pedidos de delivery imprimem só 1 via.</p>
+                      <p className="text-xs text-slate-500 mt-1">Quando ativada, imprime a via do cliente e uma segunda via marcada "VIA DO ESTABELECIMENTO" em todos os pedidos automáticos: PDV, comanda, balcão, cardápio e delivery.</p>
                     </div>
                     <Switch checked={printing.autoPrintEstablishmentCopy} onCheckedChange={v => setPrinting(p => ({ ...p, autoPrintEstablishmentCopy: v }))} />
                   </div>
