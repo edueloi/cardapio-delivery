@@ -377,6 +377,21 @@ function buildDanfeEscPosBuffer(data) {
   }
 
   out += "-".repeat(cols) + "\n";
+  if (data.subtotal !== undefined) out += twoCol("Subtotal", fmtMoney(data.subtotal), cols);
+  if (data.discountAmount > 0) out += twoCol("Desconto", `-${fmtMoney(data.discountAmount)}`, cols);
+  if (data.feeAmount > 0) {
+    const pct = data.feePercent ? ` (${Number(data.feePercent).toFixed(2).replace(".", ",")}%)` : "";
+    const suffix = data.feePassedToCustomer ? "" : " (absorvida)";
+    const sign = data.feePassedToCustomer ? "+" : "";
+    out += twoCol(`Taxa maquininha${pct}${suffix}`, `${sign}${fmtMoney(data.feeAmount)}`, cols);
+  }
+  if (data.serviceFeeAmount > 0) {
+    const pct = data.serviceFeePercent ? ` (${Number(data.serviceFeePercent).toFixed(0)}%)` : "";
+    out += twoCol(`Taxa de serviço${pct}`, `+${fmtMoney(data.serviceFeeAmount)}`, cols);
+  }
+  if (data.subtotal !== undefined || data.discountAmount > 0 || data.feeAmount > 0 || data.serviceFeeAmount > 0) {
+    out += "-".repeat(cols) + "\n";
+  }
   out += CMD.boldOn + CMD.sizeDouble;
   out += twoCol("TOTAL", fmtMoney(data.total), Math.floor(cols / 2));
   out += CMD.sizeNormal + CMD.boldOff;

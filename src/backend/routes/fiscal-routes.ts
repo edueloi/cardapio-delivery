@@ -470,6 +470,16 @@ export function registerFiscalRoutes({
           qrCodeUrlBase: getUrlQrCode(fiscal.uf, fiscal.ambiente),
           customerName,
           customerCpf: order.customerCpf || undefined,
+          subtotal: order.items.reduce(
+            (sum: number, item: any) => sum + Number(item.quantity || 0) * Number(item.price || 0),
+            0
+          ),
+          discountAmount: order.discount || undefined,
+          feeAmount: order.feeAmount || undefined,
+          feePercent: order.feePercent || undefined,
+          feePassedToCustomer: order.feePassedToCustomer,
+          serviceFeeAmount: order.serviceFeeAmount || undefined,
+          serviceFeePercent: order.serviceFeePercent || undefined,
           realItemNames: order.items.map(
             (item: any) => item.productName ?? item.product?.name ?? ""
           ),

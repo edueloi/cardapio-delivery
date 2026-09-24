@@ -201,6 +201,14 @@ export interface DanfeData {
   dhEmi: string;
   dhRecbto?: string;
   items: DanfeItem[];
+  /** Valores comerciais do pedido, exibidos no DANFE quando houver ajuste. */
+  subtotal?: number;
+  discountAmount?: number;
+  feeAmount?: number;
+  feePercent?: number;
+  feePassedToCustomer?: boolean;
+  serviceFeeAmount?: number;
+  serviceFeePercent?: number;
   total: number;
   paymentMethod: string;
   customerName?: string;

@@ -536,6 +536,11 @@ function estimateDanfeHeight(data: DanfeData, nameLines: string[], addressLines:
   y += 1 + 5; // linha + espaço
   for (const item of data.items) y += 8; // nome (pode quebrar) + linha qtd/valor — aproximado
   y += 1 + 6; // linha + espaço
+  if (data.subtotal !== undefined) y += 4;
+  if (data.discountAmount && data.discountAmount > 0) y += 4;
+  if (data.feeAmount && data.feeAmount > 0) y += 4;
+  if (data.serviceFeeAmount && data.serviceFeeAmount > 0) y += 4;
+  if (data.subtotal !== undefined || (data.discountAmount && data.discountAmount > 0) || (data.feeAmount && data.feeAmount > 0) || (data.serviceFeeAmount && data.serviceFeeAmount > 0)) y += 2;
   y += 6; // total
   y += 4; // forma de pagamento
   if (data.customerCpf || data.customerName) y += 4;
@@ -619,7 +624,38 @@ export function buildDanfePdf(data: DanfeData, paperWidthMm?: 58 | 80): jsPDF {
 
   y += 1;
   doc.line(margin, y, width - margin, y);
-  y += 6;
+  y += 5;
+
+  doc.setFont("courier", "normal");
+  doc.setFontSize(7);
+  if (data.subtotal !== undefined) {
+    doc.text("Subtotal", margin, y);
+    doc.text(fmtMoney(data.subtotal), width - margin, y, { align: "right" });
+    y += 4;
+  }
+  if (data.discountAmount && data.discountAmount > 0) {
+    doc.text("Desconto", margin, y);
+    doc.text(`-${fmtMoney(data.discountAmount)}`, width - margin, y, { align: "right" });
+    y += 4;
+  }
+  if (data.feeAmount && data.feeAmount > 0) {
+    const pct = data.feePercent ? ` (${data.feePercent.toFixed(2).replace(".", ",")}%)` : "";
+    const label = `Taxa maquininha${pct}${data.feePassedToCustomer ? "" : " (absorvida)"}`;
+    doc.text(label, margin, y, { maxWidth: contentWidth - 20 });
+    doc.text(`${data.feePassedToCustomer ? "+" : ""}${fmtMoney(data.feeAmount)}`, width - margin, y, { align: "right" });
+    y += 4;
+  }
+  if (data.serviceFeeAmount && data.serviceFeeAmount > 0) {
+    const pct = data.serviceFeePercent ? ` (${data.serviceFeePercent.toFixed(0)}%)` : "";
+    doc.text(`Taxa de serviço${pct}`, margin, y, { maxWidth: contentWidth - 20 });
+    doc.text(`+${fmtMoney(data.serviceFeeAmount)}`, width - margin, y, { align: "right" });
+    y += 4;
+  }
+  if (data.subtotal !== undefined || (data.discountAmount && data.discountAmount > 0) || (data.feeAmount && data.feeAmount > 0) || (data.serviceFeeAmount && data.serviceFeeAmount > 0)) {
+    y += 1;
+    doc.line(margin, y, width - margin, y);
+    y += 5;
+  }
 
   doc.setFont("courier", "bold");
   doc.setFontSize(10);

@@ -31,6 +31,16 @@ export interface DanfeData {
   paymentMethod: string;
   customerName?: string;
   customerCpf?: string;
+  // Ajustes comerciais persistidos no pedido. Eles não são extraídos dos itens
+  // do XML, mas precisam aparecer no DANFE para que o consumidor confira como
+  // o total da NFC-e foi formado.
+  subtotal?: number;
+  discountAmount?: number;
+  feeAmount?: number;
+  feePercent?: number;
+  feePassedToCustomer?: boolean;
+  serviceFeeAmount?: number;
+  serviceFeePercent?: number;
   qrCodeUrl: string;
   consultaUrl: string; // URL de consulta pública (sem os parâmetros do QR), exibida por extenso
   isSimplesNacional: boolean; // CRT 1 ou 2 — exibe o aviso legal no rodapé do cupom
@@ -141,6 +151,13 @@ export function buildDanfeData(opts: {
     dhEmi,
     dhRecbto,
     items,
+    subtotal: opts.subtotal,
+    discountAmount: opts.discountAmount,
+    feeAmount: opts.feeAmount,
+    feePercent: opts.feePercent,
+    feePassedToCustomer: opts.feePassedToCustomer,
+    serviceFeeAmount: opts.serviceFeeAmount,
+    serviceFeePercent: opts.serviceFeePercent,
     total,
     paymentMethod: payment.method,
     customerName: opts.customerName,
