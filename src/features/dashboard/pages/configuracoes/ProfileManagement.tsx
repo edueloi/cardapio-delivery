@@ -356,24 +356,6 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
         </div>
       </section>
 
-      <div className="sticky top-0 z-10 mb-6 -mx-4 border-y border-slate-200 bg-slate-50/95 px-4 py-2 backdrop-blur sm:mx-0 sm:rounded-xl sm:border sm:px-3">
-        <div className="flex gap-1 overflow-x-auto">
-          {SETTINGS_TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => selectTab(tab.id)}
-              className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
-                activeTab === tab.id ? "bg-[#0D1B3E] text-white" : "text-slate-500 hover:bg-white hover:text-[#0D1B3E]"
-              }`}
-            >
-              <tab.icon className="h-3.5 w-3.5" strokeWidth={2} />
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       <form id="settings-content" onSubmit={handleUpdate} className="scroll-mt-24 space-y-6">
         <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
           <div className="flex items-center gap-2 text-xs text-slate-500">
@@ -451,7 +433,8 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
             </ContentCard>
 
             <ContentCard padding="lg">
-              <SectionTitle title="Status do Estabelecimento" icon={Info} divider className="mb-1" />
+              <SectionTitle title="Atendimento e balcão" icon={Info} divider className="mb-1" />
+              <p className="mb-1 text-xs text-slate-500">Controle a disponibilidade da loja e a forma de atender pedidos presenciais.</p>
               <div className="divide-y divide-slate-100 space-y-0">
                 <div className="flex items-center justify-between gap-4 py-5">
                   <div>
@@ -507,6 +490,13 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                   </div>
                   <Switch checked={form.waiterNotifyOnReady} onCheckedChange={v => setForm(f => ({ ...f, waiterNotifyOnReady: v }))} />
                 </div>
+              </div>
+            </ContentCard>
+
+            <ContentCard padding="lg">
+              <SectionTitle title="PDV e impressão" icon={Monitor} divider className="mb-1" />
+              <p className="mb-1 text-xs text-slate-500">Defina as regras do caixa, da impressora térmica e das vias dos comprovantes.</p>
+              <div className="divide-y divide-slate-100 space-y-0">
                 <div className="flex items-center justify-between gap-4 py-5">
                   <div>
                     <p className="text-sm font-semibold text-slate-800">Exigir Abertura/Fechamento de Caixa no PDV</p>
@@ -555,6 +545,13 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                 <div className="py-5">
                   <DesktopPrinterSettings />
                 </div>
+              </div>
+            </ContentCard>
+
+            <ContentCard padding="lg">
+              <SectionTitle title="Canais de pedido" icon={Truck} divider className="mb-1" />
+              <p className="mb-1 text-xs text-slate-500">Escolha se a loja aceita delivery, encomendas e em quais dias as entregas ficam disponíveis.</p>
+              <div>
                 {/* ── Modo de Operação (Delivery / Encomenda / Misto) ── */}
                 <div className="pt-5">
                   <div className="mb-3">
