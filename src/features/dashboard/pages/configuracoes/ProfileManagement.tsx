@@ -3,6 +3,7 @@ import { motion } from "motion/react";
 import {
   AlertTriangle,
   AlertCircle,
+  ArrowUp,
   Banknote,
   CalendarClock,
   CheckCircle2,
@@ -115,9 +116,56 @@ const UF_OPTIONS = [
   { value: "TO", label: "TO — Tocantins" },
 ];
 
+const SETTINGS_TABS = [
+  {
+    id: "general",
+    label: "Loja",
+    description: "Identidade, endereço, operação e impressão",
+    icon: Store,
+    accent: "bg-amber-50 text-amber-600 border-amber-100",
+  },
+  {
+    id: "hours",
+    label: "Horários",
+    description: "Abertura, intervalos e dias de atendimento",
+    icon: Clock3,
+    accent: "bg-sky-50 text-sky-600 border-sky-100",
+  },
+  {
+    id: "delivery",
+    label: "Entrega",
+    description: "Taxas, zonas, raio e regras de entrega",
+    icon: Truck,
+    accent: "bg-violet-50 text-violet-600 border-violet-100",
+  },
+  {
+    id: "payments",
+    label: "Pagamentos",
+    description: "Formas aceitas e opções do checkout",
+    icon: Wallet,
+    accent: "bg-emerald-50 text-emerald-600 border-emerald-100",
+  },
+  {
+    id: "maquinhas",
+    label: "Maquininhas",
+    description: "Taxas, bandeiras e integrações de cartão",
+    icon: Smartphone,
+    accent: "bg-rose-50 text-rose-600 border-rose-100",
+  },
+  {
+    id: "fiscal",
+    label: "Fiscal",
+    description: "NFC-e, certificado e dados da SEFAZ",
+    icon: FileText,
+    accent: "bg-indigo-50 text-indigo-600 border-indigo-100",
+  },
+] as const;
+
+type SettingsTabId = typeof SETTINGS_TABS[number]["id"];
+
 export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, refresh: () => void }) {
   const toast = useToast();
-  const [activeTab, setActiveTab] = useState<"general" | "hours" | "delivery" | "payments" | "maquinhas" | "fiscal">("general");
+  const [activeTab, setActiveTab] = useState<SettingsTabId>("general");
   const [form, setForm] = useState({
     name: tenant?.name || "",
     description: tenant?.description || "",
@@ -253,6 +301,13 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
 
   const setA = (field: keyof AddressForm, value: string) => setAddr(a => ({ ...a, [field]: value }));
 
+  const selectTab = (tabId: SettingsTabId) => {
+    setActiveTab(tabId);
+    window.setTimeout(() => document.getElementById("settings-content")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+  };
+
+  const scrollToCategories = () => document.getElementById("settings-categories")?.scrollIntoView({ behavior: "smooth", block: "start" });
+
   return (
     <PageWrapper>
       <SectionTitle
@@ -263,32 +318,73 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
         className="mb-5"
       />
 
-      <div className="mb-6 -mx-4 px-4 sm:mx-0 sm:px-0 overflow-x-auto">
-        <div className="flex gap-1 border-b border-slate-200 w-max min-w-full sm:w-fit sm:min-w-0">
-          {[
-            { id: "general", label: "Loja", icon: Store },
-            { id: "hours", label: "Horários", icon: Clock3 },
-            { id: "delivery", label: "Entrega", icon: Truck },
-            { id: "payments", label: "Pagamentos", icon: Wallet },
-            { id: "maquinhas", label: "Maquininhas", icon: Smartphone },
-            { id: "fiscal", label: "Fiscal", icon: FileText },
-          ].map((tab) => (
+      <section id="settings-categories" className="mb-6 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-bold text-[#0D1B3E]">Central de configurações</p>
+            <p className="text-xs text-slate-500">Escolha uma categoria para editar sem percorrer uma página longa.</p>
+          </div>
+          <span className="w-fit rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-500">6 categorias</span>
+        </div>
+
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          {SETTINGS_TABS.map((tab) => {
+            const selected = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => selectTab(tab.id)}
+                aria-pressed={selected}
+                className={`group flex items-center gap-3 rounded-2xl border p-3.5 text-left transition-all ${
+                  selected
+                    ? "border-[#0D1B3E] bg-[#0D1B3E] text-white shadow-md shadow-[#0D1B3E]/15"
+                    : "border-slate-200 bg-white hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-sm"
+                }`}
+              >
+                <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${selected ? "border-white/15 bg-white/15 text-white" : tab.accent}`}>
+                  <tab.icon className="h-5 w-5" strokeWidth={2} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className={`block text-sm font-bold ${selected ? "text-white" : "text-slate-800"}`}>{tab.label}</span>
+                  <span className={`mt-0.5 block text-[11px] leading-4 ${selected ? "text-white/70" : "text-slate-500"}`}>{tab.description}</span>
+                </span>
+                <span className={`text-lg transition-transform group-hover:translate-x-0.5 ${selected ? "text-white" : "text-slate-300"}`}>›</span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <div className="sticky top-0 z-10 mb-6 -mx-4 border-y border-slate-200 bg-slate-50/95 px-4 py-2 backdrop-blur sm:mx-0 sm:rounded-xl sm:border sm:px-3">
+        <div className="flex gap-1 overflow-x-auto">
+          {SETTINGS_TABS.map((tab) => (
             <button
               key={tab.id}
               type="button"
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-semibold transition-colors shrink-0 border-b-2 -mb-px ${
-                activeTab === tab.id ? 'border-[#0D1B3E] text-[#0D1B3E]' : 'border-transparent text-slate-400 hover:text-slate-600'
+              onClick={() => selectTab(tab.id)}
+              className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
+                activeTab === tab.id ? "bg-[#0D1B3E] text-white" : "text-slate-500 hover:bg-white hover:text-[#0D1B3E]"
               }`}
             >
-              <tab.icon className="w-4 h-4" strokeWidth={2} />
-              <span>{tab.label}</span>
+              <tab.icon className="h-3.5 w-3.5" strokeWidth={2} />
+              {tab.label}
             </button>
           ))}
         </div>
       </div>
 
-      <form onSubmit={handleUpdate} className="space-y-6">
+      <form id="settings-content" onSubmit={handleUpdate} className="scroll-mt-24 space-y-6">
+        <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+          <div className="flex items-center gap-2 text-xs text-slate-500">
+            <span className="font-semibold text-[#0D1B3E]">Editando:</span>
+            <span>{SETTINGS_TABS.find(tab => tab.id === activeTab)?.label}</span>
+          </div>
+          <button type="button" onClick={scrollToCategories} className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-[#0D1B3E] hover:bg-slate-100">
+            <ArrowUp className="h-3.5 w-3.5" />
+            Categorias
+          </button>
+        </div>
         {activeTab === "general" && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
             <ContentCard padding="lg">
