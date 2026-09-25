@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Menu BoxSys">
+  <g transform="translate(-254 -18) scale(1.55)">
+    <polygon points="367,77 328,57 236,104 234,109 269,127 273,127 366,80" fill="#297ed1"/>
+    <polygon points="348,105 350,108 385,126 389,126 422,108 420,104 387,87" fill="#297ed1"/>
+    <polygon points="196,149 198,155 282,198 287,198 319,167 319,163 233,119 228,119" fill="#ed670e"/>
+    <polygon points="458,149 427,119 422,119 338,162 337,167 369,198 373,198 455,156" fill="#eb5e10"/>
+    <polygon points="224,183 225,238 308,284 321,289 322,186 292,214 287,215" fill="#e53b2c"/>
+    <polygon points="430,184 369,216 365,216 334,186 335,288 430,238" fill="#f7920c"/>
+  </g>
+</svg>

@@ -14,9 +14,27 @@ import type { CashRegister, CashMovement, Tenant } from "../../../../types";
 
 // Mesmo padrão de filtro de período usado no resto do Financeiro — navegador de
 // mês/ano com atalho pra período livre.
-type PeriodPreset = "month" | "year" | "custom" | "all";
+type PeriodPreset = "today" | "week" | "month" | "year" | "custom" | "all";
 const MONTHS = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
+function toISODate(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+function todayRange(): { from: string; to: string } {
+  const today = toISODate(new Date());
+  return { from: today, to: today };
+}
+function weekRange(): { from: string; to: string } {
+  // Semana corrente de domingo a sábado, igual ao calendário — evita confusão
+  // sobre "quando começa a semana" pra quem só quer ver "essa semana".
+  const now = new Date();
+  const start = new Date(now);
+  start.setDate(now.getDate() - now.getDay());
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  return { from: toISODate(start), to: toISODate(end) };
+}
 function monthRange(year: number, month: number): { from: string; to: string } {
   const pad = (n: number) => String(n).padStart(2, "0");
   const lastDay = new Date(year, month + 1, 0).getDate();
@@ -75,7 +93,9 @@ export default function CashHistoryPanel({ tenant }: { tenant: Tenant }) {
 
   const applyPeriodPreset = (p: PeriodPreset) => {
     setPeriodPreset(p);
-    if (p === "month") { const r = monthRange(navYear, navMonth); setDateFrom(r.from); setDateTo(r.to); }
+    if (p === "today") { const r = todayRange(); setDateFrom(r.from); setDateTo(r.to); }
+    else if (p === "week") { const r = weekRange(); setDateFrom(r.from); setDateTo(r.to); }
+    else if (p === "month") { const r = monthRange(navYear, navMonth); setDateFrom(r.from); setDateTo(r.to); }
     else if (p === "year") { const r = yearRange(navYear); setDateFrom(r.from); setDateTo(r.to); }
   };
 
@@ -743,15 +763,15 @@ export default function CashHistoryPanel({ tenant }: { tenant: Tenant }) {
 
       {mainTab === "sessions" && (
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm">
-        <div className="flex items-center gap-0 border-b border-slate-100 divide-x divide-slate-100">
+        <div className="grid grid-cols-2 sm:grid-cols-4 border-b border-slate-100 divide-x divide-y sm:divide-y-0 divide-slate-100">
           {[
             { label: "Total",           value: counts.total,          color: "text-slate-900" },
             { label: "Caixas Abertos",   value: counts.open,           color: "text-blue-500" },
             { label: "Caixas Fechados",  value: counts.closed,         color: "text-emerald-500" },
             { label: "Com Diferença",    value: counts.withDifference, color: "text-rose-500" },
           ].map((k) => (
-            <div key={k.label} className="flex-1 px-5 py-4 flex flex-col gap-0.5">
-              <span className={cn("text-2xl font-black tracking-tight tabular-nums leading-none", k.color)}>{k.value}</span>
+            <div key={k.label} className="px-4 sm:px-5 py-3.5 sm:py-4 flex flex-col gap-0.5">
+              <span className={cn("text-xl sm:text-2xl font-black tracking-tight tabular-nums leading-none", k.color)}>{k.value}</span>
               <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{k.label}</span>
             </div>
           ))}
@@ -779,7 +799,8 @@ export default function CashHistoryPanel({ tenant }: { tenant: Tenant }) {
           </select>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Desktop: tabela */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-t border-slate-100 bg-slate-50/60">
@@ -836,57 +857,107 @@ export default function CashHistoryPanel({ tenant }: { tenant: Tenant }) {
             </tbody>
           </table>
         </div>
+
+        {/* Mobile: cards empilhados — a tabela de 8 colunas não cabe numa tela de celular */}
+        <div className="md:hidden divide-y divide-slate-100">
+          {loading && <p className="px-4 py-10 text-center text-slate-400 text-xs">Carregando...</p>}
+          {!loading && filtered.length === 0 && (
+            <p className="px-4 py-10 text-center text-slate-400 text-xs">Nenhuma sessão de caixa encontrada</p>
+          )}
+          {!loading && filtered.map((s) => {
+            const diff = s.closingBalance != null && s.expectedBalance != null ? s.closingBalance - s.expectedBalance : null;
+            return (
+              <button key={s.id} onClick={() => setDetail(s)} className="w-full text-left px-4 py-3.5 flex flex-col gap-1.5 active:bg-slate-50">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-1.5 text-xs font-bold text-slate-700 min-w-0">
+                    <User size={12} className="text-slate-400 shrink-0" />
+                    <span className="truncate">{s.openedByName || s.operatorName || "—"}</span>
+                  </span>
+                  {s.status === "OPEN" ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wide bg-blue-50 text-blue-600 shrink-0">
+                      <Clock size={10} /> Aberto
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wide bg-emerald-50 text-emerald-600 shrink-0">
+                      <CheckCircle2 size={10} /> Fechado
+                    </span>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-400">{new Date(s.openedAt).toLocaleString("pt-BR")}</p>
+                <div className="flex items-center justify-between text-xs font-mono mt-0.5">
+                  <span className="text-slate-500">Inicial {money(s.openingBalance)}</span>
+                  <span className="text-slate-500">Contado {s.closingBalance != null ? money(s.closingBalance) : "—"}</span>
+                  {diff !== null && (
+                    <span className={cn("font-bold", Math.abs(diff) < 0.01 ? "text-slate-400" : diff > 0 ? "text-emerald-600" : "text-rose-600")}>
+                      {diff > 0 ? "+" : ""}{money(diff)}
+                    </span>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </div>
       )}
 
       {mainTab === "report" && (
         <div className="space-y-4">
           {/* Filtro de período */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {(periodPreset === "month" || periodPreset === "year") && (
-              <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl p-1">
-                <button onClick={() => navigatePeriod(-1)} className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-500 hover:bg-white hover:text-slate-900 transition-all">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-                </button>
-                <span className="px-3 h-7 flex items-center rounded-lg text-[11px] font-black uppercase tracking-widest bg-slate-900 text-white min-w-[140px] justify-center">
-                  {periodPreset === "year" ? navYear : `${MONTHS[navMonth]} ${navYear}`}
-                </span>
-                <button onClick={() => navigatePeriod(1)} className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-500 hover:bg-white hover:text-slate-900 transition-all">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-                </button>
-              </div>
-            )}
-            <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl p-1">
-              {([["all", "Tudo"], ["month", "Mês"], ["year", "Ano"]] as const).map(([k, l]) => (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-3 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <div className="grid grid-cols-3 sm:flex sm:items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl p-1 w-full sm:w-auto">
+                {([["today", "Hoje"], ["week", "Semana"], ["month", "Mês"], ["year", "Ano"], ["all", "Tudo"]] as const).map(([k, l]) => (
+                  <button
+                    key={k}
+                    onClick={() => applyPeriodPreset(k)}
+                    className={cn(
+                      "h-8 px-3 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap",
+                      periodPreset === k ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-700"
+                    )}
+                  >{l}</button>
+                ))}
                 <button
-                  key={k}
-                  onClick={() => applyPeriodPreset(k)}
+                  onClick={() => setPeriodPreset("custom")}
                   className={cn(
-                    "h-7 px-3 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all",
-                    periodPreset === k ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-700"
+                    "h-8 px-3 rounded-lg flex items-center justify-center gap-1.5 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap col-span-3 sm:col-span-1",
+                    periodPreset === "custom" ? "bg-amber-500 text-white shadow-sm" : "text-slate-500 hover:text-slate-700"
                   )}
-                >{l}</button>
-              ))}
-            </div>
-            <button
-              onClick={() => setPeriodPreset(periodPreset === "custom" ? "month" : "custom")}
-              className={cn(
-                "h-9 px-3 rounded-xl flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest border transition-all",
-                periodPreset === "custom" ? "bg-amber-500 text-white border-amber-500" : "bg-white text-slate-400 border-slate-200 hover:border-slate-400"
+                >
+                  <Calendar size={12} /> Livre
+                </button>
+              </div>
+
+              {(periodPreset === "month" || periodPreset === "year") && (
+                <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl p-1 w-full sm:w-auto">
+                  <button onClick={() => navigatePeriod(-1)} className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center text-slate-500 hover:bg-white hover:text-slate-900 transition-all">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                  </button>
+                  <span className="flex-1 sm:flex-none px-3 h-8 flex items-center justify-center rounded-lg text-[11px] font-black uppercase tracking-widest bg-slate-900 text-white sm:min-w-[140px]">
+                    {periodPreset === "year" ? navYear : `${MONTHS[navMonth]} ${navYear}`}
+                  </span>
+                  <button onClick={() => navigatePeriod(1)} className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center text-slate-500 hover:bg-white hover:text-slate-900 transition-all">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
+                </div>
               )}
-            >
-              <Calendar size={12} /> Período Livre
-            </button>
+
+              {loading && <Loader2 size={16} className="animate-spin text-slate-400 shrink-0 mx-auto sm:mx-0" />}
+            </div>
+
             {periodPreset === "custom" && (
-              <div className="flex items-center gap-2">
-                <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
-                  className="pl-3 pr-3 h-9 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-bold focus:outline-none focus:border-amber-400 transition-all w-[148px]" />
-                <span className="text-[10px] font-black text-slate-300 uppercase">até</span>
-                <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
-                  className="pl-3 pr-3 h-9 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-bold focus:outline-none focus:border-amber-400 transition-all w-[148px]" />
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-1 border-t border-slate-100">
+                <div className="flex items-center gap-2 flex-1">
+                  <span className="text-[10px] font-black text-slate-400 uppercase shrink-0">De</span>
+                  <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+                    className="flex-1 sm:w-[160px] px-3 h-9 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-bold focus:outline-none focus:border-amber-400 transition-all" />
+                </div>
+                <div className="flex items-center gap-2 flex-1">
+                  <span className="text-[10px] font-black text-slate-400 uppercase shrink-0">Até</span>
+                  <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+                    className="flex-1 sm:w-[160px] px-3 h-9 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-bold focus:outline-none focus:border-amber-400 transition-all" />
+                </div>
               </div>
             )}
-            {loading && <Loader2 size={16} className="animate-spin text-slate-400" />}
           </div>
 
           {sessionsForReport.length === 0 ? (
@@ -974,7 +1045,7 @@ export default function CashHistoryPanel({ tenant }: { tenant: Tenant }) {
 
               {/* Tabela de itens vendidos */}
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-slate-100 flex-wrap">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4 border-b border-slate-100">
                   <div className="flex items-center gap-2">
                     <ListOrdered size={14} className="text-slate-400" />
                     <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-700">Itens Vendidos ({filteredSoldItems.length})</h3>
@@ -1001,7 +1072,8 @@ export default function CashHistoryPanel({ tenant }: { tenant: Tenant }) {
                     </div>
                   )}
                 </div>
-                <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
+                {/* Desktop: tabela */}
+                <div className="hidden md:block overflow-x-auto max-h-[420px] overflow-y-auto">
                   <table className="w-full text-left border-collapse">
                     <thead className="sticky top-0 z-10">
                       <tr className="bg-slate-50">
@@ -1027,6 +1099,26 @@ export default function CashHistoryPanel({ tenant }: { tenant: Tenant }) {
                       ))}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Mobile: cards empilhados */}
+                <div className="md:hidden max-h-[420px] overflow-y-auto divide-y divide-slate-100">
+                  {filteredSoldItems.length === 0 && (
+                    <p className="px-4 py-8 text-center text-slate-400 text-xs">Nenhum item vendido no período</p>
+                  )}
+                  {filteredSoldItems.map((it, i) => (
+                    <div key={i} className="px-4 py-3 flex flex-col gap-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-semibold text-slate-700 truncate">{it.quantity}x {it.productName}</span>
+                        <span className="text-xs font-mono font-bold text-slate-800 shrink-0">{money(it.total)}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 text-[10px] text-slate-400">
+                        <span className="truncate">#{it.orderId.slice(-6).toUpperCase()} · {it.sellerName}</span>
+                        <span className="shrink-0">{new Date(it.createdAt).toLocaleDateString("pt-BR")}</span>
+                      </div>
+                      <span className="text-[10px] text-slate-500">{it.paymentLabel}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             </>

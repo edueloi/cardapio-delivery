@@ -16,8 +16,8 @@ export default defineConfig(({mode}) => {
         injectRegister: false,
         includeAssets: ['images/app_celular.png', 'favicon.ico'],
         manifest: {
-          name: 'Box Sys PDV',
-          short_name: 'Box Sys',
+          name: 'Menu BoxSys PDV',
+          short_name: 'Menu BoxSys',
           description: 'Cardápio digital e PDV Box Sys',
           theme_color: '#000000',
           background_color: '#000000',

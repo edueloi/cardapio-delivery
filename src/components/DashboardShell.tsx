@@ -76,7 +76,7 @@ export default function DashboardShell({
 }: DashboardShellProps) {
   const active        = findActiveItem(navigationGroups, activeTab);
   const ActiveIcon    = active?.item.icon;
-  const logoSrc       = "/images/logo.png";
+  const logoSrc       = "/system/menu-boxsys-icon-v1.png";
   const isLiveOrdersTab = activeTab === "live-orders";
 
   // Sidebar compacta (só ícones) — preferência persistida por navegador, independente do tenant.
@@ -140,10 +140,15 @@ export default function DashboardShell({
         <div className="flex items-center justify-between gap-3 px-4 h-14">
           {/* Logo */}
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center shrink-0 p-1">
-              <img src={logoSrc} alt="Logo" className="w-full h-full object-contain" />
+            <div className="w-8 h-8 rounded-xl bg-white/10 ring-1 ring-white/10 flex items-center justify-center shrink-0 p-1">
+              <img src={logoSrc} alt="Menu BoxSys" className="w-full h-full object-contain" />
             </div>
-            <p className="text-[12px] font-black text-white leading-tight truncate max-w-[170px]">Box Sys</p>
+            <div className="min-w-0">
+              <p className="text-[10px] font-black tracking-[0.08em] leading-none">
+                <span className="text-[#f58d0a]">Menu</span><span className="text-[#5ba9ee]"> BoxSys</span>
+              </p>
+              <p className="text-[12px] font-bold text-white leading-tight truncate max-w-[170px] mt-0.5">{tenantName || "Box Sys"}</p>
+            </div>
           </div>
 
           {/* Ações mobile */}
@@ -152,7 +157,7 @@ export default function DashboardShell({
               href={`/${slug}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="w-9 h-9 rounded-xl flex items-center justify-center text-white/40 hover:text-[#C9A227] hover:bg-white/10 transition-colors"
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-white/40 hover:text-[#5ba9ee] hover:bg-white/10 transition-colors"
             >
               <Utensils className="w-4 h-4" />
             </a>
@@ -174,9 +179,9 @@ export default function DashboardShell({
         {/* Breadcrumb da aba ativa — mobile */}
         {active && (
           <div className="flex items-center gap-2 px-4 pb-2.5">
-            <div className="flex items-center gap-1.5 bg-[#C9A227]/10 border border-[#C9A227]/20 rounded-lg px-2.5 py-1">
-              {ActiveIcon && <ActiveIcon className="w-3 h-3 text-[#C9A227]" />}
-              <span className="text-[11px] font-black uppercase tracking-wider text-[#C9A227]">
+            <div className="flex items-center gap-1.5 bg-[#297ed1]/10 border border-[#297ed1]/20 rounded-lg px-2.5 py-1">
+              {ActiveIcon && <ActiveIcon className="w-3 h-3 text-[#297ed1]" />}
+              <span className="text-[11px] font-black uppercase tracking-wider text-[#297ed1]">
                 {active.item.label}
               </span>
             </div>
@@ -207,31 +212,38 @@ export default function DashboardShell({
       )}>
         {/* Logo header */}
         <div className={cn("pt-5 pb-4 flex items-center border-b border-white/[0.07]", isCollapsed ? "px-3 justify-center" : "px-5 justify-between")}>
-          <div className={cn("flex items-center gap-3 min-w-0", isCollapsed && "justify-center")}>
-            <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center shrink-0 p-1.5">
-              <img src={logoSrc} alt="Logo" className="w-full h-full object-contain" />
+          <button
+            onClick={() => isCollapsed && setIsCollapsed(false)}
+            title={isCollapsed ? "Expandir menu" : undefined}
+            className={cn("flex items-center gap-3 min-w-0", isCollapsed && "justify-center")}
+          >
+            <div className="w-9 h-9 rounded-xl bg-white/10 ring-1 ring-white/10 flex items-center justify-center shrink-0 p-1.5">
+              <img src={logoSrc} alt="Menu BoxSys" className="w-full h-full object-contain" />
             </div>
-            {!isCollapsed && <p className="text-[13px] font-black text-white/90 leading-none truncate">Box Sys</p>}
-          </div>
+            {!isCollapsed && (
+              <div className="min-w-0 text-left">
+                <p className="text-[11px] font-black tracking-[0.08em] leading-none">
+                  <span className="text-[#f58d0a]">Menu</span><span className="text-[#5ba9ee]"> BoxSys</span>
+                </p>
+                <p className="text-[13px] font-bold text-white/90 leading-tight truncate mt-1">{tenantName || "Box Sys"}</p>
+              </div>
+            )}
+          </button>
           {!isCollapsed && (
-            <button onClick={onCloseMobileMenu} className="xl:hidden w-7 h-7 rounded-lg flex items-center justify-center text-white/30 hover:text-white transition-colors">
-              <X className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                onClick={() => setIsCollapsed(true)}
+                title="Recolher menu"
+                className="hidden xl:flex w-7 h-7 rounded-lg items-center justify-center text-white/30 hover:text-white hover:bg-white/[0.06] transition-colors"
+              >
+                <PanelLeftClose className="w-4 h-4" />
+              </button>
+              <button onClick={onCloseMobileMenu} className="xl:hidden w-7 h-7 rounded-lg flex items-center justify-center text-white/30 hover:text-white transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           )}
         </div>
-
-        {/* Collapse toggle — só desktop */}
-        <button
-          onClick={() => setIsCollapsed((v) => !v)}
-          title={isCollapsed ? "Expandir menu" : "Recolher menu"}
-          className={cn(
-            "hidden xl:flex items-center gap-3 px-3 py-2.5 mx-2.5 mt-2 rounded-xl text-slate-500 hover:bg-white/[0.06] hover:text-white transition-all",
-            isCollapsed && "justify-center"
-          )}
-        >
-          {isCollapsed ? <PanelLeftOpen className="w-4 h-4 shrink-0" /> : <PanelLeftClose className="w-4 h-4 shrink-0" />}
-          {!isCollapsed && <span className="text-[11px] font-black uppercase tracking-widest">Recolher</span>}
-        </button>
 
         {/* Nav */}
         <nav className="flex-1 py-3 px-2.5 space-y-4 overflow-y-auto overflow-x-hidden custom-scrollbar">
@@ -257,13 +269,13 @@ export default function DashboardShell({
                         "relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left group",
                         isCollapsed && "justify-center",
                         isActive
-                          ? "bg-[#C9A227] text-white shadow-lg shadow-[#C9A227]/20"
+                          ? "bg-[#297ed1] text-white shadow-[0_8px_18px_rgba(41,126,209,0.25)] before:absolute before:left-0 before:top-2 before:bottom-2 before:w-1 before:rounded-r-full before:bg-[#f7920c]"
                           : "text-slate-400 hover:bg-white/[0.06] hover:text-white"
                       )}
                     >
                       <item.icon className={cn(
                         "w-4 h-4 shrink-0 transition-colors",
-                        isActive ? "text-white" : "text-slate-500 group-hover:text-[#C9A227]"
+                        isActive ? "text-white" : "text-slate-500 group-hover:text-[#5ba9ee]"
                       )} />
                       {!isCollapsed && (
                         <span className="text-[12px] font-semibold tracking-wide leading-none flex-1">
@@ -329,7 +341,7 @@ export default function DashboardShell({
                   isCollapsed && "justify-center"
                 )}
               >
-                <Monitor className="w-4 h-4 shrink-0 text-slate-500 group-hover:text-[#C9A227] transition-colors" />
+                <Monitor className="w-4 h-4 shrink-0 text-slate-500 group-hover:text-[#5ba9ee] transition-colors" />
                 {!isCollapsed && (
                   <>
                     <span className="text-[12px] font-semibold tracking-wide leading-none flex-1">Painel TV</span>
@@ -347,7 +359,7 @@ export default function DashboardShell({
                   isCollapsed && "justify-center"
                 )}
               >
-                <ChefHat className="w-4 h-4 shrink-0 text-slate-500 group-hover:text-[#C9A227] transition-colors" />
+                <ChefHat className="w-4 h-4 shrink-0 text-slate-500 group-hover:text-[#5ba9ee] transition-colors" />
                 {!isCollapsed && (
                   <>
                     <span className="text-[12px] font-semibold tracking-wide leading-none flex-1">Painel Cozinha</span>
@@ -371,7 +383,7 @@ export default function DashboardShell({
               isCollapsed && "justify-center"
             )}
           >
-            <Utensils className="w-4 h-4 shrink-0 group-hover:text-[#C9A227] transition-colors" />
+            <Utensils className="w-4 h-4 shrink-0 group-hover:text-[#5ba9ee] transition-colors" />
             {!isCollapsed && <span className="text-[12px] font-semibold tracking-wide">Ver Cardápio</span>}
           </a>
           {isSuperAdmin && (
@@ -458,10 +470,10 @@ export default function DashboardShell({
                       onClick={() => { onSelectTab(item.tab); setOpenTopGroupId(null); }}
                       className={cn(
                         "w-full flex items-center gap-2.5 px-3 py-2 text-left text-[12px] font-semibold transition-colors",
-                        isActive ? "bg-[#C9A227]/10 text-[#0A1628]" : "text-slate-600 hover:bg-slate-50"
+                        isActive ? "bg-[#297ed1]/10 text-[#0A1628]" : "text-slate-600 hover:bg-slate-50"
                       )}
                     >
-                      <item.icon className={cn("w-3.5 h-3.5 shrink-0", isActive ? "text-[#C9A227]" : "text-slate-400")} />
+                      <item.icon className={cn("w-3.5 h-3.5 shrink-0", isActive ? "text-[#297ed1]" : "text-slate-400")} />
                       <span className="flex-1 truncate">{item.label}</span>
                     </button>
                   );
@@ -517,10 +529,10 @@ export default function DashboardShell({
                           onClick={() => { onSelectTab(item.tab); setOpenTopGroupId(null); }}
                           className={cn(
                             "w-full flex items-center gap-2.5 px-3 py-2 text-left text-[12px] font-semibold transition-colors",
-                            isActive ? "bg-[#C9A227]/10 text-[#0A1628]" : "text-slate-600 hover:bg-slate-50"
+                            isActive ? "bg-[#297ed1]/10 text-[#0A1628]" : "text-slate-600 hover:bg-slate-50"
                           )}
                         >
-                          <item.icon className={cn("w-3.5 h-3.5 shrink-0", isActive ? "text-[#C9A227]" : "text-slate-400")} />
+                          <item.icon className={cn("w-3.5 h-3.5 shrink-0", isActive ? "text-[#297ed1]" : "text-slate-400")} />
                           <span className="flex-1 truncate">{item.label}</span>
                           {alertCount > 0 && (
                             <span className="shrink-0 min-w-[16px] h-[16px] px-1 rounded-full bg-amber-400 text-[#0A1628] text-[9px] font-black flex items-center justify-center">
@@ -609,10 +621,19 @@ export default function DashboardShell({
             </nav>
           ) : (
           <div className="flex items-center gap-3 min-w-0">
+            {!hideSystemNav && (
+              <button
+                onClick={() => setIsCollapsed((v) => !v)}
+                title={isCollapsed ? "Expandir menu" : "Recolher menu"}
+                className="w-9 h-9 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-500 hover:text-[#0A1628] transition-all shrink-0"
+              >
+                {isCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+              </button>
+            )}
             {active ? (
               <>
                 <div className="w-9 h-9 rounded-xl bg-[#0A1628] flex items-center justify-center shrink-0">
-                  {ActiveIcon && <ActiveIcon className="w-4 h-4 text-[#C9A227]" />}
+                  {ActiveIcon && <ActiveIcon className="w-4 h-4 text-[#297ed1]" />}
                 </div>
                 <div className="min-w-0">
                   <p className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400 leading-none mb-0.5">
@@ -646,7 +667,7 @@ export default function DashboardShell({
                   title="Usuário logado"
                   className="hidden sm:flex items-center gap-2 px-3 h-10 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-all"
                 >
-                  <span className="w-6 h-6 rounded-full bg-[#0A1628] text-[#C9A227] flex items-center justify-center text-[10px] font-black shrink-0">
+                  <span className="w-6 h-6 rounded-full bg-[#0A1628] text-[#297ed1] flex items-center justify-center text-[10px] font-black shrink-0">
                     {accountName.charAt(0).toUpperCase()}
                   </span>
                   <span className="text-[12px] font-bold text-[#0A1628] max-w-[140px] truncate">

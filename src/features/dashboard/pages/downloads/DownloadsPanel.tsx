@@ -10,7 +10,7 @@ const GITHUB_RELEASES_BASE = "https://github.com/edueloi/cardapio-delivery/relea
 const downloads = [
   {
     id: "windows-installer",
-    name: "Box Sys PDV",
+    name: "Menu BoxSys PDV",
     subtitle: "Instalador Windows",
     description: "Versão completa com instalação automática, atalho na área de trabalho e atualizações.",
     icon: Monitor,
@@ -23,7 +23,7 @@ const downloads = [
   },
   {
     id: "windows-portable",
-    name: "Box Sys PDV",
+    name: "Menu BoxSys PDV",
     subtitle: "Versão Portátil",
     description: "Execute sem instalar. Ideal para uso em pendrive ou computadores sem permissão de administrador.",
     icon: Package2,
@@ -57,7 +57,7 @@ export default function DownloadsPanel() {
     <PageWrapper>
       <SectionTitle
         title="Downloads"
-        description="Baixe o aplicativo desktop do Box Sys PDV para Windows"
+        description="Baixe o aplicativo desktop do Menu BoxSys PDV para Windows"
         icon={Download}
         className="mb-6"
       />
@@ -65,8 +65,8 @@ export default function DownloadsPanel() {
       {/* ── App Celular (PWA) ── */}
       <div className="bg-gradient-to-br from-[#0D1B3E] to-[#1a2f5a] rounded-2xl p-6 mb-6 flex flex-col sm:flex-row items-center gap-6">
         <img
-          src="/images/app_celular.png"
-          alt="App Box Sys no celular"
+          src="/system/menu-boxsys-icon-v1.png"
+          alt="Menu BoxSys no celular"
           className="w-32 h-32 object-contain drop-shadow-2xl shrink-0"
         />
         <div className="flex-1 text-center sm:text-left">
@@ -74,7 +74,7 @@ export default function DownloadsPanel() {
             <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-[#C9A227] text-black">Grátis</span>
             <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-white/10 text-white">iOS & Android</span>
           </div>
-          <h3 className="text-xl font-black text-white mb-1">Box Sys no Celular</h3>
+          <h3 className="text-xl font-black text-white mb-1">Menu BoxSys no Celular</h3>
           <p className="text-sm text-slate-300 mb-4 leading-relaxed">
             Adicione o painel à tela inicial do seu celular e use como um app nativo — sem baixar nada da loja.
           </p>

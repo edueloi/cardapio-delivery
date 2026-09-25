@@ -54,12 +54,12 @@ export async function resolveSeoMeta(
   const segments = requestPath.split("/").filter(Boolean);
   const slug = segments[0];
   const isKitchen = hostname === "cozinha.boxsys.com.br";
-  const appleTitle = isKitchen ? "Cozinha BoxSys" : "Box Sys";
+  const appleTitle = isKitchen ? "Cozinha BoxSys" : "Menu BoxSys";
   const appleIcon = isKitchen
     ? "/images/cozinha-icon.png"
     : "/images/app_celular.png";
 
-  let title = "Box Sys — Cardápio Digital";
+  let title = "Menu BoxSys — Cardápio Digital";
   let description = "Peça agora pelo nosso cardápio digital!";
   let image = DEFAULT_OG_IMAGE;
 
@@ -131,6 +131,6 @@ export function injectSeoMeta(
     .replace(/{{APPLE_ICON}}/g, seo.appleIcon)
     .replace(
       /<meta property="og:image" content="[^"]*"\s*\/>/,
-      `<meta property="og:image" content="${seo.image}" />\n    <meta property="og:url" content="${seo.url}" />\n    <meta property="og:site_name" content="Box Sys" />`
+      `<meta property="og:image" content="${seo.image}" />\n    <meta property="og:url" content="${seo.url}" />\n    <meta property="og:site_name" content="Menu BoxSys" />`
     );
 }

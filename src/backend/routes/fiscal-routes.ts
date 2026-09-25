@@ -538,16 +538,16 @@ export function registerFiscalRoutes({
 
   // Manifest do PWA varia por subdomínio: cozinha.boxsys.com.br precisa de nome/ícone
   // próprios ("Cozinha BoxSys"), senão o atalho "Adicionar à Tela de Início" no
-  // celular/iPad sai com o nome e ícone genéricos do sistema (Box Sys). Precisa vir antes
+  // celular/iPad sai com o nome e ícone genéricos do sistema (Menu BoxSys). Precisa vir antes
   // do express.static (que serve o manifest.webmanifest genérico gerado pelo build).
   app.get("/manifest.webmanifest", (req, res) => {
     const isKitchen = req.hostname === "cozinha.boxsys.com.br";
     res.set("Content-Type", "application/manifest+json").json({
-      name: isKitchen ? "Cozinha BoxSys" : "Box Sys PDV",
-      short_name: isKitchen ? "Cozinha BoxSys" : "Box Sys",
+      name: isKitchen ? "Cozinha BoxSys" : "Menu BoxSys PDV",
+      short_name: isKitchen ? "Cozinha BoxSys" : "Menu BoxSys",
       description: isKitchen
         ? "Painel de pedidos da cozinha BoxSys"
-        : "Cardápio digital e PDV Box Sys",
+        : "Cardápio digital e PDV Menu BoxSys",
       theme_color: "#0D1B3E",
       background_color: "#0D1B3E",
       display: "standalone",

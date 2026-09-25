@@ -59,6 +59,28 @@ function firstOfMonthISO() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
+type RevenuePeriod = "today" | "week" | "month" | "year";
+function toISODate(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+function revenuePeriodRange(period: RevenuePeriod): { from: string; to: string } {
+  const now = new Date();
+  if (period === "today") { const t = toISODate(now); return { from: t, to: t }; }
+  if (period === "week") {
+    const start = new Date(now);
+    start.setDate(now.getDate() - now.getDay());
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    return { from: toISODate(start), to: toISODate(end) };
+  }
+  if (period === "year") return { from: `${now.getFullYear()}-01-01`, to: `${now.getFullYear()}-12-31` };
+  return { from: firstOfMonthISO(), to: todayISO() };
+}
+const REVENUE_PERIOD_LABEL: Record<RevenuePeriod, string> = {
+  today: "Hoje", week: "Esta semana", month: "Mês atual", year: "Este ano",
+};
+
 interface Summary {
   totalRevenue: number; orderCount: number; totalSangrias: number;
   totalSuprimentos: number; netBalance: number;
@@ -69,27 +91,45 @@ interface Summary {
 interface CashFlowPanelProps { slug: string; tenant: Tenant; }
 
 // ─── Sparkline de barras ────────────────────────────────────────────────────
-function SparkBar({ byDay }: { byDay: Record<string, number> }) {
-  const entries = Object.entries(byDay).sort(([a], [b]) => a.localeCompare(b)).slice(-14);
+const MONTH_SHORT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+// No período "Ano", agrega por mês (12 barras) em vez de por dia — sem isso, um
+// ano inteiro tentaria desenhar até 365 barras diárias espremidas na mesma faixa.
+function groupByMonth(byDay: Record<string, number>): Record<string, number> {
+  const byMonth: Record<string, number> = {};
+  for (const [day, val] of Object.entries(byDay)) {
+    const monthKey = day.slice(0, 7); // "YYYY-MM"
+    byMonth[monthKey] = (byMonth[monthKey] || 0) + val;
+  }
+  return byMonth;
+}
+
+function SparkBar({ byDay, maxBars = 31, granularity = "day" }: { byDay: Record<string, number>; maxBars?: number; granularity?: "day" | "month" }) {
+  const data = granularity === "month" ? groupByMonth(byDay) : byDay;
+  const entries = Object.entries(data).sort(([a], [b]) => a.localeCompare(b)).slice(-maxBars);
   if (entries.length === 0) return null;
   const max = Math.max(...entries.map(([, v]) => v), 1);
+  const todayKey = granularity === "month" ? todayISO().slice(0, 7) : todayISO();
   return (
     <div className="flex items-end gap-1 h-16 w-full">
-      {entries.map(([day, val]) => {
-        const isToday = day === todayISO();
+      {entries.map(([key, val]) => {
+        const isCurrent = key === todayKey;
         const pct = Math.max((val / max) * 100, 4);
+        const label = granularity === "month"
+          ? `${MONTH_SHORT[Number(key.slice(5, 7)) - 1]}/${key.slice(2, 4)}`
+          : fmtDate(key);
         return (
-          <div key={day} className="flex-1 flex flex-col items-center gap-0.5 group relative">
+          <div key={key} className="flex-1 flex flex-col items-center gap-0.5 group relative">
             <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[9px] font-bold px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10 shadow-lg">
-              {fmtDate(day)}<br />{fmt(val)}
+              {label}<br />{fmt(val)}
             </div>
             <motion.div
               initial={{ height: 0 }}
               animate={{ height: `${pct}%` }}
               transition={{ duration: 0.5, ease: "easeOut" }}
-              className={`w-full rounded-t-lg ${isToday ? "bg-[#C9A227]" : "bg-slate-200 group-hover:bg-[#C9A227]/50 transition-colors"}`}
+              className={`w-full rounded-t-lg ${isCurrent ? "bg-[#C9A227]" : "bg-slate-200 group-hover:bg-[#C9A227]/50 transition-colors"}`}
             />
-            {isToday && <span className="text-[8px] font-bold text-[#C9A227] mt-0.5">hoje</span>}
+            {isCurrent && <span className="text-[8px] font-bold text-[#C9A227] mt-0.5">{granularity === "month" ? "mês" : "hoje"}</span>}
           </div>
         );
       })}
@@ -242,9 +282,17 @@ export default function CashFlowPanel({ slug, tenant }: CashFlowPanelProps) {
   const [loading,     setLoading]     = useState(true);
   const [activeTab,   setActiveTab]   = useState<"caixa" | "historico">("caixa");
 
+  const [revenuePeriod, setRevenuePeriod] = useState<RevenuePeriod>("month");
   const [dateFrom, setDateFrom] = useState<string | null>(firstOfMonthISO());
   const [dateTo,   setDateTo]   = useState<string | null>(todayISO());
   const [autoRegister, setAutoRegister] = useState(true);
+
+  const handleRevenuePeriodChange = (period: RevenuePeriod) => {
+    setRevenuePeriod(period);
+    const r = revenuePeriodRange(period);
+    setDateFrom(r.from);
+    setDateTo(r.to);
+  };
 
   const [showOpenModal,     setShowOpenModal]     = useState(false);
   const [showCloseModal,    setShowCloseModal]    = useState(false);
@@ -499,14 +547,38 @@ export default function CashFlowPanel({ slug, tenant }: CashFlowPanelProps) {
             </div>
           )}
 
-          {/* ── Gráfico diário (mês atual) ── */}
-          {summary && Object.keys(summary.byDay).length > 1 && (
+          {/* ── Gráfico diário ── */}
+          {summary && (
             <div className="bg-white rounded-2xl border border-slate-100 p-5">
-              <div className="flex items-center justify-between mb-4">
-                <p className="text-sm font-black text-slate-800">Receita — Mês atual</p>
-                <span className="text-xs font-bold text-[#C9A227]">{fmt(summary.totalRevenue)}</span>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                <div className="flex items-center justify-between sm:justify-start gap-3">
+                  <p className="text-sm font-black text-slate-800">Receita — {REVENUE_PERIOD_LABEL[revenuePeriod]}</p>
+                  <span className="text-xs font-bold text-[#C9A227] sm:hidden">{fmt(summary.totalRevenue)}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                    {(["today", "week", "month", "year"] as const).map((p) => (
+                      <button
+                        key={p}
+                        onClick={() => handleRevenuePeriodChange(p)}
+                        className={`h-7 px-2.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${revenuePeriod === p ? "bg-white shadow-sm text-slate-900" : "text-slate-400 hover:text-slate-600"}`}
+                      >
+                        {p === "today" ? "Hoje" : p === "week" ? "Semana" : p === "month" ? "Mês" : "Ano"}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="hidden sm:inline text-xs font-bold text-[#C9A227] shrink-0">{fmt(summary.totalRevenue)}</span>
+                </div>
               </div>
-              <SparkBar byDay={summary.byDay} />
+              {Object.keys(summary.byDay).length > 0 ? (
+                <SparkBar
+                  byDay={summary.byDay}
+                  granularity={revenuePeriod === "year" ? "month" : "day"}
+                  maxBars={revenuePeriod === "year" ? 12 : revenuePeriod === "month" ? 31 : revenuePeriod === "week" ? 7 : 1}
+                />
+              ) : (
+                <p className="text-center text-xs text-slate-400 py-8">Sem vendas nesse período</p>
+              )}
             </div>
           )}
 

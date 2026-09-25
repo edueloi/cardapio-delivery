@@ -1027,7 +1027,7 @@ export function registerCashRoutes({
 
       const movements = await prisma.cashMovement.findMany({
         where: { cashRegisterId: currentCash.id },
-        orderBy: { createdAt: "asc" },
+        orderBy: { createdAt: "desc" },
       });
       res.json(await attachOrderDetails(movements));
     } catch (error) {
