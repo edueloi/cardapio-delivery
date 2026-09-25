@@ -15,6 +15,13 @@ export interface RegisterPaymentRoutesOptions {
     tabId?: string | string[],
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ) => Promise<any | null>;
+  updateOrderStatus: (
+    orderId: string,
+    previousStatus: string,
+    status: string,
+    kitchenReady?: boolean,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ) => Promise<any>;
 }
 
 export function registerPaymentRoutes({
@@ -23,6 +30,7 @@ export function registerPaymentRoutes({
   prisma,
   requireAuth,
   requireTenantBySlug,
+  updateOrderStatus,
 }: RegisterPaymentRoutesOptions) {
   // ── STONE / MAQUININHA ──────────────────────────────────────────────────────
   // Sends a charge to the Stone (Pagar.me) POS terminal.
@@ -169,11 +177,11 @@ export function registerPaymentRoutes({
       hydrateOrderItemNames(order);
 
       if (status === "paid") {
-        // Mark order delivered and register cash movement
-        await prisma.order.update({
-          where: { id: order.id },
-          data: { status: "DELIVERED" },
-        });
+        // Mark order delivered (debita estoque, dá pontos, avisa socket — via updateOrderStatus,
+        // mesma função usada em toda mudança de status no resto do app) e registra o movimento de caixa.
+        if (order.status !== "DELIVERED") {
+          await updateOrderStatus(order.id, order.status, "DELIVERED");
+        }
 
         const currentCash = await prisma.cashRegister.findFirst({
           where: { tenantId: tenant.id, status: "OPEN" },
@@ -262,10 +270,7 @@ export function registerPaymentRoutes({
             where: { stoneChargeId: req.params.chargeId, tenantId: tenant.id },
           });
           if (order && order.status !== "DELIVERED") {
-            await prisma.order.update({
-              where: { id: order.id },
-              data: { status: "DELIVERED" },
-            });
+            await updateOrderStatus(order.id, order.status, "DELIVERED");
             const currentCash = await prisma.cashRegister.findFirst({
               where: { tenantId: tenant.id, status: "OPEN" },
               orderBy: { openedAt: "desc" },
@@ -455,10 +460,7 @@ export function registerPaymentRoutes({
       // Status da Cielo: DRAFT, ENTERED, PAID, CLOSED, RE_ENTERED
       if (status === "PAID" || status === "CLOSED") {
         if (order.status !== "DELIVERED") {
-          await prisma.order.update({
-            where: { id: order.id },
-            data: { status: "DELIVERED" },
-          });
+          await updateOrderStatus(order.id, order.status, "DELIVERED");
 
           const currentCash = await prisma.cashRegister.findFirst({
             where: { tenantId: tenant.id, status: "OPEN" },
@@ -530,10 +532,7 @@ export function registerPaymentRoutes({
             where: { cieloOrderId: req.params.chargeId, tenantId: tenant.id },
           });
           if (order && order.status !== "DELIVERED") {
-            await prisma.order.update({
-              where: { id: order.id },
-              data: { status: "DELIVERED" },
-            });
+            await updateOrderStatus(order.id, order.status, "DELIVERED");
             const currentCash = await prisma.cashRegister.findFirst({
               where: { tenantId: tenant.id, status: "OPEN" },
               orderBy: { openedAt: "desc" },

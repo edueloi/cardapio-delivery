@@ -132,9 +132,17 @@ export function registerPdvRoutes({
       const isWaiterComanda = source === "waiter" && orderType === "DINE_IN";
       const isPDVComandaLaunch =
         orderType === "DINE_IN" && req.body.status === "PENDING";
+      // Venda de balcão (TAKEAWAY) via maquininha (Stone/Cielo) também nasce PENDING —
+      // sem isso, caía direto em DELIVERED antes mesmo de a maquininha confirmar o
+      // pagamento, porque isPDVComandaLaunch só reconhecia DINE_IN. Restrito ao
+      // paymentMethod de maquininha (não a qualquer status=PENDING vindo do body) pra
+      // não abrir brecha de outro chamador marcar uma venda comum como PENDING à toa.
+      const isTerminalPending =
+        req.body.status === "PENDING" &&
+        /^(?:STONE|CIELO)_/.test(String(paymentMethod || ""));
       const initialStatus = isDraftDineIn
         ? "AWAITING_PAYMENT"
-        : isWaiterComanda || isPDVComandaLaunch
+        : isWaiterComanda || isPDVComandaLaunch || isTerminalPending
         ? "PENDING"
         : "DELIVERED";
 

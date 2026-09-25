@@ -262,6 +262,7 @@ registerPaymentRoutes({
   prisma,
   requireAuth,
   requireTenantBySlug,
+  updateOrderStatus,
 });
 
 registerPromotionBundleRoutes({
