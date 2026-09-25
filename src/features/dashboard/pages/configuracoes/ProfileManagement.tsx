@@ -1198,11 +1198,24 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                     </div>
                   </div>
 
+                  <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex gap-3">
+                    <Smartphone className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+                    <div className="text-xs text-blue-700 leading-relaxed">
+                      <p className="font-semibold mb-1">Onde encontrar o Merchant-ID (EC) na maquininha:</p>
+                      <ol className="list-decimal ml-3 space-y-0.5">
+                        <li>Na tela principal da maquininha, toque em <strong>Configurações</strong></li>
+                        <li>Role até o final e entre em <strong>Sistema</strong></li>
+                        <li>Toque em <strong>"Sobre a máquina"</strong></li>
+                        <li>O código do estabelecimento (EC) aparece ali — é esse número que vai no campo abaixo</li>
+                      </ol>
+                    </div>
+                  </div>
+
                   <Input
                     label="Merchant-ID (código do estabelecimento na Cielo)"
                     value={cielo.merchantId}
                     onChange={e => setCielo({ ...cielo, merchantId: e.target.value })}
-                    placeholder="Fornecido pelo suporte Cielo ao credenciar este estabelecimento"
+                    placeholder="Peça ao cliente: Configurações > Sistema > Sobre a máquina"
                   />
 
                   <div className="bg-slate-50 rounded-2xl p-4 flex items-start gap-3 border border-slate-100">
