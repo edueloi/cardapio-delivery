@@ -660,6 +660,8 @@ export interface Order {
   scheduledDate?: string | null; // ISO date string YYYY-MM-DD
   scheduledTime?: string | null; // HH:mm
   notes?: string | null;
+  discount?: number | null;                    // valor do desconto — percentual ou fixo conforme discountType
+  discountType?: 'PERCENT' | 'FIXED' | null;
   total: number;
   tenantId: string;
   createdAt: string;

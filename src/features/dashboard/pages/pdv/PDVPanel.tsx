@@ -213,6 +213,12 @@ export default function PDVPanel({
   const [showAddItemsPanel, setShowAddItemsPanel] = useState(false);
   const [showComandaModal, setShowComandaModal] = useState(false);
   const [comandaNumber, setComandaNumber] = useState("");
+  // Desconto definido já na abertura da comanda (ex: cliente com cortesia combinada de
+  // antemão) — separado do discountValue/discountType do rodapé do carrinho, que é o
+  // desconto aplicado na hora de FECHAR a venda. Fica salvo no pedido-base da comanda
+  // (Order.discount/discountType) e é ecoado de volta pelo handleLoadComanda.
+  const [comandaDiscountType, setComandaDiscountType] = useState<"PERCENT" | "FIXED">("FIXED");
+  const [comandaDiscountValue, setComandaDiscountValue] = useState("");
   const [nextTicket, setNextTicket] = useState<number | null>(null);
   const [nextTicketLoading, setNextTicketLoading] = useState(false);
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
@@ -1427,6 +1433,16 @@ export default function PDVPanel({
     setSelectedComandaId(comanda.id);
     setComandaNumber(comanda.customerName || "");
     setConsumptionType(comanda.consumptionType || null);
+    // Desconto definido na abertura da comanda (fica salvo só no pedido-base, comanda.discount)
+    // "gruda" aqui: sem isso, reabrir uma comanda com desconto voltava ao estado padrão (sem
+    // desconto), como se o operador tivesse que redigitar toda vez que reabrisse a tela.
+    if (comanda.discount) {
+      setDiscountValue(String(comanda.discount));
+      setDiscountType(comanda.discountType || "FIXED");
+    } else {
+      setDiscountValue("");
+      setDiscountType("FIXED");
+    }
     setContextLoadMessage(`${dineInOrderLabel(comanda)} aberta no PDV. O que já foi lançado aparece separado do que será adicionado agora.`);
     setOrderDetailsView(null);
     setActiveTab("products");
@@ -1458,6 +1474,8 @@ export default function PDVPanel({
           status: cart.length > 0 ? "PENDING" : "AWAITING_PAYMENT",
           paymentMethod: "CASH",
           operatorName: operatorName || undefined,
+          discount: comandaDiscountValue ? parseFloat(comandaDiscountValue) : undefined,
+          discountType: comandaDiscountValue ? comandaDiscountType : undefined,
           items: cart.map((i) => ({
             productId: i.product.id,
             productVariantId: i.productVariantId,
@@ -1472,6 +1490,8 @@ export default function PDVPanel({
 
       setCart([]);
       setComandaNumber("");
+      setComandaDiscountValue("");
+      setComandaDiscountType("FIXED");
       setShowComandaModal(false);
       onOrderCreated?.();
 
@@ -2431,7 +2451,7 @@ export default function PDVPanel({
         {/* Tables Tab */}
         {activeTab === "tables" && (() => {
           // Build active tables from orders (PENDING, PREPARING, SHIPPED = still open)
-          const activeTableMap = new Map<string, { tableId: string; customerName: string; total: number; orderCount: number; lastAt: string; wantsCheckout: boolean }>();
+          const activeTableMap = new Map<string, { tableId: string; customerName: string; total: number; orderCount: number; lastAt: string; wantsCheckout: boolean; hasDiscount: boolean }>();
           orders.forEach((o) => {
             if (!o.tableId || o.orderType !== "DINE_IN") return;
             if (o.status === "DELIVERED" || o.status === "CANCELLED" || o.status === "MERGED") return;
@@ -2440,6 +2460,7 @@ export default function PDVPanel({
             if (existing) {
               existing.total += o.total;
               existing.orderCount += 1;
+              existing.hasDiscount = existing.hasDiscount || !!o.discount;
               if (o.createdAt > existing.lastAt) existing.lastAt = o.createdAt;
             } else {
               activeTableMap.set(o.tableId, {
@@ -2449,13 +2470,14 @@ export default function PDVPanel({
                 orderCount: 1,
                 lastAt: o.createdAt,
                 wantsCheckout: checkoutRequests.some(r => r.tableId === o.tableId),
+                hasDiscount: !!o.discount,
               });
             }
           });
           // Mark checkout requests even if no order yet in state
           checkoutRequests.forEach((r) => {
             if (!activeTableMap.has(r.tableId)) {
-              activeTableMap.set(r.tableId, { tableId: r.tableId, customerName: r.customerName, total: 0, orderCount: 0, lastAt: new Date(r.timestamp).toISOString(), wantsCheckout: true });
+              activeTableMap.set(r.tableId, { tableId: r.tableId, customerName: r.customerName, total: 0, orderCount: 0, lastAt: new Date(r.timestamp).toISOString(), wantsCheckout: true, hasDiscount: false });
             } else {
               activeTableMap.get(r.tableId)!.wantsCheckout = true;
             }
@@ -2516,6 +2538,9 @@ export default function PDVPanel({
                       <div className="min-w-0 flex-1">
                         <h4 className="text-sm font-black text-slate-800 truncate">Mesa {tbl.tableId}</h4>
                         <p className="text-[10px] font-bold text-slate-400 truncate">{tbl.customerName || `${tbl.orderCount} ${tbl.orderCount === 1 ? "pedido" : "pedidos"}`}</p>
+                        {tbl.hasDiscount && (
+                          <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Com desconto</p>
+                        )}
                         <p className="text-sm font-black text-[#C9A227] mt-0.5">{fmt(tbl.total)}</p>
                       </div>
                     </button>
@@ -2567,6 +2592,9 @@ export default function PDVPanel({
                       <p className="text-[10px] font-bold text-slate-400">
                         {comanda.items.length} {comanda.items.length === 1 ? "item" : "itens"}
                       </p>
+                      {!!comanda.discount && (
+                        <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Com desconto</p>
+                      )}
                       <p className="text-sm font-black text-[#C9A227] mt-0.5">{fmt(comanda.total)}</p>
                     </div>
                   </button>
@@ -3384,7 +3412,7 @@ export default function PDVPanel({
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-[300] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
-            onClick={() => { setShowComandaModal(false); setComandaNumber(""); setConsumptionType("EAT_IN"); }}
+            onClick={() => { setShowComandaModal(false); setComandaNumber(""); setConsumptionType("EAT_IN"); setComandaDiscountValue(""); setComandaDiscountType("FIXED"); }}
           >
             <motion.div
               initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.96, y: 12, opacity: 0 }}
@@ -3465,10 +3493,43 @@ export default function PDVPanel({
                     {tenant.counterTicketMode === "NAME" ? "Deixe em branco se não quiser identificar o pedido" : "Deixe em branco para usar só a senha numérica"}
                   </p>
                 </div>
+
+                {/* Desconto na abertura (opcional) — vale sobre o total da comanda inteira,
+                    incluindo itens lançados depois, até o fechamento. */}
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-1">
+                    Desconto na comanda <span className="normal-case font-normal">(opcional)</span>
+                  </label>
+                  <div className="mt-1 flex items-center gap-2">
+                    <div className="flex bg-slate-50 rounded-xl overflow-hidden border border-slate-200 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setComandaDiscountType("FIXED")}
+                        className={`px-3 py-2.5 text-[10px] font-black transition-all ${comandaDiscountType === "FIXED" ? "bg-[#C9A227] text-black" : "text-slate-400"}`}
+                      >
+                        R$
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setComandaDiscountType("PERCENT")}
+                        className={`px-3 py-2.5 text-[10px] font-black transition-all ${comandaDiscountType === "PERCENT" ? "bg-[#C9A227] text-black" : "text-slate-400"}`}
+                      >
+                        %
+                      </button>
+                    </div>
+                    <input
+                      type="number"
+                      placeholder={comandaDiscountType === "PERCENT" ? "Desconto %" : "Desconto R$"}
+                      value={comandaDiscountValue}
+                      onChange={(e) => setComandaDiscountValue(e.target.value)}
+                      className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-4 text-sm font-bold text-slate-800 focus:border-[#C9A227] outline-none text-center"
+                    />
+                  </div>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-2.5">
                 <button
-                  onClick={() => { setShowComandaModal(false); setComandaNumber(""); setConsumptionType("EAT_IN"); }}
+                  onClick={() => { setShowComandaModal(false); setComandaNumber(""); setConsumptionType("EAT_IN"); setComandaDiscountValue(""); setComandaDiscountType("FIXED"); }}
                   className="bg-slate-100 hover:bg-slate-200 text-slate-500 font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all"
                 >
                   Cancelar

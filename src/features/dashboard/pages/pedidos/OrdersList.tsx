@@ -513,6 +513,13 @@ function KanbanCard({ order, categoryMap, updateStatus, isExpanded, toggleOrder,
       <div className="h-px bg-slate-100 w-full" />
 
       {/* Total */}
+      {!!order.discount && (
+        <div className="flex items-center justify-between">
+          <span className="text-[9px] font-bold uppercase tracking-widest text-emerald-600">
+            Desconto {order.discountType === "PERCENT" ? `${order.discount}%` : fmt(order.discount)}
+          </span>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total</span>
         <span className="text-sm font-black text-slate-800">{fmt(order.total)}</span>

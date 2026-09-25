@@ -80,7 +80,7 @@ function buildReceiptDataFromOrder(order: Order, tenant: Tenant): ReceiptData {
     isPreCheckout: !(order.billed === true || order.status === "DELIVERED"),
     items,
     subtotal: orderSubtotal,
-    discountAmount: (order as any).discount || 0,
+    discountAmount: order.discount || 0,
     feeAmount: order.feeAmount || undefined,
     feePercent: order.feePercent || undefined,
     feePassedToCustomer: (order as any).feePassedToCustomer,
@@ -379,7 +379,14 @@ export function OrderHistoryPanel({
     {
       header: 'Valor',
       render: (o: Order) => (
-        <span className="text-xs font-black text-slate-800 tabular-nums">{fmt(o.total)}</span>
+        <div className="flex flex-col items-end">
+          <span className="text-xs font-black text-slate-800 tabular-nums">{fmt(o.total)}</span>
+          {!!o.discount && (
+            <span className="text-[9px] font-bold text-emerald-600 tabular-nums">
+              -{o.discountType === "PERCENT" ? `${o.discount}%` : fmt(o.discount)}
+            </span>
+          )}
+        </div>
       ),
     },
     {
@@ -592,6 +599,14 @@ export function OrderHistoryPanel({
               ))}
             </div>
 
+            {!!detailsOrder.discount && (
+              <div className="flex items-center justify-between px-1">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Desconto</span>
+                <span className="text-xs font-bold text-emerald-600">
+                  {detailsOrder.discountType === "PERCENT" ? `${detailsOrder.discount}%` : fmt(detailsOrder.discount)}
+                </span>
+              </div>
+            )}
             <div className="flex items-center justify-between px-1">
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Pagamento</span>

@@ -219,6 +219,9 @@ export default function WaiterPanel({
                         <p className="text-[9px] font-black uppercase tracking-widest text-red-500">Pediu a conta</p>
                       )}
                       <p className="text-xs text-slate-400 font-bold">{t.itemCount} item{t.itemCount !== 1 ? "s" : ""}</p>
+                      {t.orders.some((o) => !!o.discount) && (
+                        <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Com desconto</p>
+                      )}
                       <p className="text-sm font-black text-slate-700">{fmt(t.total)}</p>
                     </button>
                   ))}
