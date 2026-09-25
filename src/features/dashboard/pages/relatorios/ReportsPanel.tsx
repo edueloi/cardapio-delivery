@@ -196,36 +196,51 @@ export default function ReportsPanel({ slug, tenant }: ReportsPanelProps) {
       />
 
       {/* Period selector */}
-      <ContentCard className="mb-6">
-        <div className="flex flex-wrap gap-2 items-center">
-          {(["today", "week", "month", "year", "custom"] as const).map((p) => (
+      <ContentCard className="mb-6" padding="sm">
+        <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-3 sm:flex sm:items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl p-1">
+            {(["today", "week", "month", "year"] as const).map((p) => (
+              <button
+                key={p}
+                onClick={() => setPeriod(p)}
+                className={`h-9 px-3 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
+                  period === p ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                {p === "today" ? "Hoje" : p === "week" ? "7 Dias" : p === "month" ? "Este Mês" : "Este Ano"}
+              </button>
+            ))}
             <button
-              key={p}
-              onClick={() => setPeriod(p)}
-              className={`px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${
-                period === p ? "bg-[#0D1B3E] text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+              onClick={() => setPeriod("custom")}
+              className={`h-9 px-3 rounded-lg flex items-center justify-center gap-1.5 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap col-span-3 sm:col-span-1 ${
+                period === "custom" ? "bg-amber-500 text-white shadow-sm" : "text-slate-500 hover:text-slate-700"
               }`}
             >
-              {p === "today" ? "Hoje" : p === "week" ? "7 Dias" : p === "month" ? "Este Mês" : p === "year" ? "Este Ano" : "Personalizado"}
+              <Calendar size={12} /> Livre
             </button>
-          ))}
+          </div>
 
           {period === "custom" && (
-            <div className="flex gap-2 items-center flex-wrap">
-              <input
-                type="date"
-                value={customFrom}
-                onChange={(e) => setCustomFrom(e.target.value)}
-                className="border border-slate-200 rounded-xl py-2 px-3 text-sm focus:border-[#C9A227] outline-none"
-              />
-              <span className="text-slate-400 text-sm">até</span>
-              <input
-                type="date"
-                value={customTo}
-                onChange={(e) => setCustomTo(e.target.value)}
-                className="border border-slate-200 rounded-xl py-2 px-3 text-sm focus:border-[#C9A227] outline-none"
-              />
-              <Button variant="primary" size="sm" onClick={fetchReport}>Buscar</Button>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-2 border-t border-slate-100">
+              <div className="flex items-center gap-2 flex-1">
+                <span className="text-[10px] font-black text-slate-400 uppercase shrink-0">De</span>
+                <input
+                  type="date"
+                  value={customFrom}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  className="flex-1 sm:w-[160px] h-9 px-3 border border-slate-200 rounded-xl text-[11px] font-bold focus:border-[#C9A227] outline-none transition-all"
+                />
+              </div>
+              <div className="flex items-center gap-2 flex-1">
+                <span className="text-[10px] font-black text-slate-400 uppercase shrink-0">Até</span>
+                <input
+                  type="date"
+                  value={customTo}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  className="flex-1 sm:w-[160px] h-9 px-3 border border-slate-200 rounded-xl text-[11px] font-bold focus:border-[#C9A227] outline-none transition-all"
+                />
+              </div>
+              <Button variant="primary" size="sm" onClick={fetchReport} className="w-full sm:w-auto">Buscar</Button>
             </div>
           )}
         </div>
@@ -237,6 +252,12 @@ export default function ReportsPanel({ slug, tenant }: ReportsPanelProps) {
         </div>
       ) : !summary ? (
         <EmptyState title="Sem dados" description="Selecione um período para visualizar o relatório." icon={BarChart3} />
+      ) : summary.totalOrders === 0 ? (
+        <EmptyState
+          title="Nenhuma venda nesse período"
+          description="Não houve pedidos concluídos no período selecionado. Tente escolher outro período ou aguarde as primeiras vendas chegarem."
+          icon={BarChart3}
+        />
       ) : (
         <div className="space-y-6">
           {/* KPIs */}
@@ -388,11 +409,11 @@ export default function ReportsPanel({ slug, tenant }: ReportsPanelProps) {
                 <Clock className="w-4 h-4" />
                 Distribuição por Hora
               </h3>
-              <div className="flex items-end gap-1 h-24">
+              <div className="flex items-end gap-1 h-24 overflow-x-auto pb-1">
                 {summary.hourly.map((h) => {
                   const pct = maxHourlyTotal > 0 ? (h.total / maxHourlyTotal) * 100 : 0;
                   return (
-                    <div key={h.hour} className="flex flex-col items-center gap-1 flex-1 group relative">
+                    <div key={h.hour} className="flex flex-col items-center gap-1 min-w-[18px] flex-1 group relative">
                       {h.total > 0 && (
                         <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[8px] font-black px-1.5 py-0.5 rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
                           {fmt(h.total)}
@@ -424,11 +445,11 @@ export default function ReportsPanel({ slug, tenant }: ReportsPanelProps) {
                   <Timer className="w-4 h-4" />
                   Tempo Médio de Preparo por Hora
                 </h3>
-                <div className="flex items-end gap-1 h-24">
+                <div className="flex items-end gap-1 h-24 overflow-x-auto pb-1">
                   {timing.hourly.map((h) => {
                     const pct = h.count > 0 ? (h.avgPrepMinutes / maxHourlyPrepMinutes) * 100 : 0;
                     return (
-                      <div key={h.hour} className="flex flex-col items-center gap-1 flex-1 group relative">
+                      <div key={h.hour} className="flex flex-col items-center gap-1 min-w-[18px] flex-1 group relative">
                         {h.count > 0 && (
                           <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[8px] font-black px-1.5 py-0.5 rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
                             {fmtMinutes(h.avgPrepMinutes)} ({h.count})

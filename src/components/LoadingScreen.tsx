@@ -1,5 +1,6 @@
 import React, {useEffect, useState} from 'react';
 import {AnimatePresence, motion} from 'framer-motion';
+import AnimatedLogo from './AnimatedLogo';
 
 interface LoadingProps {
   onComplete?: () => void;
@@ -71,13 +72,7 @@ const LoadingScreen: React.FC<LoadingProps> = ({
               >
                 <div className="absolute inset-0 rounded-[2rem] bg-[#D49E00]/12 blur-2xl" />
                 <div className="relative rounded-[2rem] border border-slate-200/80 bg-white p-4 shadow-[0_28px_80px_-34px_rgba(15,23,42,0.35)]">
-                  <div className="rounded-[1.4rem] bg-white p-3">
-                    <img
-                      src="/images/logo.png"
-                      alt="Logo Box Sys"
-                      className="h-16 w-16 object-contain"
-                    />
-                  </div>
+                  <AnimatedLogo markOnly className="h-16 w-16 object-contain" />
                 </div>
               </motion.div>
 
@@ -87,8 +82,8 @@ const LoadingScreen: React.FC<LoadingProps> = ({
                 transition={{delay: 0.25, duration: 0.75, ease: [0.22, 1, 0.36, 1]}}
                 className="space-y-4"
               >
-                <h1 className="text-5xl font-black tracking-[-0.08em] text-[#0B2343] sm:text-6xl">
-                  Box<span className="text-[#D49E00]">Sys</span>
+                <h1 className="text-4xl font-black tracking-tight sm:text-5xl">
+                  <span className="text-[#f58d0a]">Menu</span> <span className="text-[#297ed1]">BoxSys</span>
                 </h1>
 
                 <div className="flex items-center justify-center gap-4 text-[11px] font-semibold uppercase tracking-[0.34em]">

@@ -4,6 +4,7 @@ import { Eye, EyeOff, ArrowRight } from "lucide-react";
 import { useAuth } from "../../lib/auth";
 import { resolvePostAuthPath } from "./authRedirect";
 import LoadingScreen from "../../components/LoadingScreen";
+import AnimatedLogo from "../../components/AnimatedLogo";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -107,7 +108,7 @@ export default function LoginPage() {
             {/* Logo solta, com glow sutil atrás — sem container branco */}
             <div className="self-start relative shrink-0">
               <div className="absolute inset-0 bg-blue-500/20 blur-3xl rounded-full scale-90" />
-              <img src="/images/menu-flow-continue.png" alt="BoxSys" className="relative h-16 2xl:h-20 object-contain" />
+              <AnimatedLogo className="relative h-16 2xl:h-20 w-auto" />
             </div>
 
             {/* Headline */}
@@ -153,7 +154,7 @@ export default function LoginPage() {
           <div className="lg:hidden flex items-center justify-center pt-8 pb-2 shrink-0 bg-[#071020]">
             <div className="relative py-4">
               <div className="absolute inset-0 bg-blue-500/20 blur-2xl rounded-full scale-90" />
-              <img src="/images/menu-flow-continue.png" alt="BoxSys" className="relative h-14 object-contain" />
+              <AnimatedLogo className="relative h-14 w-auto" />
             </div>
           </div>
 
