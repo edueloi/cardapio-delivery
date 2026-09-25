@@ -1201,18 +1201,18 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                   <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex gap-3">
                     <Smartphone className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
                     <div className="text-xs text-blue-700 leading-relaxed">
-                      <p className="font-semibold mb-1">Onde encontrar o Merchant-ID (EC) na maquininha:</p>
+                      <p className="font-semibold mb-1">Como pegar o código do estabelecimento na maquininha do cliente:</p>
                       <ol className="list-decimal ml-3 space-y-0.5">
                         <li>Na tela principal da maquininha, toque em <strong>Configurações</strong></li>
                         <li>Role até o final e entre em <strong>Sistema</strong></li>
                         <li>Toque em <strong>"Sobre a máquina"</strong></li>
-                        <li>O código do estabelecimento (EC) aparece ali — é esse número que vai no campo abaixo</li>
+                        <li>O código do estabelecimento aparece ali — é esse número que vai no campo abaixo</li>
                       </ol>
                     </div>
                   </div>
 
                   <Input
-                    label="Merchant-ID (código do estabelecimento na Cielo)"
+                    label="Código do estabelecimento na Cielo"
                     value={cielo.merchantId}
                     onChange={e => setCielo({ ...cielo, merchantId: e.target.value })}
                     placeholder="Peça ao cliente: Configurações > Sistema > Sobre a máquina"
@@ -1233,7 +1233,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                   {cielo.merchantId && (
                     <div className="flex items-center gap-2 text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
                       <CheckCircle2 className="w-3.5 h-3.5" />
-                      Merchant-ID configurado — salve para ativar.
+                      Código do estabelecimento configurado — salve para ativar.
                     </div>
                   )}
                 </div>
