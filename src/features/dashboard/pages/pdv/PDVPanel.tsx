@@ -425,6 +425,11 @@ export default function PDVPanel({
     if (!printingConfig.autoPrintOnOrderCreate) return;
     const handler = (order: any) => {
       if (!order?.id || globalAutoPrintedOrderIds.has(order.id)) return;
+      // Pedido de maquininha (Stone/Cielo) nasce PENDING e chega aqui pelo socket assim que
+      // criado — mas ainda não foi pago. Não imprime agora; handleStonePay/handleCieloPay
+      // já cuidam de imprimir quando o pagamento for de fato confirmado.
+      const isTerminalPending = order.status === "PENDING" && /^(?:STONE|CIELO)_/.test(String(order.paymentMethod || ""));
+      if (isTerminalPending) return;
       globalAutoPrintedOrderIds.add(order.id);
       printOrderAuto(order);
     };
