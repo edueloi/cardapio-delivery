@@ -219,12 +219,48 @@ export function registerPdvRoutes({
       let feePercent = 0;
       let feePassedToCustomer = false;
       let feeAmount = 0;
+      // Maquininha (Stone/Cielo) não informa a bandeira do cartão pro sistema — o
+      // terminal físico detecta sozinho, o operador só escolhe crédito/débito/PIX.
+      // Sem bandeira conhecida, usa a MÉDIA das taxas cadastradas entre as bandeiras
+      // daquele método/parcela como estimativa de custo (nunca a bandeira exata).
+      const averageBrandFee = (
+        cfg: any,
+        installmentKey: string
+      ): number => {
+        const brandFees = cfg?.brandFees;
+        if (!brandFees) return 0;
+        const percents = Object.values(brandFees)
+          .map((bf: any) => bf?.installmentFees?.[installmentKey])
+          .filter((p: any) => typeof p === "number" && p > 0);
+        if (percents.length === 0) return 0;
+        return percents.reduce((sum: number, p: number) => sum + p, 0) / percents.length;
+      };
+
       const computeFeeForMethod = (
         pm: any,
         method: string,
         brand: string | undefined,
         installmentsCount: number
       ) => {
+        // STONE_CREDIT, CIELO_DEBIT, CIELO_PIX etc — extrai o método real do sufixo.
+        const terminalMatch = /^(?:STONE|CIELO)_(CREDIT|DEBIT|PIX)$/.exec(method);
+        if (terminalMatch) {
+          const realMethod = terminalMatch[1];
+          if (realMethod === "PIX") {
+            const cfg = pm?.pix;
+            return {
+              percent: cfg?.brandFees?.["PIX"]?.installmentFees?.["1"] ?? 0,
+              passToCustomer: !!cfg?.passFeeToCustomer,
+            };
+          }
+          const methodKey = realMethod === "CREDIT" ? "credit" : "debit";
+          const cfg = pm?.[methodKey];
+          const installmentKey = realMethod === "CREDIT" ? String(installmentsCount || 1) : "1";
+          return {
+            percent: averageBrandFee(cfg, installmentKey),
+            passToCustomer: !!cfg?.passFeeToCustomer,
+          };
+        }
         if (method === "PIX") {
           const cfg = pm?.pix;
           return {

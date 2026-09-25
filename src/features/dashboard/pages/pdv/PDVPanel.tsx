@@ -1657,7 +1657,10 @@ export default function PDVPanel({
         body: JSON.stringify(orderData),
       }) as { id: string; [key: string]: unknown };
       lastOrderRef.current = order;
-      if (printingConfig.autoPrintOnOrderCreate && (order as any).id && !globalAutoPrintedOrderIds.has((order as any).id)) {
+      // Pedido de maquininha (Stone/Cielo) só imprime depois que o terminal confirmar
+      // o pagamento (ver handleStonePay/handleCieloPay) — nunca antes, pra cozinha não
+      // receber um pedido cujo pagamento ainda pode ser recusado/cancelado na maquininha.
+      if (!isStone && !isCielo && printingConfig.autoPrintOnOrderCreate && (order as any).id && !globalAutoPrintedOrderIds.has((order as any).id)) {
         globalAutoPrintedOrderIds.add((order as any).id);
         printOrderAuto(order);
       }
@@ -1780,6 +1783,10 @@ export default function PDVPanel({
             clearInterval(stonePollRef.current!);
             stonePollRef.current = null;
             setStoneStatus("paid");
+            if (printingConfig.autoPrintOnOrderCreate && !globalAutoPrintedOrderIds.has(pendingOrderId)) {
+              globalAutoPrintedOrderIds.add(pendingOrderId);
+              printOrderAuto(lastOrderRef.current as any);
+            }
             setTimeout(() => {
               clearCart();
               setShowCheckout(false);
@@ -1821,6 +1828,10 @@ export default function PDVPanel({
             clearInterval(cieloPollRef.current!);
             cieloPollRef.current = null;
             setCieloStatus("paid");
+            if (printingConfig.autoPrintOnOrderCreate && !globalAutoPrintedOrderIds.has(pendingOrderId)) {
+              globalAutoPrintedOrderIds.add(pendingOrderId);
+              printOrderAuto(lastOrderRef.current as any);
+            }
             setTimeout(() => {
               clearCart();
               setShowCheckout(false);
