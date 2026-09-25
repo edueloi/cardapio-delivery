@@ -655,7 +655,7 @@ export interface Order {
   comandaGroupId?: string | null; // id interno (nunca exibido) que agrupa todos os pedidos de uma mesma comanda de balcão, mesmo lançados em dias diferentes — nunca reseta nem colide, ao contrário de counterTicketNumber
   consumptionType?: 'EAT_IN' | 'TAKEOUT' | null; // comer no local ou para viagem — só pedidos de Balcão
   kitchenReady?: boolean;
-  paymentMethod: 'PIX' | 'CREDIT' | 'DEBIT' | 'MEAL' | 'FOOD' | 'CASH' | 'VR' | 'SPLIT' | 'STONE_CREDIT' | 'STONE_DEBIT' | 'STONE_PIX';
+  paymentMethod: 'PIX' | 'CREDIT' | 'DEBIT' | 'MEAL' | 'FOOD' | 'CASH' | 'VR' | 'SPLIT' | 'STONE_CREDIT' | 'STONE_DEBIT' | 'STONE_PIX' | 'CIELO_CREDIT' | 'CIELO_DEBIT' | 'CIELO_PIX';
   paymentDetail?: string;
   scheduledDate?: string | null; // ISO date string YYYY-MM-DD
   scheduledTime?: string | null; // HH:mm

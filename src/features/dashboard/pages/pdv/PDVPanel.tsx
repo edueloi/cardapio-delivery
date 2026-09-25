@@ -9,7 +9,7 @@ import {
   MoreHorizontal, DoorClosed, Maximize2, Minimize2, Split, Truck, MessageSquarePlus, Pencil
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import type { Tenant, Product, ProductExtra, Order, PaymentConfig, PaymentMethodConfig, StoneConfig, Customer, PrintingConfig } from "../../../../types";
+import type { Tenant, Product, ProductExtra, Order, PaymentConfig, PaymentMethodConfig, StoneConfig, CieloConfig, Customer, PrintingConfig } from "../../../../types";
 import { dineInOrderLabel, DEFAULT_PRINTING_CONFIG } from "../../../../types";
 import { apiJson } from "../../../../lib/api";
 import { useToast } from "../../../../components";
@@ -154,6 +154,7 @@ const BASE_PAYMENT_METHODS = [
   { id: "PIX",    label: "PIX",           icon: QrCode,      desc: "Instantâneo" },
   { id: "VR",     label: "Refeição/VR",   icon: Receipt,     desc: "Ticket/VR" },
   { id: "STONE",  label: "Maquininha",    icon: Smartphone,  desc: "Stone / Pagar.me" },
+  { id: "CIELO",  label: "Maquininha Cielo", icon: Smartphone, desc: "Cielo LIO Smart" },
 ];
 
 export default function PDVPanel({
@@ -252,7 +253,7 @@ export default function PDVPanel({
   const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
 
   // Payment
-  const [paymentMethod, setPaymentMethod] = useState<"CASH" | "DEBIT" | "CREDIT" | "PIX" | "VR" | "STONE">("CASH");
+  const [paymentMethod, setPaymentMethod] = useState<"CASH" | "DEBIT" | "CREDIT" | "PIX" | "VR" | "STONE" | "CIELO">("CASH");
   const [cardBrand, setCardBrand] = useState<string>("");
   const [amountReceived, setAmountReceived] = useState<string>("");
   const [installments, setInstallments] = useState<number>(1);
@@ -275,6 +276,12 @@ export default function PDVPanel({
   const [stoneStatus, setStoneStatus] = useState<"idle" | "sending" | "waiting" | "paid" | "failed">("idle");
   const [stoneChargeId, setStoneChargeId] = useState<string | null>(null);
   const stonePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Cielo terminal flow
+  const [cieloPaymentType, setCieloPaymentType] = useState<"credit" | "debit" | "pix">("credit");
+  const [cieloStatus, setCieloStatus] = useState<"idle" | "sending" | "waiting" | "paid" | "failed">("idle");
+  const [cieloChargeId, setCieloChargeId] = useState<string | null>(null);
+  const cieloPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const discountInputRef = useRef<HTMLInputElement>(null);
 
   // Discount
@@ -513,6 +520,11 @@ export default function PDVPanel({
     catch { return null; }
   }, [tenant.stoneConfig]);
 
+  const cieloCfg = useMemo<CieloConfig | null>(() => {
+    try { return tenant.cieloConfig ? JSON.parse(tenant.cieloConfig) as CieloConfig : null; }
+    catch { return null; }
+  }, [tenant.cieloConfig]);
+
   const fiscalEnabled = useMemo(() => {
     try {
       const cfg = tenant.fiscalConfig ? JSON.parse(tenant.fiscalConfig as string) : null;
@@ -589,12 +601,13 @@ export default function PDVPanel({
   const PAYMENT_METHODS = useMemo(() => {
     return BASE_PAYMENT_METHODS.filter((m) => {
       if (m.id === "STONE") return !!stoneCfg?.enabled;
+      if (m.id === "CIELO") return !!cieloCfg?.enabled;
       const key = PAYMENT_CONFIG_KEY_MAP[m.id];
       const cfg = key ? (paymentConfig[key] as any) : undefined;
       // Sem configuração salva ainda = habilitado por padrão (não bloqueia quem nunca configurou)
       return cfg?.enabled !== false;
     });
-  }, [stoneCfg, paymentConfig]);
+  }, [stoneCfg, cieloCfg, paymentConfig]);
 
   // Se a forma selecionada foi desabilitada nas Configurações, troca para a primeira disponível
   useEffect(() => {
@@ -639,12 +652,12 @@ export default function PDVPanel({
   }, [getInstallmentOptionsForMethod]);
 
   const getFeeInfoForMethod = useCallback((
-    method: SplitPaymentMethod | "STONE",
+    method: SplitPaymentMethod | "STONE" | "CIELO",
     brand?: string,
     installmentsCount = 1,
     amount = 0
   ) => {
-    if (method === "STONE" || method === "CASH") {
+    if (method === "STONE" || method === "CIELO" || method === "CASH") {
       return { percent: 0, amount: 0, passToCustomer: false, rate: 0 };
     }
     if (method === "PIX") {
@@ -680,7 +693,7 @@ export default function PDVPanel({
     };
   }, [getNormalizedBrandForMethod, getNormalizedInstallmentsForMethod, paymentConfig]);
 
-  const normalizedCardBrand = paymentMethod === "STONE"
+  const normalizedCardBrand = paymentMethod === "STONE" || paymentMethod === "CIELO"
     ? undefined
     : getNormalizedBrandForMethod(paymentMethod as SplitPaymentMethod, cardBrand);
   const creditInstallmentOptions = useMemo(
@@ -689,7 +702,7 @@ export default function PDVPanel({
   );
 
   useEffect(() => {
-    if (paymentMethod === "STONE") {
+    if (paymentMethod === "STONE" || paymentMethod === "CIELO") {
       if (cardBrand) setCardBrand("");
       return;
     }
@@ -950,7 +963,7 @@ export default function PDVPanel({
     [getFeeInfoForMethod, normalizedPaymentSplits]
   );
   const baseTotalWithoutSplitFee = total + serviceChargeAmount;
-  const activeSplitRate = paymentMethod === "STONE"
+  const activeSplitRate = paymentMethod === "STONE" || paymentMethod === "CIELO"
     ? 0
     : getFeeInfoForMethod(paymentMethod as SplitPaymentMethod, normalizedCardBrand, installments, 1).rate;
   const splitDifference = roundMoney(baseTotalWithoutSplitFee + splitFeeAmount - splitAllocated);
@@ -1115,6 +1128,8 @@ export default function PDVPanel({
     setServiceChargeChecked(!!paymentConfig.serviceCharge?.enabled);
     setStoneStatus("idle");
     setStoneChargeId(null);
+    setCieloStatus("idle");
+    setCieloChargeId(null);
     setNfceStatus("idle");
     setNfceMessage("");
     setShowCartDrawer(false);
@@ -1122,12 +1137,13 @@ export default function PDVPanel({
     setIsSplitMode(false);
     setGroupSplitCount("2");
     if (stonePollRef.current) clearInterval(stonePollRef.current);
+    if (cieloPollRef.current) clearInterval(cieloPollRef.current);
   };
 
   // Adiciona a forma de pagamento atualmente selecionada como uma parcela do split,
   // usando o valor restante como sugestão (some 100% do que falta por padrão).
   const handleAddPaymentSplit = () => {
-    if (paymentMethod === "STONE" || splitRemaining <= 0) return;
+    if (paymentMethod === "STONE" || paymentMethod === "CIELO" || splitRemaining <= 0) return;
     const method = paymentMethod as SplitPaymentMethod;
     const nextBrand = getNormalizedBrandForMethod(method, cardBrand);
     const nextInstallments = getNormalizedInstallmentsForMethod(method, nextBrand, installments);
@@ -1207,6 +1223,10 @@ export default function PDVPanel({
       toast.warning("A divisão por grupo não está disponível para maquininha Stone.");
       return;
     }
+    if (paymentMethod === "CIELO") {
+      toast.warning("A divisão por grupo não está disponível para maquininha Cielo.");
+      return;
+    }
 
     const method = paymentMethod as SplitPaymentMethod;
     const nextBrand = getNormalizedBrandForMethod(method, cardBrand);
@@ -1265,6 +1285,10 @@ export default function PDVPanel({
       toast.warning("A divisão por item não está disponível para maquininha Stone.");
       return;
     }
+    if (paymentMethod === "CIELO") {
+      toast.warning("A divisão por item não está disponível para maquininha Cielo.");
+      return;
+    }
     const personCount = splitPersonLabels.length;
     if (personCount < 2) {
       toast.warning("Adicione pelo menos 2 pessoas para dividir por item.");
@@ -1318,8 +1342,11 @@ export default function PDVPanel({
     }));
   };
 
-  // Cleanup stone polling on unmount
-  useEffect(() => () => { if (stonePollRef.current) clearInterval(stonePollRef.current); }, []);
+  // Cleanup stone/cielo polling on unmount
+  useEffect(() => () => {
+    if (stonePollRef.current) clearInterval(stonePollRef.current);
+    if (cieloPollRef.current) clearInterval(cieloPollRef.current);
+  }, []);
 
   // Guarda a versão mais recente de handleCheckout (declarado abaixo) para o atalho F2 do checkout.
   const handleCheckoutRef = useRef<() => void>(() => {});
@@ -1521,6 +1548,7 @@ export default function PDVPanel({
     setIsProcessing(true);
 
     const isStone = paymentMethod === "STONE";
+    const isCielo = paymentMethod === "CIELO";
     const useSplit = isSplitMode && paymentSplits.length > 0;
 
     // Ação "Fechar Conta" é exclusivamente de faturamento. Como essa tela é aberta
@@ -1536,7 +1564,7 @@ export default function PDVPanel({
     // apenas faturamos o contexto atual sem criar um novo pedido (mantendo na cozinha se for o caso).
     const isPayingExistingContext = cart.length === 0 && (selectedTableId || selectedComandaId);
 
-    if (isPayingExistingContext && !isStone) {
+    if (isPayingExistingContext && !isStone && !isCielo) {
       try {
         const billResult = await apiJson<{ orders?: any[]; receiptOrder?: any }>(`/api/tenants/${tenant.slug}/pdv/bill-context`, {
           method: "POST",
@@ -1597,7 +1625,7 @@ export default function PDVPanel({
       orderType: selectedTableId || selectedComandaId ? "DINE_IN" : "TAKEAWAY",
       tableId: selectedTableId || undefined,
       consumptionType: isCounterSale ? consumptionType : undefined,
-      paymentMethod: useSplit ? "SPLIT" : isStone ? `STONE_${stonePaymentType.toUpperCase()}` : paymentMethod,
+      paymentMethod: useSplit ? "SPLIT" : isStone ? `STONE_${stonePaymentType.toUpperCase()}` : isCielo ? `CIELO_${cieloPaymentType.toUpperCase()}` : paymentMethod,
       paymentMetadata: useSplit
         ? { splits: normalizedPaymentSplits.map(({ id, ...s }) => s) }
         : {
@@ -1611,8 +1639,8 @@ export default function PDVPanel({
       cardBrand: normalizedCardBrand,
       installments: paymentMethod === "CREDIT" ? installments : 1,
       serviceChargeIncluded: serviceChargeChecked && !!serviceChargeConfig?.enabled,
-      // Stone orders start as PENDING until terminal confirms
-      status: isStone ? "PENDING" : undefined,
+      // Stone/Cielo orders start as PENDING until terminal confirms
+      status: isStone || isCielo ? "PENDING" : undefined,
       items: checkoutItems.map((item) => ({
         productId: item.productId,
         productVariantId: item.productVariantId,
@@ -1637,6 +1665,12 @@ export default function PDVPanel({
       if (isStone) {
         setIsProcessing(false);
         await handleStonePay(order.id);
+        return;
+      }
+
+      if (isCielo) {
+        setIsProcessing(false);
+        await handleCieloPay(order.id);
         return;
       }
 
@@ -1764,6 +1798,47 @@ export default function PDVPanel({
     } catch (err) {
       console.error(err);
       setStoneStatus("failed");
+    }
+  };
+
+  const handleCieloPay = async (pendingOrderId: string) => {
+    setCieloStatus("sending");
+    try {
+      const result = await apiJson(`/api/tenants/${tenant.slug}/cielo/charge`, {
+        method: "POST",
+        body: JSON.stringify({ orderId: pendingOrderId, amount: finalTotal, paymentType: cieloPaymentType }),
+      }) as { chargeId: string; status: string };
+      setCieloChargeId(result.chargeId);
+      setCieloStatus("waiting");
+
+      // Poll every 5s for up to 3 minutes
+      let attempts = 0;
+      cieloPollRef.current = setInterval(async () => {
+        attempts++;
+        try {
+          const poll = await apiJson(`/api/tenants/${tenant.slug}/cielo/charge/${result.chargeId}`) as { status: string; chargeId: string };
+          if (poll.status === "PAID" || poll.status === "CLOSED") {
+            clearInterval(cieloPollRef.current!);
+            cieloPollRef.current = null;
+            setCieloStatus("paid");
+            setTimeout(() => {
+              clearCart();
+              setShowCheckout(false);
+              setShowSuccess(true);
+              if (!fiscalEnabled) setTimeout(() => setShowSuccess(false), 3000);
+              if (fiscalEnabled && requestNfce) void handleEmitNfce();
+              onOrderCreated?.();
+            }, 1500);
+          } else if (poll.status === "CANCELLED" || poll.status === "CANCELED" || attempts > 36) {
+            clearInterval(cieloPollRef.current!);
+            cieloPollRef.current = null;
+            setCieloStatus("failed");
+          }
+        } catch { /* ignore poll errors */ }
+      }, 5000);
+    } catch (err) {
+      console.error(err);
+      setCieloStatus("failed");
     }
   };
 
@@ -2508,9 +2583,9 @@ export default function PDVPanel({
                     // o pedido, em vez de sempre abrir em "Dinheiro" por padrão.
                     const m = order.paymentMethod;
                     setBillingPaymentMethod(
-                      m === "CREDIT" || m === "STONE_CREDIT" ? "CREDIT"
-                      : m === "DEBIT" || m === "STONE_DEBIT" ? "DEBIT"
-                      : m === "PIX" || m === "STONE_PIX" ? "PIX"
+                      m === "CREDIT" || m === "STONE_CREDIT" || m === "CIELO_CREDIT" ? "CREDIT"
+                      : m === "DEBIT" || m === "STONE_DEBIT" || m === "CIELO_DEBIT" ? "DEBIT"
+                      : m === "PIX" || m === "STONE_PIX" || m === "CIELO_PIX" ? "PIX"
                       : m === "VR" ? "VR"
                       : "CASH"
                     );
@@ -3850,7 +3925,7 @@ export default function PDVPanel({
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between gap-2 flex-wrap">
                       <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Forma de Pagamento</p>
-                      {paymentMethod !== "STONE" && (
+                      {paymentMethod !== "STONE" && paymentMethod !== "CIELO" && (
                         <button
                           onClick={() => {
                             setIsSplitMode((v) => !v);
@@ -3961,7 +4036,7 @@ export default function PDVPanel({
                                     </div>
                                   )}
                                   <div className="grid grid-cols-4 gap-1">
-                                    {PAYMENT_METHODS.filter((method) => method.id !== "STONE").map((method) => {
+                                    {PAYMENT_METHODS.filter((method) => method.id !== "STONE" && method.id !== "CIELO").map((method) => {
                                       const Icon = method.icon;
                                       const active = split.method === method.id;
                                       return (
@@ -4044,7 +4119,7 @@ export default function PDVPanel({
                           <>
                             <p className="text-[9px] font-black uppercase text-white/30 pt-1">Escolha a forma pra adicionar</p>
                             <div className="grid grid-cols-4 gap-1.5">
-                              {PAYMENT_METHODS.filter((m) => m.id !== "STONE").map((method) => {
+                              {PAYMENT_METHODS.filter((m) => m.id !== "STONE" && m.id !== "CIELO").map((method) => {
                                 const Icon = method.icon;
                                 const active = paymentMethod === method.id;
                                 return (
@@ -4063,7 +4138,7 @@ export default function PDVPanel({
                                 );
                               })}
                             </div>
-                            {paymentMethod !== "STONE" && getBrandsForPaymentMethod(paymentMethod as SplitPaymentMethod).length > 0 && (
+                            {paymentMethod !== "STONE" && paymentMethod !== "CIELO" && getBrandsForPaymentMethod(paymentMethod as SplitPaymentMethod).length > 0 && (
                               <select
                                 value={normalizedCardBrand || ""}
                                 onChange={(e) => setCardBrand(e.target.value)}
@@ -4351,13 +4426,97 @@ export default function PDVPanel({
                         )}
                       </div>
                     )}
+
+                    {paymentMethod === "CIELO" && (
+                      <div className="space-y-4">
+                        {cieloStatus === "idle" && (
+                          <>
+                            <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Tipo de pagamento</p>
+                            <div className="grid grid-cols-3 gap-2">
+                              {(["credit", "debit", "pix"] as const).map((t) => (
+                                <button
+                                  key={t}
+                                  onClick={() => setCieloPaymentType(t)}
+                                  className={`py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                                    cieloPaymentType === t
+                                      ? "bg-[#0072CE] text-white"
+                                      : "bg-white/5 border border-white/10 text-white/60 hover:bg-white/10"
+                                  }`}
+                                >
+                                  {t === "credit" ? "Crédito" : t === "debit" ? "Débito" : "PIX"}
+                                </button>
+                              ))}
+                            </div>
+                            <div className="bg-white/5 rounded-2xl border border-white/10 p-4 flex items-start gap-3">
+                              <Smartphone className="w-5 h-5 text-[#0072CE] shrink-0 mt-0.5" />
+                              <p className="text-[10px] text-white/50 leading-relaxed">
+                                O valor será enviado para a maquininha Cielo. O cliente paga na maquinha e o sistema confirma automaticamente.
+                              </p>
+                            </div>
+                          </>
+                        )}
+
+                        {cieloStatus === "sending" && (
+                          <div className="flex flex-col items-center justify-center gap-4 py-8">
+                            <div className="w-12 h-12 border-2 border-[#0072CE] border-t-transparent rounded-full animate-spin" />
+                            <p className="text-[11px] font-black uppercase tracking-widest text-white/60">Enviando para maquininha...</p>
+                          </div>
+                        )}
+
+                        {cieloStatus === "waiting" && (
+                          <div className="flex flex-col items-center justify-center gap-4 py-6 text-center">
+                            <div className="w-16 h-16 bg-[#0072CE]/10 rounded-full flex items-center justify-center">
+                              <Smartphone className="w-8 h-8 text-[#0072CE] animate-pulse" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-black uppercase tracking-widest text-white">Aguardando pagamento</p>
+                              <p className="text-[10px] text-white/40 mt-1">O cliente deve pagar na maquininha agora.</p>
+                            </div>
+                            <div className="flex items-center gap-2 text-[10px] text-white/30">
+                              <div className="w-1.5 h-1.5 bg-[#0072CE] rounded-full animate-pulse" />
+                              Verificando a cada 5 segundos...
+                            </div>
+                            <button
+                              onClick={() => { setCieloStatus("idle"); if (cieloPollRef.current) clearInterval(cieloPollRef.current); }}
+                              className="text-[10px] font-black text-red-400/60 hover:text-red-400 uppercase tracking-widest transition-colors mt-2"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        )}
+
+                        {cieloStatus === "paid" && (
+                          <div className="flex flex-col items-center justify-center gap-4 py-8 text-center">
+                            <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center">
+                              <CheckCircle2 className="w-8 h-8 text-green-400" />
+                            </div>
+                            <p className="text-sm font-black uppercase tracking-widest text-green-400">Pagamento confirmado!</p>
+                          </div>
+                        )}
+
+                        {cieloStatus === "failed" && (
+                          <div className="flex flex-col items-center justify-center gap-4 py-6 text-center">
+                            <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center">
+                              <AlertCircle className="w-8 h-8 text-red-400" />
+                            </div>
+                            <p className="text-sm font-black uppercase tracking-widest text-red-400">Pagamento falhou</p>
+                            <button
+                              onClick={() => setCieloStatus("idle")}
+                              className="text-[10px] font-black text-white/40 hover:text-white uppercase tracking-widest border border-white/10 px-4 py-2 rounded-xl transition-colors"
+                            >
+                              Tentar novamente
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                   )}
                 </div>
               </div>
 
                 {/* Finalize button — sempre visível, fora da área rolável */}
-                {paymentMethod !== "STONE" || stoneStatus === "idle" ? (
+                {(paymentMethod !== "STONE" || stoneStatus === "idle") && (paymentMethod !== "CIELO" || cieloStatus === "idle") ? (
                   <div className="px-3 sm:px-6 py-2 sm:py-3 border-t border-white/5 shrink-0 bg-black/20 space-y-1.5 sm:space-y-2">
                     {!isWaiterMode && (
                       <div className="flex items-center justify-center gap-4 text-[9px] font-bold text-white/30">
@@ -4403,8 +4562,8 @@ export default function PDVPanel({
                           <>Falta {fmt(splitRemaining)}</>
                         ) : (
                           <>
-                            {paymentMethod === "STONE" ? "Enviar para Maquininha" : "Finalizar Venda"}
-                            {paymentMethod === "STONE" ? <Smartphone className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> : <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />}
+                            {paymentMethod === "STONE" || paymentMethod === "CIELO" ? "Enviar para Maquininha" : "Finalizar Venda"}
+                            {paymentMethod === "STONE" || paymentMethod === "CIELO" ? <Smartphone className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> : <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />}
                           </>
                         )}
                       </button>
