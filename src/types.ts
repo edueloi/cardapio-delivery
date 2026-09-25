@@ -127,6 +127,13 @@ export interface StoneConfig {
   stonecode: string;    // establishment code linking to physical terminal
 }
 
+export interface CieloConfig {
+  enabled: boolean;
+  merchantId: string;   // merchant-id do estabelecimento do lojista — vincula ao terminal físico Cielo LIO Smart
+  // Client-ID e Access Token são da aplicação (não do tenant) — vêm de env var
+  // no backend (CIELO_CLIENT_ID/CIELO_ACCESS_TOKEN), os mesmos para todos os clientes.
+}
+
 // ─── Fiscal / NFC-e ──────────────────────────────────────────────────────────
 
 export type FiscalRegime =
@@ -243,6 +250,7 @@ export interface Tenant {
   deliveryConfig?: string | null; // JSON string: DeliveryConfig
   paymentMethods?: string | null; // JSON string: PaymentConfig
   stoneConfig?: string | null;    // JSON string: StoneConfig
+  cieloConfig?: string | null;    // JSON string: CieloConfig
   fiscalConfig?: string | null;   // JSON string: FiscalConfig
   categories?: Category[];
   wppInstance?: WppInstance | null;

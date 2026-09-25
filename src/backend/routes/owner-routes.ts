@@ -172,6 +172,7 @@ export function registerOwnerRoutes({
       deliveryConfig,
       paymentMethods,
       stoneConfig,
+      cieloConfig,
       fiscalConfig,
       displayPanelConfig,
       printingConfig,
@@ -298,6 +299,14 @@ export function registerOwnerRoutes({
                 : typeof stoneConfig === "string"
                 ? stoneConfig
                 : JSON.stringify(stoneConfig),
+          }),
+          ...(cieloConfig !== undefined && {
+            cieloConfig:
+              cieloConfig === null || cieloConfig === "null"
+                ? null
+                : typeof cieloConfig === "string"
+                ? cieloConfig
+                : JSON.stringify(cieloConfig),
           }),
           ...(fiscalConfig !== undefined && {
             fiscalConfig:

@@ -56,6 +56,7 @@ import {
   PaymentMethodConfig,
   PrintingConfig,
   StoneConfig,
+  CieloConfig,
   Tenant,
 } from "../../../../types";
 import {
@@ -207,6 +208,11 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
     try { return tenant?.stoneConfig ? JSON.parse(tenant.stoneConfig) : DEFAULT_STONE; } catch { return DEFAULT_STONE; }
   });
 
+  const DEFAULT_CIELO: CieloConfig = { enabled: false, merchantId: "" };
+  const [cielo, setCielo] = useState<CieloConfig>(() => {
+    try { return tenant?.cieloConfig ? JSON.parse(tenant.cieloConfig) : DEFAULT_CIELO; } catch { return DEFAULT_CIELO; }
+  });
+
   const DEFAULT_FISCAL: FiscalConfig = {
     enabled: false, ambiente: "homologacao", cnpj: "", ie: "", crt: "1",
     serie: 1, proximoNumero: 1, uf: "SP", cMun: "3550308", xMun: "São Paulo",
@@ -247,6 +253,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
       setDelivery(parseDeliveryConfig(tenant.deliveryConfig));
       try { setPayments(tenant.paymentMethods ? JSON.parse(tenant.paymentMethods) : DEFAULT_PAYMENTS); } catch { setPayments(DEFAULT_PAYMENTS); }
       try { setStone(tenant.stoneConfig ? JSON.parse(tenant.stoneConfig) : DEFAULT_STONE); } catch { setStone(DEFAULT_STONE); }
+      try { setCielo(tenant.cieloConfig ? JSON.parse(tenant.cieloConfig) : DEFAULT_CIELO); } catch { setCielo(DEFAULT_CIELO); }
       try { setFiscal(migrarFiscal(tenant.fiscalConfig ? JSON.parse(tenant.fiscalConfig) : DEFAULT_FISCAL)); } catch { setFiscal(DEFAULT_FISCAL); }
     }
   }, [tenant]);
@@ -280,6 +287,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
           deliveryConfig: JSON.stringify(delivery),
           paymentMethods: JSON.stringify(payments),
           stoneConfig: JSON.stringify(stone),
+          cieloConfig: JSON.stringify(cielo),
           fiscalConfig: JSON.stringify(fiscal),
           printingConfig: JSON.stringify(printing),
           scheduleDays: JSON.stringify(scheduleDays),
@@ -1167,6 +1175,66 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
               )}
             </ContentCard>
 
+            {/* Cielo LIO Smart */}
+            <ContentCard padding="lg">
+              <div className="flex items-center gap-4 mb-6">
+                <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${cielo.enabled ? "bg-[#0072CE]/10 text-[#0072CE]" : "bg-slate-100 text-slate-400"}`}>
+                  <Smartphone className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-slate-800">Cielo LIO Smart</p>
+                  <p className="text-xs text-slate-400">Maquininha física via Cielo Order Manager (integração remota)</p>
+                </div>
+                <Switch checked={cielo.enabled} onCheckedChange={v => setCielo({ ...cielo, enabled: v })} />
+              </div>
+
+              {cielo.enabled && (
+                <div className="space-y-4 pt-4 border-t border-slate-100">
+                  <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex gap-3">
+                    <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                    <div className="text-xs text-amber-700 leading-relaxed">
+                      <p className="font-semibold mb-1">Só funciona com terminais Cielo Smart:</p>
+                      <p>DX8000, L300 (V3/V4) ou L400 — as maquininhas com tela grande tipo tablet. A maquininha simples de botões não tem essa API.</p>
+                    </div>
+                  </div>
+
+                  <Input
+                    label="Merchant-ID (código do estabelecimento na Cielo)"
+                    value={cielo.merchantId}
+                    onChange={e => setCielo({ ...cielo, merchantId: e.target.value })}
+                    placeholder="Fornecido pelo suporte Cielo ao credenciar este estabelecimento"
+                  />
+
+                  <div className="bg-slate-50 rounded-2xl p-4 flex items-start gap-3 border border-slate-100">
+                    <div className="w-8 h-8 rounded-xl bg-[#0072CE]/10 text-[#0072CE] flex items-center justify-center shrink-0">
+                      <Smartphone className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-700 mb-1">Fluxo de pagamento</p>
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        No PDV, selecione "Maquininha Cielo" e o tipo (crédito, débito ou PIX). O sistema envia o pedido para a nuvem da Cielo, o terminal físico busca e exibe pro cliente. A confirmação chega automaticamente por webhook.
+                      </p>
+                    </div>
+                  </div>
+
+                  {cielo.merchantId && (
+                    <div className="flex items-center gap-2 text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Merchant-ID configurado — salve para ativar.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!cielo.enabled && (
+                <div className="text-center py-8 text-slate-400">
+                  <Smartphone className="w-8 h-8 mx-auto mb-3 opacity-40" strokeWidth={1.5} />
+                  <p className="text-xs font-semibold mb-1">Maquininha desativada</p>
+                  <p className="text-xs">Ative acima para configurar a integração com a Cielo.</p>
+                </div>
+              )}
+            </ContentCard>
+
             {/* Taxas da Maquininha */}
             <ContentCard padding="lg">
               <SectionTitle title="Taxas da Maquininha" icon={CircleDollarSign} className="mb-1" />
@@ -1399,7 +1467,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
             <ContentCard padding="lg">
               <p className="text-xs font-semibold text-slate-500 mb-4">Outras Maquininhas (em breve)</p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 opacity-50 pointer-events-none select-none">
-                {["Cielo", "Rede", "GetNet", "PagSeguro", "Mercado Pago"].map(name => (
+                {["Rede", "GetNet", "PagSeguro", "Mercado Pago"].map(name => (
                   <div key={name} className="p-4 rounded-2xl border border-slate-100 text-center">
                     <CreditCard className="w-5 h-5 mx-auto mb-2 text-slate-300" strokeWidth={1.5} />
                     <p className="text-xs font-medium text-slate-400">{name}</p>
