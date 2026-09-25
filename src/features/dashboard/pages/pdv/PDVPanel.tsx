@@ -928,11 +928,18 @@ export default function PDVPanel({
 
   const billableLines = isSplitMode && splitByItem ? billableLinesByUnit : billableLinesGrouped;
 
+  // discountValue guarda dígitos mascarados (centavos) quando FIXED (ex: "1000" = R$ 10,00),
+  // igual ao padrão de amountReceived — mas percentual continua sendo lido direto, sem máscara.
+  const getDiscountNumericValue = useCallback((value: string, type: "PERCENT" | "FIXED") => {
+    if (!value) return 0;
+    return type === "FIXED" ? digitsToNumber(value) : parseFloat(value) || 0;
+  }, []);
+
   const discountAmount = useMemo(() => {
-    const v = parseFloat(discountValue || "0");
+    const v = getDiscountNumericValue(discountValue, discountType);
     if (!v) return 0;
     return discountType === "PERCENT" ? subtotal * (v / 100) : Math.min(v, subtotal);
-  }, [subtotal, discountValue, discountType]);
+  }, [subtotal, discountValue, discountType, getDiscountNumericValue]);
 
   const total = Math.max(0, subtotal - discountAmount);
 
@@ -1437,8 +1444,11 @@ export default function PDVPanel({
     // "gruda" aqui: sem isso, reabrir uma comanda com desconto voltava ao estado padrão (sem
     // desconto), como se o operador tivesse que redigitar toda vez que reabrisse a tela.
     if (comanda.discount) {
-      setDiscountValue(String(comanda.discount));
-      setDiscountType(comanda.discountType || "FIXED");
+      const type = comanda.discountType || "FIXED";
+      // discountValue guarda dígitos mascarados (centavos) quando FIXED — comanda.discount vem
+      // em reais puro do backend (ex: 10.5), precisa converter pro mesmo formato do input.
+      setDiscountValue(type === "FIXED" ? String(Math.round(comanda.discount * 100)) : String(comanda.discount));
+      setDiscountType(type);
     } else {
       setDiscountValue("");
       setDiscountType("FIXED");
@@ -1474,7 +1484,9 @@ export default function PDVPanel({
           status: cart.length > 0 ? "PENDING" : "AWAITING_PAYMENT",
           paymentMethod: "CASH",
           operatorName: operatorName || undefined,
-          discount: comandaDiscountValue ? parseFloat(comandaDiscountValue) : undefined,
+          discount: comandaDiscountValue
+            ? (comandaDiscountType === "FIXED" ? digitsToNumber(comandaDiscountValue) : parseFloat(comandaDiscountValue))
+            : undefined,
           discountType: comandaDiscountValue ? comandaDiscountType : undefined,
           items: cart.map((i) => ({
             productId: i.product.id,
@@ -1608,7 +1620,7 @@ export default function PDVPanel({
             operatorName,
             cardBrand: normalizedCardBrand,
             installments: paymentMethod === "CREDIT" ? installments : 1,
-            discount: discountValue ? parseFloat(discountValue) : 0,
+            discount: getDiscountNumericValue(discountValue, discountType),
             discountType,
           }),
         });
@@ -1659,7 +1671,7 @@ export default function PDVPanel({
             cardBrand: normalizedCardBrand,
             installments: paymentMethod === "CREDIT" ? installments : 1,
           },
-      discount: discountValue ? parseFloat(discountValue) : 0,
+      discount: getDiscountNumericValue(discountValue, discountType),
       discountType,
       cardBrand: normalizedCardBrand,
       installments: paymentMethod === "CREDIT" ? installments : 1,
@@ -2993,13 +3005,13 @@ export default function PDVPanel({
           <div className="flex items-center gap-2">
             <div className="flex bg-white/5 rounded-xl overflow-hidden border border-white/10">
               <button
-                onClick={() => setDiscountType("FIXED")}
+                onClick={() => { setDiscountType("FIXED"); setDiscountValue(""); }}
                 className={`px-3 py-2 text-[10px] font-black transition-all ${discountType === "FIXED" ? "bg-[#C9A227] text-black" : "text-white/40"}`}
               >
                 R$
               </button>
               <button
-                onClick={() => setDiscountType("PERCENT")}
+                onClick={() => { setDiscountType("PERCENT"); setDiscountValue(""); }}
                 className={`px-3 py-2 text-[10px] font-black transition-all ${discountType === "PERCENT" ? "bg-[#C9A227] text-black" : "text-white/40"}`}
               >
                 %
@@ -3007,15 +3019,28 @@ export default function PDVPanel({
             </div>
             <div className="relative flex-1">
               <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-white/30" />
-              <input
-                ref={discountInputRef}
-                type="number"
-                placeholder={discountType === "PERCENT" ? "Desconto %" : "Desconto R$"}
-                value={discountValue}
-                onChange={(e) => setDiscountValue(e.target.value)}
-                title="Atalho: F4"
-                className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-8 pr-8 text-xs text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
-              />
+              {discountType === "FIXED" ? (
+                <input
+                  ref={discountInputRef}
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="0,00"
+                  value={formatCurrencyDigits(discountValue)}
+                  onChange={(e) => setDiscountValue(maskCurrencyDigits(e.target.value))}
+                  title="Atalho: F4"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-8 pr-8 text-xs text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
+                />
+              ) : (
+                <input
+                  ref={discountInputRef}
+                  type="number"
+                  placeholder="Desconto %"
+                  value={discountValue}
+                  onChange={(e) => setDiscountValue(e.target.value)}
+                  title="Atalho: F4"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-8 pr-8 text-xs text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
+                />
+              )}
               <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[8px] font-bold text-white/20">F4</span>
             </div>
             {discountAmount > 0 && (
@@ -3504,26 +3529,37 @@ export default function PDVPanel({
                     <div className="flex bg-slate-50 rounded-xl overflow-hidden border border-slate-200 shrink-0">
                       <button
                         type="button"
-                        onClick={() => setComandaDiscountType("FIXED")}
+                        onClick={() => { setComandaDiscountType("FIXED"); setComandaDiscountValue(""); }}
                         className={`px-3 py-2.5 text-[10px] font-black transition-all ${comandaDiscountType === "FIXED" ? "bg-[#C9A227] text-black" : "text-slate-400"}`}
                       >
                         R$
                       </button>
                       <button
                         type="button"
-                        onClick={() => setComandaDiscountType("PERCENT")}
+                        onClick={() => { setComandaDiscountType("PERCENT"); setComandaDiscountValue(""); }}
                         className={`px-3 py-2.5 text-[10px] font-black transition-all ${comandaDiscountType === "PERCENT" ? "bg-[#C9A227] text-black" : "text-slate-400"}`}
                       >
                         %
                       </button>
                     </div>
-                    <input
-                      type="number"
-                      placeholder={comandaDiscountType === "PERCENT" ? "Desconto %" : "Desconto R$"}
-                      value={comandaDiscountValue}
-                      onChange={(e) => setComandaDiscountValue(e.target.value)}
-                      className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-4 text-sm font-bold text-slate-800 focus:border-[#C9A227] outline-none text-center"
-                    />
+                    {comandaDiscountType === "FIXED" ? (
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="0,00"
+                        value={formatCurrencyDigits(comandaDiscountValue)}
+                        onChange={(e) => setComandaDiscountValue(maskCurrencyDigits(e.target.value))}
+                        className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-4 text-sm font-bold text-slate-800 focus:border-[#C9A227] outline-none text-center"
+                      />
+                    ) : (
+                      <input
+                        type="number"
+                        placeholder="Desconto %"
+                        value={comandaDiscountValue}
+                        onChange={(e) => setComandaDiscountValue(e.target.value)}
+                        className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-4 text-sm font-bold text-slate-800 focus:border-[#C9A227] outline-none text-center"
+                      />
+                    )}
                   </div>
                 </div>
               </div>
