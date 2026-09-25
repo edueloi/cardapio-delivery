@@ -146,6 +146,7 @@ function buildAppMenu() {
       label: "PDV",
       submenu: [
         { label: "Recarregar", accelerator: "CmdOrCtrl+R", click: () => mainWindow?.reload() },
+        { label: "Recarregar (ignorar cache)", accelerator: "CmdOrCtrl+Shift+R", click: () => mainWindow?.webContents.reloadIgnoringCache() },
         { label: "Sair", accelerator: "CmdOrCtrl+Q", click: () => confirmAndQuit() },
       ],
     },
@@ -220,6 +221,12 @@ function registerShortcuts(win) {
       event.preventDefault();
     } else if (input.key === "F9") {
       openPrinterConfigWindow(win);
+      event.preventDefault();
+    } else if (ctrlOrCmd && input.shift && input.key.toLowerCase() === "r") {
+      // Reload ignorando cache — necessário porque o app fica aberto o dia inteiro sem
+      // fechar, então o Ctrl+R normal (win.reload()) pode continuar servindo uma versão
+      // em cache do site mesmo depois de um novo deploy no servidor.
+      win.webContents.reloadIgnoringCache();
       event.preventDefault();
     } else if (ctrlOrCmd && input.key.toLowerCase() === "r") {
       win.reload();
