@@ -1523,6 +1523,15 @@ export default function PDVPanel({
     const isStone = paymentMethod === "STONE";
     const useSplit = isSplitMode && paymentSplits.length > 0;
 
+    // Ação "Fechar Conta" é exclusivamente de faturamento. Como essa tela é aberta
+    // com o carrinho limpo, nunca pode cair no fluxo de criar pedido novo: isso geraria
+    // uma nova via automática ao receber uma comanda já existente.
+    if (isClosingAccount && cart.length > 0) {
+      toast.error("Há itens novos no carrinho. Lance-os na comanda antes de fechar a conta.");
+      setIsProcessing(false);
+      return;
+    }
+
     // Se o carrinho está vazio (só tem itens já lançados) e tem mesa/comanda selecionada,
     // apenas faturamos o contexto atual sem criar um novo pedido (mantendo na cozinha se for o caso).
     const isPayingExistingContext = cart.length === 0 && (selectedTableId || selectedComandaId);
