@@ -30,6 +30,7 @@ import { createOrderHelpers } from "./src/backend/shared/order-helpers";
 import { injectSeoMeta, resolveSeoMeta } from "./src/backend/shared/seo";
 import { registerAuthRoutes } from "./src/backend/routes/auth-routes";
 import { registerSuperAdminRoutes } from "./src/backend/routes/superadmin-routes";
+import { registerExternalApiRoutes } from "./src/backend/routes/external-api-routes";
 import { registerOwnerRoutes } from "./src/backend/routes/owner-routes";
 import { registerTenantPublicRoutes } from "./src/backend/routes/tenant-public-routes";
 import { registerOrderRoutes } from "./src/backend/routes/order-routes";
@@ -142,6 +143,11 @@ registerSuperAdminRoutes({
   requireAuth,
   upload,
   currentAccount,
+});
+
+registerExternalApiRoutes({
+  app,
+  prisma,
 });
 
 registerOwnerRoutes({
