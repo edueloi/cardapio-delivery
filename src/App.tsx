@@ -27,10 +27,15 @@ import TvAppPage from "./pages/TvAppPage";
 
 // Em cozinha.boxsys.com.br a raiz "/" deve cair direto na tela de login da
 // cozinha, sem precisar digitar "/cozinha" no final — mais fácil de favoritar
-// no tablet. Em qualquer outro domínio, mostra a landing page normal.
+// no tablet. Em menu.boxsys.com.br (o sistema em si — login/dashboard/PDV) a
+// raiz cai direto no login, nunca na landing de vendas — essa fica exclusiva
+// de boxsys.com.br. Em qualquer outro domínio, mostra a landing page normal.
 function HomeOrKitchen() {
   if (typeof window !== "undefined" && window.location.hostname.startsWith("cozinha.")) {
     return <KitchenGlobalPage />;
+  }
+  if (typeof window !== "undefined" && window.location.hostname.startsWith("menu.")) {
+    return <Navigate to="/login" replace />;
   }
   return <LandingPage />;
 }
