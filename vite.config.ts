@@ -12,6 +12,30 @@ export default defineConfig(({mode}) => {
       react(),
       tailwindcss(),
       VitePWA({
+        // TEMPORÁRIO — não remover sem antes ler o comentário abaixo.
+        //
+        // Depois da separação de boxsys.com.br (antes servia o app inteiro; agora é a
+        // landing estática + proxy condicional só pras rotas do cardápio/PDV), alguns
+        // celulares com o Service Worker ANTIGO ainda registrado ficaram presos: o SW
+        // antigo intercepta a navegação e serve, do cache dele, um index.html/JS de
+        // antes da mudança — sem nunca buscar a versão nova de verdade. Sintoma: QR
+        // Code do cardápio de balcão ("boxsys.com.br/:slug/balcao") caindo na landing
+        // em vez do cardápio, só nesses aparelhos (outros celulares/PC funcionavam OK).
+        //
+        // selfDestroying: true é o mecanismo oficial do vite-plugin-pwa pra esse caso:
+        // gera um SW especial que qualquer SW antigo, ao checar update sozinho (o
+        // navegador faz isso periodicamente por conta própria), instala — e esse SW
+        // especial se desregistra, apaga TODOS os caches do Service Worker e força
+        // reload, sem precisar o cliente fazer nada manualmente. Efeito colateral:
+        // desliga o PWA pra TODO MUNDO enquanto isso (some o ícone de "instalado na
+        // tela inicial", sem cache offline) — não é cirúrgico, é limpeza geral.
+        //
+        // REVERTER: depois de alguns dias (tempo pra garantir que os celulares com bug
+        // já passaram por essa limpeza), remover a linha `selfDestroying: true` abaixo
+        // e fazer deploy de novo — o PWA volta ao normal sozinho. Não mexer em mais
+        // nada aqui enquanto isso (nome do SW, manifest, workbox) — ver doc oficial:
+        // https://vite-pwa-org.netlify.app/guide/unregister-service-worker
+        selfDestroying: true,
         registerType: 'autoUpdate',
         injectRegister: false,
         includeAssets: ['images/app_celular.png', 'favicon.ico'],
