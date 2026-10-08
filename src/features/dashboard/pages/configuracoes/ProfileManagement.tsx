@@ -215,7 +215,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
 
   const DEFAULT_FISCAL: FiscalConfig = {
     enabled: false, ambiente: "homologacao", cnpj: "", ie: "", crt: "1",
-    serie: 1, proximoNumero: 1, uf: "SP", cMun: "3550308", xMun: "São Paulo",
+    serie: 1, proximoNumero: 1, autoEmitNfce: false, autoPrintDanfe: false, uf: "SP", cMun: "3550308", xMun: "São Paulo",
   };
   // Migração transparente: configs salvas antes da separação de CSC por ambiente tinham
   // só "csc"/"cscId" (implicitamente do ambiente configurado na época) — copia esse valor
@@ -229,9 +229,9 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
     if (parsed.csc && !parsed.cscHomologacao && !parsed.cscProducao) {
       const key = parsed.ambiente === "producao" ? "cscProducao" : "cscHomologacao";
       const keyId = parsed.ambiente === "producao" ? "cscIdProducao" : "cscIdHomologacao";
-      return { ...parsed, [key]: parsed.csc, [keyId]: parsed.cscId };
+      return { ...parsed, autoEmitNfce: parsed.autoEmitNfce ?? false, autoPrintDanfe: parsed.autoPrintDanfe ?? false, [key]: parsed.csc, [keyId]: parsed.cscId };
     }
-    return parsed;
+    return { ...parsed, autoEmitNfce: parsed.autoEmitNfce ?? false, autoPrintDanfe: parsed.autoPrintDanfe ?? false };
   }
   const [fiscal, setFiscal] = useState<FiscalConfig>(() => {
     try { return migrarFiscal(tenant?.fiscalConfig ? JSON.parse(tenant.fiscalConfig) : DEFAULT_FISCAL); }
@@ -1610,6 +1610,23 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                         />
                       </div>
                     </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 flex items-start gap-4">
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-slate-800">Emitir NFC-e automaticamente no PDV</p>
+                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">Ao concluir uma venda no PDV, o sistema envia a NFC-e imediatamente para a SEFAZ. Use somente depois de conferir certificado, CSC e dados fiscais dos produtos.</p>
+                      {fiscal.ambiente === "homologacao" && <p className="text-xs text-amber-700 font-semibold mt-2">Em homologação, a emissão automática gera somente notas de teste, sem valor fiscal.</p>}
+                    </div>
+                    <Switch checked={fiscal.autoEmitNfce === true} onCheckedChange={value => setFiscal(current => ({ ...current, autoEmitNfce: value, ...(!value ? { autoPrintDanfe: false } : {}) }))} />
+                  </div>
+
+                  <div className={`rounded-2xl border p-4 flex items-start gap-4 ${fiscal.autoEmitNfce ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50 opacity-60"}`}>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-slate-800">Imprimir DANFE NFC-e automaticamente</p>
+                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">Depois da autorização da SEFAZ, imprime o DANFE NFC-e na impressora do PDV. O cupom comercial automático não será impresso nessa venda.</p>
+                    </div>
+                    <Switch checked={fiscal.autoPrintDanfe === true} disabled={!fiscal.autoEmitNfce} onCheckedChange={value => setFiscal(current => ({ ...current, autoPrintDanfe: value }))} />
                   </div>
 
                   {/* CSC — o credenciamento e o CSC são registros SEPARADOS por ambiente na

@@ -97,11 +97,34 @@ export function registerFiscalRoutes({
         // Monta items fiscais — prioriza o snapshot congelado no pedido (não muda mesmo
         // que o produto seja editado ou excluído depois), com o produto vivo como
         // fallback só para pedidos criados antes desse snapshot existir.
-        const { emitirNfce } = await import("../../lib/fiscal.js");
-        const fiscalItems = order.items.map((item: any) => ({
+        // Não envia NCM/CFOP genéricos para a SEFAZ. Esses campos definem o
+        // produto e a natureza da venda; um fallback silencioso geraria XML
+        // incorreto e mascararia cadastro fiscal incompleto.
+        const fiscalItemSource = order.items.map((item: any) => ({
           productName: item.productName ?? item.product?.name ?? "Produto",
-          ncm: item.ncm ?? item.product?.ncm ?? "00000000",
-          cfop: item.cfop ?? item.product?.cfop ?? "5102",
+          ncm: String(item.ncm ?? item.product?.ncm ?? "").replace(/\D/g, ""),
+          cfop: String(item.cfop ?? item.product?.cfop ?? "").replace(/\D/g, ""),
+          csosn: item.csosn ?? item.product?.csosn ?? "102",
+          unitCom: item.unitCom ?? item.product?.unitCom ?? "UN",
+          origem: item.origem ?? item.product?.origem ?? 0,
+          aliqIcms: item.aliqIcms ?? item.product?.aliqIcms ?? 0,
+          quantity: item.quantity,
+          unitPrice: item.price,
+        }));
+        const invalidFiscalItem = fiscalItemSource.find((item: any) =>
+          !/^\d{8}$/.test(item.ncm) || item.ncm === "00000000" || !/^\d{4}$/.test(item.cfop)
+        );
+        if (invalidFiscalItem) {
+          return res.status(400).json({
+            error: `Produto sem NCM/CFOP fiscal válido: ${invalidFiscalItem.productName}. Corrija em Cardápio > Conferência fiscal.`,
+          });
+        }
+
+        const { emitirNfce } = await import("../../lib/fiscal.js");
+        const fiscalItems = fiscalItemSource.map((item: any) => ({
+          productName: item.productName,
+          ncm: item.ncm,
+          cfop: item.cfop,
           csosn: item.csosn ?? item.product?.csosn ?? "400",
           unitCom: item.unitCom ?? item.product?.unitCom ?? "UN",
           origem: item.origem ?? item.product?.origem ?? 0,

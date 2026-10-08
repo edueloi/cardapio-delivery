@@ -155,6 +155,10 @@ export interface FiscalConfig {
   // NFC-e
   serie: number;             // Série da NFC-e (geralmente 1)
   proximoNumero: number;     // Próximo número sequencial
+  /** Emite a NFC-e assim que a venda do PDV for concluída. */
+  autoEmitNfce?: boolean;
+  /** Imprime o DANFE NFC-e após a autorização automática pela SEFAZ. */
+  autoPrintDanfe?: boolean;
   // CSC/idCSC são registros SEPARADOS por ambiente na SEFAZ (o credenciamento e o CSC de
   // homologação não valem em produção, e vice-versa) — por isso ficam guardados aqui em
   // pares por ambiente, e o par certo é escolhido automaticamente conforme "ambiente"

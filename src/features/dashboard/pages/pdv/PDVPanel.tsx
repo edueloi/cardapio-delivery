@@ -245,8 +245,8 @@ export default function PDVPanel({
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerCpf, setCustomerCpf] = useState("");
   // Cliente pediu Nota Fiscal — marcado no fechamento do pagamento; se marcado, a NFC-e
-  // é emitida automaticamente assim que a venda for concluída, sem precisar de um clique
-  // extra depois (a emissão nunca acontece sozinha se isso não for marcado).
+  // é emitida automaticamente assim que a venda for concluída. A configuração da loja
+  // também pode tornar a emissão automática para todas as vendas do PDV.
   const [requestNfce, setRequestNfce] = useState(false);
   // Cliente vinculado por busca (fidelidade) — null quando os campos acima são digitados
   // à mão sem bater com nenhum cadastro. O vínculo em si com a venda acontece pelo telefone
@@ -536,12 +536,16 @@ export default function PDVPanel({
     catch { return null; }
   }, [tenant.cieloConfig]);
 
-  const fiscalEnabled = useMemo(() => {
+  const fiscalConfig = useMemo(() => {
     try {
-      const cfg = tenant.fiscalConfig ? JSON.parse(tenant.fiscalConfig as string) : null;
-      return cfg?.enabled === true;
-    } catch { return false; }
+      return tenant.fiscalConfig ? JSON.parse(tenant.fiscalConfig as string) : null;
+    } catch { return null; }
   }, [tenant.fiscalConfig]);
+
+  const fiscalEnabled = fiscalConfig?.enabled === true;
+  const autoEmitNfce = fiscalConfig?.autoEmitNfce === true;
+  const autoPrintDanfe = autoEmitNfce && fiscalConfig?.autoPrintDanfe === true;
+  const shouldEmitNfce = fiscalEnabled && (requestNfce || autoEmitNfce);
 
   // CNPJ do estabelecimento pro cabeçalho da notinha — vem da config fiscal mesmo
   // quando o fiscal não está habilitado (é só informação do cabeçalho, não emissão de nota).
@@ -565,6 +569,16 @@ export default function PDVPanel({
       if (res.status === "AUTHORIZED") {
         setNfceStatus("authorized");
         setNfceMessage(`NFC-e ${res.numero} autorizada — Chave: ${res.chave?.slice(-8)}`);
+        if (autoPrintDanfe) {
+          try {
+            const danfe = await apiJson<DanfeData>(`/api/owner/tenants/${tenant.id}/nfce/danfe/${order.id}`);
+            const desktop = (window as any).pdvDesktop;
+            if (desktop?.printDanfe) desktop.printDanfe(danfe);
+            else printDanfePdf(danfe, tenant.receiptPaperWidth);
+          } catch (printError: any) {
+            toast.error(printError?.message ?? "NFC-e autorizada, mas não foi possível imprimir o DANFE.");
+          }
+        }
       } else {
         setNfceStatus("rejected");
         setNfceMessage(res.motivo ?? "NFC-e rejeitada pela SEFAZ");
@@ -1644,7 +1658,7 @@ export default function PDVPanel({
         // Com fiscal habilitado, deixa o aviso aberto até fechar manualmente — 3s não dá
         // tempo de digitar/conferir o CPF-CNPJ e emitir a NFC-e antes de sumir sozinho.
         if (!fiscalEnabled) setTimeout(() => setShowSuccess(false), 3000);
-        if (fiscalEnabled && requestNfce) void handleEmitNfce();
+        if (shouldEmitNfce) void handleEmitNfce();
         onOrderCreated?.();
       } catch (err: any) {
         console.error(err);
@@ -1699,7 +1713,9 @@ export default function PDVPanel({
       // receber um pedido cujo pagamento ainda pode ser recusado/cancelado na maquininha.
       if (!isStone && !isCielo && printingConfig.autoPrintOnOrderCreate && (order as any).id && !globalAutoPrintedOrderIds.has((order as any).id)) {
         globalAutoPrintedOrderIds.add((order as any).id);
-        printOrderAuto(order);
+        // Com DANFE automático, reserva o pedido para que o socket não imprima o
+        // cupom comercial antes da autorização da NFC-e.
+        if (!autoPrintDanfe) printOrderAuto(order);
       }
 
       if (isStone) {
@@ -1725,7 +1741,7 @@ export default function PDVPanel({
       setShowCheckout(false);
       setShowSuccess(true);
       if (!fiscalEnabled) setTimeout(() => setShowSuccess(false), 3000);
-      if (fiscalEnabled && requestNfce) void handleEmitNfce();
+      if (shouldEmitNfce) void handleEmitNfce();
       onOrderCreated?.();
     } catch (err) {
       console.error(err);
@@ -1822,14 +1838,14 @@ export default function PDVPanel({
             setStoneStatus("paid");
             if (printingConfig.autoPrintOnOrderCreate && !globalAutoPrintedOrderIds.has(pendingOrderId)) {
               globalAutoPrintedOrderIds.add(pendingOrderId);
-              printOrderAuto(lastOrderRef.current as any);
+              if (!autoPrintDanfe) printOrderAuto(lastOrderRef.current as any);
             }
             setTimeout(() => {
               clearCart();
               setShowCheckout(false);
               setShowSuccess(true);
               if (!fiscalEnabled) setTimeout(() => setShowSuccess(false), 3000);
-              if (fiscalEnabled && requestNfce) void handleEmitNfce();
+              if (shouldEmitNfce) void handleEmitNfce();
               onOrderCreated?.();
             }, 1500);
           } else if (poll.status === "failed" || poll.status === "canceled" || attempts > 36) {
@@ -1867,14 +1883,14 @@ export default function PDVPanel({
             setCieloStatus("paid");
             if (printingConfig.autoPrintOnOrderCreate && !globalAutoPrintedOrderIds.has(pendingOrderId)) {
               globalAutoPrintedOrderIds.add(pendingOrderId);
-              printOrderAuto(lastOrderRef.current as any);
+              if (!autoPrintDanfe) printOrderAuto(lastOrderRef.current as any);
             }
             setTimeout(() => {
               clearCart();
               setShowCheckout(false);
               setShowSuccess(true);
               if (!fiscalEnabled) setTimeout(() => setShowSuccess(false), 3000);
-              if (fiscalEnabled && requestNfce) void handleEmitNfce();
+              if (shouldEmitNfce) void handleEmitNfce();
               onOrderCreated?.();
             }, 1500);
           } else if (poll.status === "CANCELLED" || poll.status === "CANCELED" || attempts > 36) {
@@ -3799,9 +3815,7 @@ export default function PDVPanel({
                       />
                     </div>
                   )}
-                  {/* A NFC-e só sai se o atendente marcar isso aqui, no fechamento do
-                      pagamento — emitir sozinho pra toda venda não é o esperado. */}
-                  {fiscalEnabled && (
+                  {!autoEmitNfce && fiscalEnabled && (
                     <label className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-2.5 py-2 cursor-pointer hover:border-[#C9A227]/50 transition-colors">
                       <input
                         type="checkbox"
@@ -3811,6 +3825,12 @@ export default function PDVPanel({
                       />
                       <span className="text-[11px] font-bold text-white/70">Cliente pediu Nota Fiscal (NFC-e)</span>
                     </label>
+                  )}
+                  {autoEmitNfce && fiscalEnabled && (
+                    <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-400/20 rounded-lg px-2.5 py-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
+                      <span className="text-[11px] font-bold text-emerald-100">NFC-e automática ativada</span>
+                    </div>
                   )}
 
                   {/* Popover de busca/cadastro de cliente — cópia do que já existe no

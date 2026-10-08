@@ -552,6 +552,15 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
   // (ex: trocar para "Estoque" e voltar) antes do useEffect abaixo rodar.
   const [localCategories, setLocalCategories] = useState<any[]>(() => tenant?.categories || []);
 
+  // Conferência fiscal em lote. O NCM continua sendo informado produto a produto,
+  // pois depende da composição; o perfil em lote altera somente o CFOP.
+  const [fiscalReviewOpen, setFiscalReviewOpen] = useState(false);
+  const [fiscalReviewSearch, setFiscalReviewSearch] = useState("");
+  const [fiscalDrafts, setFiscalDrafts] = useState<Record<string, {
+    ncm: string; cfop: string; csosn: string; unitCom: string; origem: number; aliqIcms: number;
+  }>>({});
+  const [fiscalSaving, setFiscalSaving] = useState(false);
+
   // Category modal
   const [catModal, setCatModal] = useState<{ open: boolean; editing: { id: string; name: string } | null }>({ open: false, editing: null });
   const [catName, setCatName] = useState("");
@@ -1121,6 +1130,97 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
   });
 
   const categories = localCategories;
+  const allCatalogProducts = categories.flatMap((category: any) => category.products || []);
+
+  const openFiscalReview = () => {
+    setFiscalDrafts(Object.fromEntries(allCatalogProducts.map((product: any) => [product.id, {
+      ncm: product.ncm || "",
+      cfop: product.cfop || "",
+      csosn: product.csosn || "102",
+      unitCom: product.unitCom || "UN",
+      origem: product.origem ?? 0,
+      aliqIcms: product.aliqIcms ?? 0,
+    }])));
+    setFiscalReviewSearch("");
+    setFiscalReviewOpen(true);
+  };
+
+  const updateFiscalDraft = (productId: string, patch: Partial<typeof fiscalDrafts[string]>) => {
+    setFiscalDrafts(current => ({
+      ...current,
+      [productId]: { ...current[productId], ...patch },
+    }));
+  };
+
+  const fiscalReviewProducts = allCatalogProducts.filter((product: any) =>
+    !fiscalReviewSearch.trim() || product.name.toLowerCase().includes(fiscalReviewSearch.trim().toLowerCase())
+  );
+  const productsWithFiscalPending = allCatalogProducts.filter((product: any) => !product.ncm || !product.cfop);
+
+  const applyFiscalProfile = (cfop: "5101" | "5102") => {
+    setFiscalDrafts(current => {
+      const next = { ...current };
+      for (const product of fiscalReviewProducts) {
+        next[product.id] = { ...next[product.id], cfop };
+      }
+      return next;
+    });
+  };
+
+  const saveFiscalReview = async () => {
+    const changed = allCatalogProducts.filter((product: any) => {
+      const draft = fiscalDrafts[product.id];
+      return draft && (
+        draft.ncm !== (product.ncm || "") ||
+        draft.cfop !== (product.cfop || "") ||
+        draft.csosn !== (product.csosn || "102") ||
+        draft.unitCom !== (product.unitCom || "UN") ||
+        draft.origem !== (product.origem ?? 0) ||
+        draft.aliqIcms !== (product.aliqIcms ?? 0)
+      );
+    });
+
+    if (changed.length === 0) {
+      toast.error("Não há alterações fiscais para salvar.");
+      return;
+    }
+
+    const invalid = changed.find((product: any) => {
+      const draft = fiscalDrafts[product.id];
+      const ncm = draft.ncm.replace(/\D/g, "");
+      return !/^\d{8}$/.test(ncm) || ncm === "00000000" || !/^\d{4}$/.test(draft.cfop);
+    });
+    if (invalid) {
+      toast.error(`Revise NCM e CFOP de “${invalid.name}”. O NCM deve ter 8 dígitos e o CFOP, 4.`);
+      return;
+    }
+
+    setFiscalSaving(true);
+    try {
+      for (const product of changed) {
+        const draft = fiscalDrafts[product.id];
+        const response = await apiFetch(`/api/owner/products/${product.id}/fiscal`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...draft, ncm: draft.ncm.replace(/\D/g, "") }),
+        });
+        const saved = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(saved?.error || `Não foi possível salvar “${product.name}”.`);
+        setLocalCategories(current => current.map(category => ({
+          ...category,
+          products: category.products?.map((item: any) => item.id === product.id ? { ...item, ...saved } : item),
+        })));
+      }
+      toast.success(`${changed.length} produto${changed.length > 1 ? "s" : ""} fiscal${changed.length > 1 ? "is" : ""} atualizado${changed.length > 1 ? "s" : ""}.`);
+      setFiscalReviewOpen(false);
+      refresh();
+    } catch (error: any) {
+      toast.error(error?.message || "Falha ao salvar os dados fiscais.");
+    } finally {
+      setFiscalSaving(false);
+    }
+  };
+
   const visibleCategories = categories
     .filter(cat => selectedCat === "all" || cat.id === selectedCat)
     .map(cat => ({
@@ -1221,9 +1321,14 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
           />
         </div>
 
-        <Button onClick={openNewCategory} iconLeft={<Plus className="w-4 h-4" />} className="shrink-0 w-full sm:w-auto">
-          Nova Categoria
-        </Button>
+        <div className="flex gap-2 shrink-0 w-full sm:w-auto">
+          <Button variant="outline" onClick={openFiscalReview} className="flex-1 sm:flex-none">
+            Conferência fiscal{productsWithFiscalPending.length > 0 ? ` (${productsWithFiscalPending.length})` : ""}
+          </Button>
+          <Button onClick={openNewCategory} iconLeft={<Plus className="w-4 h-4" />} className="flex-1 sm:flex-none">
+            Nova Categoria
+          </Button>
+        </div>
       </div>
 
       {/* Empty state */}
@@ -1308,6 +1413,63 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
           {activeDragProduct && <ProductRowGhost prod={activeDragProduct} fmt={fmt} />}
         </DragOverlay>
       </DndContext>
+
+      <Modal
+        isOpen={fiscalReviewOpen}
+        onClose={() => !fiscalSaving && setFiscalReviewOpen(false)}
+        title="Conferência fiscal do cardápio"
+        size="full"
+        mobileStyle="fullscreen"
+        footer={
+          <ModalFooter align="between">
+            <p className="text-xs text-slate-500 hidden sm:block">NCM identifica o produto; CFOP identifica se é produção própria ou revenda.</p>
+            <div className="flex gap-2 ml-auto">
+              <Button variant="outline" onClick={() => setFiscalReviewOpen(false)} disabled={fiscalSaving}>Cancelar</Button>
+              <Button onClick={saveFiscalReview} loading={fiscalSaving}>Salvar alterações</Button>
+            </div>
+          </ModalFooter>
+        }
+      >
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+            <p className="font-black">Confirme o NCM com o contador antes de salvar.</p>
+            <p className="mt-1 text-xs leading-relaxed">Produção própria aplica o CFOP 5101; revenda aplica 5102. Esses atalhos não alteram o NCM, pois ele depende da composição do produto.</p>
+          </div>
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+            <input
+              value={fiscalReviewSearch}
+              onChange={event => setFiscalReviewSearch(event.target.value)}
+              placeholder="Buscar produto para conferir..."
+              className="w-full lg:flex-1 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-amber-400"
+            />
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => applyFiscalProfile("5101")}>Produção própria (5101)</Button>
+              <Button variant="outline" onClick={() => applyFiscalProfile("5102")}>Revenda (5102)</Button>
+            </div>
+          </div>
+          <p className="text-xs text-slate-500">Os atalhos são aplicados apenas aos {fiscalReviewProducts.length} produtos exibidos no filtro. Campos em destaque precisam de revisão antes da emissão.</p>
+          <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+            <table className="w-full min-w-[760px] text-left">
+              <thead className="bg-slate-50 text-[10px] uppercase tracking-widest text-slate-500">
+                <tr><th className="px-4 py-3">Produto</th><th className="px-4 py-3">NCM</th><th className="px-4 py-3">CFOP</th><th className="px-4 py-3">CSOSN</th><th className="px-4 py-3">Unidade</th></tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {fiscalReviewProducts.map((product: any) => {
+                  const draft = fiscalDrafts[product.id];
+                  const invalidNcm = !draft?.ncm || !/^\d{8}$/.test(draft.ncm.replace(/\D/g, "")) || draft.ncm.replace(/\D/g, "") === "00000000";
+                  return <tr key={product.id} className="bg-white">
+                    <td className="px-4 py-3"><p className="text-sm font-bold text-slate-800">{product.name}</p>{invalidNcm && <p className="mt-0.5 text-[10px] font-bold text-red-600">NCM pendente</p>}</td>
+                    <td className="px-4 py-3"><input value={draft?.ncm || ""} maxLength={8} onChange={event => updateFiscalDraft(product.id, { ncm: event.target.value.replace(/\D/g, "") })} placeholder="8 dígitos" className={`w-28 rounded-lg border px-2.5 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-amber-400 ${invalidNcm ? "border-red-300 bg-red-50" : "border-slate-200"}`} /></td>
+                    <td className="px-4 py-3"><select value={draft?.cfop || ""} onChange={event => updateFiscalDraft(product.id, { cfop: event.target.value })} className="rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-amber-400"><option value="">Selecione</option><option value="5101">5101 — Produção própria</option><option value="5102">5102 — Revenda</option><option value="5405">5405 — ST</option><option value="5933">5933 — Serviço</option></select></td>
+                    <td className="px-4 py-3"><select value={draft?.csosn || "102"} onChange={event => updateFiscalDraft(product.id, { csosn: event.target.value })} className="rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-amber-400"><option value="102">102</option><option value="103">103</option><option value="500">500</option><option value="900">900</option></select></td>
+                    <td className="px-4 py-3"><select value={draft?.unitCom || "UN"} onChange={event => updateFiscalDraft(product.id, { unitCom: event.target.value })} className="rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-amber-400">{["UN", "KG", "G", "L", "ML", "CX", "PC", "PT", "PAR", "DZ"].map(unit => <option key={unit} value={unit}>{unit}</option>)}</select></td>
+                  </tr>;
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </Modal>
 
       {/* Search / filtro sem resultado */}
       {(search || statusFilter !== "all") && visibleCategories.length === 0 && categories.length > 0 && (
