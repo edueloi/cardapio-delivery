@@ -102,10 +102,6 @@ export default function DashboardContent({
   activeOrderId
 }: DashboardContentProps) {
   const allowed = (tab: DashboardTabId) => canAccess(membership ?? null, tab);
-  const pendingOrders = orders.filter((order) => order.status === "PENDING").length;
-  const preparingOrders = orders.filter((order) => order.status === "PREPARING").length;
-  const shippedOrders = orders.filter((order) => order.status === "SHIPPED").length;
-  const delayedOrders = orders.filter((order) => (order.status === "PENDING" || order.status === "PREPARING") && Date.now() - new Date(order.createdAt).getTime() > 30 * 60000).length;
   const activeOrders = orders.filter((order) =>
     (order.status !== "DELIVERED" && order.status !== "CANCELLED" && order.status !== "MERGED") ||
     // Delivery entregue mas ainda não faturado (pagamento na entrega) continua
@@ -152,12 +148,6 @@ export default function DashboardContent({
             description="O que está acontecendo agora?"
             icon={Clock}
           />
-          <StatGrid cols={4}>
-            <StatCard title="Pendentes" value={pendingOrders} icon={Clock} color="warning" />
-            <StatCard title="Em preparo" value={preparingOrders} icon={ChefHat} color="info" />
-            <StatCard title="Prontos" value={shippedOrders} icon={CheckCircle2} color="success" />
-            <StatCard title="Atrasados" value={delayedOrders} icon={AlertCircle} color="danger" />
-          </StatGrid>
 
           <OrdersList filteredOrders={activeOrders} updateStatus={updateStatus} slug={slug} tenant={tenant} />
         </div>
