@@ -396,7 +396,15 @@ export async function emitirNfce(
   let vCBSTotal = 0;
 
   const det = order.items.map((item, i) => {
-    const vProd = parseFloat((item.quantity * item.unitPrice).toFixed(2));
+    // Pedidos antigos ou integrações externas podem trazer valores serializados
+    // de forma diferente. Converte antes de montar o XML e interrompe com uma
+    // mensagem clara, em vez de quebrar a emissão com "toFixed" indefinido.
+    const quantity = Number(item.quantity);
+    const unitPrice = Number(item.unitPrice);
+    if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitPrice) || unitPrice < 0) {
+      throw new Error(`Item fiscal inválido: ${item.productName || `item ${i + 1}`}. Confira quantidade e preço do pedido.`);
+    }
+    const vProd = parseFloat((quantity * unitPrice).toFixed(2));
     // nItem NÃO deve ser propriedade do objeto aqui — nItem é um ATRIBUTO XML de <det>
     // (<det nItem="1">), não um elemento filho. A lib (nfewizard-io, gerarXmlNFeAutorizacao)
     // já injeta { $: { nItem: index + 1 } } automaticamente ao montar cada item via
@@ -417,13 +425,13 @@ export async function emitirNfce(
         NCM: item.ncm.replace(/\D/g, "").slice(0, 8).padStart(8, "0"),
         CFOP: item.cfop || "5102",
         uCom: item.unitCom || "UN",
-        qCom: item.quantity,
-        vUnCom: parseFloat(item.unitPrice.toFixed(2)),
+        qCom: quantity,
+        vUnCom: parseFloat(unitPrice.toFixed(2)),
         vProd,
         cEANTrib: "SEM GTIN",
         uTrib: item.unitCom || "UN",
-        qTrib: item.quantity,
-        vUnTrib: parseFloat(item.unitPrice.toFixed(2)),
+        qTrib: quantity,
+        vUnTrib: parseFloat(unitPrice.toFixed(2)),
         indTot: 1,
       },
       imposto: {
