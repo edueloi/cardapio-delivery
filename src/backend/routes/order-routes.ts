@@ -491,18 +491,18 @@ export function registerOrderRoutes({
 
   // Cancela um pedido já concluído no Histórico. Não apaga o registro (preserva rastreabilidade
   // e não quebra o fechamento de caixa de dias já encerrados) — só muda pra CANCELLED, que já
-  // é filtrado fora de todo relatório/receita. Restrito ao proprietário e exige confirmar a
-  // própria senha de novo, pra evitar que qualquer operador cancele uma venda por engano.
+  // é filtrado fora de todo relatório/receita. Proprietário e Administrador devem confirmar a
+  // própria senha de novo, pra evitar que um operador cancele uma venda por engano.
   app.post("/api/orders/:id/cancel", requireAuth, async (req, res) => {
     const tenantOrder = await requireTenantFromOrder(req, res, req.params.id);
     if (!tenantOrder) return;
 
     const membership = (req as AuthenticatedRequest).membership;
-    if (!membership || membership.role !== "OWNER") {
+    if (!membership || !["OWNER", "ADMIN"].includes(membership.role)) {
       return res
         .status(403)
         .json({
-          error: "Apenas o proprietário pode cancelar um pedido do histórico.",
+          error: "Apenas o proprietário ou um administrador pode cancelar um pedido do histórico.",
         });
     }
 

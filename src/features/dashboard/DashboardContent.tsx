@@ -136,7 +136,7 @@ export default function DashboardContent({
             orders={orders}
             slug={slug}
             tenant={tenant}
-            isOwner={membership?.role === "OWNER"}
+            isOwner={membership?.role === "OWNER" || membership?.role === "ADMIN"}
             onOrderChanged={refreshTenant}
           />
         </PageWrapper>

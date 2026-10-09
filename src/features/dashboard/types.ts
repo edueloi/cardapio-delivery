@@ -72,7 +72,7 @@ export interface DashboardNavigationItem {
   label: string;
   tab: DashboardTabId;
   icon: LucideIcon;
-  ownerOnly?: boolean; // hidden from STAFF/ADMIN regardless of permissions
+  ownerOnly?: boolean; // hidden from STAFF; ADMIN has the same access as OWNER
 }
 
 export interface DashboardNavigationGroup {

@@ -715,7 +715,7 @@ export default function CashFlowPanel({ slug, tenant }: CashFlowPanelProps) {
         <div className="space-y-4 p-1">
           <p className="text-sm text-slate-600">O estorno será registrado no caixa aberto atual. A venda original continuará no histórico para auditoria.</p>
           <label className="flex items-start gap-3 rounded-xl border border-slate-200 p-3 cursor-pointer"><input type="checkbox" checked={restockInventory} onChange={(e) => setRestockInventory(e.target.checked)} className="mt-0.5" /><span className="text-xs text-slate-600"><strong className="block text-slate-800">Devolver produtos ao estoque</strong>Desmarque se os itens foram consumidos, preparados ou perdidos.</span></label>
-          <Input label="Senha do proprietário" type="password" value={cancelPassword} onChange={(e) => setCancelPassword(e.target.value)} />
+          <Input label="Senha da sua conta (Admin ou Proprietário)" type="password" value={cancelPassword} onChange={(e) => setCancelPassword(e.target.value)} />
         </div>
       </Modal>
     </PageWrapper>
