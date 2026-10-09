@@ -1,17 +1,18 @@
 import {
   Clock,
-  LayoutDashboard,
   MessageSquare,
-  Utensils,
   ChefHat,
   CheckCircle2,
   AlertCircle,
-  History
+  Package,
+  Users,
 } from "lucide-react";
 import {
-  FilterLineSegmented,
+  Badge,
   PageWrapper,
   SectionTitle,
+  StatCard,
+  StatGrid,
 } from "../../components";
 import type { Order, Tenant } from "../../types";
 import {
@@ -70,12 +71,12 @@ interface DashboardContentProps {
 function AccessDenied() {
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center p-8">
-      <div className="w-20 h-20 rounded-3xl bg-red-50 flex items-center justify-center">
-        <svg className="w-10 h-10 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+      <div className="w-14 h-14 rounded-lg bg-red-50 flex items-center justify-center">
+        <svg className="w-7 h-7 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
       </div>
       <div>
-        <p className="text-lg font-black text-slate-800 uppercase tracking-widest mb-1">Acesso restrito</p>
-        <p className="text-sm text-slate-400 max-w-xs">Você não tem permissão para acessar esta área. Contate o proprietário.</p>
+        <p className="text-base font-medium text-slate-900 mb-1">Acesso restrito</p>
+        <p className="text-xs text-slate-500 max-w-xs">Você não tem permissão para acessar esta área. Contate o proprietário.</p>
       </div>
     </div>
   );
@@ -115,9 +116,12 @@ export default function DashboardContent({
   // If the active tab is not accessible, show the access denied screen
   if (!allowed(activeTab)) return <AccessDenied />;
 
-  return (
+  // PDV e Garçom ocupam a área inteira; as demais telas ficam dentro de um único
+  // PageWrapper (os PageWrapper das telas viram apenas contêineres internos).
+  const fullBleed = activeTab === "pos" || activeTab === "waiter";
+
+  const content = (
     <>
-      {/* Overview is the only full-width section now */}
       {activeTab === "overview" && (
         <OverviewPanel
           tenant={tenant}
@@ -130,8 +134,7 @@ export default function DashboardContent({
 
       {/* Standard wrapped sections */}
       {activeTab === "history" && (
-        <PageWrapper>
-
+        <div>
           <OrderHistoryPanel
             orders={orders}
             slug={slug}
@@ -139,40 +142,25 @@ export default function DashboardContent({
             isOwner={membership?.role === "OWNER" || membership?.role === "ADMIN"}
             onOrderChanged={refreshTenant}
           />
-        </PageWrapper>
+        </div>
       )}
 
       {activeTab === "live-orders" && (
-        <PageWrapper className="px-0 sm:px-1 lg:px-2 xl:px-3 pt-0">
+        <div className="space-y-4">
           <SectionTitle
             title="Painel de Pedidos"
             description="O que está acontecendo agora?"
             icon={Clock}
-            action={
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-lg border border-amber-200">
-                  <Clock className="w-3.5 h-3.5" />
-                  <span className="text-[10px] font-black uppercase tracking-wider">Pendentes: {pendingOrders}</span>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-orange-50 text-orange-700 rounded-lg border border-orange-200">
-                  <ChefHat className="w-3.5 h-3.5" />
-                  <span className="text-[10px] font-black uppercase tracking-wider">Em Preparo: {preparingOrders}</span>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-200">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span className="text-[10px] font-black uppercase tracking-wider">Prontos: {shippedOrders}</span>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-red-50 text-red-600 rounded-lg border border-red-200">
-                  <AlertCircle className="w-3.5 h-3.5" />
-                  <span className="text-[10px] font-black uppercase tracking-wider">Atrasados: {delayedOrders}</span>
-                </div>
-              </div>
-            }
-            className="hidden"
           />
+          <StatGrid cols={4}>
+            <StatCard title="Pendentes" value={pendingOrders} icon={Clock} color="warning" />
+            <StatCard title="Em preparo" value={preparingOrders} icon={ChefHat} color="info" />
+            <StatCard title="Prontos" value={shippedOrders} icon={CheckCircle2} color="success" />
+            <StatCard title="Atrasados" value={delayedOrders} icon={AlertCircle} color="danger" />
+          </StatGrid>
 
           <OrdersList filteredOrders={activeOrders} updateStatus={updateStatus} slug={slug} tenant={tenant} />
-        </PageWrapper>
+        </div>
       )}
 
       {activeTab === "scheduled" && (
@@ -180,18 +168,7 @@ export default function DashboardContent({
       )}
 
       {activeTab === "menu" && (
-        <div className="space-y-6">
-          <div className="bg-[#0D1B3E] rounded-[28px] sm:rounded-3xl p-6 sm:p-8 text-white mb-8 shadow-xl shadow-[#0D1B3E]/20 flex flex-col items-start gap-5 sm:flex-row sm:justify-between sm:items-center overflow-hidden relative">
-            <div className="relative z-10 max-w-md">
-              <h3 className="text-2xl sm:text-3xl font-black tracking-tight mb-2">Cardápio Inteligente</h3>
-              <p className="text-[#C9A227]/80 font-medium text-sm sm:text-base">
-                Gerencie categorias, preços e disponibilidades em tempo real.
-              </p>
-            </div>
-            <Utensils className="w-24 h-24 sm:w-32 sm:h-32 absolute -right-6 -bottom-6 sm:-right-8 sm:-bottom-8 text-[#C9A227]/15 rotate-12" />
-          </div>
-          <MenuManagement tenant={tenant} refresh={refreshTenant} membership={membership} />
-        </div>
+        <MenuManagement tenant={tenant} refresh={refreshTenant} membership={membership} />
       )}
 
       {activeTab === "drivers" && (
@@ -227,7 +204,7 @@ export default function DashboardContent({
       )}
 
       {activeTab === "whatsapp" && (
-        <div className="space-y-6">
+        <div className="space-y-4">
           <SectionTitle
             title="WhatsApp e Bot"
             description="Conecte um número por estabelecimento e configure o atendimento automático."
@@ -242,29 +219,11 @@ export default function DashboardContent({
       )}
 
       {activeTab === "staff" && (
-        <div className="space-y-6">
-          <h3 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">
-            Equipe de Atendimento
-          </h3>
-          <StaffList tenant={tenant} />
-        </div>
+      <StaffList tenant={tenant} />
       )}
 
       {activeTab === "inventory" && (
-        <div className="space-y-6">
-          <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h3 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight underline decoration-[#C9A227] decoration-4 underline-offset-4">
-              Gestão de Insumos
-            </h3>
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-              <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
-                Estoque Integrado
-              </span>
-            </div>
-          </div>
-          <InventoryPanel tenant={tenant} />
-        </div>
+      <InventoryPanel tenant={tenant} />
       )}
 
       {activeTab === "production" && (
@@ -275,7 +234,7 @@ export default function DashboardContent({
       )}
 
       {activeTab === "tables" && (
-        <div className="space-y-6">
+        <div className="space-y-4">
           <TableManagement tenant={tenant} />
         </div>
       )}
@@ -332,4 +291,6 @@ export default function DashboardContent({
       )}
     </>
   );
+
+  return fullBleed ? content : <PageWrapper className="px-0 sm:px-0 lg:px-0 xl:px-0">{content}</PageWrapper>;
 }

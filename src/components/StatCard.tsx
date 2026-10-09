@@ -2,6 +2,7 @@ import React from "react";
 import { motion } from "motion/react";
 import { ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { cn } from "@/src/lib/utils";
+import { uiTheme } from './theme';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // StatCard — Design System
@@ -10,41 +11,41 @@ import { cn } from "@/src/lib/utils";
 //  • Mobile (2 colunas): valor grande, ícone menor, menos padding
 //  • Tablet+ (4 colunas): versão completa com hover animado
 //
-// Variantes de cor de ícone: default (amber) | success | info | danger | purple | warning
+// Variantes de cor de ícone: default (azul) | success | info | danger | purple | warning
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type StatCardColor = "default" | "success" | "info" | "danger" | "purple" | "warning";
 
 const colorMap: Record<StatCardColor, { wrap: string; icon: string; glow: string }> = {
   default: {
-    wrap: "bg-slate-50 border-slate-100 group-hover:bg-[#C9A227] group-hover:border-[#C9A227]",
-    icon: "text-slate-400 group-hover:text-white",
-    glow: "bg-[#C9A227]/5",
+    wrap: "bg-blue-50 border-blue-100 group-hover:bg-blue-500 group-hover:border-blue-500",
+    icon: "text-blue-600 group-hover:text-white",
+    glow: "bg-blue-500/5",
   },
   success: {
-    wrap: "bg-slate-50 border-slate-100 group-hover:bg-emerald-500 group-hover:border-emerald-500",
-    icon: "text-slate-400 group-hover:text-white",
+    wrap: "bg-emerald-50 border-emerald-100 group-hover:bg-emerald-500 group-hover:border-emerald-500",
+    icon: "text-emerald-600 group-hover:text-white",
     glow: "bg-emerald-500/5",
   },
   info: {
-    wrap: "bg-slate-50 border-slate-100 group-hover:bg-[#0D1B3E] group-hover:border-[#0D1B3E]",
-    icon: "text-slate-400 group-hover:text-white",
-    glow: "bg-[#0D1B3E]/5",
+    wrap: "bg-blue-50 border-blue-100 group-hover:bg-blue-500 group-hover:border-blue-500",
+    icon: "text-blue-600 group-hover:text-white",
+    glow: "bg-blue-500/5",
   },
   danger: {
-    wrap: "bg-slate-50 border-slate-100 group-hover:bg-red-500 group-hover:border-red-500",
-    icon: "text-slate-400 group-hover:text-white",
+    wrap: "bg-red-50 border-red-100 group-hover:bg-red-500 group-hover:border-red-500",
+    icon: "text-red-600 group-hover:text-white",
     glow: "bg-red-500/5",
   },
   purple: {
-    wrap: "bg-slate-50 border-slate-100 group-hover:bg-violet-500 group-hover:border-violet-500",
-    icon: "text-slate-400 group-hover:text-white",
+    wrap: "bg-violet-50 border-violet-100 group-hover:bg-violet-500 group-hover:border-violet-500",
+    icon: "text-violet-600 group-hover:text-white",
     glow: "bg-violet-500/5",
   },
   warning: {
-    wrap: "bg-slate-50 border-slate-100 group-hover:bg-amber-500 group-hover:border-amber-500",
-    icon: "text-slate-400 group-hover:text-white",
-    glow: "bg-amber-500/5",
+    wrap: "bg-yellow-50 border-yellow-100 group-hover:bg-yellow-500 group-hover:border-yellow-500",
+    icon: "text-yellow-600 group-hover:text-white",
+    glow: "bg-yellow-500/5",
   },
 };
 
@@ -56,6 +57,8 @@ interface StatCardProps {
   description?: string;
   color?: StatCardColor;
   className?: string;
+  isCurrency?: boolean;
+  variant?: "default" | "flat";
   /** Animação com delay para entrada escalonada */
   delay?: number;
 }
@@ -68,59 +71,50 @@ export function StatCard({
   description,
   color = "default",
   className,
+  isCurrency = false,
+  variant = "default",
   delay = 0,
 }: StatCardProps) {
-  const c = colorMap[color] ?? colorMap.default;
+  const c = colorMap[color];
+
+  const formattedValue = isCurrency 
+    ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value))
+    : value;
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
+      transition={{ delay, duration: 0.2, ease: "easeOut" }}
       className={cn(
-        "ds-card-premium group relative overflow-hidden",
-        "min-h-[100px] p-3 sm:min-h-0 sm:p-5 transition-all duration-300",
-        "hover:translate-y-[-2px] hover:shadow-[0_20px_40px_rgb(0,0,0,0.08)]",
+        "rounded-lg shadow-none relative overflow-hidden transition-all duration-200 group p-3",
+        variant === "default" ? `${uiTheme.surface} hover:border-slate-300` : "bg-slate-50/50 border border-transparent hover:bg-slate-50",
         className
       )}
     >
-      {/* Círculo decorativo de fundo */}
-      <div
-        className={cn(
-          "absolute top-0 right-0 w-12 h-12 sm:w-20 sm:h-20 rounded-full -mr-6 -mt-6 sm:-mr-10 sm:-mt-10",
-          "transition-transform group-hover:scale-150 duration-700",
-          c.glow
-        )}
-      />
-
       {/* Header: ícone + trend */}
-      <div className="flex justify-between items-start mb-2 sm:mb-4 relative z-10">
+      <div className="flex justify-between items-center mb-1.5 relative z-10">
         <div
           className={cn(
-            "p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl border transition-all duration-300",
+            "p-1.5 rounded-lg border transition-all duration-300",
             c.wrap
           )}
         >
-          <Icon size={14} className={cn("transition-colors duration-300 sm:hidden", c.icon)} />
-          <Icon size={18} className={cn("hidden sm:block transition-colors duration-300", c.icon)} />
+          <Icon size={14} className={cn("transition-colors duration-300", c.icon)} />
         </div>
 
         {trend && (
           <div
             className={cn(
-              "flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg border text-[9px] sm:text-[10px] font-bold",
+              "flex items-center gap-0.5 px-1.5 py-0.5 rounded-md border text-[10px] font-medium",
               trend.isUp
                 ? "bg-emerald-50 text-emerald-600 border-emerald-200"
                 : "bg-red-50 text-red-500 border-red-200"
             )}
           >
             {trend.isUp
-              ? <ArrowUpRight size={10} className="sm:hidden" />
-              : <ArrowDownRight size={10} className="sm:hidden" />
-            }
-            {trend.isUp
-              ? <ArrowUpRight size={11} className="hidden sm:block" />
-              : <ArrowDownRight size={11} className="hidden sm:block" />
+              ? <ArrowUpRight size={10} />
+              : <ArrowDownRight size={10} />
             }
             {trend.value}%
           </div>
@@ -129,16 +123,15 @@ export function StatCard({
 
       {/* Conteúdo */}
       <div className="relative z-10">
-        <p className="text-[7px] sm:text-[10px] font-bold text-zinc-400 uppercase tracking-[0.18em] mb-0.5 sm:mb-1 truncate">
+        <p className="text-[11px] font-medium text-slate-500 mb-0.5 truncate">
           {title}
         </p>
-        <h3 className="text-sm sm:text-2xl font-black text-zinc-900 tracking-tight leading-none">
-          {value}
+        <h3 className="text-base font-medium text-slate-900 leading-none">
+          {formattedValue}
         </h3>
         {description && (
-          <p className="hidden sm:flex text-[9px] sm:text-[10px] text-zinc-400 mt-1 sm:mt-1.5 font-medium items-center gap-1">
-            <span className="w-1 h-1 rounded-full bg-zinc-300 shrink-0" />
-            <span className="truncate">{description}</span>
+          <p className="text-[11px] text-slate-500 mt-1 font-normal leading-snug">
+            {description}
           </p>
         )}
       </div>

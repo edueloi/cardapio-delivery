@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import socket from "../../lib/socket";
-import { playTvPanelReadySound, primeAudioContext } from "../../lib/notificationSound";
+import { isAudioContextRunning, playTvPanelReadySound, primeAudioContext } from "../../lib/notificationSound";
 import { announceOrderReady, primeSpeechSynthesis } from "../../lib/voiceAnnouncement";
 import type { DisplayPanelConfig, DisplayPanelImage, Order, Tenant } from "../../types";
 import { dineInOrderLabel } from "../../types";
@@ -785,6 +785,20 @@ export default function PublicDashboardPage() {
   // isso, "Chamar novamente" feito no painel de pedidos (outra aba/dispositivo) nunca produz
   // som aqui, mesmo funcionando o resto do fluxo. Um único clique/toque em qualquer lugar
   // da tela do painel destrava o resto da sessão.
+  // Na TV (app Android TV, Edge em kiosk com autoplay liberado) ninguém toca na tela: tenta
+  // liberar o áudio sozinho. Se o navegador já permitir, o aviso nem chega a aparecer.
+  useEffect(() => {
+    if (audioUnlocked) return;
+    primeAudioContext();
+    const timer = window.setTimeout(() => {
+      if (isAudioContextRunning()) {
+        primeSpeechSynthesis();
+        setAudioUnlocked(true);
+      }
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [audioUnlocked]);
+
   useEffect(() => {
     if (audioUnlocked) return;
     const unlock = () => {
@@ -963,33 +977,9 @@ export default function PublicDashboardPage() {
         overflow: "hidden",
       }}
     >
-      {/* ── AVISO PRA DESTRAVAR SOM/VOZ ────────────────────────
-          Navegador só libera áudio/fala nesta aba depois de 1 clique/toque real
-          nela — some sozinho assim que o gesto acontece (ver useEffect acima). */}
-      {!audioUnlocked && (
-        <div
-          style={{
-            position: "fixed",
-            top: 14,
-            left: "50%",
-            transform: "translateX(-50%)",
-            zIndex: 300,
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            background: "rgba(0,0,0,0.82)",
-            color: "#ffffff",
-            padding: "10px 20px",
-            borderRadius: 999,
-            fontSize: 13,
-            fontWeight: 700,
-            boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
-          }}
-        >
-          <Bell style={{ width: 16, height: 16 }} />
-          Toque na tela para ativar o som e a voz das chamadas
-        </div>
-      )}
+      {/* O painel de TV não exibe pedido de "toque na tela": o som/voz liga sozinho quando o navegador
+          permite (app Android TV, Edge em kiosk com autoplay liberado) e, em um navegador comum, no
+          primeiro clique/tecla em qualquer lugar da tela (ver useEffect de destravar áudio acima). */}
 
       {/* ── CHAMADA DE SENHA ──────────────────────────────────── */}
       <AnimatePresence>

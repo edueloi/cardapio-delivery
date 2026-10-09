@@ -199,7 +199,7 @@ function ImageDialog({ onConfirm, onClose }: {
             style={{ padding: "9px 12px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, outline: "none" }} />
 
           <div>
-            <p style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em" }}>Tamanho inicial</p>
+            <p style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", marginBottom: 6 }}>Tamanho inicial</p>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
               {WIDTH_PRESETS.map(p => (
                 <button key={p} type="button" onClick={() => setWidth(p)}
@@ -215,7 +215,7 @@ function ImageDialog({ onConfirm, onClose }: {
           </div>
 
           <div>
-            <p style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em" }}>Posição no texto</p>
+            <p style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", marginBottom: 6 }}>Posição no texto</p>
             <div style={{ display: "flex", gap: 6 }}>
               {FLOAT_OPTIONS.map(opt => (
                 <button key={opt.value} type="button" onClick={() => setFloat(opt.value)}

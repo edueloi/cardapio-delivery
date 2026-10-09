@@ -54,26 +54,28 @@ export const Calendar: React.FC<CalendarProps> = ({
   today.setHours(0, 0, 0, 0);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-      <div className="mb-4 flex items-center justify-between gap-3">
+    <div className="ui-calendar min-w-0 overflow-hidden rounded-lg border border-zinc-200 bg-white p-3">
+      <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">
+          <p className="text-[11px] font-medium tracking-normal text-zinc-400">
             {mode === 'block' ? 'Dias bloqueados' : 'Selecionar data'}
           </p>
-          <h3 className="text-sm font-black text-zinc-800">{monthLabel}</h3>
+          <h3 className="text-sm font-medium text-zinc-800">{monthLabel}</h3>
         </div>
 
         <div className="flex items-center gap-2">
           <button
+            type="button"
             onClick={handlePrevMonth}
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-500 transition-all hover:border-zinc-300 hover:bg-zinc-50"
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 transition-all hover:border-zinc-300 hover:bg-zinc-50"
             aria-label="Mês anterior"
           >
             <ChevronLeft size={16} />
           </button>
           <button
+            type="button"
             onClick={handleNextMonth}
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-500 transition-all hover:border-zinc-300 hover:bg-zinc-50"
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 transition-all hover:border-zinc-300 hover:bg-zinc-50"
             aria-label="Próximo mês"
           >
             <ChevronRight size={16} />
@@ -81,7 +83,7 @@ export const Calendar: React.FC<CalendarProps> = ({
         </div>
       </div>
 
-      <div className="mb-3 grid grid-cols-7 gap-1 rounded-xl bg-zinc-100 p-1 text-center text-[10px] font-black uppercase tracking-widest text-zinc-400">
+      <div className="mb-3 grid grid-cols-7 gap-1 rounded-lg bg-zinc-100 p-1 text-center text-[11px] font-medium tracking-normal text-zinc-400">
         {WEEK_DAYS.map((day, i) => (
           <div key={i} className="flex h-8 items-center justify-center rounded-lg">
             {day}
@@ -91,7 +93,7 @@ export const Calendar: React.FC<CalendarProps> = ({
 
       <div className="grid grid-cols-7 gap-1">
         {Array.from({ length: startDay }).map((_, index) => (
-          <div key={'empty-' + index} className="h-10 rounded-xl" />
+          <div key={'empty-' + index} className="h-8 rounded-md" />
         ))}
 
         {Array.from({ length: daysInMonth }).map((_, dayIndex) => {
@@ -104,7 +106,7 @@ export const Calendar: React.FC<CalendarProps> = ({
           const isPast = date < today;
           const isToday = date.getTime() === today.getTime();
 
-          let className = 'h-10 rounded-xl text-sm font-bold transition-all ';
+          let className = 'h-8 rounded-md text-sm font-medium transition-all';
 
           if (isPast && !isClosed) {
             className += 'text-zinc-300 cursor-default';
@@ -114,11 +116,11 @@ export const Calendar: React.FC<CalendarProps> = ({
           } else if (mode === 'block' && isBlocked) {
             className += 'border border-zinc-900 bg-zinc-900 text-white shadow-sm hover:bg-zinc-800 cursor-pointer';
           } else if (mode === 'select' && isSelected) {
-            className += 'border border-amber-500 bg-amber-500 text-white shadow-sm hover:bg-amber-600 cursor-pointer';
+            className += 'border border-blue-500 bg-blue-500 text-white shadow-sm hover:bg-blue-600 cursor-pointer';
           } else if (isToday) {
-            className += 'border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 cursor-pointer';
+            className += 'border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 cursor-pointer';
           } else {
-            className += 'border border-transparent bg-white text-zinc-600 hover:border-amber-100 hover:bg-amber-50 hover:text-amber-700 cursor-pointer';
+            className += 'border border-transparent bg-white text-zinc-600 hover:border-blue-100 hover:bg-blue-50 hover:text-blue-700 cursor-pointer';
           }
 
           return (
@@ -132,7 +134,7 @@ export const Calendar: React.FC<CalendarProps> = ({
                 else onDateSelect?.(dateString);
               }}
               className={className}
-              title={isClosed ? 'Estúdio fechado' : isBlocked ? 'Dia bloqueado' : 'Dia disponível'}
+              title={isClosed ? 'Dia fechado' : isBlocked ? 'Dia bloqueado' : 'Dia disponível'}
             >
               {dayNumber}
             </button>
@@ -141,7 +143,7 @@ export const Calendar: React.FC<CalendarProps> = ({
       </div>
 
       {/* Legenda */}
-      <div className="mt-4 flex items-center justify-between gap-2 rounded-xl bg-zinc-100 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-400">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-zinc-100 px-3 py-2 text-[11px] font-medium tracking-normal text-zinc-400">
         <span>Branco: livre</span>
         {closedDates.length > 0 && (
           <span className="flex items-center gap-1">

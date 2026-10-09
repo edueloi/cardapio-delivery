@@ -1,6 +1,6 @@
 ﻿import React, { useMemo } from "react";
 import { CalendarClock } from "lucide-react";
-import { EmptyState, PageWrapper, SectionTitle } from "../../../../components";
+import { Badge, EmptyState, PageWrapper, SectionTitle } from "../../../../components";
 import { Order } from "../../../../types";
 import { OrdersList } from "../pedidos";
 
@@ -70,14 +70,14 @@ export function ScheduledOrdersPanel({
             <div key={date}>
               {/* Date header */}
               <div className={`flex items-center gap-3 mb-3 px-1`}>
-                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${isPast ? "bg-slate-100" : "bg-amber-50"}`}>
-                  <CalendarClock className={`w-5 h-5 ${isPast ? "text-slate-400" : "text-amber-500"}`} />
+                <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${isPast ? "bg-slate-100" : "bg-blue-50"}`}>
+                  <CalendarClock className={`w-5 h-5 ${isPast ? "text-slate-400" : "text-blue-600"}`} />
                 </div>
                 <div>
-                  <p className={`text-sm font-black capitalize ${isPast ? "text-slate-400" : "text-slate-800"}`}>{fmtDate(date)}</p>
-                  <p className="text-[10px] font-bold text-slate-400">{dayOrders.length} pedido{dayOrders.length !== 1 ? "s" : ""}</p>
+                  <p className={`text-sm font-semibold capitalize ${isPast ? "text-slate-400" : "text-slate-800"}`}>{fmtDate(date)}</p>
+                  <p className="text-[11px] text-slate-500">{dayOrders.length} pedido{dayOrders.length !== 1 ? "s" : ""}</p>
                 </div>
-                {isPast && <span className="ml-auto text-[10px] font-black uppercase tracking-widest text-slate-300 bg-slate-100 px-2.5 py-1 rounded-full">Passado</span>}
+                {isPast && <Badge className="ml-auto">Passado</Badge>}
               </div>
               <OrdersList filteredOrders={dayOrders} updateStatus={updateStatus} slug={slug} />
             </div>

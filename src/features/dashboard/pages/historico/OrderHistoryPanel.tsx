@@ -1,7 +1,5 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
 import {
-  ChevronLeft,
-  ChevronRight,
   CircleDollarSign,
   Clock,
   Download,
@@ -10,8 +8,10 @@ import {
   Package,
   Printer,
   TrendingUp,
+  X,
 } from "lucide-react";
 import {
+  Badge,
   Button,
   EmptyState,
   FilterLine,
@@ -20,9 +20,15 @@ import {
   FilterLineSearch,
   FilterLineSection,
   FilterLineSegmented,
+  FilterPopover,
   GridTable,
+  IconButton,
+  Input,
   Modal,
+  ModalFooter,
+  PageWrapper,
   PaymentBadge,
+  Select,
   SectionTitle,
   StatCard,
   StatGrid,
@@ -304,7 +310,7 @@ export function OrderHistoryPanel({
     { value: 'PICKUP', label: 'Retirada' },
   ];
   const paymentOptions = [
-    { value: 'all', label: 'Pagamento' },
+    { value: 'all', label: 'Todos' },
     { value: 'PIX', label: 'Pix' },
     { value: 'CREDIT', label: 'Crédito' },
     { value: 'DEBIT', label: 'Débito' },
@@ -312,7 +318,7 @@ export function OrderHistoryPanel({
     { value: 'VR', label: 'VR/VA' },
   ];
   const statusOptions = [
-    { value: 'all', label: 'Status' },
+    { value: 'all', label: 'Todos' },
     { value: 'CONCLUDED', label: 'Concluído' },
     { value: 'CANCELLED', label: 'Cancelado' },
   ];
@@ -321,17 +327,17 @@ export function OrderHistoryPanel({
     {
       header: 'ID',
       render: (o: Order) => (
-        <span className="text-xs font-black text-slate-800 tabular-nums">#{o.id.slice(-6).toUpperCase()}</span>
+        <span className="text-xs font-medium text-slate-800 tabular-nums">#{o.id.slice(-6).toUpperCase()}</span>
       ),
     },
     {
       header: 'Data / Hora',
       render: (o: Order) => (
         <div className="flex flex-col gap-0.5">
-          <span className="text-xs font-bold text-slate-700">
+          <span className="text-xs font-medium text-slate-700">
             {new Date(o.createdAt).toLocaleDateString('pt-BR')}
           </span>
-          <span className="text-[10px] text-slate-400 flex items-center gap-1">
+          <span className="text-[11px] text-slate-500 flex items-center gap-1">
             <Clock className="w-3 h-3" />
             {new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </span>
@@ -341,14 +347,14 @@ export function OrderHistoryPanel({
     {
       header: 'Cliente',
       render: (o: Order) => (
-        <p className="text-xs font-bold text-slate-700 truncate max-w-[130px]">{o.customerName}</p>
+        <p className="text-xs font-medium text-slate-700 truncate max-w-[130px]">{o.customerName}</p>
       ),
     },
     {
       header: 'Tipo',
       hideOnMobile: true,
       render: (o: Order) => (
-        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+        <span className="text-[11px] text-slate-500">
           {o.orderType === 'DELIVERY' ? 'Delivery' : o.orderType === 'DINE_IN' ? dineInOrderLabel(o) : 'Retirada'}
         </span>
       ),
@@ -357,18 +363,16 @@ export function OrderHistoryPanel({
       header: 'Atendente',
       hideOnMobile: true,
       render: (o: Order) => (
-        <span className="text-xs font-bold text-slate-600 truncate max-w-[110px] block">{o.operatorName || "—"}</span>
+        <span className="text-xs text-slate-600 truncate max-w-[110px] block">{o.operatorName || "—"}</span>
       ),
     },
     {
       header: 'Status',
       hideOnMobile: true,
       render: (o: Order) => (
-        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
-          o.status === 'CANCELLED' ? 'bg-red-100 text-red-700' : isOrderConcluded(o) ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-        }`}>
+        <Badge color={o.status === 'CANCELLED' ? 'danger' : isOrderConcluded(o) ? 'success' : 'warning'} pill>
           {orderHistoryStatusLabel(o)}
-        </span>
+        </Badge>
       ),
     },
     {
@@ -380,9 +384,9 @@ export function OrderHistoryPanel({
       header: 'Valor',
       render: (o: Order) => (
         <div className="flex flex-col items-end">
-          <span className="text-xs font-black text-slate-800 tabular-nums">{fmt(o.total)}</span>
+          <span className="text-xs font-medium text-slate-800 tabular-nums">{fmt(o.total)}</span>
           {!!o.discount && (
-            <span className="text-[9px] font-bold text-emerald-600 tabular-nums">
+            <span className="text-[11px] font-medium text-emerald-600 tabular-nums">
               -{o.discountType === "PERCENT" ? `${o.discount}%` : fmt(o.discount)}
             </span>
           )}
@@ -392,145 +396,136 @@ export function OrderHistoryPanel({
     {
       header: '',
       render: (o: Order) => (
-        <button
-          onClick={() => setDetailsOrder(o)}
-          className="p-2 text-slate-300 hover:text-amber-500 transition-colors inline-block"
-        >
+        <IconButton size="sm" variant="ghost" aria-label="Ver detalhes do pedido" onClick={() => setDetailsOrder(o)}>
           <Eye className="w-4 h-4" />
-        </button>
+        </IconButton>
       ),
     },
   ], [slug]);
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <SectionTitle
-          title="Histórico de Pedidos"
-          description="Relatório detalhado de vendas finalizadas"
-          icon={History}
-        />
-        <Button variant="outline" size="sm" className="hidden sm:flex gap-2" onClick={() => exportOrdersCSV(filtered)}>
-          <Download className="w-4 h-4" /> Exportar CSV
-        </Button>
-      </div>
+  const [draft, setDraft] = useState({ type: "all", payment: "all", status: "all", mode: "month" as "range" | "month", from: null as string | null, to: null as string | null, month: NOW.getMonth(), year: NOW.getFullYear() });
+  const dateIsDefault = dateMode === 'month' && selMonth === NOW.getMonth() && selYear === NOW.getFullYear();
+  const filterChips: { key: string; label: string; onRemove: () => void }[] = [];
+  if (typeFilter !== 'all') filterChips.push({ key: 'type', label: `Tipo: ${typeOptions.find(o => o.value === typeFilter)?.label ?? typeFilter}`, onRemove: () => setTypeFilter('all') });
+  if (paymentFilter !== 'all') filterChips.push({ key: 'payment', label: `Pagamento: ${paymentOptions.find(o => o.value === paymentFilter)?.label ?? paymentFilter}`, onRemove: () => setPaymentFilter('all') });
+  if (statusFilter !== 'all') filterChips.push({ key: 'status', label: `Status: ${statusOptions.find(o => o.value === statusFilter)?.label ?? statusFilter}`, onRemove: () => setStatusFilter('all') });
+  if (!dateIsDefault) {
+    const dateLabel = dateMode === 'month'
+      ? `${MONTH_NAMES[selMonth]}/${selYear}`
+      : `${dateFrom ? new Date(dateFrom + 'T12:00:00').toLocaleDateString('pt-BR') : '...'} a ${dateTo ? new Date(dateTo + 'T12:00:00').toLocaleDateString('pt-BR') : '...'}`;
+    filterChips.push({ key: 'date', label: `Período: ${dateLabel}`, onRemove: () => { setDateMode('month'); setDateFrom(null); setDateTo(null); setSelMonth(NOW.getMonth()); setSelYear(NOW.getFullYear()); } });
+  }
+  const openFilters = () => setDraft({ type: typeFilter, payment: paymentFilter, status: statusFilter, mode: dateMode, from: dateFrom, to: dateTo, month: selMonth, year: selYear });
+  const applyFilters = () => {
+    setTypeFilter(draft.type); setPaymentFilter(draft.payment); setStatusFilter(draft.status);
+    setDateMode(draft.mode); setDateFrom(draft.from); setDateTo(draft.to); setSelMonth(draft.month); setSelYear(draft.year);
+  };
+  const clearFilters = () => {
+    setTypeFilter('all'); setPaymentFilter('all'); setStatusFilter('all');
+    setDateMode('month'); setDateFrom(null); setDateTo(null); setSelMonth(NOW.getMonth()); setSelYear(NOW.getFullYear());
+    setDraft({ type: 'all', payment: 'all', status: 'all', mode: 'month', from: null, to: null, month: NOW.getMonth(), year: NOW.getFullYear() });
+  };
 
-      <StatGrid cols={3} className="mb-2">
+  return (
+    <PageWrapper>
+    <div className="space-y-4">
+      <SectionTitle
+        title="Histórico de Pedidos"
+        description="Relatório detalhado de vendas finalizadas"
+        icon={History}
+        action={
+          <Button variant="outline" size="sm" className="hidden sm:inline-flex" onClick={() => exportOrdersCSV(filtered)} iconLeft={<Download size={14} />}>
+            Exportar CSV
+          </Button>
+        }
+      />
+
+      <StatGrid cols={3}>
         <StatCard title="Vendas Filtradas" value={fmt(totalSales)} icon={CircleDollarSign} color="success" />
         <StatCard title="Total de Pedidos" value={filtered.length} icon={Package} color="info" />
-        <StatCard title="Ticket Médio" value={fmt(avgTicket)} icon={TrendingUp} color="warning" />
+        <StatCard title="Ticket Médio" value={fmt(avgTicket)} icon={TrendingUp} color="info" />
       </StatGrid>
 
-      {/* Filter bar */}
       <FilterLine>
-        {/* Linha 1: Modo de data + seletores */}
-        <FilterLineSection grow wrap>
-          {/* Segmentado Mês / Período */}
-          <FilterLineItem fullOnMobile={false}>
-            <FilterLineSegmented
-              value={dateMode}
-              onChange={v => { setDateMode(v as 'range' | 'month'); }}
-              options={[
-                { value: 'month', label: 'Por Mês' },
-                { value: 'range', label: 'Período' },
-              ]}
-              size="sm"
-            />
-          </FilterLineItem>
-
-          {dateMode === 'month' ? (
-            <>
-              {/* Seletor de Mês */}
-              <FilterLineItem fullOnMobile={false}>
-                <div className="flex items-center gap-1 rounded-xl border border-zinc-200 bg-zinc-50 px-2 h-10">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (selMonth === 0) { setSelMonth(11); setSelYear(y => y - 1); }
-                      else setSelMonth(m => m - 1);
-                    }}
-                    className="p-1 text-zinc-400 hover:text-amber-500 transition-colors"
-                  >
-                    <ChevronLeft className="w-3.5 h-3.5" />
-                  </button>
-                  <span className="text-xs font-black text-zinc-700 w-8 text-center">{MONTH_NAMES[selMonth]}</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (selMonth === 11) { setSelMonth(0); setSelYear(y => y + 1); }
-                      else setSelMonth(m => m + 1);
-                    }}
-                    className="p-1 text-zinc-400 hover:text-amber-500 transition-colors"
-                  >
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </FilterLineItem>
-
-              {/* Seletor de Ano */}
-              <FilterLineItem fullOnMobile={false}>
-                <select
-                  value={selYear}
-                  onChange={e => { setSelYear(Number(e.target.value)); }}
-                  className="h-10 rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-xs font-black text-zinc-700 outline-none focus:border-amber-400"
-                >
-                  {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
-                </select>
-              </FilterLineItem>
-            </>
-          ) : (
-            <FilterLineItem grow>
-              <FilterLineDateRange
-                from={dateFrom}
-                to={dateTo}
-                onFromChange={v => setDateFrom(v)}
-                onToChange={v => setDateTo(v)}
-              />
-            </FilterLineItem>
-          )}
-        </FilterLineSection>
-
-        {/* Linha 2: Busca + dropdowns */}
-        <FilterLineSection grow wrap>
-          <FilterLineItem grow>
+        <FilterLineSection grow wrap className="gap-2">
+          <FilterLineItem fullOnMobile={false} grow className="min-w-0 sm:max-w-[280px]">
             <FilterLineSearch
               value={searchTerm}
               onChange={v => setSearchTerm(v)}
               placeholder="Buscar por ID ou cliente..."
+              aria-label="Buscar pedidos"
+              className="h-[34px]"
             />
           </FilterLineItem>
-
-          <FilterLineItem fullOnMobile={false}>
-            <select
-              value={typeFilter}
-              onChange={e => setTypeFilter(e.target.value)}
-              className="h-10 rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-xs font-black text-zinc-600 outline-none focus:border-amber-400"
-            >
-              {typeOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </FilterLineItem>
-
-          <FilterLineItem fullOnMobile={false}>
-            <select
-              value={paymentFilter}
-              onChange={e => setPaymentFilter(e.target.value)}
-              className="h-10 rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-xs font-black text-zinc-600 outline-none focus:border-amber-400"
-            >
-              {paymentOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </FilterLineItem>
-
-          <FilterLineItem fullOnMobile={false}>
-            <select
-              value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value)}
-              className="h-10 rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-xs font-black text-zinc-600 outline-none focus:border-amber-400"
-            >
-              {statusOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </FilterLineItem>
+          <FilterPopover activeCount={filterChips.length} onOpen={openFilters} onApply={applyFilters} onClear={clearFilters}>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-600">Período</label>
+              <FilterLineSegmented
+                value={draft.mode}
+                onChange={v => setDraft(d => ({ ...d, mode: v as 'range' | 'month' }))}
+                options={[
+                  { value: 'month', label: 'Por Mês' },
+                  { value: 'range', label: 'Período' },
+                ]}
+                size="sm"
+              />
+              {draft.mode === 'month' ? (
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <Select
+                    aria-label="Mês"
+                    value={String(draft.month)}
+                    onChange={e => setDraft(d => ({ ...d, month: Number(e.target.value) }))}
+                    options={MONTH_NAMES.map((m, i) => ({ value: String(i), label: m }))}
+                  />
+                  <Select
+                    aria-label="Ano"
+                    value={String(draft.year)}
+                    onChange={e => setDraft(d => ({ ...d, year: Number(e.target.value) }))}
+                    options={yearOptions.map(y => ({ value: String(y), label: String(y) }))}
+                  />
+                </div>
+              ) : (
+                <div className="pt-1">
+                  <FilterLineDateRange
+                    from={draft.from}
+                    to={draft.to}
+                    onFromChange={v => setDraft(d => ({ ...d, from: v }))}
+                    onToChange={v => setDraft(d => ({ ...d, to: v }))}
+                  />
+                </div>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-600">Tipo</label>
+              <Select aria-label="Filtrar por tipo" value={draft.type} onChange={e => setDraft(d => ({ ...d, type: e.target.value }))} options={typeOptions} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-600">Pagamento</label>
+              <Select aria-label="Filtrar por pagamento" value={draft.payment} onChange={e => setDraft(d => ({ ...d, payment: e.target.value }))} options={paymentOptions} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-600">Status</label>
+              <Select aria-label="Filtrar por status" value={draft.status} onChange={e => setDraft(d => ({ ...d, status: e.target.value }))} options={statusOptions} />
+            </div>
+          </FilterPopover>
         </FilterLineSection>
       </FilterLine>
+
+      {filterChips.length > 0 && (
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          {filterChips.map((chip) => (
+            <span key={chip.key} className="inline-flex max-w-full items-center gap-1 rounded-lg border border-blue-100 bg-blue-50 py-0.5 pl-2 pr-1 text-[11px] font-medium text-blue-700">
+              <span className="truncate">{chip.label}</span>
+              <button type="button" onClick={chip.onRemove} aria-label={`Remover filtro ${chip.label}`} className="rounded p-0.5 hover:bg-blue-100">
+                <X size={11} />
+              </button>
+            </span>
+          ))}
+          <button type="button" onClick={clearFilters} className="px-1 text-[11px] font-medium text-slate-500 hover:text-slate-800">
+            Limpar filtros
+          </button>
+        </div>
+      )}
 
       <GridTable
         data={paginatedData}
@@ -564,83 +559,74 @@ export function OrderHistoryPanel({
         {detailsOrder && (
           <div className="space-y-4">
             <div className="flex items-center justify-between text-xs">
-              <span className="font-bold text-slate-500">
+              <span className="text-slate-500">
                 {new Date(detailsOrder.createdAt).toLocaleString('pt-BR')}
               </span>
-              <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
-                detailsOrder.status === 'CANCELLED' ? 'bg-red-100 text-red-700' : isOrderConcluded(detailsOrder) ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-              }`}>
+              <Badge color={detailsOrder.status === 'CANCELLED' ? 'danger' : isOrderConcluded(detailsOrder) ? 'success' : 'warning'} pill>
                 {orderHistoryStatusLabel(detailsOrder)}
-              </span>
+              </Badge>
             </div>
 
             <div className="space-y-1">
-              <p className="text-sm font-black text-slate-800">{detailsOrder.customerName}</p>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              <p className="text-sm font-medium text-slate-800">{detailsOrder.customerName}</p>
+              <p className="text-[11px] text-slate-500">
                 {detailsOrder.orderType === 'DELIVERY' ? 'Delivery' : detailsOrder.orderType === 'DINE_IN' ? dineInOrderLabel(detailsOrder) : 'Retirada'}
               </p>
               {detailsOrder.operatorName && (
-                <p className="text-[10px] font-bold text-slate-400">Atendente: <span className="text-slate-600">{detailsOrder.operatorName}</span></p>
+                <p className="text-[11px] text-slate-500">Atendente: <span className="text-slate-600">{detailsOrder.operatorName}</span></p>
               )}
             </div>
 
-            <div className="border border-slate-100 rounded-2xl divide-y divide-slate-100">
+            <div className="border border-slate-100 rounded-lg divide-y divide-slate-100">
               {detailsOrder.items.map((item) => (
                 <div key={item.id} className="flex items-center justify-between px-4 py-2.5 text-xs">
                   <div className="min-w-0">
-                    <p className="font-bold text-slate-700 truncate">{item.quantity}x {item.product?.name || "Produto"}</p>
+                    <p className="font-medium text-slate-700 truncate">{item.quantity}x {item.product?.name || "Produto"}</p>
                     {extrasLabelsFromOrderItem(item).map((extra, idx) => (
-                      <p key={idx} className="text-[10px] text-slate-400 truncate">+ {extra}</p>
+                      <p key={idx} className="text-[11px] text-slate-500 truncate">+ {extra}</p>
                     ))}
-                    {item.notes && <p className="text-[10px] text-slate-400 italic truncate">{item.notes}</p>}
+                    {item.notes && <p className="text-[11px] text-slate-500 italic truncate">{item.notes}</p>}
                   </div>
-                  <span className="font-black text-slate-800 shrink-0 ml-2">{fmt(item.price * item.quantity)}</span>
+                  <span className="font-medium text-slate-800 shrink-0 ml-2">{fmt(item.price * item.quantity)}</span>
                 </div>
               ))}
             </div>
 
             {!!detailsOrder.discount && (
               <div className="flex items-center justify-between px-1">
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Desconto</span>
-                <span className="text-xs font-bold text-emerald-600">
+                <span className="text-[11px] text-slate-500">Desconto</span>
+                <span className="text-xs font-semibold text-emerald-600">
                   {detailsOrder.discountType === "PERCENT" ? `${detailsOrder.discount}%` : fmt(detailsOrder.discount)}
                 </span>
               </div>
             )}
             <div className="flex items-center justify-between px-1">
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Pagamento</span>
+                <span className="text-[11px] text-slate-500">Pagamento</span>
                 <PaymentBadge method={detailsOrder.paymentMethod.toLowerCase() as any} size="sm" />
               </div>
-              <span className="text-base font-black text-slate-800">{fmt(detailsOrder.total)}</span>
+              <span className="text-base font-semibold text-slate-800">{fmt(detailsOrder.total)}</span>
             </div>
 
             {parsePaymentSplits(detailsOrder).length > 0 && (
-              <div className="border border-slate-100 rounded-2xl divide-y divide-slate-100">
+              <div className="border border-slate-100 rounded-lg divide-y divide-slate-100">
                 {parsePaymentSplits(detailsOrder).map((split, idx) => (
                   <div key={idx} className="flex items-center justify-between px-4 py-2 text-xs">
                     <PaymentBadge method={split.method.toLowerCase() as any} size="sm" />
-                    <span className="font-black text-slate-700">{fmt(split.amount)}</span>
+                    <span className="font-medium text-slate-700">{fmt(split.amount)}</span>
                   </div>
                 ))}
               </div>
             )}
 
             <div className={`grid gap-2.5 ${isOwner && detailsOrder.status !== 'CANCELLED' ? 'grid-cols-2' : 'grid-cols-1'}`}>
-              <button
-                onClick={() => void handleReprintOrder(detailsOrder)}
-                className="w-full py-3 rounded-2xl border border-slate-200 text-slate-600 text-xs font-black uppercase tracking-widest hover:bg-slate-50 transition-colors flex items-center justify-center gap-1.5"
-              >
-                <Printer className="w-3.5 h-3.5" />
+              <Button variant="outline" fullWidth onClick={() => void handleReprintOrder(detailsOrder)} iconLeft={<Printer size={14} />}>
                 Reimprimir
-              </button>
+              </Button>
               {isOwner && detailsOrder.status !== 'CANCELLED' && (
-                <button
-                  onClick={() => { setCancelOrder(detailsOrder); setCancelPassword(""); }}
-                  className="w-full py-3 rounded-2xl border border-red-200 text-red-600 text-xs font-black uppercase tracking-widest hover:bg-red-50 transition-colors"
-                >
+                <Button variant="danger" fullWidth onClick={() => { setCancelOrder(detailsOrder); setCancelPassword(""); }}>
                   Cancelar Pedido
-                </button>
+                </Button>
               )}
             </div>
           </div>
@@ -653,42 +639,31 @@ export function OrderHistoryPanel({
         onClose={() => { setCancelOrder(null); setCancelPassword(""); }}
         title="Cancelar Pedido"
         size="sm"
+        footer={
+          <ModalFooter>
+            <Button variant="ghost" onClick={() => { setCancelOrder(null); setCancelPassword(""); }}>Voltar</Button>
+            <Button variant="danger" loading={isCancelling} disabled={!cancelPassword} onClick={handleCancelOrder}>Confirmar Cancelamento</Button>
+          </ModalFooter>
+        }
       >
         {cancelOrder && (
           <div className="space-y-4">
             <p className="text-sm text-slate-600">
               Confirme sua senha para cancelar o pedido <strong>#{cancelOrder.id.slice(-6).toUpperCase()}</strong> ({fmt(cancelOrder.total)}). O pedido não é apagado, apenas marcado como cancelado e sai dos relatórios.
             </p>
-            <input
+            <Input
               type="password"
               autoFocus
               value={cancelPassword}
               onChange={(e) => setCancelPassword(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") handleCancelOrder(); }}
               placeholder="Sua senha"
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 focus:border-red-400 outline-none"
             />
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => { setCancelOrder(null); setCancelPassword(""); }}
-                className="bg-slate-100 hover:bg-slate-200 text-slate-500 font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all"
-              >
-                Voltar
-              </button>
-              <button
-                disabled={!cancelPassword || isCancelling}
-                onClick={handleCancelOrder}
-                className="bg-red-500 hover:bg-red-600 text-white font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all disabled:opacity-50"
-              >
-                {isCancelling ? (
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto" />
-                ) : "Confirmar Cancelamento"}
-              </button>
-            </div>
           </div>
         )}
       </Modal>
     </div>
+    </PageWrapper>
   );
 }
 

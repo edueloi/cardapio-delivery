@@ -21,6 +21,7 @@ import {
   Zap,
 } from "lucide-react";
 import {
+  Alert,
   Badge,
   Button,
   Combobox,
@@ -28,17 +29,24 @@ import {
   ContentCard,
   Divider,
   EmptyState,
+  FilterLine,
+  FilterLineItem,
+  FilterLineSearch,
+  FilterLineSection,
+  FilterLineSegmented,
   FormRow,
   GridTable,
   IconButton,
   Input,
   Modal,
   ModalFooter,
+  PageWrapper,
   SectionTitle,
   Select,
   StatCard,
   StatGrid,
   Switch,
+  Tabs,
   Textarea,
   useToast,
 } from "../../../../components";
@@ -86,6 +94,28 @@ const PRODUCTION_UNIT_OPTIONS = [
 
 type RecipeFilter = "all" | "active" | "critical" | "inactive";
 type ProductionTab = "recipes" | "history";
+type EditorTab = "base" | "ingredients" | "overheads" | "instructions";
+
+const PRODUCTION_FILTER_OPTIONS = [
+  { value: "all", label: "Todas" },
+  { value: "active", label: "Ativas" },
+  { value: "critical", label: "Críticas" },
+  { value: "inactive", label: "Inativas" },
+] as const;
+
+const EDITOR_TABS = [
+  { id: "base", label: "Identificação", icon: ClipboardList },
+  { id: "ingredients", label: "Insumos", icon: Package },
+  { id: "overheads", label: "Custos indiretos", icon: CircleDollarSign },
+  { id: "instructions", label: "Modo de preparo", icon: ChefHat },
+] as const;
+
+function productionTabs(recipeCount: number, runCount: number) {
+  return [
+    { id: "recipes", label: "Fichas Técnicas", icon: ChefHat, badge: recipeCount },
+    { id: "history", label: "Histórico", icon: History, badge: runCount },
+  ] as const;
+}
 
 interface RecipeSummary {
   recipe: ProductionRecipe;
@@ -237,136 +267,82 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
   if (!tenant) return null;
 
   return (
-    <div className="min-w-0 space-y-6">
-      {/* Hero */}
-      <div className="overflow-hidden rounded-2xl border border-[#0D1B3E]/10 bg-[radial-gradient(circle_at_top_left,_rgba(201,162,39,0.24),_transparent_42%),linear-gradient(135deg,#0D1B3E_0%,#142751_55%,#1e3570_100%)] p-4 text-white shadow-[0_20px_50px_-30px_rgba(13,27,62,0.7)] sm:p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0 space-y-1.5">
-            <Badge color="primary" size="sm" className="bg-white/12 text-white border-white/10">
-              Engenharia de produção integrada
-            </Badge>
-            <h2 className="break-words text-lg font-black tracking-tight sm:text-xl">Central de Produção</h2>
-            <p className="max-w-xl text-xs font-medium leading-relaxed text-slate-300 sm:text-sm">
-              Monte fichas técnicas, converta unidades automaticamente e registre o custo completo de cada produção.
-            </p>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row shrink-0">
+    <PageWrapper>
+    <div className="min-w-0 space-y-4">
+      <SectionTitle
+        title="Central de Produção"
+        description="Fichas técnicas, conversão de unidades, consumo projetado, baixa automática e histórico de custos"
+        icon={Factory}
+        action={
+          <>
             <Button
               variant="outline"
-              size="md"
-              className="border-white/15 bg-white/8 text-white hover:bg-white/12"
-              iconLeft={<Plus className="h-4 w-4" />}
+              size="sm"
+              iconLeft={<Plus size={14} />}
               onClick={() => { setEditingRecipe(null); setShowRecipeModal(true); }}
             >
               Nova Receita
             </Button>
             <Button
               variant="primary"
-              size="md"
-              iconLeft={<Play className="h-4 w-4" />}
+              size="sm"
+              iconLeft={<Play size={14} />}
               onClick={() => selectedRecipe && setRecipeToProduce(selectedRecipe)}
               disabled={!selectedRecipe}
             >
               Registrar Produção
             </Button>
-          </div>
-        </div>
-      </div>
-
-      <SectionTitle
-        title="Planejamento e Custos"
-        description="Receitas, consumo projetado, baixa automática e histórico operacional"
-        icon={Factory}
+          </>
+        }
       />
 
       <StatGrid cols={4}>
         <StatCard title="Receitas Cadastradas" value={recipes.length} icon={ChefHat} color="info" />
         <StatCard title="Receitas Críticas" value={criticalRecipes} icon={AlertTriangle} color={criticalRecipes > 0 ? "warning" : "success"} />
         <StatCard title="Receitas Ativas" value={activeRecipes} icon={Package} color="success" />
-        <StatCard title="Custo Produzido" value={formatCurrency(monthlyCost)} icon={CircleDollarSign} color="warning" />
+        <StatCard title="Custo Produzido" value={formatCurrency(monthlyCost)} icon={CircleDollarSign} color="info" />
       </StatGrid>
 
       {error && (
-        <ContentCard className="border border-red-200 bg-red-50/70">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm font-black text-red-700">Falha ao carregar a central de produção</p>
-              <p className="text-xs text-red-600/80">{error}</p>
-            </div>
-            <Button variant="danger" size="sm" onClick={() => void fetchData()}>
-              Tentar Novamente
-            </Button>
-          </div>
-        </ContentCard>
+        <Alert
+          variant="error"
+          title="Falha ao carregar a central de produção"
+          action={<Button variant="danger" size="sm" onClick={() => void fetchData()}>Tentar Novamente</Button>}
+        >
+          {error}
+        </Alert>
       )}
 
-      {/* Abas */}
-      <div className="grid grid-cols-2 gap-1 rounded-2xl border border-slate-200 bg-slate-100/70 p-1">
-        <button
-          onClick={() => setActiveTab("recipes")}
-          className={`flex min-w-0 items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-xs font-black transition-all sm:gap-2 sm:px-4 sm:text-sm ${
-            activeTab === "recipes"
-              ? "bg-white text-slate-900 shadow-sm"
-              : "text-slate-500 hover:text-slate-700"
-          }`}
-        >
-          <ChefHat className="h-4 w-4" />
-          <span className="truncate">Fichas Técnicas</span>
-          <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${activeTab === "recipes" ? "bg-slate-100 text-slate-600" : "bg-white/60 text-slate-400"}`}>
-            {recipes.length}
-          </span>
-        </button>
-        <button
-          onClick={() => setActiveTab("history")}
-          className={`flex min-w-0 items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-xs font-black transition-all sm:gap-2 sm:px-4 sm:text-sm ${
-            activeTab === "history"
-              ? "bg-white text-slate-900 shadow-sm"
-              : "text-slate-500 hover:text-slate-700"
-          }`}
-        >
-          <History className="h-4 w-4" />
-          <span className="truncate">Histórico</span>
-          <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${activeTab === "history" ? "bg-slate-100 text-slate-600" : "bg-white/60 text-slate-400"}`}>
-            {runs.length}
-          </span>
-        </button>
-      </div>
-
+      <Tabs items={productionTabs(recipes.length, runs.length)} value={activeTab} onChange={(v) => setActiveTab(v as ProductionTab)} label="Seções da produção">
       {/* Aba Fichas Técnicas */}
       {activeTab === "recipes" && (
         <>
-          <ContentCard padding="md" className="min-w-0 space-y-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <Input
+          <FilterLine>
+            <FilterLineSection grow wrap className="gap-2">
+              <FilterLineItem fullOnMobile={false} grow className="min-w-0 sm:max-w-[280px]">
+                <FilterLineSearch
+                  value={searchTerm}
+                  onChange={setSearchTerm}
+                  placeholder="Buscar receita ou produto..."
+                  aria-label="Buscar receitas"
+                  className="h-[34px]"
+                />
+              </FilterLineItem>
+              <FilterLineSegmented
                 size="sm"
-                placeholder="Buscar receita ou produto..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full sm:w-[260px]"
+                value={filter}
+                onChange={(v) => setFilter(v as RecipeFilter)}
+                options={PRODUCTION_FILTER_OPTIONS.map((option) => ({
+                  value: option.value,
+                  label: option.value === "all" ? `Todas (${recipes.length})` : option.label,
+                }))}
               />
-              <div className="grid w-full grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 sm:flex sm:w-auto">
-                {([
-                  { value: "all", label: `Todas (${recipes.length})` },
-                  { value: "active", label: "Ativas" },
-                  { value: "critical", label: "Críticas" },
-                  { value: "inactive", label: "Inativas" },
-                ] as const).map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => setFilter(option.value)}
-                    className={`min-w-0 rounded-lg px-2 py-1.5 text-[10px] font-bold transition-all sm:px-2.5 ${
-                      filter === option.value ? "bg-white text-amber-600 shadow-sm" : "text-slate-500 hover:text-slate-800"
-                    }`}
-                  >
-                    <span className="block truncate">{option.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+            </FilterLineSection>
+          </FilterLine>
 
+          <ContentCard padding="md" className="min-w-0 space-y-4">
             {loading ? (
-              <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50/70 px-6 py-16 text-center text-xs font-black uppercase tracking-[0.24em] text-slate-400">
+              <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/70 px-6 py-16 text-center text-xs text-slate-500">
                 Carregando receitas...
               </div>
             ) : filteredRecipes.length === 0 ? (
@@ -375,30 +351,32 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
                 title="Nenhuma receita encontrada"
                 description="Cadastre sua primeira ficha técnica para controlar ingredientes, custo e produção."
                 action={(
-                  <Button variant="primary" size="sm" iconLeft={<Plus className="h-4 w-4" />} onClick={() => { setEditingRecipe(null); setShowRecipeModal(true); }}>
+                  <Button variant="primary" size="sm" iconLeft={<Plus size={14} />} onClick={() => { setEditingRecipe(null); setShowRecipeModal(true); }}>
                     Criar Receita
                   </Button>
                 )}
               />
             ) : (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                 {filteredRecipes.map(({ recipe, simulation }) => (
-                  <button
+                  <div
                     key={recipe.id}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     onClick={() => setSelectedRecipe(recipe)}
-                    className={`flex min-w-0 flex-col gap-3 rounded-2xl border p-4 text-left transition-all hover:shadow-sm ${
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedRecipe(recipe); } }}
+                    className={`flex min-w-0 cursor-pointer flex-col gap-3 rounded-lg border p-3 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 ${
                       selectedRecipe?.id === recipe.id
-                        ? "border-[#C9A227] shadow-sm ring-1 ring-[#C9A227]/20"
+                        ? "border-blue-500 ring-1 ring-blue-200"
                         : !recipe.active
                           ? "border-slate-200 bg-slate-50/50"
                           : simulation.missingItems > 0
-                            ? "border-amber-200 bg-amber-50/30"
+                            ? "border-amber-200 bg-amber-50"
                             : "border-slate-200 bg-white hover:border-slate-300"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#fdf8e8] text-[#A8841C]">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
                         <ChefHat className="h-[18px] w-[18px]" />
                       </div>
                       {!recipe.active ? (
@@ -410,30 +388,31 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
                       )}
                     </div>
                     <div className="min-w-0">
-                      <p className="truncate text-[13.5px] font-black text-slate-900">{recipe.name}</p>
-                      <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-400">
-                        {recipe.product?.name || "Sem produto vinculado"} · Base {formatQuantity(recipe.outputQuantity, recipe.outputUnit)}
+                      <p className="line-clamp-2 break-words text-[13px] font-medium leading-snug text-slate-900">{recipe.name}</p>
+                      <p className="mt-1 break-words text-[11px] leading-snug text-slate-500">
+                        {recipe.product?.name || "Sem produto vinculado"}
                       </p>
+                      <p className="mt-0.5 text-[11px] text-slate-500">Base {formatQuantity(recipe.outputQuantity, recipe.outputUnit)}</p>
                     </div>
-                    <div className="flex items-center justify-between gap-2 text-[11.5px] text-slate-500">
-                      <span className="truncate font-black text-slate-900">{formatCurrency(simulation.totalCost)}</span>
+                    <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
+                      <span className="font-semibold tabular-nums text-slate-900">{formatCurrency(simulation.totalCost)}</span>
                       <span className="shrink-0 whitespace-nowrap">{recipe.ingredients.length} insumo(s)</span>
                     </div>
                     <div className="flex items-center gap-1.5 border-t border-slate-100 pt-3" onClick={(e) => e.stopPropagation()}>
-                      <IconButton size="sm" variant="ghost" title="Registrar produção" onClick={() => setRecipeToProduce(recipe)}>
+                      <IconButton size="sm" variant="ghost" aria-label="Registrar produção" title="Registrar produção" onClick={() => setRecipeToProduce(recipe)}>
                         <Play className="h-4 w-4" />
                       </IconButton>
-                      <IconButton size="sm" variant="ghost" title="Editar receita" onClick={() => { setEditingRecipe(recipe); setShowRecipeModal(true); }}>
+                      <IconButton size="sm" variant="ghost" aria-label="Editar receita" title="Editar receita" onClick={() => { setEditingRecipe(recipe); setShowRecipeModal(true); }}>
                         <Pencil className="h-4 w-4" />
                       </IconButton>
-                      <IconButton size="sm" variant="ghost" title="Duplicar receita" onClick={() => void handleDuplicateRecipe(tenant.slug, recipe, fetchData, toast.error)}>
+                      <IconButton size="sm" variant="ghost" aria-label="Duplicar receita" title="Duplicar receita" onClick={() => void handleDuplicateRecipe(tenant.slug, recipe, fetchData, toast.error)}>
                         <Copy className="h-4 w-4" />
                       </IconButton>
-                      <IconButton size="sm" variant="ghost" className="ml-auto text-red-500 hover:text-red-700" title="Excluir receita" onClick={() => setRecipeToDelete(recipe)}>
+                      <IconButton size="sm" variant="ghost" aria-label="Excluir receita" className="ml-auto text-red-600 hover:text-red-700" title="Excluir receita" onClick={() => setRecipeToDelete(recipe)}>
                         <Trash2 className="h-4 w-4" />
                       </IconButton>
                     </div>
-                  </button>
+                  </div>
                 ))}
               </div>
             )}
@@ -443,11 +422,11 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
           {selectedRecipe && previewSimulation && (
             <div className="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true">
               <div className="absolute inset-0 bg-slate-900/40" onClick={() => setSelectedRecipe(null)} />
-              <div className="relative flex h-full w-full max-w-md flex-col gap-4 overflow-y-auto bg-white p-5 shadow-2xl">
+              <div className="relative flex h-full w-full max-w-md flex-col gap-4 overflow-y-auto bg-white p-5 shadow-lg">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 space-y-1.5">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="min-w-0 break-words text-base font-black tracking-tight text-slate-900">{selectedRecipe.name}</p>
+                      <p className="min-w-0 break-words text-base font-semibold text-slate-900">{selectedRecipe.name}</p>
                       <Badge color={selectedRecipe.active ? "success" : "default"}>
                         {selectedRecipe.active ? "Ativa" : "Inativa"}
                       </Badge>
@@ -469,13 +448,13 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
                       )}
                     </div>
                   </div>
-                  <IconButton size="sm" variant="ghost" title="Fechar" onClick={() => setSelectedRecipe(null)} className="shrink-0">
+                  <IconButton size="sm" variant="ghost" aria-label="Fechar" title="Fechar" onClick={() => setSelectedRecipe(null)} className="shrink-0">
                     <X className="h-4 w-4" />
                   </IconButton>
                 </div>
 
                 <div>
-                  <p className="mb-1.5 text-[11px] font-bold text-slate-500">Quantidade a produzir</p>
+                  <p className="mb-1.5 text-[11px] font-semibold text-slate-500">Quantidade a produzir</p>
                   <div className="flex items-center gap-2">
                     <Input
                       type="number"
@@ -507,17 +486,17 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
                 </div>
 
                 {selectedRecipe.product?.price ? (
-                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
+                  <div className="rounded-lg border border-emerald-100 bg-emerald-50/70 p-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
-                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600">Margem estimada</p>
+                        <p className="text-[11px] font-semibold text-emerald-600">Margem estimada</p>
                         <p className="mt-1 text-xs font-semibold text-emerald-800">Preço do produto: {formatCurrency(selectedRecipe.product.price)}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-xl font-black text-emerald-700">
+                        <p className="text-base font-semibold text-emerald-700">
                           {formatCurrency(selectedRecipe.product.price - previewSimulation.costPerOutput)}
                         </p>
-                        <p className="text-[10px] font-semibold text-emerald-600">por {selectedRecipe.outputUnit}</p>
+                        <p className="text-[11px] font-semibold text-emerald-600">por {selectedRecipe.outputUnit}</p>
                       </div>
                     </div>
                   </div>
@@ -527,25 +506,25 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
 
                 <div className="space-y-3">
                   <div>
-                    <p className="text-sm font-black text-slate-900">Consumo projetado</p>
+                    <p className="text-sm font-semibold text-slate-900">Consumo projetado</p>
                     <p className="text-[11px] text-slate-500">Conversão automática para a unidade do estoque.</p>
                   </div>
                   {previewSimulation.ingredients.map((ingredient) => (
                     <div
                       key={ingredient.id}
-                      className={`rounded-2xl border p-4 ${ingredient.available ? "border-emerald-100 bg-emerald-50/40" : "border-amber-200 bg-amber-50/70"}`}
+                      className={`rounded-lg border p-4 ${ingredient.available ? "border-emerald-100 bg-emerald-50/40" : "border-amber-200 bg-amber-50/70"}`}
                     >
                       <div className="flex flex-col gap-3">
                         <div className="min-w-0 space-y-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <p className="break-words text-sm font-black text-slate-900">{ingredient.itemName}</p>
+                            <p className="break-words text-sm font-semibold text-slate-900">{ingredient.itemName}</p>
                             <Badge color={ingredient.available ? "success" : "warning"}>
                               {ingredient.available ? "Disponível" : "Ajuste estoque"}
                             </Badge>
                           </div>
                           <p className="text-[11px] font-semibold text-slate-500">
                             Receita: {formatQuantity(ingredient.requestedQuantity, ingredient.unit)}
-                            {ingredient.convertedQuantity !== null ? ` • Estoque: ${formatQuantity(ingredient.convertedQuantity, ingredient.inventoryUnit)}` : ""}
+                            {ingredient.convertedQuantity !== null ? `• Estoque: ${formatQuantity(ingredient.convertedQuantity, ingredient.inventoryUnit)}` : ""}
                           </p>
                           {ingredient.message && <p className="text-[11px] font-semibold text-amber-700">{ingredient.message}</p>}
                         </div>
@@ -564,11 +543,11 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
                   <>
                     <Divider />
                     <div className="space-y-3">
-                      <p className="text-sm font-black text-slate-900">Custos indiretos</p>
+                      <p className="text-sm font-semibold text-slate-900">Custos indiretos</p>
                       {previewSimulation.overheads.map((overhead) => {
                         const accent = getOverheadAccent(overhead.type);
                         return (
-                          <div key={overhead.id} className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+                          <div key={overhead.id} className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
                             <div className="space-y-1">
                               <div className="flex flex-wrap items-center gap-2">
                                 <Badge color={accent.color} icon={accent.icon}>{overhead.label}</Badge>
@@ -579,7 +558,7 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
                               {overhead.notes && <p className="text-[11px] text-slate-500">{overhead.notes}</p>}
                             </div>
                             <div className="text-right">
-                              <p className="text-sm font-black text-slate-900">{formatCurrency(overhead.totalCost)}</p>
+                              <p className="text-sm font-semibold text-slate-900">{formatCurrency(overhead.totalCost)}</p>
                               <p className="text-[11px] text-slate-500">Base {formatCurrency(overhead.cost)}</p>
                             </div>
                           </div>
@@ -592,10 +571,10 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
                 {previewSimulation.outputSnapshot && (
                   <>
                     <Divider />
-                    <div className="rounded-2xl border border-[#0D1B3E]/10 bg-[#0D1B3E]/[0.03] p-4">
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div>
-                          <p className="text-sm font-black text-slate-900">Entrada do produto final</p>
+                          <p className="text-sm font-semibold text-slate-900">Entrada do produto final</p>
                           <p className="text-[11px] text-slate-500">Ao concluir, o item vinculado recebe entrada automática.</p>
                         </div>
                         <Badge color={previewSimulation.outputSnapshot.canRestock ? "success" : "warning"}>
@@ -621,8 +600,8 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
                 {selectedRecipe.instructions && (
                   <>
                     <Divider />
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                      <p className="text-sm font-black text-slate-900">Modo de preparo</p>
+                    <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-4">
+                      <p className="text-sm font-semibold text-slate-900">Modo de preparo</p>
                       <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-slate-600">
                         {selectedRecipe.instructions}
                       </p>
@@ -646,11 +625,10 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
 
       {/* Aba Histórico */}
       {activeTab === "history" && (
-        <ContentCard padding="lg" className="space-y-5">
+        <ContentCard padding="md" className="space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className="text-[11px] font-black uppercase tracking-[0.25em] text-slate-400">Histórico</p>
-              <h3 className="mt-1 text-xl font-black tracking-tight text-slate-900">Produções registradas</h3>
+              <h3 className="text-sm font-medium text-slate-900">Produções registradas</h3>
             </div>
             <p className="text-xs text-slate-500">
               Cada registro mantém os custos, consumo e movimentação do momento em que foi produzido.
@@ -658,7 +636,7 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
           </div>
 
           {loading ? (
-            <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50/70 px-6 py-16 text-center text-xs font-black uppercase tracking-[0.24em] text-slate-400">
+            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/70 px-6 py-16 text-center text-xs text-slate-500">
               Carregando histórico...
             </div>
           ) : runs.length === 0 ? (
@@ -675,7 +653,7 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
               renderMobileItem={(run) => (
                 <div className="space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-black text-slate-900">{run.recipeName}</p>
+                    <p className="text-sm font-semibold text-slate-900">{run.recipeName}</p>
                     <Badge color="info">{run.batchCode}</Badge>
                   </div>
                   <p className="text-[11px] font-semibold text-slate-500">
@@ -700,7 +678,7 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
                   header: "Lote",
                   render: (run) => (
                     <div className="space-y-1">
-                      <p className="text-sm font-black text-slate-900">{run.batchCode}</p>
+                      <p className="text-sm font-semibold text-slate-900">{run.batchCode}</p>
                       <p className="text-[11px] font-semibold text-slate-500">{run.recipeName}</p>
                     </div>
                   ),
@@ -708,14 +686,14 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
                 {
                   header: "Produzido",
                   render: (run) => (
-                    <span className="text-xs font-black text-slate-900">{formatQuantity(run.quantityProduced, run.unit)}</span>
+                    <span className="text-xs font-medium text-slate-900">{formatQuantity(run.quantityProduced, run.unit)}</span>
                   ),
                 },
                 {
                   header: "Custos",
                   render: (run) => (
                     <div className="space-y-1">
-                      <p className="text-xs font-black text-slate-900">{formatCurrency(run.totalCost)}</p>
+                      <p className="text-xs font-semibold text-slate-900">{formatCurrency(run.totalCost)}</p>
                       <p className="text-[11px] text-slate-500">{formatCurrency(run.costPerOutput)} por {run.unit}</p>
                     </div>
                   ),
@@ -723,13 +701,13 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
                 {
                   header: "Responsável",
                   render: (run) => (
-                    <span className="text-xs font-semibold text-slate-600">{run.createdByName || "Equipe"}</span>
+                    <span className="text-xs text-slate-600">{run.createdByName || "Equipe"}</span>
                   ),
                 },
                 {
                   header: "Data",
                   render: (run) => (
-                    <span className="text-xs font-semibold text-slate-600">{formatDateTime(run.createdAt)}</span>
+                    <span className="text-xs text-slate-600">{formatDateTime(run.createdAt)}</span>
                   ),
                 },
                 {
@@ -747,6 +725,7 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
           )}
         </ContentCard>
       )}
+      </Tabs>
 
       {/* Modais */}
       {showRecipeModal && (
@@ -798,26 +777,27 @@ export default function ProductionPanel({ tenant }: { tenant: Tenant | null }) {
         onClose={() => setRecipeToDelete(null)}
       />
     </div>
+    </PageWrapper>
   );
 }
 
 function SummaryTile({ label, value, icon }: { label: string; value: string; icon: ReactNode }) {
   return (
-    <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+    <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 p-4">
       <div className="flex items-center justify-between gap-3">
-        <p className="min-w-0 break-words text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">{label}</p>
-        <div className="rounded-xl bg-white p-2 text-[#0D1B3E] shadow-sm">{icon}</div>
+        <p className="min-w-0 break-words text-[11px] text-slate-500">{label}</p>
+        <div className="rounded-lg bg-white p-2 text-blue-600 border border-slate-200">{icon}</div>
       </div>
-      <p className="mt-3 break-words text-lg font-black tracking-tight text-slate-900">{value}</p>
+      <p className="mt-3 break-words text-base font-semibold text-slate-900">{value}</p>
     </div>
   );
 }
 
 function MetricPill({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3">
-      <p className="break-words text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">{label}</p>
-      <p className="mt-1 break-words text-sm font-black text-slate-900">{value}</p>
+    <div className="min-w-0 rounded-lg border border-slate-200 bg-white p-3">
+      <p className="break-words text-[11px] text-slate-500">{label}</p>
+      <p className="mt-1 break-words text-sm font-semibold text-slate-900">{value}</p>
     </div>
   );
 }
@@ -835,7 +815,7 @@ function UnitCombobox({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="ds-label">{label}</label>
+      <label className="text-xs font-medium text-slate-600">{label}</label>
       <Combobox
         options={PRODUCTION_UNIT_OPTIONS}
         value={value}
@@ -904,6 +884,7 @@ function RecipeEditorModal({
   );
   const [overheads, setOverheads] = useState<ProductionRecipeOverhead[]>(recipe?.overheads || []);
   const [saving, setSaving] = useState(false);
+  const [editorTab, setEditorTab] = useState<EditorTab>("base");
 
   const inventoryMap = new Map(inventoryItems.map((item) => [item.id, item]));
 
@@ -923,6 +904,11 @@ function RecipeEditorModal({
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    if (!name.trim() || !(Number(outputQuantity) > 0)) {
+      setEditorTab("base");
+      toast.error("Informe o nome da receita e um rendimento base válido.");
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
@@ -973,14 +959,16 @@ function RecipeEditorModal({
       )}
     >
       <form id="production-recipe-form" onSubmit={handleSubmit} className="space-y-6">
-        <div className="rounded-3xl border border-slate-200 bg-slate-50/70 p-4">
+        <Tabs items={EDITOR_TABS} value={editorTab} onChange={(v) => setEditorTab(v as EditorTab)} label="Seções da ficha técnica">
+        {editorTab === "base" && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-black text-slate-900">Identificação da receita</p>
+              <p className="text-sm font-semibold text-slate-900">Identificação da receita</p>
               <p className="text-[11px] text-slate-500">Dê nome, descreva o rendimento e vincule ao produto final do cardápio.</p>
             </div>
-            <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2">
-              <span className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">Ativa</span>
+            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+              <span className="text-[11px] font-medium text-slate-500">Ativa</span>
               <Switch checked={active} onCheckedChange={setActive} size="sm" />
             </div>
           </div>
@@ -999,11 +987,13 @@ function RecipeEditorModal({
             </FormRow>
           </div>
         </div>
+        )}
 
-        <div className="rounded-3xl border border-slate-200 bg-white p-4">
+        {editorTab === "ingredients" && (
+        <div className="rounded-lg border border-slate-200 bg-white p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className="text-sm font-black text-slate-900">Insumos e consumo</p>
+              <p className="text-sm font-semibold text-slate-900">Insumos e consumo</p>
               <p className="text-[11px] text-slate-500">Use a unidade da receita e o sistema converte para a unidade cadastrada no estoque.</p>
             </div>
             <Button type="button" variant="outline" size="sm" iconLeft={<Plus className="h-4 w-4" />} onClick={addIngredient}>
@@ -1014,11 +1004,11 @@ function RecipeEditorModal({
             {ingredients.map((ingredient, index) => {
               const stockItem = inventoryMap.get(ingredient.inventoryItemId);
               return (
-                <div key={ingredient.id} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                <div key={ingredient.id} className="rounded-lg border border-slate-200 bg-slate-50/70 p-4">
                   <div className="flex items-start justify-between gap-3">
-                    <p className="text-sm font-black text-slate-900">Insumo {index + 1}</p>
+                    <p className="text-sm font-semibold text-slate-900">Insumo {index + 1}</p>
                     {ingredients.length > 1 && (
-                      <IconButton type="button" size="sm" variant="ghost" className="text-red-500 hover:text-red-700" onClick={() => setIngredients((current) => current.filter((row) => row.id !== ingredient.id))}>
+                      <IconButton type="button" size="sm" variant="ghost" aria-label="Remover insumo" className="text-red-600 hover:text-red-700" onClick={() => setIngredients((current) => current.filter((row) => row.id !== ingredient.id))}>
                         <Trash2 className="h-4 w-4" />
                       </IconButton>
                     )}
@@ -1077,7 +1067,7 @@ function RecipeEditorModal({
                       placeholder="Ex.: peneirar antes de misturar, bater separado, reservar para cobertura..."
                     />
                     {stockItem && (
-                      <div className="rounded-2xl border border-slate-200 bg-white p-3 text-[11px] text-slate-600">
+                      <div className="rounded-lg border border-slate-200 bg-white p-3 text-[11px] text-slate-600">
                         Estoque atual: <strong>{formatQuantity(stockItem.quantity, stockItem.unit)}</strong> •
                         custo unitário: <strong>{formatCurrency(stockItem.purchasePrice || 0)}</strong>
                       </div>
@@ -1088,11 +1078,13 @@ function RecipeEditorModal({
             })}
           </div>
         </div>
+        )}
 
-        <div className="rounded-3xl border border-slate-200 bg-white p-4">
+        {editorTab === "overheads" && (
+        <div className="rounded-lg border border-slate-200 bg-white p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className="text-sm font-black text-slate-900">Custos indiretos</p>
+              <p className="text-sm font-semibold text-slate-900">Custos indiretos</p>
               <p className="text-[11px] text-slate-500">Cadastre energia, água, gás, mão de obra, embalagem e demais despesas de produção.</p>
             </div>
             <Button type="button" variant="outline" size="sm" iconLeft={<Plus className="h-4 w-4" />} onClick={addOverhead}>
@@ -1101,15 +1093,15 @@ function RecipeEditorModal({
           </div>
           <div className="mt-4 space-y-4">
             {overheads.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-6 text-sm text-slate-500">
+              <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/70 px-4 py-6 text-sm text-slate-500">
                 Nenhum custo adicional cadastrado ainda.
               </div>
             ) : (
               overheads.map((overhead, index) => (
-                <div key={overhead.id} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                <div key={overhead.id} className="rounded-lg border border-slate-200 bg-slate-50/70 p-4">
                   <div className="flex items-start justify-between gap-3">
-                    <p className="text-sm font-black text-slate-900">Custo {index + 1}</p>
-                    <IconButton type="button" size="sm" variant="ghost" className="text-red-500 hover:text-red-700" onClick={() => setOverheads((current) => current.filter((row) => row.id !== overhead.id))}>
+                    <p className="text-sm font-semibold text-slate-900">Custo {index + 1}</p>
+                    <IconButton type="button" size="sm" variant="ghost" aria-label="Remover custo" className="text-red-600 hover:text-red-700" onClick={() => setOverheads((current) => current.filter((row) => row.id !== overhead.id))}>
                       <Trash2 className="h-4 w-4" />
                     </IconButton>
                   </div>
@@ -1162,9 +1154,11 @@ function RecipeEditorModal({
             )}
           </div>
         </div>
+        )}
 
-        <div className="rounded-3xl border border-slate-200 bg-slate-50/70 p-4">
-          <p className="text-sm font-black text-slate-900">Modo de preparo / padrão</p>
+        {editorTab === "instructions" && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-4">
+          <p className="text-sm font-semibold text-slate-900">Modo de preparo / padrão</p>
           <p className="text-[11px] text-slate-500">Registre o processo para reproduzir a mesma produção com consistência.</p>
           <Textarea
             className="mt-4 min-h-[160px]"
@@ -1173,6 +1167,8 @@ function RecipeEditorModal({
             placeholder="Descreva etapas, tempos, temperaturas, ordem de mistura, peso final, acabamento e cuidados de execução."
           />
         </div>
+        )}
+        </Tabs>
       </form>
     </Modal>
   );
@@ -1236,7 +1232,7 @@ function ProductionRunModal({
       )}
     >
       <form id="production-run-form" onSubmit={handleSubmit} className="space-y-5">
-        <div className="rounded-3xl border border-slate-200 bg-slate-50/70 p-4">
+        <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-4">
           <div className="flex flex-wrap items-center gap-2">
             <Badge color="info">{formatQuantity(recipe.outputQuantity, recipe.outputUnit)} por receita</Badge>
             {recipe.product && <Badge color="primary">{recipe.product.name}</Badge>}
@@ -1268,11 +1264,11 @@ function ProductionRunModal({
         </div>
 
         {simulation.missingItems > 0 && (
-          <div className="rounded-3xl border border-amber-200 bg-amber-50/80 p-4">
+          <div className="rounded-lg border border-amber-200 bg-amber-50/80 p-4">
             <div className="flex items-start gap-3">
               <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-600" />
               <div>
-                <p className="text-sm font-black text-amber-900">Produção bloqueada até ajustar o estoque</p>
+                <p className="text-sm font-semibold text-amber-900">Produção bloqueada até ajustar o estoque</p>
                 <p className="mt-1 text-[11px] leading-relaxed text-amber-700">
                   Há insumos com saldo insuficiente ou unidade incompatível. Corrija o estoque antes de confirmar.
                 </p>
@@ -1285,11 +1281,11 @@ function ProductionRunModal({
           {simulation.ingredients.map((ingredient) => (
             <div
               key={ingredient.id}
-              className={`rounded-2xl border p-4 ${ingredient.available ? "border-emerald-100 bg-emerald-50/40" : "border-amber-200 bg-amber-50/70"}`}
+              className={`rounded-lg border p-4 ${ingredient.available ? "border-emerald-100 bg-emerald-50/40" : "border-amber-200 bg-amber-50/70"}`}
             >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="text-sm font-black text-slate-900">{ingredient.itemName}</p>
+                  <p className="text-sm font-semibold text-slate-900">{ingredient.itemName}</p>
                   <p className="text-[11px] text-slate-500">
                     {formatQuantity(ingredient.requestedQuantity, ingredient.unit)}
                     {ingredient.convertedQuantity !== null ? ` • baixa ${formatQuantity(ingredient.convertedQuantity, ingredient.inventoryUnit)}` : ""}
@@ -1297,7 +1293,7 @@ function ProductionRunModal({
                   {ingredient.message && <p className="mt-1 text-[11px] font-semibold text-amber-700">{ingredient.message}</p>}
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-black text-slate-900">{formatCurrency(ingredient.totalCost)}</p>
+                  <p className="text-sm font-semibold text-slate-900">{formatCurrency(ingredient.totalCost)}</p>
                   <p className="text-[11px] text-slate-500">saldo após: {formatQuantity(ingredient.stockAfter, ingredient.inventoryUnit)}</p>
                 </div>
               </div>
@@ -1324,15 +1320,15 @@ function ProductionRunDetailsModal({ run, onClose }: { run: ProductionRun; onClo
       )}
     >
       <div className="space-y-5">
-        <div className="rounded-3xl border border-slate-200 bg-slate-50/70 p-4">
+        <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div className="min-w-0">
-              <p className="break-words text-2xl font-black tracking-tight text-slate-900">{run.recipeName}</p>
+              <p className="break-words text-base font-semibold text-slate-900">{run.recipeName}</p>
               <p className="mt-1 text-sm text-slate-500">
                 Produzido em {formatDateTime(run.createdAt)}{run.createdByName ? ` por ${run.createdByName}` : ""}
               </p>
               {run.notes && (
-                <p className="mt-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">{run.notes}</p>
+                <p className="mt-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">{run.notes}</p>
               )}
             </div>
             <div className="grid w-full gap-3 shrink-0 md:w-[260px]">
@@ -1344,12 +1340,12 @@ function ProductionRunDetailsModal({ run, onClose }: { run: ProductionRun; onClo
         </div>
 
         <div className="space-y-3">
-          <p className="text-sm font-black text-slate-900">Consumo registrado</p>
+          <p className="text-sm font-semibold text-slate-900">Consumo registrado</p>
           {run.ingredientsSnapshot.map((ingredient) => (
-            <div key={ingredient.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div key={ingredient.id} className="rounded-lg border border-slate-200 bg-white p-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0 space-y-1">
-                  <p className="break-words text-sm font-black text-slate-900">{ingredient.itemName}</p>
+                  <p className="break-words text-sm font-semibold text-slate-900">{ingredient.itemName}</p>
                   <p className="text-[11px] text-slate-500">
                     Receita: {formatQuantity(ingredient.requestedQuantity, ingredient.unit)}
                     {ingredient.convertedQuantity !== null ? ` • baixa real ${formatQuantity(ingredient.convertedQuantity, ingredient.inventoryUnit)}` : ""}
@@ -1367,16 +1363,16 @@ function ProductionRunDetailsModal({ run, onClose }: { run: ProductionRun; onClo
         </div>
 
         <div className="space-y-3">
-          <p className="text-sm font-black text-slate-900">Custos indiretos aplicados</p>
+          <p className="text-sm font-semibold text-slate-900">Custos indiretos aplicados</p>
           {run.overheadsSnapshot.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-6 text-sm text-slate-500">
+            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/70 px-4 py-6 text-sm text-slate-500">
               Nenhum custo indireto foi aplicado neste lote.
             </div>
           ) : (
             run.overheadsSnapshot.map((overhead) => {
               const accent = getOverheadAccent(overhead.type);
               return (
-                <div key={overhead.id} className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div key={overhead.id} className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="space-y-1">
                     <Badge color={accent.color} icon={accent.icon}>{overhead.label}</Badge>
                     <p className="text-[11px] text-slate-500">
@@ -1384,7 +1380,7 @@ function ProductionRunDetailsModal({ run, onClose }: { run: ProductionRun; onClo
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-black text-slate-900">{formatCurrency(overhead.totalCost)}</p>
+                    <p className="text-sm font-semibold text-slate-900">{formatCurrency(overhead.totalCost)}</p>
                     <p className="text-[11px] text-slate-500">Base {formatCurrency(overhead.cost)}</p>
                   </div>
                 </div>
@@ -1394,8 +1390,8 @@ function ProductionRunDetailsModal({ run, onClose }: { run: ProductionRun; onClo
         </div>
 
         {run.outputSnapshot && (
-          <div className="rounded-3xl border border-[#0D1B3E]/10 bg-[#0D1B3E]/[0.03] p-4">
-            <p className="text-sm font-black text-slate-900">Entrada do produto final</p>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <p className="text-sm font-semibold text-slate-900">Entrada do produto final</p>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               <MetricPill label="Produção registrada" value={formatQuantity(run.outputSnapshot.requestedQuantity, run.outputSnapshot.requestedUnit)} />
               <MetricPill

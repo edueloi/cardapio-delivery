@@ -3,6 +3,7 @@ import { CheckSquare, Square, ChevronDown } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { Pagination } from './Pagination';
+import { uiTheme } from './theme';
 
 export interface Column<T> {
   header: ReactNode | string;
@@ -37,6 +38,9 @@ export interface GridTableProps<T> {
   getMobileBorderClass?: (row: T) => string;
   // Feature: Force standard table even on mobile if needed
   disableMobileCards?: boolean;
+  /** Dense tables may keep cards until a wider viewport. Defaults preserve existing screens. */
+  mobileBreakpoint?: 'sm' | 'lg' | 'xl';
+  tableMinWidth?: number;
   // Feature: Remove the card wrapper (border/shadow/rounded) from the desktop table — use when the parent already provides the container styling
   noDesktopCard?: boolean;
   // Feature: Provide expandable body content for desktop tables
@@ -55,7 +59,7 @@ export interface GridTableProps<T> {
 function SortIndicator({ active, order }: { active: boolean; order: 'asc' | 'desc' }) {
   if (!active) return <span className="inline-block ml-1.5 w-1.5 h-1.5 rounded-full bg-zinc-300 align-middle" />;
   return (
-    <span className="inline-block ml-1.5 align-middle text-amber-500 leading-none font-black text-xs">
+    <span className="inline-block ml-1.5 align-middle text-blue-500 leading-none font-medium text-xs">
       {order === 'asc' ? '↑' : '↓'}
     </span>
   );
@@ -106,14 +110,14 @@ function MobileCard<T>({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       className={cn(
-        'bg-white rounded-2xl border shadow-sm overflow-hidden transition-colors',
-        isSelected ? 'border-amber-400 bg-amber-50/30' : borderClass,
+        'bg-white rounded-lg border shadow-none overflow-hidden transition-colors',
+        isSelected ? 'border-blue-400 bg-blue-50/30' : borderClass,
       )}
     >
       {/* ── Header (always visible) ── */}
       <div
         className={cn(
-          'flex items-center gap-3 px-4 py-3.5 transition-colors',
+          'flex items-center gap-2 px-3 py-2.5 transition-colors',
           (isExpandable || onRowClick) && 'cursor-pointer active:bg-zinc-50',
         )}
         onClick={handleHeaderClick}
@@ -123,9 +127,9 @@ function MobileCard<T>({
           <div className="pt-0.5 shrink-0" onClick={e => e.stopPropagation()}>
             <button
               onClick={() => onToggleSelect?.(id)}
-              className="text-zinc-300 hover:text-amber-500 transition-colors"
+              className="text-zinc-300 hover:text-blue-500 transition-colors"
             >
-              {isSelected ? <CheckSquare size={18} className="text-amber-500" /> : <Square size={18} />}
+              {isSelected ? <CheckSquare size={18} className="text-blue-500" /> : <Square size={18} />}
             </button>
           </div>
         )}
@@ -180,7 +184,7 @@ export function GridTable<T>({
   data, columns, keyExtractor, selectedIds, onToggleSelect, onToggleSelectAll,
   onRowClick, emptyMessage = 'Nenhum registro encontrado.', sortKey, sortOrder = 'asc', onSort, isLoading = false,
   renderMobileItem, renderMobileExpandedContent, renderMobileAvatar, getMobileBorderClass,
-  disableMobileCards = false, noDesktopCard = false, renderDesktopExpandedContent, isRowExpanded, pagination,
+  disableMobileCards = false, noDesktopCard = false, renderDesktopExpandedContent, isRowExpanded, pagination, mobileBreakpoint = 'sm', tableMinWidth,
 }: GridTableProps<T>) {
   const isSelectable = !!selectedIds && !!onToggleSelect;
   const allSelected = isSelectable && data.length > 0 && data.every((row) => selectedIds.has(String(keyExtractor(row))));
@@ -189,25 +193,36 @@ export function GridTable<T>({
   const renderAutoMobileCard = (row: T) => {
     const visibleCols = columns.filter(c => !c.hideOnMobile);
     const titleCol = visibleCols.find(c => typeof c.header === 'string' && c.header.toString().trim() !== '') || visibleCols[0];
-    const detailsCols = visibleCols.filter(c => c !== titleCol && typeof c.header === 'string' && c.header.toString().trim() !== '');
+    const actionCol = visibleCols.find(c => c.header === 'Ações');
+    const detailsCols = visibleCols.filter(c => c !== titleCol && c !== actionCol && typeof c.header === 'string' && c.header.toString().trim() !== '');
 
     return (
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between gap-3">
-          <div className="font-bold text-sm text-zinc-900 pr-4 break-words line-clamp-1">
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-3 px-1">
+          <div className="font-medium text-sm text-zinc-900 pr-4 break-words">
             {titleCol?.render ? titleCol.render(row) : titleCol?.accessor ? String(row[titleCol.accessor] ?? '') : ''}
           </div>
         </div>
+        
         {detailsCols.length > 0 && (
-          <div className="grid grid-cols-2 gap-x-3 gap-y-2 pt-2 border-t border-zinc-100">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3 pt-3 border-t border-zinc-100">
             {detailsCols.map((col, idx) => (
               <div key={idx} className="flex flex-col min-w-0">
-                <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 mb-0.5 truncate">{col.header}</span>
-                <span className="text-xs font-semibold text-zinc-700 truncate">
+                <span className="text-[10px] font-medium tracking-normal text-zinc-400 mb-0.5 truncate">{col.header}</span>
+                <div className="text-xs font-medium text-zinc-700">
                   {col.render ? col.render(row) : col.accessor ? String(row[col.accessor] ?? '') : ''}
-                </span>
+                </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {actionCol && (
+          <div className="pt-3 mt-1 border-t border-zinc-100">
+            <span className="text-[10px] font-medium tracking-normal text-zinc-400 mb-2 block">Ações</span>
+            <div className="flex flex-wrap gap-2">
+              {actionCol.render ? actionCol.render(row) : null}
+            </div>
           </div>
         )}
       </div>
@@ -215,21 +230,21 @@ export function GridTable<T>({
   };
 
   return (
-    <div className="w-full">
+    <div className="w-full min-w-0 max-w-full">
       {/* ─── DESKTOP TABLE VIEW ─── */}
       <div className={cn(
-        !noDesktopCard && 'bg-white sm:border border-zinc-200 sm:rounded-2xl sm:shadow-sm',
+        !noDesktopCard && uiTheme.table.surface,
         'overflow-hidden',
-        !disableMobileCards && 'hidden sm:block',
+        !disableMobileCards && ({ sm: 'hidden sm:block', lg: 'hidden lg:block', xl: 'hidden xl:block' }[mobileBreakpoint]),
       )}>
         <div className="overflow-x-auto custom-scrollbar">
-          <table className="w-full text-left border-collapse" style={{ minWidth: disableMobileCards ? 0 : 520 }}>
-            <thead className="bg-zinc-50 border-b border-zinc-200">
+          <table className="w-full text-left border-collapse" style={{ minWidth: tableMinWidth ?? (disableMobileCards ? 0 : 520) }}>
+            <thead className={uiTheme.table.header}>
               <tr>
                 {isSelectable && (
-                  <th className="px-4 py-3 w-10 text-center shrink-0" onClick={(e) => e.stopPropagation()}>
-                    <button onClick={onToggleSelectAll} className="text-zinc-400 hover:text-amber-600 transition-colors focus:outline-none">
-                      {allSelected ? <CheckSquare size={16} className="text-amber-500" /> : <Square size={16} />}
+                  <th className="px-3 py-2.5 w-10 text-center shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <button onClick={onToggleSelectAll} className="text-zinc-400 hover:text-blue-600 transition-colors focus:outline-none">
+                      {allSelected ? <CheckSquare size={16} className="text-blue-500" /> : <Square size={16} />}
                     </button>
                   </th>
                 )}
@@ -241,9 +256,9 @@ export function GridTable<T>({
                       key={idx}
                       onClick={isSortable ? () => onSort!(col.sortKey!) : undefined}
                       className={cn(
-                        'px-4 py-3.5 text-[10px] font-black text-zinc-400 uppercase tracking-widest whitespace-nowrap',
-                        isSortable && 'cursor-pointer select-none hover:text-amber-600 transition-colors',
-                        isActive && 'text-amber-600',
+                        'px-3.5 py-2.5 text-[11px] font-medium text-zinc-400 tracking-normal whitespace-nowrap',
+                        isSortable && 'cursor-pointer select-none hover:text-blue-600 transition-colors',
+                        isActive && 'text-blue-600',
                         col.headerClassName,
                       )}
                     >
@@ -269,7 +284,7 @@ export function GridTable<T>({
                 ))
               ) : data.length === 0 ? (
                 <tr>
-                  <td colSpan={columns.length + (isSelectable ? 1 : 0)} className="py-8 bg-white text-center text-xs font-bold text-zinc-400 uppercase tracking-widest">
+                  <td colSpan={columns.length + (isSelectable ? 1 : 0)} className="py-6 bg-white text-center text-xs font-medium text-zinc-400 tracking-normal">
                     {emptyMessage}
                   </td>
                 </tr>
@@ -280,34 +295,34 @@ export function GridTable<T>({
                   const expanded = isRowExpanded ? isRowExpanded(row) : false;
                   return (
                     <React.Fragment key={id}>
-                      <tr
-                        onClick={() => onRowClick?.(row)}
-                        className={cn(
-                          'group transition-colors',
-                          onRowClick && 'cursor-pointer',
-                          isSelected ? 'bg-amber-50/50 hover:bg-amber-100/60' : rowIdx % 2 === 0 ? 'bg-white hover:bg-zinc-50/80' : 'bg-zinc-50/50 hover:bg-zinc-100/60',
-                        )}
-                      >
-                        {isSelectable && (
-                          <td className="px-4 py-3.5 text-center w-10 shrink-0" onClick={(e) => e.stopPropagation()}>
-                            <button onClick={() => onToggleSelect(id)} className="text-zinc-300 hover:text-amber-500 transition-colors">
-                              {isSelected ? <CheckSquare size={16} className="text-amber-500" /> : <Square size={16} />}
-                            </button>
-                          </td>
-                        )}
-                        {columns.map((col, idx) => (
-                          <td key={idx} className={cn('px-4 py-3.5 text-xs text-zinc-700', col.className)}>
-                            {col.render ? col.render(row) : col.accessor ? String(row[col.accessor] ?? '') : null}
-                          </td>
-                        ))}
-                      </tr>
-                      {expanded && renderDesktopExpandedContent && (
-                        <tr>
-                          <td colSpan={columns.length + (isSelectable ? 1 : 0)} className="p-0 border-b border-zinc-100 bg-zinc-50/30 shadow-inner">
-                            {renderDesktopExpandedContent(row)}
-                          </td>
-                        </tr>
+                    <tr
+                      onClick={() => onRowClick?.(row)}
+                      className={cn(
+                        'group transition-colors',
+                        onRowClick && 'cursor-pointer',
+                        isSelected ? 'bg-blue-50/50 hover:bg-blue-100/60' : rowIdx % 2 === 0 ? 'bg-white hover:bg-zinc-50/80' : 'bg-zinc-50/50 hover:bg-zinc-100/60',
                       )}
+                    >
+                      {isSelectable && (
+                        <td className="px-3.5 py-2.5 text-center w-10 shrink-0" onClick={(e) => e.stopPropagation()}>
+                          <button onClick={() => onToggleSelect(id)} className="text-zinc-300 hover:text-blue-500 transition-colors">
+                            {isSelected ? <CheckSquare size={16} className="text-blue-500" /> : <Square size={16} />}
+                          </button>
+                        </td>
+                      )}
+                      {columns.map((col, idx) => (
+                        <td key={idx} className={cn('px-3.5 py-2.5 text-xs text-zinc-700', col.className)}>
+                          {col.render ? col.render(row) : col.accessor ? String(row[col.accessor] ?? '') : null}
+                        </td>
+                      ))}
+                    </tr>
+                    {expanded && renderDesktopExpandedContent && (
+                      <tr>
+                        <td colSpan={columns.length + (isSelectable ? 1 : 0)} className="p-0 border-b border-zinc-100 bg-zinc-50/30">
+                          {renderDesktopExpandedContent(row)}
+                        </td>
+                      </tr>
+                    )}
                     </React.Fragment>
                   );
                 })
@@ -319,10 +334,10 @@ export function GridTable<T>({
 
       {/* ─── MOBILE CARD VIEW ─── */}
       {!disableMobileCards && (
-        <div className="block sm:hidden space-y-2 pb-2">
+        <div className={cn('space-y-2 pb-2', { sm: 'block sm:hidden', lg: 'block lg:hidden', xl: 'block xl:hidden' }[mobileBreakpoint])}>
           {isLoading ? (
             Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="animate-pulse bg-white border border-zinc-200 rounded-2xl p-4 flex flex-col gap-3">
+              <div key={i} className="animate-pulse bg-white border border-zinc-200 rounded-lg p-4 flex flex-col gap-3">
                 <div className="h-4 bg-zinc-200 rounded-md w-2/3" />
                 <div className="grid grid-cols-2 gap-3">
                   <div className="h-8 bg-zinc-100 rounded-lg w-full" />
@@ -331,7 +346,7 @@ export function GridTable<T>({
               </div>
             ))
           ) : data.length === 0 ? (
-            <div className="py-12 bg-white border border-zinc-200 border-dashed rounded-2xl text-center text-xs font-bold text-zinc-400 uppercase tracking-widest">
+            <div className="py-6 bg-white border border-zinc-200 border-dashed rounded-lg text-center text-xs font-medium text-zinc-400 tracking-normal">
               {emptyMessage}
             </div>
           ) : (

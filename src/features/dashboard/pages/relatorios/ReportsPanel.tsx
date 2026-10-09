@@ -1,13 +1,17 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
-  BarChart3, TrendingUp, Calendar, Download,
+  BarChart3, TrendingUp, Calendar, Download, LayoutDashboard, Boxes, Loader2,
   ShoppingBag, CreditCard, Banknote, QrCode,
   Receipt, Package, Clock, ArrowUpRight, Timer, Truck, AlertTriangle,
 } from "lucide-react";
 import {
   PageWrapper, SectionTitle, StatGrid, StatCard, ContentCard,
-  Button, EmptyState,
+  Button, EmptyState, PanelCard, Tabs, Badge,
+  FilterLine, FilterLineSection, FilterLineItem, FilterLineSegmented, FilterLineDateRange,
 } from "../../../../components";
+import {
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+} from "recharts";
 import { apiFetch } from "../../../../lib/api";
 import type { Tenant } from "../../../../types";
 
@@ -67,6 +71,42 @@ interface TimingReport {
   slowest: SlowestOrder[];
 }
 
+const REPORT_TABS = [
+  { id: "overview", label: "Visão geral", icon: LayoutDashboard },
+  { id: "timing", label: "Tempos", icon: Timer },
+  { id: "products", label: "Produtos e estoque", icon: Boxes },
+] as const;
+type ReportTabId = (typeof REPORT_TABS)[number]["id"];
+
+const PERIOD_OPTIONS = [
+  { value: "today", label: "Hoje" },
+  { value: "week", label: "7 dias" },
+  { value: "month", label: "Este mês" },
+  { value: "year", label: "Este ano" },
+  { value: "custom", label: "Livre", icon: <Calendar size={12} /> },
+];
+
+// Gráfico de barras padrão (eixos sem linha, fonte 11, grade horizontal, azul).
+function BarsChart({ data, format, color = "#2563eb" }: {
+  data: { label: string; value: number }[];
+  format: (v: number) => string;
+  color?: string;
+}) {
+  return (
+    <div className="h-56 min-w-0">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <CartesianGrid vertical={false} stroke="#e2e8f0" />
+          <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#64748b" }} interval="preserveStartEnd" />
+          <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#64748b" }} width={48} tickFormatter={(v) => (v >= 1000 ? `${Math.round(v / 100) / 10}k` : String(v))} />
+          <Tooltip cursor={{ fill: "#f1f5f9" }} formatter={(v: number) => [format(v), ""]} separator="" contentStyle={{ fontSize: 11, borderRadius: 8, border: "1px solid #e2e8f0" }} />
+          <Bar dataKey="value" fill={color} radius={[3, 3, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 const MONTH_LABELS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
 const PAYMENT_LABELS: Record<string, { label: string; icon: React.ElementType; color: string }> = {
@@ -99,6 +139,7 @@ export default function ReportsPanel({ slug, tenant }: ReportsPanelProps) {
   const [topInventory, setTopInventory] = useState<TopInventoryItem[]>([]);
   const [timing, setTiming] = useState<TimingReport | null>(null);
   const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<ReportTabId>("overview");
 
   const buildDates = useCallback(() => {
     const now = new Date();
@@ -151,11 +192,7 @@ export default function ReportsPanel({ slug, tenant }: ReportsPanelProps) {
 
   useEffect(() => { fetchReport(); }, [fetchReport]);
 
-  const maxDailyTotal = dailyData.length > 0 ? Math.max(...dailyData.map((d) => d.total)) : 1;
-  const maxHourlyTotal = summary ? Math.max(...summary.hourly.map((h) => h.total), 1) : 1;
-  const maxMonthlyTotal = monthlyData.length > 0 ? Math.max(...monthlyData.map((m) => m.total), 1) : 1;
   const maxTopInventoryQty = topInventory.length > 0 ? Math.max(...topInventory.map((i) => i.quantity), 1) : 1;
-  const maxHourlyPrepMinutes = timing ? Math.max(...timing.hourly.map((h) => h.avgPrepMinutes), 1) : 1;
 
   const fmtMinutes = (m: number) => {
     if (m < 1) return "< 1 min";
@@ -181,400 +218,297 @@ export default function ReportsPanel({ slug, tenant }: ReportsPanelProps) {
     URL.revokeObjectURL(url);
   };
 
+  const bar = (pct: number, color: string) => (
+    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+      <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+    </div>
+  );
+
+  const hasTiming = !!timing && timing.ordersWithTiming > 0;
+  const tabs = REPORT_TABS.map((t) => (t.id === "timing" && !hasTiming ? { ...t, disabled: true } : t));
+
   return (
     <PageWrapper>
-      <SectionTitle
-        title="Relatórios"
-        description="Análise de vendas e desempenho"
-        icon={BarChart3}
-        action={
-          <Button variant="outline" size="sm" iconLeft={<Download className="w-4 h-4" />} onClick={exportCSV}>
-            Exportar CSV
-          </Button>
-        }
-        className="mb-6"
-      />
-
-      {/* Period selector */}
-      <ContentCard className="mb-6" padding="sm">
-        <div className="flex flex-col gap-3">
-          <div className="grid grid-cols-3 sm:flex sm:items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl p-1">
-            {(["today", "week", "month", "year"] as const).map((p) => (
-              <button
-                key={p}
-                onClick={() => setPeriod(p)}
-                className={`h-9 px-3 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
-                  period === p ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-700"
-                }`}
-              >
-                {p === "today" ? "Hoje" : p === "week" ? "7 Dias" : p === "month" ? "Este Mês" : "Este Ano"}
-              </button>
-            ))}
-            <button
-              onClick={() => setPeriod("custom")}
-              className={`h-9 px-3 rounded-lg flex items-center justify-center gap-1.5 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap col-span-3 sm:col-span-1 ${
-                period === "custom" ? "bg-amber-500 text-white shadow-sm" : "text-slate-500 hover:text-slate-700"
-              }`}
-            >
-              <Calendar size={12} /> Livre
-            </button>
-          </div>
-
-          {period === "custom" && (
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-2 border-t border-slate-100">
-              <div className="flex items-center gap-2 flex-1">
-                <span className="text-[10px] font-black text-slate-400 uppercase shrink-0">De</span>
-                <input
-                  type="date"
-                  value={customFrom}
-                  onChange={(e) => setCustomFrom(e.target.value)}
-                  className="flex-1 sm:w-[160px] h-9 px-3 border border-slate-200 rounded-xl text-[11px] font-bold focus:border-[#C9A227] outline-none transition-all"
-                />
-              </div>
-              <div className="flex items-center gap-2 flex-1">
-                <span className="text-[10px] font-black text-slate-400 uppercase shrink-0">Até</span>
-                <input
-                  type="date"
-                  value={customTo}
-                  onChange={(e) => setCustomTo(e.target.value)}
-                  className="flex-1 sm:w-[160px] h-9 px-3 border border-slate-200 rounded-xl text-[11px] font-bold focus:border-[#C9A227] outline-none transition-all"
-                />
-              </div>
-              <Button variant="primary" size="sm" onClick={fetchReport} className="w-full sm:w-auto">Buscar</Button>
-            </div>
-          )}
-        </div>
-      </ContentCard>
-
-      {loading ? (
-        <div className="flex justify-center py-20 opacity-30">
-          <div className="w-10 h-10 border-4 border-[#C9A227] border-t-transparent rounded-full animate-spin" />
-        </div>
-      ) : !summary ? (
-        <EmptyState title="Sem dados" description="Selecione um período para visualizar o relatório." icon={BarChart3} />
-      ) : summary.totalOrders === 0 ? (
-        <EmptyState
-          title="Nenhuma venda nesse período"
-          description="Não houve pedidos concluídos no período selecionado. Tente escolher outro período ou aguarde as primeiras vendas chegarem."
+      <div className="space-y-4">
+        <SectionTitle
+          title="Relatórios"
+          description="Análise de vendas e desempenho"
           icon={BarChart3}
+          action={
+            <Button variant="outline" size="sm" iconLeft={<Download size={14} />} onClick={exportCSV}>
+              Exportar CSV
+            </Button>
+          }
         />
-      ) : (
-        <div className="space-y-6">
-          {/* KPIs */}
-          <StatGrid cols={4}>
-            <StatCard title="Receita Total" value={fmt(summary.totalRevenue)} icon={TrendingUp} color="success" delay={0} />
-            <StatCard title="Pedidos" value={summary.totalOrders} icon={ShoppingBag} color="info" delay={0.1} />
-            <StatCard title="Ticket Médio" value={fmt(summary.averageTicket)} icon={ArrowUpRight} color="default" delay={0.2} />
-            <StatCard title="Produtos Vendidos" value={summary.topProducts.reduce((s, p) => s + p.qty, 0)} icon={Package} color="warning" delay={0.3} />
-          </StatGrid>
 
-          {summary.totalFees > 0 && (
-            <StatGrid cols={3}>
-              <StatCard title="Taxa de Maquininha (custo)" value={fmt(summary.totalFees)} icon={CreditCard} color="warning" delay={0} />
-              <StatCard title="Absorvida pela Loja" value={fmt(summary.totalFeesAbsorbed)} icon={ArrowUpRight} color="danger" delay={0.1} />
-              <StatCard title="Receita Líquida" value={fmt(summary.netRevenue)} icon={TrendingUp} color="success" delay={0.2} />
-            </StatGrid>
-          )}
+        <FilterLine>
+          <FilterLineSection grow>
+            <FilterLineItem fullOnMobile={false}>
+              <FilterLineSegmented
+                value={period}
+                onChange={(v) => setPeriod(v as typeof period)}
+                options={PERIOD_OPTIONS}
+              />
+            </FilterLineItem>
+            {period === "custom" && (
+              <>
+                <FilterLineItem minWidth={260}>
+                  <FilterLineDateRange
+                    from={customFrom || null}
+                    to={customTo || null}
+                    onFromChange={(v) => setCustomFrom(v ?? "")}
+                    onToChange={(v) => setCustomTo(v ?? "")}
+                  />
+                </FilterLineItem>
+                <FilterLineItem fullOnMobile={false}>
+                  <Button variant="primary" size="sm" onClick={fetchReport}>Buscar</Button>
+                </FilterLineItem>
+              </>
+            )}
+          </FilterLineSection>
+        </FilterLine>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Payment method breakdown */}
-            <ContentCard>
-              <h3 className="text-sm font-black uppercase tracking-widest text-slate-700 mb-4">
-                Receita por Pagamento
-              </h3>
-              <div className="space-y-3">
-                {Object.entries(summary.byPaymentMethod)
-                  .sort((a, b) => b[1].total - a[1].total)
-                  .map(([method, data]) => {
-                    const meta = PAYMENT_LABELS[method] || { label: method, icon: CreditCard, color: "bg-slate-400" };
-                    const pct = summary.totalRevenue > 0 ? (data.total / summary.totalRevenue) * 100 : 0;
-                    return (
-                      <div key={method}>
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center gap-2">
-                            <div className={`w-2 h-2 rounded-full ${meta.color}`} />
-                            <span className="text-sm font-bold text-slate-700">{meta.label}</span>
-                            <span className="text-[10px] text-slate-400">({data.count} pedidos)</span>
-                          </div>
-                          <span className="text-sm font-black text-slate-800">{fmt(data.total)}</span>
-                        </div>
-                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full ${meta.color} transition-all`}
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                        {data.fees > 0 && (
-                          <p className="text-[10px] text-amber-500 font-bold mt-1">Taxa maquininha: {fmt(data.fees)}</p>
-                        )}
-                      </div>
-                    );
-                  })}
-              </div>
-            </ContentCard>
-
-            {/* Order type breakdown */}
-            <ContentCard>
-              <h3 className="text-sm font-black uppercase tracking-widest text-slate-700 mb-4">
-                Por Tipo de Pedido
-              </h3>
-              <div className="space-y-3">
-                {Object.entries(summary.byOrderType)
-                  .sort((a, b) => b[1].total - a[1].total)
-                  .map(([type, data]) => {
-                    const pct = summary.totalRevenue > 0 ? (data.total / summary.totalRevenue) * 100 : 0;
-                    return (
-                      <div key={type}>
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full bg-[#0D1B3E]" />
-                            <span className="text-sm font-bold text-slate-700">{ORDER_TYPE_LABELS[type] || type}</span>
-                            <span className="text-[10px] text-slate-400">({data.count} pedidos)</span>
-                          </div>
-                          <span className="text-sm font-black text-slate-800">{fmt(data.total)}</span>
-                        </div>
-                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-[#0D1B3E] transition-all"
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            </ContentCard>
+        {loading ? (
+          <div role="status" className="flex items-center justify-center gap-2 py-16 text-sm text-slate-500">
+            <Loader2 size={18} className="animate-spin" />Carregando relatório…
           </div>
+        ) : !summary ? (
+          <ContentCard>
+            <EmptyState title="Sem dados" description="Selecione um período para visualizar o relatório." icon={BarChart3} />
+          </ContentCard>
+        ) : summary.totalOrders === 0 ? (
+          <ContentCard>
+            <EmptyState
+              title="Nenhuma venda nesse período"
+              description="Não houve pedidos concluídos no período selecionado. Tente escolher outro período ou aguarde as primeiras vendas chegarem."
+              icon={BarChart3}
+            />
+          </ContentCard>
+        ) : (
+          <>
+            <StatGrid cols={4}>
+              <StatCard title="Receita Total" value={fmt(summary.totalRevenue)} icon={TrendingUp} color="success" />
+              <StatCard title="Pedidos" value={summary.totalOrders} icon={ShoppingBag} color="info" />
+              <StatCard title="Ticket Médio" value={fmt(summary.averageTicket)} icon={ArrowUpRight} color="default" />
+              <StatCard title="Produtos Vendidos" value={summary.topProducts.reduce((s, p) => s + p.qty, 0)} icon={Package} color="warning" />
+            </StatGrid>
 
-          {/* Monthly chart (visão "Este Ano") */}
-          {period === "year" && (
-            <ContentCard>
-              <h3 className="text-sm font-black uppercase tracking-widest text-slate-700 mb-4">
-                Receita por Mês — {new Date().getFullYear()}
-              </h3>
-              <div className="flex items-end gap-2 h-32">
-                {monthlyData.map((m) => {
-                  const pct = maxMonthlyTotal > 0 ? (m.total / maxMonthlyTotal) * 100 : 0;
-                  return (
-                    <div key={m.month} className="flex flex-col items-center gap-1 flex-1 group relative">
-                      {m.total > 0 && (
-                        <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[9px] font-black px-2 py-0.5 rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                          {fmt(m.total)}
-                        </div>
-                      )}
-                      <div
-                        className={`w-full rounded-t-lg transition-colors min-h-[4px] ${m.total > 0 ? "bg-[#0D1B3E] hover:bg-[#1a3068]" : "bg-slate-100"}`}
-                        style={{ height: `${Math.max(4, pct)}%` }}
-                      />
-                      <span className="text-[9px] text-slate-400 font-bold">{MONTH_LABELS[m.month]}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </ContentCard>
-          )}
-
-          {/* Daily chart */}
-          {dailyData.length > 1 && (
-            <ContentCard>
-              <h3 className="text-sm font-black uppercase tracking-widest text-slate-700 mb-4">
-                Receita Diária
-              </h3>
-              <div className="flex items-end gap-1 h-32 overflow-x-auto pb-2">
-                {dailyData.map((d) => {
-                  const pct = maxDailyTotal > 0 ? (d.total / maxDailyTotal) * 100 : 0;
-                  return (
-                    <div key={d.date} className="flex flex-col items-center gap-1 min-w-[32px] flex-1 group relative">
-                      <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[9px] font-black px-2 py-0.5 rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                        {fmt(d.total)}
-                      </div>
-                      <div
-                        className="w-full rounded-t-lg bg-[#C9A227] hover:bg-[#E8B93A] transition-colors min-h-[4px]"
-                        style={{ height: `${Math.max(4, pct)}%` }}
-                      />
-                      <span className="text-[8px] text-slate-400 font-bold">
-                        {new Date(d.date + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </ContentCard>
-          )}
-
-          {/* Hourly distribution (today only) */}
-          {period === "today" && summary.hourly.some((h) => h.total > 0) && (
-            <ContentCard>
-              <h3 className="text-sm font-black uppercase tracking-widest text-slate-700 mb-4 flex items-center gap-2">
-                <Clock className="w-4 h-4" />
-                Distribuição por Hora
-              </h3>
-              <div className="flex items-end gap-1 h-24 overflow-x-auto pb-1">
-                {summary.hourly.map((h) => {
-                  const pct = maxHourlyTotal > 0 ? (h.total / maxHourlyTotal) * 100 : 0;
-                  return (
-                    <div key={h.hour} className="flex flex-col items-center gap-1 min-w-[18px] flex-1 group relative">
-                      {h.total > 0 && (
-                        <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[8px] font-black px-1.5 py-0.5 rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                          {fmt(h.total)}
-                        </div>
-                      )}
-                      <div
-                        className={`w-full rounded-t-md min-h-[2px] transition-colors ${h.total > 0 ? "bg-[#0D1B3E] hover:bg-[#1a3068]" : "bg-slate-100"}`}
-                        style={{ height: `${Math.max(2, pct)}%` }}
-                      />
-                      <span className="text-[7px] text-slate-300 font-bold">{h.hour}h</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </ContentCard>
-          )}
-
-          {/* Tempo de preparo e entrega */}
-          {timing && timing.ordersWithTiming > 0 && (
-            <>
+            {summary.totalFees > 0 && (
               <StatGrid cols={3}>
-                <StatCard title="Tempo Médio de Preparo" value={fmtMinutes(timing.avgPrepMinutes)} icon={Timer} color="warning" delay={0} />
-                <StatCard title="Tempo Médio de Entrega" value={timing.avgDeliveryMinutes > 0 ? fmtMinutes(timing.avgDeliveryMinutes) : "—"} icon={Truck} color="info" delay={0.1} />
-                <StatCard title="Pedidos com Tempo Registrado" value={timing.ordersWithTiming} icon={Clock} color="default" delay={0.2} />
+                <StatCard title="Taxa de Maquininha (custo)" value={fmt(summary.totalFees)} icon={CreditCard} color="warning" />
+                <StatCard title="Absorvida pela Loja" value={fmt(summary.totalFeesAbsorbed)} icon={ArrowUpRight} color="danger" />
+                <StatCard title="Receita Líquida" value={fmt(summary.netRevenue)} icon={TrendingUp} color="success" />
               </StatGrid>
+            )}
 
-              <ContentCard>
-                <h3 className="text-sm font-black uppercase tracking-widest text-slate-700 mb-4 flex items-center gap-2">
-                  <Timer className="w-4 h-4" />
-                  Tempo Médio de Preparo por Hora
-                </h3>
-                <div className="flex items-end gap-1 h-24 overflow-x-auto pb-1">
-                  {timing.hourly.map((h) => {
-                    const pct = h.count > 0 ? (h.avgPrepMinutes / maxHourlyPrepMinutes) * 100 : 0;
-                    return (
-                      <div key={h.hour} className="flex flex-col items-center gap-1 min-w-[18px] flex-1 group relative">
-                        {h.count > 0 && (
-                          <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[8px] font-black px-1.5 py-0.5 rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                            {fmtMinutes(h.avgPrepMinutes)} ({h.count})
-                          </div>
-                        )}
-                        <div
-                          className={`w-full rounded-t-md min-h-[2px] transition-colors ${h.count > 0 ? "bg-[#C9A227] hover:bg-[#E8B93A]" : "bg-slate-100"}`}
-                          style={{ height: `${Math.max(2, pct)}%` }}
-                        />
-                        <span className="text-[7px] text-slate-300 font-bold">{h.hour}h</span>
+            <Tabs<ReportTabId> items={tabs} value={activeTab} onChange={setActiveTab} label="Seções do relatório">
+              {activeTab === "overview" && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    <PanelCard title="Receita por pagamento">
+                      <div className="space-y-3 p-3">
+                        {Object.entries(summary.byPaymentMethod)
+                          .sort((a, b) => b[1].total - a[1].total)
+                          .map(([method, data]) => {
+                            const meta = PAYMENT_LABELS[method] || { label: method, icon: CreditCard, color: "bg-slate-400" };
+                            const pct = summary.totalRevenue > 0 ? (data.total / summary.totalRevenue) * 100 : 0;
+                            return (
+                              <div key={method}>
+                                <div className="flex items-center justify-between mb-1 gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <div className={`w-2 h-2 rounded-full shrink-0 ${meta.color}`} />
+                                    <span className="text-xs font-medium text-slate-700">{meta.label}</span>
+                                    <span className="text-[11px] text-slate-500">({data.count} pedidos)</span>
+                                  </div>
+                                  <span className="text-xs font-semibold tabular-nums text-slate-800">{fmt(data.total)}</span>
+                                </div>
+                                {bar(pct, meta.color)}
+                                {data.fees > 0 && (
+                                  <p className="text-[11px] text-amber-600 font-medium mt-1">Taxa maquininha: {fmt(data.fees)}</p>
+                                )}
+                              </div>
+                            );
+                          })}
                       </div>
-                    );
-                  })}
-                </div>
-              </ContentCard>
+                    </PanelCard>
 
-              {timing.slowest.length > 0 && (
-                <ContentCard>
-                  <h3 className="text-sm font-black uppercase tracking-widest text-slate-700 mb-4 flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4" />
-                    Pedidos Mais Demorados no Preparo
-                  </h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-left text-[10px] uppercase tracking-widest text-slate-400 border-b border-slate-100">
-                          <th className="pb-2 pr-3 font-black">Pedido</th>
-                          <th className="pb-2 pr-3 font-black">Data / Hora</th>
-                          <th className="pb-2 pr-3 font-black">Tipo</th>
-                          <th className="pb-2 pr-3 font-black text-right">Preparo</th>
-                          <th className="pb-2 font-black text-right">Entrega</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {timing.slowest.map((o) => (
-                          <tr key={o.id} className="border-b border-slate-50 last:border-0">
-                            <td className="py-2 pr-3 font-bold text-slate-700">
-                              {o.counterTicketNumber != null ? `#${String(o.counterTicketNumber).padStart(2, "0")}` : o.customerName}
-                            </td>
-                            <td className="py-2 pr-3 text-slate-500">
-                              {new Date(o.createdAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
-                            </td>
-                            <td className="py-2 pr-3 text-slate-500">{ORDER_TYPE_LABELS[o.orderType] || o.orderType}</td>
-                            <td className="py-2 pr-3 text-right font-black text-[#C9A227]">{fmtMinutes(o.prepMinutes)}</td>
-                            <td className="py-2 text-right font-black text-slate-500">
-                              {o.deliveryMinutes != null ? fmtMinutes(o.deliveryMinutes) : "—"}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <PanelCard title="Por tipo de pedido">
+                      <div className="space-y-3 p-3">
+                        {Object.entries(summary.byOrderType)
+                          .sort((a, b) => b[1].total - a[1].total)
+                          .map(([type, data]) => {
+                            const pct = summary.totalRevenue > 0 ? (data.total / summary.totalRevenue) * 100 : 0;
+                            return (
+                              <div key={type}>
+                                <div className="flex items-center justify-between mb-1 gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <div className="w-2 h-2 rounded-full shrink-0 bg-blue-600" />
+                                    <span className="text-xs font-medium text-slate-700">{ORDER_TYPE_LABELS[type] || type}</span>
+                                    <span className="text-[11px] text-slate-500">({data.count} pedidos)</span>
+                                  </div>
+                                  <span className="text-xs font-semibold tabular-nums text-slate-800">{fmt(data.total)}</span>
+                                </div>
+                                {bar(pct, "bg-blue-600")}
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </PanelCard>
                   </div>
-                </ContentCard>
+
+                  {period === "year" && (
+                    <PanelCard title={`Receita por mês — ${new Date().getFullYear()}`}>
+                      <div className="p-3">
+                        <BarsChart
+                          data={monthlyData.map((m) => ({ label: MONTH_LABELS[m.month], value: m.total }))}
+                          format={fmt}
+                        />
+                      </div>
+                    </PanelCard>
+                  )}
+
+                  {dailyData.length > 1 && (
+                    <PanelCard title="Receita diária">
+                      <div className="p-3">
+                        <BarsChart
+                          data={dailyData.map((d) => ({
+                            label: new Date(d.date + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
+                            value: d.total,
+                          }))}
+                          format={fmt}
+                        />
+                      </div>
+                    </PanelCard>
+                  )}
+
+                  {period === "today" && summary.hourly.some((h) => h.total > 0) && (
+                    <PanelCard title="Distribuição por hora" icon={Clock}>
+                      <div className="p-3">
+                        <BarsChart
+                          data={summary.hourly.map((h) => ({ label: `${h.hour}h`, value: h.total }))}
+                          format={fmt}
+                        />
+                      </div>
+                    </PanelCard>
+                  )}
+                </div>
               )}
-            </>
-          )}
 
-          {/* Top products */}
-          {summary.topProducts.length > 0 && (
-            <ContentCard>
-              <h3 className="text-sm font-black uppercase tracking-widest text-slate-700 mb-4">
-                Produtos Mais Vendidos
-              </h3>
-              <div className="space-y-3">
-                {summary.topProducts.map((p, i) => {
-                  const maxTotal = summary.topProducts[0]?.total || 1;
-                  const pct = (p.total / maxTotal) * 100;
-                  return (
-                    <div key={p.id} className="flex items-center gap-3">
-                      <span className="w-6 text-[10px] font-black text-slate-400 text-center shrink-0">
-                        #{i + 1}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-sm font-bold text-slate-800 truncate">{p.name}</span>
-                          <div className="flex items-center gap-3 shrink-0 ml-2">
-                            <span className="text-[10px] text-slate-400">{p.qty}x</span>
-                            <span className="text-sm font-black text-[#C9A227]">{fmt(p.total)}</span>
-                          </div>
-                        </div>
-                        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                          <div className="h-full rounded-full bg-[#C9A227]" style={{ width: `${pct}%` }} />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </ContentCard>
-          )}
+              {activeTab === "timing" && timing && hasTiming && (
+                <div className="space-y-3">
+                  <StatGrid cols={3}>
+                    <StatCard title="Tempo Médio de Preparo" value={fmtMinutes(timing.avgPrepMinutes)} icon={Timer} color="warning" />
+                    <StatCard title="Tempo Médio de Entrega" value={timing.avgDeliveryMinutes > 0 ? fmtMinutes(timing.avgDeliveryMinutes) : "—"} icon={Truck} color="info" />
+                    <StatCard title="Pedidos com Tempo Registrado" value={timing.ordersWithTiming} icon={Clock} color="default" />
+                  </StatGrid>
 
-          {/* Top inventory consumption */}
-          {topInventory.length > 0 && (
-            <ContentCard>
-              <h3 className="text-sm font-black uppercase tracking-widest text-slate-700 mb-4 flex items-center gap-2">
-                <Package className="w-4 h-4" />
-                Estoque Que Mais Sai
-              </h3>
-              <div className="space-y-3">
-                {topInventory.map((item, i) => {
-                  const pct = (item.quantity / maxTopInventoryQty) * 100;
-                  return (
-                    <div key={item.id} className="flex items-center gap-3">
-                      <span className="w-6 text-[10px] font-black text-slate-400 text-center shrink-0">
-                        #{i + 1}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-sm font-bold text-slate-800 truncate">{item.name}</span>
-                          <span className="text-sm font-black text-[#0D1B3E] shrink-0 ml-2">
-                            {item.quantity.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} {item.unit || "un"}
-                          </span>
-                        </div>
-                        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                          <div className="h-full rounded-full bg-[#0D1B3E]" style={{ width: `${pct}%` }} />
-                        </div>
-                      </div>
+                  <PanelCard title="Tempo médio de preparo por hora" icon={Timer}>
+                    <div className="p-3">
+                      <BarsChart
+                        data={timing.hourly.map((h) => ({ label: `${h.hour}h`, value: h.count > 0 ? Math.round(h.avgPrepMinutes * 10) / 10 : 0 }))}
+                        format={fmtMinutes}
+                      />
                     </div>
-                  );
-                })}
-              </div>
-            </ContentCard>
-          )}
-        </div>
-      )}
+                  </PanelCard>
+
+                  {timing.slowest.length > 0 && (
+                    <PanelCard title="Pedidos mais demorados no preparo" icon={AlertTriangle}>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="bg-zinc-50 text-left text-[11px] font-medium text-slate-500">
+                              <th className="px-3 py-2 font-medium">Pedido</th>
+                              <th className="px-3 py-2 font-medium">Data / Hora</th>
+                              <th className="px-3 py-2 font-medium">Tipo</th>
+                              <th className="px-3 py-2 font-medium text-right">Preparo</th>
+                              <th className="px-3 py-2 font-medium text-right">Entrega</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {timing.slowest.map((o) => (
+                              <tr key={o.id} className="border-t border-slate-100">
+                                <td className="px-3 py-2 font-medium text-slate-700">
+                                  {o.counterTicketNumber != null ? `#${String(o.counterTicketNumber).padStart(2, "0")}` : o.customerName}
+                                </td>
+                                <td className="px-3 py-2 text-slate-500 whitespace-nowrap">
+                                  {new Date(o.createdAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                                </td>
+                                <td className="px-3 py-2 text-slate-500">{ORDER_TYPE_LABELS[o.orderType] || o.orderType}</td>
+                                <td className="px-3 py-2 text-right"><Badge color="warning" size="sm">{fmtMinutes(o.prepMinutes)}</Badge></td>
+                                <td className="px-3 py-2 text-right text-slate-500">
+                                  {o.deliveryMinutes != null ? fmtMinutes(o.deliveryMinutes) : "—"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </PanelCard>
+                  )}
+                </div>
+              )}
+
+              {activeTab === "products" && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  <PanelCard title="Produtos mais vendidos" icon={ShoppingBag}>
+                    {summary.topProducts.length === 0 ? (
+                      <p className="p-3 text-xs text-slate-500">Nenhum produto vendido no período.</p>
+                    ) : (
+                      <div className="space-y-3 p-3">
+                        {summary.topProducts.map((p, i) => {
+                          const maxTotal = summary.topProducts[0]?.total || 1;
+                          const pct = (p.total / maxTotal) * 100;
+                          return (
+                            <div key={p.id} className="flex items-center gap-3">
+                              <span className="w-6 text-[11px] font-medium text-slate-500 text-center shrink-0">#{i + 1}</span>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex justify-between items-center mb-1">
+                                  <span className="text-xs font-medium text-slate-800 truncate">{p.name}</span>
+                                  <div className="flex items-center gap-3 shrink-0 ml-2">
+                                    <span className="text-[11px] text-slate-500">{p.qty}x</span>
+                                    <span className="text-xs font-semibold tabular-nums text-blue-700">{fmt(p.total)}</span>
+                                  </div>
+                                </div>
+                                {bar(pct, "bg-blue-600")}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </PanelCard>
+
+                  <PanelCard title="Estoque que mais sai" icon={Package}>
+                    {topInventory.length === 0 ? (
+                      <p className="p-3 text-xs text-slate-500">Nenhuma saída de estoque no período.</p>
+                    ) : (
+                      <div className="space-y-3 p-3">
+                        {topInventory.map((item, i) => {
+                          const pct = (item.quantity / maxTopInventoryQty) * 100;
+                          return (
+                            <div key={item.id} className="flex items-center gap-3">
+                              <span className="w-6 text-[11px] font-medium text-slate-500 text-center shrink-0">#{i + 1}</span>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex justify-between items-center mb-1">
+                                  <span className="text-xs font-medium text-slate-800 truncate">{item.name}</span>
+                                  <span className="text-xs font-semibold tabular-nums text-slate-700 shrink-0 ml-2">
+                                    {item.quantity.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} {item.unit || "un"}
+                                  </span>
+                                </div>
+                                {bar(pct, "bg-slate-500")}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </PanelCard>
+                </div>
+              )}
+            </Tabs>
+          </>
+        )}
+      </div>
     </PageWrapper>
   );
 }

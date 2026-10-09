@@ -108,7 +108,7 @@ export function TokenTextarea({
       {/* Variáveis disponíveis */}
       {availableVars.length > 0 && (
         <div>
-          <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-1.5">
+          <p className="text-[10px] font-semibold text-zinc-400 mb-1.5">
             Clique para inserir variável:
           </p>
           <div className="flex flex-wrap gap-1.5">
@@ -118,7 +118,7 @@ export function TokenTextarea({
                 type="button"
                 title={v.desc}
                 onClick={() => insertVar(v.key)}
-                className="text-[11px] px-2.5 py-1 bg-amber-50 border border-amber-200 text-amber-700 font-mono rounded-lg hover:bg-amber-100 transition-colors font-semibold"
+                className="text-[11px] px-2.5 py-1 bg-blue-50 border border-blue-200 text-blue-700 font-mono rounded-lg hover:bg-blue-100 transition-colors font-semibold"
               >
                 {v.key}
               </button>
@@ -136,7 +136,7 @@ export function TokenTextarea({
         onKeyDown={handleKeyDown}
         data-placeholder={placeholder}
         style={{ minHeight: minH }}
-        className="token-editor w-full border border-zinc-200 rounded-2xl px-4 py-3 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-amber-400/20 focus:border-amber-300 transition-all bg-white text-zinc-800 font-medium"
+        className="token-editor w-full border border-zinc-200 rounded-lg px-4 py-3 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-blue-400/20 focus:border-blue-300 transition-all bg-white text-zinc-800 font-medium"
       />
 
       <style>{`

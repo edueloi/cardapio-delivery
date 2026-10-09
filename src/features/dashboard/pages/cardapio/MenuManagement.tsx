@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import React, { useEffect, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   DndContext,
   DragOverlay,
@@ -16,44 +16,50 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-
 import { CSS } from "@dnd-kit/utilities";
 import {
   CheckCircle2,
-  CircleDollarSign,
   Eye,
-  Image as ImageIcon,
   List,
-  Luggage,
   Package,
   Plus,
   Search,
   Settings,
   Trash2,
   Utensils,
-  X,
 } from "lucide-react";
 import {
+  Alert,
   Badge,
   Button,
   ConfirmModal,
-  CurrencyInput,
-  FilterLineSegmented,
+  ContentCard,
+  EmptyState,
+  FilterLine,
+  FilterLineSearch,
+  FilterLineSection,
+  IconButton,
   Input,
   Modal,
   ModalFooter,
   PageWrapper,
   SectionTitle,
   Select,
+  StatCard,
+  StatGrid,
   Switch,
-  Textarea,
   useToast,
 } from "../../../../components";
 import { apiFetch } from "../../../../lib/api";
 import { ProductExtraStockLink, Tenant } from "../../../../types";
 import { canAccess, type MyMembership } from "../../types";
-import {
-  RecipeIngredientDraft,
-  RecipeIngredientsField,
-  StockLinksField,
-  VariantImageUploader,
-} from "../_shared/ManagementShared";
+import { RecipeIngredientDraft } from "../_shared/ManagementShared";
+import { ProductForm, type ProdFormState, type ProdTab } from "./ProductForm";
+
+const DRAG_HANDLE = (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+    <circle cx="5" cy="4" r="1.3" fill="currentColor"/><circle cx="11" cy="4" r="1.3" fill="currentColor"/>
+    <circle cx="5" cy="8" r="1.3" fill="currentColor"/><circle cx="11" cy="8" r="1.3" fill="currentColor"/>
+    <circle cx="5" cy="12" r="1.3" fill="currentColor"/><circle cx="11" cy="12" r="1.3" fill="currentColor"/>
+  </svg>
+);
 
 function SortableProductRow({
   prod, dragEnabled, fmt, toggleProductAvailability, openEditProduct, setDeleteProductConfirm,
@@ -76,39 +82,32 @@ function SortableProductRow({
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center gap-3 px-4 py-3 transition-colors ${!prod.available ? 'bg-slate-50/50 opacity-70' : 'bg-white'} ${isDragging ? 'opacity-40 z-10 relative' : ''}`}
+      className={`flex items-center gap-3 px-3 py-2 transition-colors ${!prod.available ? 'bg-slate-50/50 opacity-70' : 'bg-white'} ${isDragging ? 'opacity-40 z-10 relative' : ''}`}
     >
       {dragEnabled && (
         <button
           {...attributes}
           {...listeners}
+          aria-label="Arrastar para reordenar ou mover"
           className="shrink-0 p-1 -ml-1 text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing touch-none"
           title="Arrastar para reordenar ou mover"
         >
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-            <circle cx="5" cy="4" r="1.3" fill="currentColor"/><circle cx="11" cy="4" r="1.3" fill="currentColor"/>
-            <circle cx="5" cy="8" r="1.3" fill="currentColor"/><circle cx="11" cy="8" r="1.3" fill="currentColor"/>
-            <circle cx="5" cy="12" r="1.3" fill="currentColor"/><circle cx="11" cy="12" r="1.3" fill="currentColor"/>
-          </svg>
+          {DRAG_HANDLE}
         </button>
       )}
-      <div className={`w-12 h-12 bg-slate-100 rounded-xl overflow-hidden shrink-0 transition-all duration-500 ${!prod.available ? 'grayscale opacity-60 scale-95 border-2 border-slate-200' : 'border border-transparent'}`}>
+      <div className={`w-10 h-10 bg-slate-100 rounded-lg overflow-hidden shrink-0 ${!prod.available ? 'grayscale opacity-60' : ''}`}>
         {prod.imageUrl
           ? <img src={prod.imageUrl} className="w-full h-full object-cover" />
-          : <div className="w-full h-full flex items-center justify-center text-slate-300"><Utensils className="w-5 h-5" /></div>
+          : <div className="w-full h-full flex items-center justify-center text-slate-300"><Utensils className="w-4 h-4" /></div>
         }
       </div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <p className={`text-sm font-bold truncate transition-colors ${!prod.available ? 'text-slate-400 italic' : 'text-slate-800'}`}>{prod.name}</p>
-          {!prod.available && (
-            <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-white bg-slate-400 px-1.5 py-0.5 rounded-full shadow-sm">Inativo</span>
-          )}
-          {(prod as any).scheduleRule && (
-            <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-amber-700 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded-full">📅 Agendado</span>
-          )}
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className={`text-xs font-medium truncate ${!prod.available ? 'text-slate-500' : 'text-slate-800'}`}>{prod.name}</p>
+          {!prod.available && <Badge size="sm">Inativo</Badge>}
+          {(prod as any).scheduleRule && <Badge size="sm" color="info">Agendado</Badge>}
         </div>
-        <p className="text-xs text-slate-400 font-medium flex items-center gap-2">
+        <p className="text-[11px] text-slate-500 flex items-center gap-2 flex-wrap">
           {prod.variants?.length > 0
             ? `${prod.variants.length} variações • desde ${fmt(Math.min(...prod.variants.map((v: any) => v.price)))}`
             : fmt(prod.price)
@@ -116,12 +115,12 @@ function SortableProductRow({
           {prod.inventoryItem && (
             <>
               <span className="w-1 h-1 rounded-full bg-slate-300" />
-              <span className={`font-black uppercase text-[10px] ${
+              <span className={`font-medium text-[11px] ${
                 prod.inventoryItem.quantity <= 0
-                  ? "text-red-500"
+                  ? "text-red-600"
                   : prod.inventoryItem.quantity < 5
-                    ? "text-amber-500"
-                    : "text-green-600"
+                    ? "text-amber-600"
+                    : "text-emerald-600"
               }`}>
                 {prod.inventoryItem.quantity <= 0
                   ? "Esgotado"
@@ -132,28 +131,23 @@ function SortableProductRow({
           )}
         </p>
         {prod.description && (
-          <p className="text-[11px] text-slate-400 truncate mt-0.5">{prod.description}</p>
+          <p className="text-[11px] text-slate-500 truncate mt-0.5">{prod.description}</p>
         )}
       </div>
       <div className="flex items-center gap-1 shrink-0">
-        <button
-          onClick={() => toggleProductAvailability(prod)}
+        <Switch
+          size="sm"
+          checked={!!prod.available}
+          onCheckedChange={() => toggleProductAvailability(prod)}
           title={prod.available ? "Desativar produto" : "Ativar produto"}
-          className={`p-2 rounded-lg transition-colors ${prod.available ? 'text-green-500 hover:text-slate-400 hover:bg-slate-100' : 'text-slate-300 hover:text-green-500 hover:bg-green-50'}`}
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            {prod.available
-              ? <><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.6"/><path d="M5.5 8L7 9.5L10.5 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></>
-              : <><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.6"/><path d="M6 6L10 10M10 6L6 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></>
-            }
-          </svg>
-        </button>
-        <button onClick={() => openEditProduct(prod)} className="p-2 text-slate-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors">
-          <Settings className="w-4 h-4" />
-        </button>
-        <button onClick={() => setDeleteProductConfirm(prod.id)} className="p-2 text-slate-300 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors">
-          <Trash2 className="w-4 h-4" />
-        </button>
+          aria-label={prod.available ? "Desativar produto" : "Ativar produto"}
+        />
+        <IconButton size="xs" variant="ghost" aria-label="Editar produto" title="Editar produto" onClick={() => openEditProduct(prod)}>
+          <Settings size={14} />
+        </IconButton>
+        <IconButton size="xs" variant="ghost" aria-label="Excluir produto" title="Excluir produto" onClick={() => setDeleteProductConfirm(prod.id)}>
+          <Trash2 size={14} className="text-red-600" />
+        </IconButton>
       </div>
     </div>
   );
@@ -161,16 +155,16 @@ function SortableProductRow({
 
 function ProductRowGhost({ prod, fmt }: { prod: any; fmt: (n: number) => string }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-3 bg-white rounded-xl shadow-2xl border border-[#C9A227]/40 rotate-1">
-      <div className="w-12 h-12 bg-slate-100 rounded-xl overflow-hidden shrink-0">
+    <div className="flex items-center gap-3 px-3 py-2 bg-white rounded-lg border border-blue-300 rotate-1">
+      <div className="w-10 h-10 bg-slate-100 rounded-lg overflow-hidden shrink-0">
         {prod.imageUrl
           ? <img src={prod.imageUrl} className="w-full h-full object-cover" />
-          : <div className="w-full h-full flex items-center justify-center text-slate-300"><Utensils className="w-5 h-5" /></div>
+          : <div className="w-full h-full flex items-center justify-center text-slate-300"><Utensils className="w-4 h-4" /></div>
         }
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-bold text-slate-800 truncate">{prod.name}</p>
-        <p className="text-xs text-slate-400 font-medium">{fmt(prod.price)}</p>
+        <p className="text-xs font-medium text-slate-800 truncate">{prod.name}</p>
+        <p className="text-[11px] text-slate-500">{fmt(prod.price)}</p>
       </div>
     </div>
   );
@@ -185,14 +179,14 @@ function EmptyCategoryDropZone({ categoryId, isDraggingProduct, openNewProduct }
   return (
     <div
       ref={setNodeRef}
-      className={`px-4 py-6 text-center transition-colors ${isOver ? 'bg-amber-50' : ''}`}
+      className={`px-3 py-5 text-center transition-colors ${isOver ? 'bg-blue-50' : ''}`}
     >
-      <p className="text-xs text-slate-400 font-medium">
+      <p className="text-xs text-slate-500">
         {isDraggingProduct ? "Solte aqui para mover para esta categoria" : "Nenhum produto ainda."}
       </p>
-      <button onClick={() => openNewProduct(categoryId)} className="mt-2 text-xs font-black text-[#C9A227] hover:underline">
-        + Adicionar produto
-      </button>
+      <Button variant="ghost" size="xs" className="mt-1" iconLeft={<Plus size={14} />} onClick={() => openNewProduct(categoryId)}>
+        Adicionar produto
+      </Button>
     </div>
   );
 }
@@ -222,47 +216,34 @@ function SortableCategoryCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-4 last:mb-0 ${isDragging ? 'opacity-40 z-10 relative' : ''}`}
+      className={`bg-white rounded-lg border border-slate-200 overflow-hidden mb-3 last:mb-0 ${isDragging ? 'opacity-40 z-10 relative' : ''}`}
     >
-      {/* Category header */}
-      <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/60 flex items-center justify-between gap-3">
+      <div className="px-3 py-2 border-b border-slate-100 bg-slate-50/60 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 min-w-0">
           {dragEnabled && (
             <button
               {...attributes}
               {...listeners}
+              aria-label="Arrastar para reordenar categoria"
               className="shrink-0 p-1 -ml-1 text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing touch-none"
               title="Arrastar para reordenar categoria"
             >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                <circle cx="5" cy="4" r="1.3" fill="currentColor"/><circle cx="11" cy="4" r="1.3" fill="currentColor"/>
-                <circle cx="5" cy="8" r="1.3" fill="currentColor"/><circle cx="11" cy="8" r="1.3" fill="currentColor"/>
-                <circle cx="5" cy="12" r="1.3" fill="currentColor"/><circle cx="11" cy="12" r="1.3" fill="currentColor"/>
-              </svg>
+              {DRAG_HANDLE}
             </button>
           )}
-          <h3 className="font-black text-slate-800 uppercase tracking-widest text-xs truncate">{cat.name}
-            <span className="ml-2 text-zinc-400 font-bold normal-case tracking-normal">{cat.products?.length || 0} itens</span>
+          <h3 className="font-medium text-slate-800 text-sm truncate">{cat.name}
+            <span className="ml-2 text-[11px] text-slate-500 font-normal">{cat.products?.length || 0} itens</span>
           </h3>
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <button
-            onClick={() => openNewProduct(cat.id)}
-            className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest text-[#C9A227] hover:text-[#A8841C] px-2 py-1.5 rounded-lg hover:bg-amber-50 transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" /> Produto
-          </button>
-          <button
-            onClick={() => openEditCategory(cat)}
-            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
-            title="Editar categoria"
-          >
-            <Settings className="w-4 h-4" />
-          </button>
+          <Button variant="ghost" size="xs" iconLeft={<Plus size={14} />} onClick={() => openNewProduct(cat.id)}>Produto</Button>
+          <IconButton size="xs" variant="ghost" aria-label="Editar categoria" title="Editar categoria" onClick={() => openEditCategory(cat)}>
+            <Settings size={14} />
+          </IconButton>
         </div>
       </div>
 
-      <div className="divide-y divide-slate-50">
+      <div className="divide-y divide-slate-100">
         {cat.products?.length === 0 && (
           <EmptyCategoryDropZone categoryId={cat.id} isDraggingProduct={dragEnabled} openNewProduct={openNewProduct} />
         )}
@@ -283,263 +264,6 @@ function SortableCategoryCard({
     </div>
   );
 }
-
-const MAX_UPLOAD_SIZE_MB = 5;
-
-// Foto do produto — empilhada (foto grande em cima, texto embaixo), feita sob medida
-// pra coluna estreita de identidade do modal de produto. O ImageUploader compartilhado
-// é flex-row em telas sm:, o que espreme demais o texto numa coluna de 260px.
-function ProductPhotoField({ value, onChange }: { value: string; onChange: (val: string) => void }) {
-  const toast = useToast();
-  const [uploading, setUploading] = useState(false);
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    if (file.size > MAX_UPLOAD_SIZE_MB * 1024 * 1024) {
-      toast.error(`Imagem muito grande (máx. ${MAX_UPLOAD_SIZE_MB}MB). Escolha um arquivo menor.`);
-      return;
-    }
-    setUploading(true);
-    const formData = new FormData();
-    formData.append("file", file);
-    try {
-      const res = await apiFetch("/api/upload", { method: "POST", body: formData });
-      if (!res.ok) {
-        if (res.status === 413) throw new Error(`Imagem muito grande (máx. ${MAX_UPLOAD_SIZE_MB}MB).`);
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error || "Erro ao enviar imagem.");
-      }
-      const data = await res.json();
-      if (data.url) onChange(data.url);
-    } catch (err: any) {
-      toast.error(err?.message || "Erro ao enviar imagem");
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  return (
-    <div className="space-y-2">
-      <div className="relative w-full aspect-square rounded-2xl bg-white border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden group shadow-inner">
-        {uploading ? (
-          <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-        ) : value ? (
-          <>
-            <img src={value} className="w-full h-full object-cover" alt="Preview" />
-            <div
-              onClick={() => onChange("")}
-              className="absolute inset-0 bg-red-600/80 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer"
-            >
-              <div className="flex flex-col items-center gap-1">
-                <Trash2 className="w-5 h-5" />
-                <span className="text-[9px] font-black uppercase tracking-widest">Remover</span>
-              </div>
-            </div>
-          </>
-        ) : (
-          <label className="cursor-pointer flex flex-col items-center gap-1.5 w-full h-full justify-center hover:bg-slate-50 transition-colors">
-            <ImageIcon className="w-7 h-7 text-slate-300" />
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Trocar foto</span>
-            <input type="file" className="hidden" accept="image/*" onChange={handleFileChange} />
-          </label>
-        )}
-      </div>
-      <p className="text-[10px] text-slate-400 leading-tight">Fotos de alta qualidade convertem mais vendas. Recomendado: quadrada, até {MAX_UPLOAD_SIZE_MB}MB.</p>
-    </div>
-  );
-}
-
-// Modal de escolha de item do estoque — construído do zero (sem o Modal genérico
-// compartilhado) porque o mobileStyle="bottom-sheet" do componente base sobe de baixo
-// mesmo em telas largas; aqui é sempre centralizado com fade+scale.
-function StockPickerModal({
-  open, onClose, inventoryItems, inventoryCategories, usedItemIds, value, onPick,
-}: {
-  open: boolean;
-  onClose: () => void;
-  inventoryItems: any[];
-  inventoryCategories: any[];
-  usedItemIds: Set<string>;
-  value: string;
-  onPick: (id: string) => void;
-}) {
-  const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-
-  useEffect(() => {
-    if (open) { setSearch(""); setCategoryFilter("all"); }
-  }, [open]);
-
-  const saleItems = inventoryItems.filter(item => item.usage !== "INTERNAL");
-  const categoryById = new Map(inventoryCategories.map((cat: any) => [cat.id, cat]));
-  const filtered = saleItems.filter(item =>
-    (!search || item.name.toLowerCase().includes(search.toLowerCase())) &&
-    (categoryFilter === "all" || item.categoryId === categoryFilter)
-  );
-  const groupedFiltered = (() => {
-    const groups = new Map<string, { label: string; items: any[] }>();
-    for (const item of filtered) {
-      const key = item.categoryId || "_none";
-      if (!groups.has(key)) groups.set(key, { label: categoryById.get(item.categoryId)?.name || "Sem categoria", items: [] });
-      groups.get(key)!.items.push(item);
-    }
-    return Array.from(groups.values()).sort((a, b) => a.label.localeCompare(b.label));
-  })();
-
-  return (
-    <AnimatePresence>
-      {open && (
-        <>
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
-            onClick={onClose}
-            className="fixed inset-0 z-[110] bg-zinc-900/45 backdrop-blur-[2px]"
-          />
-          <div className="fixed inset-0 z-[111] flex items-center justify-center p-4 pointer-events-none">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96, y: 8 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 8 }}
-              transition={{ type: "spring", damping: 28, stiffness: 340 }}
-              className="w-full max-w-[420px] max-h-[70vh] bg-white rounded-2xl shadow-2xl border border-zinc-200/60 flex flex-col overflow-hidden pointer-events-auto"
-            >
-              <div className="flex items-center justify-between px-4 py-3.5 border-b border-zinc-100 shrink-0">
-                <h3 className="text-sm font-black text-zinc-900 uppercase tracking-wide">Escolher item do estoque</h3>
-                <button onClick={onClose} aria-label="Fechar" className="p-1.5 -mr-1 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition-colors">
-                  <X size={16} />
-                </button>
-              </div>
-              <div className="p-3 flex gap-2 border-b border-zinc-100 shrink-0">
-                <input
-                  autoFocus
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  placeholder="Buscar item..."
-                  className="flex-1 min-w-0 bg-zinc-50 border border-zinc-200 rounded-lg px-2.5 py-1.5 text-[13px] font-semibold focus:outline-none focus:ring-2 focus:ring-amber-400"
-                />
-                {inventoryCategories.length > 0 && (
-                  <select
-                    value={categoryFilter}
-                    onChange={e => setCategoryFilter(e.target.value)}
-                    className="w-32 shrink-0 bg-zinc-50 border border-zinc-200 rounded-lg px-2 py-1.5 text-[12px] font-semibold focus:outline-none focus:ring-2 focus:ring-amber-400"
-                  >
-                    <option value="all">Categorias</option>
-                    {inventoryCategories.map((cat: any) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
-                  </select>
-                )}
-              </div>
-              <div className="flex-1 overflow-y-auto divide-y divide-zinc-100">
-                <button
-                  type="button"
-                  onClick={() => { onPick(""); onClose(); }}
-                  className={`w-full flex items-center px-3 py-2.5 text-[13px] font-semibold text-left transition-colors ${!value ? "bg-amber-50 text-amber-800" : "hover:bg-slate-50 text-slate-500"}`}
-                >
-                  Sem vínculo de estoque
-                </button>
-                {groupedFiltered.map(group => (
-                  <div key={group.label}>
-                    {categoryFilter === "all" && (
-                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 bg-slate-50/80 px-3 py-1.5">{group.label}</p>
-                    )}
-                    {group.items.map((item: any) => {
-                      const alreadyUsed = usedItemIds.has(item.id);
-                      const isSelected = value === item.id;
-                      const statusLabel = item.quantity <= 0 ? "Esgotado" : `${item.quantity} ${item.unit || "un"}`;
-                      const statusColor = item.quantity <= 0 ? "text-red-500" : item.quantity < 5 ? "text-amber-500" : "text-green-600";
-                      return (
-                        <button
-                          key={item.id}
-                          type="button"
-                          disabled={alreadyUsed && !isSelected}
-                          onClick={() => { onPick(item.id); onClose(); }}
-                          className={`w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors ${isSelected ? "bg-amber-50" : alreadyUsed ? "opacity-45 cursor-not-allowed" : "hover:bg-slate-50"}`}
-                        >
-                          <div className="flex-1 min-w-0">
-                            <p className="text-[13px] font-semibold text-slate-800 truncate leading-tight">{item.name}</p>
-                            {alreadyUsed && !isSelected && <p className="text-[10px] text-slate-400 leading-tight">Já vinculado a outro produto</p>}
-                          </div>
-                          <span className={`text-[10px] font-bold uppercase shrink-0 ${statusColor}`}>{statusLabel}</span>
-                          {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ))}
-                {filtered.length === 0 && <p className="text-center text-sm text-slate-400 py-8">Nenhum item encontrado</p>}
-              </div>
-            </motion.div>
-          </div>
-        </>
-      )}
-    </AnimatePresence>
-  );
-}
-
-// Campo de vínculo de estoque — abre o StockPickerModal acima. Substitui o
-// InventoryLinkField compartilhado (que embutia um Modal com bottom-sheet).
-function StockLinkField({
-  inventoryItems, inventoryCategories, value, onChange, autoDisable, onAutoDisableChange, allCategories, editingProductId,
-}: {
-  inventoryItems: any[];
-  inventoryCategories: any[];
-  value: string;
-  onChange: (val: string) => void;
-  autoDisable: boolean;
-  onAutoDisableChange: (val: boolean) => void;
-  allCategories: any[];
-  editingProductId?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const saleItems = inventoryItems.filter(item => item.usage !== "INTERNAL");
-  const selectedItem = saleItems.find(i => i.id === value);
-  const allProducts = allCategories.flatMap((c: any) => c.products || []);
-  const usedItemIds = new Set(
-    allProducts.filter((p: any) => p.id !== editingProductId && p.inventoryItemId).map((p: any) => p.inventoryItemId)
-  );
-
-  return (
-    <div className="space-y-2">
-      <label className="block text-[11px] font-black uppercase tracking-widest text-slate-600">Vincular ao estoque <span className="text-slate-400 font-bold normal-case">(opcional)</span></label>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="w-full flex items-center justify-between gap-3 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2.5 text-sm font-bold text-left hover:border-amber-300 hover:bg-amber-50/30 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-400"
-      >
-        {selectedItem ? (
-          <div className="flex-1 min-w-0">
-            <span className="text-slate-800 truncate block">{selectedItem.name}</span>
-            <span className={`text-[10px] font-black uppercase ${selectedItem.quantity <= 0 ? "text-red-500" : selectedItem.quantity < 5 ? "text-amber-500" : "text-green-600"}`}>
-              {selectedItem.quantity <= 0 ? "Esgotado" : `${selectedItem.quantity} ${selectedItem.unit || "un"}`}
-            </span>
-          </div>
-        ) : (
-          <span className="text-slate-400">Sem vínculo de estoque</span>
-        )}
-        <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-      </button>
-      {value && (
-        <label className="flex items-center gap-2.5 cursor-pointer select-none">
-          <input type="checkbox" checked={autoDisable} onChange={e => onAutoDisableChange(e.target.checked)} className="w-4 h-4 rounded accent-amber-500" />
-          <span className="text-xs font-semibold text-slate-600">Desativar automaticamente quando o estoque zerar</span>
-        </label>
-      )}
-      {saleItems.length === 0 && <p className="text-[11px] text-slate-400 italic">Nenhum item de venda cadastrado no estoque.</p>}
-      <StockPickerModal
-        open={open}
-        onClose={() => setOpen(false)}
-        inventoryItems={inventoryItems}
-        inventoryCategories={inventoryCategories}
-        usedItemIds={usedItemIds}
-        value={value}
-        onPick={onChange}
-      />
-    </div>
-  );
-}
-
-type ProdTab = "estoque" | "visibilidade" | "horario" | "adicionais" | "viagem" | "selecao" | "variantes" | "fiscal";
 
 export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant | null, refresh: () => void, membership?: MyMembership | null }) {
   const canManageInventory = canAccess(membership ?? null, "inventory");
@@ -573,18 +297,14 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
   // Product modal
   const [prodModal, setProdModal] = useState<{ open: boolean; categoryId: string | null }>({ open: false, categoryId: null });
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
-  const [prodTab, setProdTab] = useState<ProdTab>("estoque");
-  // Modal construído do zero (sem o Modal genérico) — precisa bloquear o scroll do
-  // body manualmente, já que o componente compartilhado fazia isso por trás.
-  useEffect(() => {
-    if (prodModal.open) document.body.style.overflow = "hidden";
-    else document.body.style.overflow = "";
-    return () => { document.body.style.overflow = ""; };
-  }, [prodModal.open]);
+  const [prodTab, setProdTab] = useState<ProdTab>("geral");
+  const [prodSaving, setProdSaving] = useState(false);
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
   const [inventoryCategories, setInventoryCategories] = useState<any[]>([]);
   const [productionRecipes, setProductionRecipes] = useState<any[]>([]);
-  const [prodForm, setProdForm] = useState({
+  const [prodForm, setProdForm] = useState<ProdFormState>({
     name: "", description: "", price: "", imageUrl: "", inventoryItemId: "", recipeId: "",
     available: true, pdvOnly: false, kitchenPrint: false, autoDisableWhenOutOfStock: false,
     scheduleRuleEnabled: false,
@@ -642,6 +362,25 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
     }
   }, [tenant]);
 
+  // Produto abre em tela cheia; o histórico do navegador (?produto=) faz o botão
+  // "voltar" do navegador fechar o formulário em vez de sair do painel.
+  const productParam = searchParams.get("produto");
+  const historySeen = useRef(false);
+  const pushProductHistory = (value: string) => {
+    const next = new URLSearchParams(window.location.search);
+    next.set("produto", value);
+    historySeen.current = true;
+    navigate({ search: next.toString() });
+  };
+  useEffect(() => {
+    if (productParam) { historySeen.current = true; return; }
+    if (historySeen.current) {
+      historySeen.current = false;
+      setProdModal(m => (m.open ? { open: false, categoryId: null } : m));
+      setEditingProduct(null);
+    }
+  }, [productParam]);
+
   const openNewCategory = () => { setCatName(""); setCatModal({ open: true, editing: null }); };
   const openEditCategory = (cat: { id: string; name: string }) => { setCatName(cat.name); setCatModal({ open: true, editing: cat }); };
   const closeCatModal = () => setCatModal({ open: false, editing: null });
@@ -683,8 +422,9 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
     setProdForm({ name: "", description: "", price: "", imageUrl: "", inventoryItemId: "", recipeId: "", available: true, pdvOnly: false, kitchenPrint: false, autoDisableWhenOutOfStock: false, scheduleRuleEnabled: false, scheduleRuleType: "weekday", scheduleRuleWeekdays: [], scheduleRuleStartTime: "", scheduleRuleEndTime: "", scheduleRuleStartDate: "", scheduleRuleEndDate: "", variants: [], extras: [], selectionGroups: [], ncm: "", cfop: "5102", csosn: "400", unitCom: "UN", origem: 0, aliqIcms: 0 });
     setExtraInput({ label: "", price: "" });
     setRecipeIngredients([]);
-    setProdTab("estoque");
+    setProdTab("geral");
     setProdModal({ open: true, categoryId });
+    pushProductHistory("novo");
   };
 
   const openEditProduct = (prod: any) => {
@@ -774,31 +514,53 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
         unit: ing.unit || "un",
       })) || []
     );
-    setProdTab("estoque");
+    setProdTab("geral");
     setProdModal({ open: true, categoryId: prod.categoryId });
+    pushProductHistory(String(prod.id));
   };
 
 
 
   const closeProdModal = () => { setProdModal({ open: false, categoryId: null }); setEditingProduct(null); };
+  const leaveProductPage = () => {
+    closeProdModal();
+    if (searchParams.get("produto")) {
+      historySeen.current = false;
+      navigate(-1);
+    }
+  };
 
   const saveProduct = async () => {
+    if (prodSaving) return;
+    setProdSaving(true);
+    try {
+      await doSaveProduct();
+    } finally {
+      setProdSaving(false);
+    }
+  };
+
+  const doSaveProduct = async () => {
     if (!prodForm.name.trim()) {
+      setProdTab("geral");
       toast.error("Informe o nome do produto.");
       return;
     }
     if (!prodModal.categoryId) {
+      setProdTab("geral");
       toast.error("Selecione uma categoria.");
       return;
     }
     const hasVariants = prodForm.variants.length > 0;
     if (!hasVariants && (!prodForm.price || isNaN(parseFloat(prodForm.price)))) {
+      setProdTab("geral");
       toast.error("Informe o preço do produto.");
       return;
     }
     if (hasVariants) {
       const invalidVariant = prodForm.variants.find(v => !v.name.trim() || !v.price || isNaN(parseFloat(v.price)));
       if (invalidVariant) {
+        setProdTab("variantes");
         toast.error("Preencha nome e preço de todas as variações.");
         return;
       }
@@ -806,6 +568,7 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
     const validIngredients = recipeIngredients.filter(ing => ing.inventoryItemId && ing.quantity && !isNaN(parseFloat(ing.quantity)));
     const incompleteIngredient = recipeIngredients.find(ing => !ing.inventoryItemId || !ing.quantity || isNaN(parseFloat(ing.quantity)));
     if (incompleteIngredient) {
+      setProdTab("estoque");
       toast.error("Preencha o item e a quantidade de todos os insumos, ou remova a linha vazia.");
       return;
     }
@@ -831,6 +594,7 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
       // reaproveita outra categoria. Juntos, o cliente escolhe a mesma coisa duas vezes
       // (foi exatamente o bug visto em produção no "1 espeto tradicional").
       if (hasVariants) {
+        setProdTab("selecao");
         toast.error("Este produto já tem variações — remova-as antes de ativar \"Cliente escolhe itens\", ou remova os grupos de seleção. Os dois juntos fazem o cliente escolher o sabor duas vezes.");
         return;
       }
@@ -838,14 +602,17 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
       for (const g of prodForm.selectionGroups) {
         const qty = parseInt(g.qty, 10);
         if (!qty || qty < 1) {
+          setProdTab("selecao");
           toast.error(`"${g.label || "Grupo de seleção"}": informe quantos itens o cliente deve escolher.`);
           return;
         }
         if (g.sourceType === "category" && !g.categoryId) {
+          setProdTab("selecao");
           toast.error(`"${g.label || "Grupo de seleção"}": selecione a categoria de onde vêm as opções.`);
           return;
         }
         if (g.sourceType === "products" && g.productIds.length === 0) {
+          setProdTab("selecao");
           toast.error(`"${g.label || "Grupo de seleção"}": selecione ao menos um item para a seleção.`);
           return;
         }
@@ -907,7 +674,7 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
       .then(r => r.json())
       .then(data => setProductionRecipes(Array.isArray(data) ? data : []))
       .catch(() => {});
-    closeProdModal();
+    leaveProductPage();
   };
 
   // Sincroniza a lista simples de "insumos usados" com uma ProductionRecipe por trás —
@@ -1253,166 +1020,224 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
     setProdForm(prev => ({ ...prev, extras: prev.extras.map(x => x.id === takeoutExtra.id ? { ...x, ...patch } : x) }));
   };
 
-  const prodTabCounts: Partial<Record<ProdTab, number>> = {
-    adicionais: visibleExtras.length,
-    viagem: takeoutExtra?.stockLinks.length || 0,
-    selecao: prodForm.selectionGroups.length,
-    variantes: prodForm.variants.length,
-  };
-  const PROD_TABS: { id: ProdTab; label: string; icon?: React.ReactNode }[] = [
-    { id: "estoque", label: "Estoque" },
-    { id: "visibilidade", label: "Visibilidade" },
-    { id: "horario", label: "Horário" },
-    { id: "adicionais", label: "Adicionais" },
-    { id: "viagem", label: "Viagem", icon: <Luggage className="w-3.5 h-3.5" /> },
-    { id: "selecao", label: "Seleção" },
-    { id: "variantes", label: "Variantes" },
-    { id: "fiscal", label: "Fiscal" },
-  ];
+  const confirmModals = (
+    <>
+      <ConfirmModal
+        isOpen={!!deleteProductConfirm}
+        onClose={() => setDeleteProductConfirm(null)}
+        onConfirm={() => { deleteProduct(deleteProductConfirm!); setDeleteProductConfirm(null); }}
+        title="Excluir produto"
+        message="Tem certeza que deseja excluir este produto? Essa ação não pode ser desfeita."
+        confirmLabel="Excluir"
+        variant="danger"
+      />
+      <ConfirmModal
+        isOpen={!!deleteCategoryConfirm}
+        onClose={() => setDeleteCategoryConfirm(null)}
+        onConfirm={() => { deleteCategory(deleteCategoryConfirm!.id); setDeleteCategoryConfirm(null); }}
+        title="Excluir categoria"
+        message={<>Tem certeza que deseja excluir a categoria <strong>"{deleteCategoryConfirm?.name}"</strong> e todos os seus produtos? Essa ação não pode ser desfeita.</>}
+        confirmLabel="Excluir tudo"
+        variant="danger"
+      />
+    </>
+  );
+
+  // ── Página de produto (tela inteira, com histórico do navegador via ?produto=) ──
+  if (prodModal.open) {
+    return (
+      <PageWrapper>
+        <ProductForm
+          isEditing={!!editingProduct}
+          editingProductId={editingProduct?.id}
+          prodForm={prodForm}
+          setProdForm={setProdForm}
+          tab={prodTab}
+          onTabChange={setProdTab}
+          saving={prodSaving}
+          onSave={saveProduct}
+          onCancel={leaveProductPage}
+          onDelete={() => { const id = editingProduct?.id; leaveProductPage(); if (id) setDeleteProductConfirm(id); }}
+          onDuplicate={duplicateProductToCatalog}
+          onDuplicateToInventory={duplicateProductToInventory}
+          canManageInventory={canManageInventory}
+          categories={localCategories}
+          currentCategoryId={prodModal.categoryId}
+          inventoryItems={inventoryItems}
+          inventoryCategories={inventoryCategories}
+          recipeIngredients={recipeIngredients}
+          setRecipeIngredients={setRecipeIngredients}
+          extraInput={extraInput}
+          setExtraInput={setExtraInput}
+          takeoutExtra={takeoutExtra}
+          visibleExtras={visibleExtras}
+          enableTakeoutKit={enableTakeoutKit}
+          updateTakeoutExtra={updateTakeoutExtra}
+          addVariantField={addVariantField}
+          removeVariantField={removeVariantField}
+          updateVariantField={updateVariantField}
+          addSelectionGroupField={addSelectionGroupField}
+          removeSelectionGroupField={removeSelectionGroupField}
+          updateSelectionGroupField={updateSelectionGroupField}
+        />
+        {confirmModals}
+      </PageWrapper>
+    );
+  }
+
+  const activeProductsCount = allCatalogProducts.filter((p: any) => p.available !== false).length;
+  const inactiveProductsCount = allCatalogProducts.length - activeProductsCount;
+  const hasFilters = !!search || statusFilter !== "all" || selectedCat !== "all";
 
   return (
-    <div className="space-y-4">
-
-      {/* Toolbar */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        {/* Category filter dropdown */}
-        <div className="relative flex-1">
-          <select
-            value={selectedCat}
-            onChange={e => setSelectedCat(e.target.value)}
-            className="w-full appearance-none bg-white border border-zinc-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400 pr-8"
-          >
-            <option value="all">Todas as categorias ({categories.length})</option>
-            {categories.map(cat => (
-              <option key={cat.id} value={cat.id}>{cat.name} ({cat.products?.length || 0})</option>
-            ))}
-          </select>
-          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </span>
-        </div>
-
-        {/* Status filter dropdown */}
-        <div className="relative flex-1">
-          <select
-            value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value as "all" | "active" | "inactive")}
-            className="w-full appearance-none bg-white border border-zinc-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400 pr-8"
-          >
-            <option value="all">Ativos e inativos</option>
-            <option value="active">Somente ativos</option>
-            <option value="inactive">Somente inativos</option>
-          </select>
-          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </span>
-        </div>
-
-        {/* Search */}
-        <div className="relative flex-1">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.6"/><path d="M10 10L12.5 12.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
-          </span>
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar produto..."
-            className="w-full bg-white border border-zinc-200 rounded-xl pl-9 pr-4 py-2.5 text-sm font-bold text-slate-700 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
-          />
-        </div>
-
-        <div className="flex gap-2 shrink-0 w-full sm:w-auto">
-          <Button variant="outline" onClick={openFiscalReview} className="flex-1 sm:flex-none">
-            Conferência fiscal{productsWithFiscalPending.length > 0 ? ` (${productsWithFiscalPending.length})` : ""}
-          </Button>
-          <Button onClick={openNewCategory} iconLeft={<Plus className="w-4 h-4" />} className="flex-1 sm:flex-none">
-            Nova Categoria
-          </Button>
-        </div>
-      </div>
-
-      {/* Empty state */}
-      {categories.length === 0 && (
-        <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-10 text-center flex flex-col items-center gap-4">
-          <Utensils className="w-12 h-12 text-slate-300" />
-          <div>
-            <p className="text-slate-700 font-black text-base">Comece criando uma categoria</p>
-            <p className="text-slate-400 text-sm mt-1 max-w-xs mx-auto">
-              Categorias organizam seu cardápio — ex: <span className="font-bold">Pastéis</span>, <span className="font-bold">Bebidas</span>, <span className="font-bold">Sobremesas</span>. Depois disso você adiciona os produtos dentro de cada uma.
-            </p>
-          </div>
-          <Button onClick={openNewCategory} iconLeft={<Plus className="w-4 h-4" />}>
-            Adicionar primeira categoria
-          </Button>
-        </div>
-      )}
-
-      {/* Category + product list — um único DndContext cobre categorias e produtos,
-          permitindo arrastar um produto de uma categoria para outra. */}
-      <DndContext
-        sensors={dndSensors}
-        collisionDetection={closestCenter}
-        onDragStart={(e: DragStartEvent) => {
-          if (!dragEnabled) return;
-          const kind = (e.active.data.current as any)?.type;
-          if (kind === "category") {
-            setActiveDragCategory(categories.find(c => c.id === e.active.id) || null);
-          } else if (kind === "product") {
-            const cat = categories.find(c => c.id === (e.active.data.current as any).categoryId);
-            setActiveDragProduct(cat?.products?.find((p: any) => p.id === e.active.id) || null);
-          }
-        }}
-        onDragEnd={(e: DragEndEvent) => {
-          const { active, over } = e;
-          setActiveDragCategory(null);
-          setActiveDragProduct(null);
-          if (!dragEnabled || !over || active.id === over.id) return;
-
-          const activeType = (active.data.current as any)?.type;
-          const overType = (over.data.current as any)?.type;
-
-          if (activeType === "category" && overType === "category") {
-            void reorderCategories(String(active.id), String(over.id));
-            return;
-          }
-
-          if (activeType === "product") {
-            const fromCategoryId = (active.data.current as any).categoryId;
-            if (overType === "product") {
-              const toCategoryId = (over.data.current as any).categoryId;
-              void reorderOrMoveProduct(String(active.id), fromCategoryId, String(over.id), toCategoryId);
-            } else if (overType === "category-drop") {
-              // Soltou sobre o corpo de uma categoria vazia
-              void reorderOrMoveProduct(String(active.id), fromCategoryId, null, String(over.id));
-            }
-          }
-        }}
-        onDragCancel={() => { setActiveDragCategory(null); setActiveDragProduct(null); }}
-      >
-        <SortableContext items={visibleCategories.map(c => c.id)} strategy={verticalListSortingStrategy}>
-          {visibleCategories.map(cat => (
-            <SortableCategoryCard
-              key={cat.id}
-              cat={cat}
-              dragEnabled={dragEnabled}
-              openNewProduct={openNewProduct}
-              openEditCategory={openEditCategory}
-              openEditProduct={openEditProduct}
-              toggleProductAvailability={toggleProductAvailability}
-              setDeleteProductConfirm={setDeleteProductConfirm}
-              fmt={fmt}
-            />
-          ))}
-        </SortableContext>
-        <DragOverlay>
-          {activeDragCategory && (
-            <div className="bg-white rounded-2xl border-2 border-[#C9A227] shadow-2xl px-4 py-3 opacity-95 rotate-1">
-              <h3 className="font-black text-slate-800 uppercase tracking-widest text-xs">{activeDragCategory.name}</h3>
+    <PageWrapper>
+      <div className="space-y-4">
+        <SectionTitle
+          icon={Utensils}
+          title="Cardápio"
+          description="Gerencie categorias, preços e disponibilidades em tempo real."
+          action={
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={openFiscalReview}>
+                Conferência fiscal{productsWithFiscalPending.length > 0 ? ` (${productsWithFiscalPending.length})` : ""}
+              </Button>
+              <Button size="sm" onClick={openNewCategory} iconLeft={<Plus size={14} />}>Nova categoria</Button>
             </div>
-          )}
-          {activeDragProduct && <ProductRowGhost prod={activeDragProduct} fmt={fmt} />}
-        </DragOverlay>
-      </DndContext>
+          }
+        />
+
+        {categories.length > 0 && (
+          <StatGrid cols={4}>
+            <StatCard title="Categorias" value={categories.length} icon={List} color="info" />
+            <StatCard title="Produtos" value={allCatalogProducts.length} icon={Package} color="info" />
+            <StatCard title="Ativos" value={activeProductsCount} icon={CheckCircle2} color="success" />
+            <StatCard title="Inativos" value={inactiveProductsCount} icon={Eye} color={inactiveProductsCount > 0 ? "warning" : "info"} />
+          </StatGrid>
+        )}
+
+        {categories.length > 0 && (
+          <FilterLine>
+            <FilterLineSection grow>
+              <FilterLineSearch aria-label="Buscar produto" value={search} onChange={setSearch} placeholder="Buscar produto..." className="max-w-[280px]" />
+              <Select
+                aria-label="Filtrar por categoria"
+                wrapperClassName="w-full sm:w-56"
+                value={selectedCat}
+                onChange={e => setSelectedCat(e.target.value)}
+              >
+                <option value="all">Todas as categorias ({categories.length})</option>
+                {categories.map(cat => (
+                  <option key={cat.id} value={cat.id}>{cat.name} ({cat.products?.length || 0})</option>
+                ))}
+              </Select>
+              <Select
+                aria-label="Filtrar por status"
+                wrapperClassName="w-full sm:w-44"
+                value={statusFilter}
+                onChange={e => setStatusFilter(e.target.value as "all" | "active" | "inactive")}
+              >
+                <option value="all">Ativos e inativos</option>
+                <option value="active">Somente ativos</option>
+                <option value="inactive">Somente inativos</option>
+              </Select>
+            </FilterLineSection>
+            {hasFilters && (
+              <FilterLineSection align="right">
+                <Button variant="ghost" size="sm" onClick={() => { setSearch(""); setSelectedCat("all"); setStatusFilter("all"); }}>Limpar filtros</Button>
+              </FilterLineSection>
+            )}
+          </FilterLine>
+        )}
+
+        {categories.length === 0 && (
+          <ContentCard>
+            <EmptyState
+              icon={Utensils}
+              title="Comece criando uma categoria"
+              description="Categorias organizam seu cardápio — ex: Pastéis, Bebidas, Sobremesas. Depois disso você adiciona os produtos dentro de cada uma."
+              action={<Button size="sm" onClick={openNewCategory} iconLeft={<Plus size={14} />}>Adicionar primeira categoria</Button>}
+            />
+          </ContentCard>
+        )}
+
+        {/* Category + product list — um único DndContext cobre categorias e produtos,
+            permitindo arrastar um produto de uma categoria para outra. */}
+        <DndContext
+          sensors={dndSensors}
+          collisionDetection={closestCenter}
+          onDragStart={(e: DragStartEvent) => {
+            if (!dragEnabled) return;
+            const kind = (e.active.data.current as any)?.type;
+            if (kind === "category") {
+              setActiveDragCategory(categories.find(c => c.id === e.active.id) || null);
+            } else if (kind === "product") {
+              const cat = categories.find(c => c.id === (e.active.data.current as any).categoryId);
+              setActiveDragProduct(cat?.products?.find((p: any) => p.id === e.active.id) || null);
+            }
+          }}
+          onDragEnd={(e: DragEndEvent) => {
+            const { active, over } = e;
+            setActiveDragCategory(null);
+            setActiveDragProduct(null);
+            if (!dragEnabled || !over || active.id === over.id) return;
+
+            const activeType = (active.data.current as any)?.type;
+            const overType = (over.data.current as any)?.type;
+
+            if (activeType === "category" && overType === "category") {
+              void reorderCategories(String(active.id), String(over.id));
+              return;
+            }
+
+            if (activeType === "product") {
+              const fromCategoryId = (active.data.current as any).categoryId;
+              if (overType === "product") {
+                const toCategoryId = (over.data.current as any).categoryId;
+                void reorderOrMoveProduct(String(active.id), fromCategoryId, String(over.id), toCategoryId);
+              } else if (overType === "category-drop") {
+                // Soltou sobre o corpo de uma categoria vazia
+                void reorderOrMoveProduct(String(active.id), fromCategoryId, null, String(over.id));
+              }
+            }
+          }}
+          onDragCancel={() => { setActiveDragCategory(null); setActiveDragProduct(null); }}
+        >
+          <SortableContext items={visibleCategories.map(c => c.id)} strategy={verticalListSortingStrategy}>
+            {visibleCategories.map(cat => (
+              <SortableCategoryCard
+                key={cat.id}
+                cat={cat}
+                dragEnabled={dragEnabled}
+                openNewProduct={openNewProduct}
+                openEditCategory={openEditCategory}
+                openEditProduct={openEditProduct}
+                toggleProductAvailability={toggleProductAvailability}
+                setDeleteProductConfirm={setDeleteProductConfirm}
+                fmt={fmt}
+              />
+            ))}
+          </SortableContext>
+          <DragOverlay>
+            {activeDragCategory && (
+              <div className="bg-white rounded-lg border-2 border-blue-500 px-3 py-2 opacity-95 rotate-1">
+                <h3 className="font-medium text-slate-800 text-sm">{activeDragCategory.name}</h3>
+              </div>
+            )}
+            {activeDragProduct && <ProductRowGhost prod={activeDragProduct} fmt={fmt} />}
+          </DragOverlay>
+        </DndContext>
+
+        {/* Search / filtro sem resultado */}
+        {(search || statusFilter !== "all") && visibleCategories.length === 0 && categories.length > 0 && (
+          <ContentCard>
+            <EmptyState
+              icon={Search}
+              title={search ? `Nenhum produto encontrado para "${search}"` : statusFilter === "inactive" ? "Nenhum produto inativo no momento." : "Nenhum produto ativo encontrado."}
+              description="Ajuste os filtros para ver mais produtos."
+            />
+          </ContentCard>
+        )}
+      </div>
 
       <Modal
         isOpen={fiscalReviewOpen}
@@ -1430,39 +1255,39 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
           </ModalFooter>
         }
       >
-        <div className="space-y-4">
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
-            <p className="font-black">Confirme o NCM com o contador antes de salvar.</p>
-            <p className="mt-1 text-xs leading-relaxed">Produção própria aplica o CFOP 5101; revenda aplica 5102. Esses atalhos não alteram o NCM, pois ele depende da composição do produto.</p>
-          </div>
+        <div className="space-y-3">
+          <Alert variant="warning" title="Confirme o NCM com o contador antes de salvar.">
+            Produção própria aplica o CFOP 5101; revenda aplica 5102. Esses atalhos não alteram o NCM, pois ele depende da composição do produto.
+          </Alert>
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-            <input
+            <Input
+              aria-label="Buscar produto para conferir"
+              wrapperClassName="w-full lg:flex-1 lg:max-w-[280px]"
               value={fiscalReviewSearch}
               onChange={event => setFiscalReviewSearch(event.target.value)}
               placeholder="Buscar produto para conferir..."
-              className="w-full lg:flex-1 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-amber-400"
             />
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => applyFiscalProfile("5101")}>Produção própria (5101)</Button>
-              <Button variant="outline" onClick={() => applyFiscalProfile("5102")}>Revenda (5102)</Button>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={() => applyFiscalProfile("5101")}>Produção própria (5101)</Button>
+              <Button variant="outline" size="sm" onClick={() => applyFiscalProfile("5102")}>Revenda (5102)</Button>
             </div>
           </div>
           <p className="text-xs text-slate-500">Os atalhos são aplicados apenas aos {fiscalReviewProducts.length} produtos exibidos no filtro. Campos em destaque precisam de revisão antes da emissão.</p>
-          <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+          <div className="overflow-x-auto border border-slate-200 rounded-lg">
             <table className="w-full min-w-[760px] text-left">
-              <thead className="bg-slate-50 text-[10px] uppercase tracking-widest text-slate-500">
-                <tr><th className="px-4 py-3">Produto</th><th className="px-4 py-3">NCM</th><th className="px-4 py-3">CFOP</th><th className="px-4 py-3">CSOSN</th><th className="px-4 py-3">Unidade</th></tr>
+              <thead className="bg-zinc-50 text-[11px] font-medium text-slate-500">
+                <tr><th className="px-3 py-2">Produto</th><th className="px-3 py-2">NCM</th><th className="px-3 py-2">CFOP</th><th className="px-3 py-2">CSOSN</th><th className="px-3 py-2">Unidade</th></tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {fiscalReviewProducts.map((product: any) => {
                   const draft = fiscalDrafts[product.id];
                   const invalidNcm = !draft?.ncm || !/^\d{8}$/.test(draft.ncm.replace(/\D/g, "")) || draft.ncm.replace(/\D/g, "") === "00000000";
                   return <tr key={product.id} className="bg-white">
-                    <td className="px-4 py-3"><p className="text-sm font-bold text-slate-800">{product.name}</p>{invalidNcm && <p className="mt-0.5 text-[10px] font-bold text-red-600">NCM pendente</p>}</td>
-                    <td className="px-4 py-3"><input value={draft?.ncm || ""} maxLength={8} onChange={event => updateFiscalDraft(product.id, { ncm: event.target.value.replace(/\D/g, "") })} placeholder="8 dígitos" className={`w-28 rounded-lg border px-2.5 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-amber-400 ${invalidNcm ? "border-red-300 bg-red-50" : "border-slate-200"}`} /></td>
-                    <td className="px-4 py-3"><select value={draft?.cfop || ""} onChange={event => updateFiscalDraft(product.id, { cfop: event.target.value })} className="rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-amber-400"><option value="">Selecione</option><option value="5101">5101 — Produção própria</option><option value="5102">5102 — Revenda</option><option value="5405">5405 — ST</option><option value="5933">5933 — Serviço</option></select></td>
-                    <td className="px-4 py-3"><select value={draft?.csosn || "102"} onChange={event => updateFiscalDraft(product.id, { csosn: event.target.value })} className="rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-amber-400"><option value="102">102</option><option value="103">103</option><option value="500">500</option><option value="900">900</option></select></td>
-                    <td className="px-4 py-3"><select value={draft?.unitCom || "UN"} onChange={event => updateFiscalDraft(product.id, { unitCom: event.target.value })} className="rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-amber-400">{["UN", "KG", "G", "L", "ML", "CX", "PC", "PT", "PAR", "DZ"].map(unit => <option key={unit} value={unit}>{unit}</option>)}</select></td>
+                    <td className="px-3 py-2"><p className="text-xs font-medium text-slate-800">{product.name}</p>{invalidNcm && <p className="mt-0.5 text-[11px] font-medium text-red-600">NCM pendente</p>}</td>
+                    <td className="px-3 py-2"><Input aria-label={`NCM de ${product.name}`} wrapperClassName="w-32" value={draft?.ncm || ""} maxLength={8} onChange={event => updateFiscalDraft(product.id, { ncm: event.target.value.replace(/\D/g, "") })} placeholder="8 dígitos" status={invalidNcm ? "error" : "default"} /></td>
+                    <td className="px-3 py-2"><Select aria-label={`CFOP de ${product.name}`} wrapperClassName="w-52" value={draft?.cfop || ""} onChange={event => updateFiscalDraft(product.id, { cfop: event.target.value })}><option value="">Selecione</option><option value="5101">5101 — Produção própria</option><option value="5102">5102 — Revenda</option><option value="5405">5405 — ST</option><option value="5933">5933 — Serviço</option></Select></td>
+                    <td className="px-3 py-2"><Select aria-label={`CSOSN de ${product.name}`} wrapperClassName="w-24" value={draft?.csosn || "102"} onChange={event => updateFiscalDraft(product.id, { csosn: event.target.value })}><option value="102">102</option><option value="103">103</option><option value="500">500</option><option value="900">900</option></Select></td>
+                    <td className="px-3 py-2"><Select aria-label={`Unidade de ${product.name}`} wrapperClassName="w-24" value={draft?.unitCom || "UN"} onChange={event => updateFiscalDraft(product.id, { unitCom: event.target.value })}>{["UN", "KG", "G", "L", "ML", "CX", "PC", "PT", "PAR", "DZ"].map(unit => <option key={unit} value={unit}>{unit}</option>)}</Select></td>
                   </tr>;
                 })}
               </tbody>
@@ -1471,37 +1296,27 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
         </div>
       </Modal>
 
-      {/* Search / filtro sem resultado */}
-      {(search || statusFilter !== "all") && visibleCategories.length === 0 && categories.length > 0 && (
-        <div className="text-center py-10 text-slate-400 text-sm font-medium">
-          {search
-            ? <>Nenhum produto encontrado para "<span className="font-bold">{search}</span>"</>
-            : statusFilter === "inactive"
-              ? "Nenhum produto inativo no momento."
-              : "Nenhum produto ativo encontrado."}
-        </div>
-      )}
-
       {/* Modal: categoria */}
       <Modal
         isOpen={catModal.open}
         onClose={closeCatModal}
         title={catModal.editing ? "Editar categoria" : "Nova categoria"}
         size="sm"
-        mobileStyle="bottom-sheet"
         footer={
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <ModalFooter align={catModal.editing ? "between" : "right"}>
             {catModal.editing && (
-              <Button variant="ghost" className="text-red-500 hover:bg-red-50 sm:mr-auto" onClick={() => { closeCatModal(); setDeleteCategoryConfirm({ id: catModal.editing!.id, name: catName }); }}>
+              <Button variant="ghost" className="text-red-600 hover:bg-red-50" onClick={() => { closeCatModal(); setDeleteCategoryConfirm({ id: catModal.editing!.id, name: catName }); }}>
                 Excluir categoria
               </Button>
             )}
-            <Button variant="outline" onClick={closeCatModal}>Cancelar</Button>
-            <Button onClick={saveCategory} loading={catSaving}>{catModal.editing ? "Salvar" : "Criar categoria"}</Button>
-          </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={closeCatModal}>Cancelar</Button>
+              <Button onClick={saveCategory} loading={catSaving}>{catModal.editing ? "Salvar" : "Criar categoria"}</Button>
+            </div>
+          </ModalFooter>
         }
       >
-        <div className="p-4 sm:p-5">
+        <div className="space-y-2">
           <Input
             label="Nome da categoria"
             placeholder="Ex: Pastéis, Bebidas, Sobremesas..."
@@ -1510,637 +1325,11 @@ export function MenuManagement({ tenant, refresh, membership }: { tenant: Tenant
             onKeyDown={e => e.key === "Enter" && saveCategory()}
             autoFocus
           />
-          <p className="text-xs text-slate-400 mt-2">Categorias agrupam os produtos no cardápio do cliente.</p>
+          <p className="text-[11px] text-slate-500">Categorias agrupam os produtos no cardápio do cliente.</p>
         </div>
       </Modal>
 
-      {/* Modal: produto — construído do zero (sem o Modal genérico compartilhado, que
-          delega o scroll ao seu próprio body e "engole" o header/footer fixos quando o
-          conteúdo interno é maior que o viewport). Identidade fixa à esquerda com scroll
-          próprio, abas fixas à direita com scroll próprio, header e footer sempre visíveis. */}
-      <AnimatePresence>
-        {prodModal.open && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
-              onClick={closeProdModal}
-              className="fixed inset-0 z-[100] bg-zinc-900/45 backdrop-blur-[2px]"
-            />
-            <div className="fixed inset-0 z-[101] flex items-end sm:items-center justify-center p-0 sm:p-6 pointer-events-none">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.97, y: 16 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.97, y: 16 }}
-                transition={{ type: "spring", damping: 28, stiffness: 320, mass: 0.7 }}
-                className="w-full sm:max-w-[1040px] h-[100dvh] sm:h-auto sm:max-h-[min(86vh,820px)] bg-white sm:rounded-3xl shadow-2xl border border-zinc-200/60 overflow-hidden flex flex-col sm:grid sm:grid-cols-[300px_minmax(0,1fr)] sm:grid-rows-[minmax(0,1fr)] pointer-events-auto"
-              >
-          {/* Coluna: identidade do produto — scroll próprio, foto grande */}
-          <div className="bg-slate-50/60 border-b sm:border-b-0 sm:border-r border-slate-100 p-5 flex flex-col gap-4 overflow-y-auto min-h-0">
-            <ProductPhotoField value={prodForm.imageUrl} onChange={val => setProdForm({ ...prodForm, imageUrl: val })} />
-            <Input label="Nome do produto" placeholder="Ex: Pastel de carne" value={prodForm.name} onChange={e => setProdForm({ ...prodForm, name: e.target.value })} />
-            <CurrencyInput label="Preço base (R$)" value={prodForm.price} onChange={v => setProdForm({ ...prodForm, price: v })} />
-            <div className="space-y-1.5">
-              <label className="block text-[11px] font-black uppercase tracking-widest text-slate-600">Descrição (opcional)</label>
-              <textarea
-                placeholder="Ingredientes, detalhes..."
-                value={prodForm.description}
-                onChange={e => setProdForm({ ...prodForm, description: e.target.value })}
-                rows={4}
-                className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
-              />
-            </div>
-            <span className={`inline-flex items-center gap-1.5 text-[11px] font-black px-2.5 py-1 rounded-full w-fit ${prodForm.available ? "bg-green-50 text-green-700" : "bg-slate-200 text-slate-500"}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${prodForm.available ? "bg-green-500" : "bg-slate-400"}`} />
-              {prodForm.available ? "Ativo no cardápio" : "Inativo"}
-            </span>
-          </div>
-
-          {/* Coluna: abas — header e barra de abas fixos, conteúdo com scroll próprio */}
-          <div className="flex flex-col min-h-0 overflow-hidden">
-            <div className="flex items-start justify-between gap-3 px-5 pt-5 shrink-0">
-              <div className="min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{editingProduct ? "Editar produto" : "Novo produto"}</p>
-                <h2 className="text-base font-black text-slate-800 truncate">{prodForm.name || "Sem nome"}</h2>
-              </div>
-              <div className="flex items-center gap-1 shrink-0">
-                {editingProduct && (
-                  <button
-                    type="button"
-                    onClick={() => { closeProdModal(); setDeleteProductConfirm(editingProduct.id); }}
-                    title="Excluir produto"
-                    className="p-2 rounded-full text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                )}
-                <button type="button" onClick={closeProdModal} title="Fechar" className="p-2 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            <div className="flex gap-1 px-5 pt-3 border-b border-slate-100 overflow-x-auto overflow-y-hidden shrink-0">
-              {PROD_TABS.map(tab => {
-                const count = prodTabCounts[tab.id];
-                const active = prodTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setProdTab(tab.id)}
-                    className={`relative flex items-center gap-1.5 whitespace-nowrap px-2.5 py-2 text-[12px] font-bold transition-colors ${active ? "text-slate-800" : "text-slate-400 hover:text-slate-600"}`}
-                  >
-                    {tab.icon}
-                    {tab.label}
-                    {!!count && (
-                      <span className={`inline-flex items-center justify-center min-w-[15px] h-[15px] px-1 rounded-full text-[10px] font-black ${active ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-400"}`}>
-                        {count}
-                      </span>
-                    )}
-                    {active && <span className="absolute left-0 right-0 -bottom-px h-0.5 bg-[#C9A227] rounded-full" />}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 min-h-0">
-              {/* ESTOQUE */}
-              {prodTab === "estoque" && (
-                <>
-                  <StockLinkField
-                    inventoryItems={inventoryItems}
-                    inventoryCategories={inventoryCategories}
-                    value={prodForm.inventoryItemId}
-                    onChange={val => setProdForm({ ...prodForm, inventoryItemId: val })}
-                    autoDisable={prodForm.autoDisableWhenOutOfStock}
-                    onAutoDisableChange={val => setProdForm({ ...prodForm, autoDisableWhenOutOfStock: val })}
-                    allCategories={localCategories}
-                    editingProductId={editingProduct?.id}
-                  />
-                  <RecipeIngredientsField
-                    inventoryItems={inventoryItems}
-                    inventoryCategories={inventoryCategories}
-                    value={recipeIngredients}
-                    onChange={setRecipeIngredients}
-                  />
-                </>
-              )}
-
-              {/* VISIBILIDADE */}
-              {prodTab === "visibilidade" && (
-                <div>
-                  <div className="flex items-center justify-between py-2">
-                    <div className="min-w-0 pr-3">
-                      <p className="text-[13px] font-bold text-slate-700 leading-tight">Produto ativo no cardápio</p>
-                      <p className="text-[11px] text-slate-400 leading-tight">Clientes conseguem ver e pedir este produto</p>
-                    </div>
-                    <Switch size="sm" checked={prodForm.available} onCheckedChange={(v) => setProdForm(f => ({ ...f, available: v }))} />
-                  </div>
-                  <div className="flex items-center justify-between py-2 border-t border-slate-100">
-                    <div className="min-w-0 pr-3">
-                      <p className="text-[13px] font-bold text-slate-700 leading-tight">Exclusivo PDV</p>
-                      <p className="text-[11px] text-slate-400 leading-tight">Visível apenas no PDV, não aparece no cardápio online</p>
-                    </div>
-                    <Switch size="sm" checked={prodForm.pdvOnly} onCheckedChange={(v) => setProdForm(f => ({ ...f, pdvOnly: v }))} />
-                  </div>
-                  <div className="flex items-center justify-between py-2 border-t border-slate-100">
-                    <div className="min-w-0 pr-3">
-                      <p className="text-[13px] font-bold text-slate-700 leading-tight">Vai para a cozinha</p>
-                      <p className="text-[11px] text-slate-400 leading-tight">Ative para itens que precisam de preparo — bebidas/embalagens ficam desativadas por padrão</p>
-                    </div>
-                    <Switch size="sm" checked={prodForm.kitchenPrint === true} onCheckedChange={(v) => setProdForm(f => ({ ...f, kitchenPrint: v }))} />
-                  </div>
-                </div>
-              )}
-
-              {/* HORARIO */}
-              {prodTab === "horario" && (
-                <div>
-                  <div className="flex items-center justify-between pb-1">
-                    <div className="min-w-0 pr-3">
-                      <p className="text-[13px] font-bold text-slate-700 leading-tight">Disponibilidade automática</p>
-                      <p className="text-[11px] text-slate-400 leading-tight">Produto aparece/some do cardápio online automaticamente</p>
-                    </div>
-                    <Switch size="sm" checked={prodForm.scheduleRuleEnabled} onCheckedChange={(v) => setProdForm(f => ({ ...f, scheduleRuleEnabled: v }))} />
-                  </div>
-
-                  {prodForm.scheduleRuleEnabled && (
-                    <div className="space-y-3 bg-amber-50 border border-amber-200 rounded-2xl p-3 mt-3">
-                      {/* Tipo de regra */}
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-amber-800 mb-2">Tipo de regra</p>
-                        <div className="grid grid-cols-3 gap-1.5">
-                          {([
-                            { value: "weekday",   label: "Dia da semana" },
-                            { value: "daterange", label: "Período (datas)" },
-                            { value: "both",      label: "Os dois" },
-                          ] as const).map(opt => (
-                            <button
-                              key={opt.value}
-                              type="button"
-                              onClick={() => setProdForm(f => ({ ...f, scheduleRuleType: opt.value }))}
-                              className={`text-[10px] font-black py-1.5 px-2 rounded-lg border-2 transition-all ${prodForm.scheduleRuleType === opt.value ? "border-amber-400 bg-white text-amber-700" : "border-amber-200 text-slate-500 hover:border-amber-300"}`}
-                            >
-                              {opt.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Dias da semana */}
-                      {(prodForm.scheduleRuleType === "weekday" || prodForm.scheduleRuleType === "both") && (
-                        <div>
-                          <p className="text-[10px] font-black uppercase tracking-widest text-amber-800 mb-2">Dias ativos</p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"].map((label, idx) => {
-                              const active = prodForm.scheduleRuleWeekdays.includes(idx);
-                              return (
-                                <button
-                                  key={label}
-                                  type="button"
-                                  onClick={() => setProdForm(f => ({
-                                    ...f,
-                                    scheduleRuleWeekdays: active
-                                      ? f.scheduleRuleWeekdays.filter(d => d !== idx)
-                                      : [...f.scheduleRuleWeekdays, idx]
-                                  }))}
-                                  className={`w-10 h-8 text-xs font-black rounded-lg border-2 transition-all ${active ? "border-amber-400 bg-amber-400 text-white" : "border-amber-200 bg-white text-slate-500 hover:border-amber-300"}`}
-                                >
-                                  {label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Horário nos dias ativos */}
-                      {(prodForm.scheduleRuleType === "weekday" || prodForm.scheduleRuleType === "both") && (
-                        <div>
-                          <p className="text-[10px] font-black uppercase tracking-widest text-amber-800 mb-2">Horário (opcional)</p>
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <label className="text-[10px] text-slate-500 font-bold block mb-1">Aparece às</label>
-                              <input
-                                type="time"
-                                value={prodForm.scheduleRuleStartTime}
-                                onChange={e => setProdForm(f => ({ ...f, scheduleRuleStartTime: e.target.value }))}
-                                className="w-full bg-white border border-amber-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400/30"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-[10px] text-slate-500 font-bold block mb-1">Some às</label>
-                              <input
-                                type="time"
-                                value={prodForm.scheduleRuleEndTime}
-                                onChange={e => setProdForm(f => ({ ...f, scheduleRuleEndTime: e.target.value }))}
-                                className="w-full bg-white border border-amber-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400/30"
-                              />
-                            </div>
-                          </div>
-                          <p className="text-[10px] text-slate-400 italic mt-1.5">Deixe em branco para ficar visível o dia todo (00:00–23:59).</p>
-                        </div>
-                      )}
-
-                      {/* Período de datas */}
-                      {(prodForm.scheduleRuleType === "daterange" || prodForm.scheduleRuleType === "both") && (
-                        <div>
-                          <p className="text-[10px] font-black uppercase tracking-widest text-amber-800 mb-2">Período de visibilidade</p>
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <label className="text-[10px] text-slate-500 font-bold block mb-1">Data início</label>
-                              <input
-                                type="date"
-                                value={prodForm.scheduleRuleStartDate}
-                                onChange={e => setProdForm(f => ({ ...f, scheduleRuleStartDate: e.target.value }))}
-                                className="w-full bg-white border border-amber-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400/30"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-[10px] text-slate-500 font-bold block mb-1">Data fim</label>
-                              <input
-                                type="date"
-                                value={prodForm.scheduleRuleEndDate}
-                                onChange={e => setProdForm(f => ({ ...f, scheduleRuleEndDate: e.target.value }))}
-                                className="w-full bg-white border border-amber-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400/30"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* ADICIONAIS — apenas os que o cliente escolhe; o kit de viagem mora na aba própria */}
-              {prodTab === "adicionais" && (
-                <div>
-                  <p className="text-xs text-slate-400 mb-3">Ex: Gelo, Limão, Sem Cebola, Molho extra. O cliente seleciona antes de adicionar ao carrinho.</p>
-                  <div className="flex gap-2 mb-3">
-                    <input
-                      placeholder="Nome (ex: Gelo)"
-                      value={extraInput.label}
-                      onChange={e => setExtraInput(prev => ({ ...prev, label: e.target.value }))}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' && extraInput.label.trim()) {
-                          e.preventDefault();
-                          setProdForm(prev => ({ ...prev, extras: [...prev.extras, { id: crypto.randomUUID(), label: extraInput.label.trim(), price: extraInput.price, stockLinks: [], autoApplyOnTakeout: false }] }));
-                          setExtraInput({ label: "", price: "" });
-                        }
-                      }}
-                      className="flex-1 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 min-w-0"
-                    />
-                    <input
-                      placeholder="R$ (0 = grátis)"
-                      value={extraInput.price}
-                      onChange={e => setExtraInput(prev => ({ ...prev, price: e.target.value }))}
-                      className="w-28 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400"
-                    />
-                    <button
-                      onClick={() => {
-                        if (!extraInput.label.trim()) return;
-                        setProdForm(prev => ({ ...prev, extras: [...prev.extras, { id: crypto.randomUUID(), label: extraInput.label.trim(), price: extraInput.price, stockLinks: [], autoApplyOnTakeout: false }] }));
-                        setExtraInput({ label: "", price: "" });
-                      }}
-                      className="px-3 py-2 bg-amber-500 text-white rounded-xl text-sm font-black hover:bg-amber-600"
-                    >+</button>
-                  </div>
-                  {visibleExtras.length > 0 && (
-                    <div className="space-y-2">
-                      {visibleExtras.map((ex) => (
-                        <div key={ex.id} className="bg-amber-50/60 border border-amber-200 rounded-xl px-3 py-2">
-                          <div className="flex items-center gap-2">
-                            <span className="flex-1 text-sm font-bold text-amber-900 truncate">
-                              {ex.label}{parseFloat(ex.price) > 0 ? ` +R$${parseFloat(ex.price).toFixed(2)}` : ' (grátis)'}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => setProdForm(prev => ({ ...prev, extras: prev.extras.filter(e => e.id !== ex.id) }))}
-                              className="p-1 text-slate-400 hover:text-red-500 shrink-0"
-                              title="Remover adicional"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                          <div className="mt-2 pt-2 border-t border-amber-200/70">
-                            <StockLinksField
-                              value={ex.stockLinks}
-                              onChange={links => setProdForm(prev => ({ ...prev, extras: prev.extras.map(x => x.id === ex.id ? { ...x, stockLinks: links } : x) }))}
-                              inventoryItems={inventoryItems}
-                              inventoryCategories={inventoryCategories}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* VIAGEM — kit consumido automaticamente ao escolher "Para viagem", separado
-                  dos adicionais que o cliente escolhe (antes era um botão perdido ali dentro). */}
-              {prodTab === "viagem" && (
-                <div>
-                  <div className="flex items-center justify-between pb-1">
-                    <div className="min-w-0 pr-3">
-                      <p className="text-[13px] font-bold text-slate-700 leading-tight">Kit para viagem</p>
-                      <p className="text-[11px] text-slate-400 leading-tight">Consome os itens abaixo automaticamente quando o cliente escolhe "Para viagem" — não aparece como opção pro cliente</p>
-                    </div>
-                    <Switch size="sm" checked={!!takeoutExtra} onCheckedChange={enableTakeoutKit} />
-                  </div>
-
-                  {takeoutExtra && (
-                    <div className="mt-3">
-                      <StockLinksField
-                        value={takeoutExtra.stockLinks}
-                        onChange={links => updateTakeoutExtra({ stockLinks: links })}
-                        inventoryItems={inventoryItems}
-                        inventoryCategories={inventoryCategories}
-                      />
-                      <p className="text-[11px] text-slate-400 mt-2">Vincule aqui embalagem, sacola, lacre, canudo ou qualquer outro insumo e informe a quantidade. A baixa acontece automaticamente junto com a venda.</p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* SELEÇÃO — grupos de seleção embutidos: cada um deixa o cliente escolher N
-                  itens de uma categoria/lista, sem mudar o preço fixo do produto (ex: numa
-                  marmita, um grupo "Guarnição" escolhe 1, outro "Arroz" escolhe 1). Incompatível
-                  com variações — as duas coisas resolvem "escolher o sabor"; juntas, o cliente
-                  escolhe a mesma coisa duas vezes (bug visto em produção no "1 espeto
-                  tradicional", cadastrado com variações E grupo ao mesmo tempo). */}
-              {prodTab === "selecao" && (
-                <div>
-                  {prodForm.variants.length > 0 && prodForm.selectionGroups.length > 0 && (
-                    <p className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2">
-                      Este produto já tem variações — remova-as ou remova os grupos de seleção abaixo. Os dois juntos fazem o cliente escolher o sabor duas vezes.
-                    </p>
-                  )}
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">Cliente escolhe itens (preço fixo)</span>
-                    <button
-                      type="button"
-                      disabled={prodForm.variants.length > 0}
-                      onClick={addSelectionGroupField}
-                      className={`text-xs font-black hover:underline ${prodForm.variants.length > 0 ? "text-slate-300 cursor-not-allowed" : "text-[#C9A227]"}`}
-                    >+ Adicionar grupo</button>
-                  </div>
-                  <p className="text-xs text-slate-400 mb-3">Ex: numa marmita, um grupo "Guarnição" (escolhe 1), outro "Arroz" (escolhe 1) — cada grupo puxa de uma categoria já cadastrada, sem alterar o preço do produto.</p>
-
-                  {prodForm.selectionGroups.length > 0 && (
-                    <div className="space-y-3">
-                      {prodForm.selectionGroups.map((g, idx) => (
-                        <div key={g._key} className="p-4 bg-slate-50/60 rounded-2xl border border-slate-200 space-y-3">
-                          <div className="flex items-center justify-between gap-2">
-                            <input
-                              type="text"
-                              placeholder={`Rótulo do grupo ${idx + 1} (ex: Guarnição)`}
-                              value={g.label}
-                              onChange={e => updateSelectionGroupField(idx, "label", e.target.value)}
-                              className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
-                            />
-                            <button type="button" onClick={() => removeSelectionGroupField(idx)} className="p-2 text-slate-300 hover:text-red-500 shrink-0">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-
-                          <div className="flex gap-2 p-1 bg-slate-100 rounded-xl">
-                            <button
-                              type="button"
-                              onClick={() => updateSelectionGroupField(idx, "sourceType", "category")}
-                              className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${g.sourceType === "category" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
-                            >Categoria inteira</button>
-                            <button
-                              type="button"
-                              onClick={() => updateSelectionGroupField(idx, "sourceType", "products")}
-                              className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${g.sourceType === "products" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
-                            >Itens específicos</button>
-                          </div>
-
-                          {g.sourceType === "category" ? (
-                            <div>
-                              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Categoria de onde vêm as opções</label>
-                              <select
-                                value={g.categoryId}
-                                onChange={e => updateSelectionGroupField(idx, "categoryId", e.target.value)}
-                                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
-                              >
-                                <option value="">Selecione...</option>
-                                {localCategories.filter(c => c.id !== prodModal.categoryId).map(c => (
-                                  <option key={c.id} value={c.id}>{c.name} ({c.products?.length || 0} itens)</option>
-                                ))}
-                              </select>
-                            </div>
-                          ) : (
-                            <div>
-                              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Selecione os itens que entram como opção</label>
-                              <div className="max-h-48 overflow-y-auto space-y-1 bg-white rounded-xl border border-slate-200 p-2">
-                                {localCategories.flatMap(c => c.products || []).map((p: any) => {
-                                  const checked = g.productIds.includes(p.id);
-                                  return (
-                                    <label key={p.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer">
-                                      <input
-                                        type="checkbox"
-                                        checked={checked}
-                                        onChange={() => updateSelectionGroupField(idx, "productIds", checked
-                                          ? g.productIds.filter(id => id !== p.id)
-                                          : [...g.productIds, p.id])}
-                                        className="w-3.5 h-3.5 rounded accent-amber-500"
-                                      />
-                                      <span className="text-xs font-bold text-slate-700">{p.name}</span>
-                                    </label>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          )}
-
-                          <div>
-                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Quantos itens o cliente escolhe neste grupo</label>
-                            <input
-                              type="number"
-                              min={1}
-                              value={g.qty}
-                              onChange={e => updateSelectionGroupField(idx, "qty", e.target.value.replace(/\D/g, ""))}
-                              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* VARIANTES — desabilitado quando o grupo de seleção está ativo (os dois juntos
-                  fazem o cliente escolher o sabor duas vezes, ver nota acima). */}
-              {prodTab === "variantes" && (
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[11px] font-black uppercase tracking-widest text-slate-500">Tamanhos / Variantes</span>
-                    {prodForm.selectionGroups.length > 0 ? (
-                      <span className="text-[10px] font-bold text-slate-400">Remova os grupos de seleção para usar variações</span>
-                    ) : (
-                      <button onClick={addVariantField} className="text-xs font-black text-[#C9A227] hover:underline">+ Adicionar</button>
-                    )}
-                  </div>
-                  <div className="space-y-3">
-                    {prodForm.variants.map((v, idx) => (
-                      <div key={v._key} className="flex gap-2 items-start bg-zinc-50/60 border border-zinc-100 rounded-xl p-2">
-                        <VariantImageUploader
-                          value={v.imageUrl}
-                          onChange={(val) => updateVariantField(idx, 'imageUrl', val)}
-                        />
-                        <div className="flex-1 min-w-0 space-y-1.5">
-                          <div className="flex gap-2 items-center">
-                            <input placeholder="Nome (ex: 500ml)" value={v.name} onChange={e => updateVariantField(idx, 'name', e.target.value)}
-                              className="flex-1 bg-white border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 min-w-0" />
-                            <input placeholder="R$" value={v.price} onChange={e => updateVariantField(idx, 'price', e.target.value)}
-                              className="w-20 bg-white border border-zinc-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400" />
-                            <button onClick={() => removeVariantField(idx)} className="p-2 text-slate-300 hover:text-red-500 shrink-0">
-                              <X className="w-4 h-4" />
-                            </button>
-                          </div>
-                          <select
-                            value={v.inventoryItemId}
-                            onChange={e => updateVariantField(idx, 'inventoryItemId', e.target.value)}
-                            className="w-full bg-white border border-zinc-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-400"
-                          >
-                            <option value="">Sem vínculo de estoque (opcional)</option>
-                            {inventoryItems.filter((item: any) => item.usage !== 'INTERNAL').map((item: any) => (
-                              <option key={item.id} value={item.id}>
-                                {item.name} — {item.quantity <= 0 ? "Esgotado" : `${item.quantity} ${item.unit || 'un'}`}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* FISCAL */}
-              {prodTab === "fiscal" && (
-                <div>
-                  <p className="text-[10px] text-slate-400 font-medium mb-3">Preencha apenas se o módulo fiscal (NFC-e) estiver ativo nas configurações da loja.</p>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    <div>
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">NCM</label>
-                      <input type="text" maxLength={10} value={prodForm.ncm}
-                        onChange={e => setProdForm(f => ({ ...f, ncm: e.target.value.replace(/\D/g, "") }))}
-                        placeholder="00000000"
-                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">CFOP</label>
-                      <select value={prodForm.cfop} onChange={e => setProdForm(f => ({ ...f, cfop: e.target.value }))}
-                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
-                      >
-                        <option value="5102">5102 — Venda mercadoria adquirida</option>
-                        <option value="5405">5405 — Venda c/ ST</option>
-                        <option value="5101">5101 — Venda de produção própria</option>
-                        <option value="5933">5933 — Simples Nacional — serviço</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">CSOSN</label>
-                      <select value={prodForm.csosn} onChange={e => setProdForm(f => ({ ...f, csosn: e.target.value }))}
-                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
-                      >
-                        <option value="102">102 — Tributada sem permissão crédito</option>
-                        <option value="103">103 — Isento faixa receita bruta</option>
-                        <option value="500">500 — ICMS cobrado por ST</option>
-                        <option value="900">900 — Outros</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Unidade</label>
-                      <select value={prodForm.unitCom} onChange={e => setProdForm(f => ({ ...f, unitCom: e.target.value }))}
-                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
-                      >
-                        {["UN","KG","G","L","ML","CX","PC","PT","PAR","DZ"].map(u => <option key={u} value={u}>{u}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Origem</label>
-                      <select value={prodForm.origem} onChange={e => setProdForm(f => ({ ...f, origem: Number(e.target.value) }))}
-                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
-                      >
-                        <option value={0}>0 — Nacional</option>
-                        <option value={1}>1 — Estrangeira (importação direta)</option>
-                        <option value={2}>2 — Estrangeira (mercado interno)</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Alíq. ICMS %</label>
-                      <input type="number" min={0} max={100} step={0.01} value={prodForm.aliqIcms}
-                        onChange={e => setProdForm(f => ({ ...f, aliqIcms: parseFloat(e.target.value) || 0 }))}
-                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-[#C9A227] outline-none bg-white"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Footer fixo — uma linha só: ações secundárias à esquerda, principais à direita */}
-            <div className="shrink-0 border-t border-slate-100 px-5 py-3 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2.5 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:pb-3">
-              {editingProduct ? (
-                <div className="flex gap-2 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={duplicateProductToCatalog}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors border border-blue-100"
-                  >
-                    <span>📋</span> Duplicar
-                  </button>
-                  {canManageInventory && (
-                    <button
-                      type="button"
-                      onClick={duplicateProductToInventory}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors border border-amber-100"
-                    >
-                      <span>📦</span> Criar no estoque
-                    </button>
-                  )}
-                </div>
-              ) : <div />}
-              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                <Button variant="outline" onClick={closeProdModal}>Cancelar</Button>
-                <Button onClick={saveProduct}>{editingProduct ? "Salvar alterações" : "Adicionar produto"}</Button>
-              </div>
-            </div>
-          </div>
-              </motion.div>
-            </div>
-          </>
-        )}
-      </AnimatePresence>
-
-      {/* Modal: confirmar exclusão de produto */}
-      <ConfirmModal
-        isOpen={!!deleteProductConfirm}
-        onClose={() => setDeleteProductConfirm(null)}
-        onConfirm={() => { deleteProduct(deleteProductConfirm!); setDeleteProductConfirm(null); }}
-        title="Excluir produto"
-        message="Tem certeza que deseja excluir este produto? Essa ação não pode ser desfeita."
-        confirmLabel="Excluir"
-        variant="danger"
-      />
-
-      {/* Modal: confirmar exclusão de categoria */}
-      <ConfirmModal
-        isOpen={!!deleteCategoryConfirm}
-        onClose={() => setDeleteCategoryConfirm(null)}
-        onConfirm={() => { deleteCategory(deleteCategoryConfirm!.id); setDeleteCategoryConfirm(null); }}
-        title="Excluir categoria"
-        message={<>Tem certeza que deseja excluir a categoria <strong>"{deleteCategoryConfirm?.name}"</strong> e todos os seus produtos? Essa ação não pode ser desfeita.</>}
-        confirmLabel="Excluir tudo"
-        variant="danger"
-      />
-    </div>
+      {confirmModals}
+    </PageWrapper>
   );
 }

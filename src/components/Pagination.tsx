@@ -58,13 +58,14 @@ export function Pagination({
     <button
       type="button"
       title={title}
+      aria-label={title}
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "w-8 h-8 flex items-center justify-center rounded-xl border text-zinc-500 transition-all",
+        "w-8 h-8 flex items-center justify-center rounded-md border text-zinc-500 transition-all",
         disabled
           ? "opacity-30 cursor-not-allowed border-zinc-100 bg-zinc-50"
-          : "border-zinc-200 bg-white hover:border-amber-400 hover:text-amber-600 active:scale-95",
+          : "border-zinc-200 bg-white hover:border-blue-400 hover:text-blue-600 active:scale-95",
       )}
     >
       {icon}
@@ -73,38 +74,43 @@ export function Pagination({
 
   return (
     <div className={cn(
-      "flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-zinc-100 bg-zinc-50/30",
+      "ui-pagination flex flex-wrap items-center justify-between gap-3 px-3 py-2 border-t border-zinc-100 bg-zinc-50/30",
       className,
     )}>
       {/* Left: count info */}
-      <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest shrink-0">
+      <p className="text-[11px] font-medium text-slate-500 shrink-0">
         {total === 0 ? "0 registros" : `${from}–${to} de ${total}`}
       </p>
 
       {/* Center: page controls */}
-      <div className="flex items-center gap-1">
+      <div className="flex max-w-full items-center gap-1">
         {btn(<ChevronsLeft size={13} />, () => onPageChange(1),           page <= 1,           "Primeira página")}
         {btn(<ChevronLeft  size={13} />, () => onPageChange(page - 1),    page <= 1,           "Página anterior")}
 
+        <span className="px-2 text-xs text-slate-600 tabular-nums sm:hidden" aria-live="polite">{page} / {totalPages}</span>
+        <div className="hidden items-center gap-1 sm:flex">
         {pageNumbers.map((p, idx) =>
           p === "..." ? (
-            <span key={`e${idx}`} className="w-8 text-center text-xs text-zinc-300 font-bold">…</span>
+            <span key={`e${idx}`} className="w-8 text-center text-xs text-zinc-300 font-medium">…</span>
           ) : (
             <button
               key={p}
               type="button"
+              aria-label={`Página ${p}`}
+              aria-current={p === page ? 'page' : undefined}
               onClick={() => onPageChange(p as number)}
               className={cn(
-                "w-8 h-8 flex items-center justify-center rounded-xl text-xs font-black transition-all",
+                "w-8 h-8 flex items-center justify-center rounded-md text-xs font-medium transition-all",
                 p === page
-                  ? "bg-amber-400 text-white border border-amber-400 shadow-sm"
-                  : "bg-white border border-zinc-200 text-zinc-600 hover:border-amber-300 hover:text-amber-600",
+                  ? "bg-blue-400 text-white border border-blue-400 shadow-sm"
+                  : "bg-white border border-zinc-200 text-zinc-600 hover:border-blue-300 hover:text-blue-600",
               )}
             >
               {p}
             </button>
           )
         )}
+        </div>
 
         {btn(<ChevronRight  size={13} />, () => onPageChange(page + 1),    page >= totalPages,  "Próxima página")}
         {btn(<ChevronsRight size={13} />, () => onPageChange(totalPages),   page >= totalPages,  "Última página")}
@@ -113,11 +119,12 @@ export function Pagination({
       {/* Right: page size selector */}
       {showPageSizeSelector && (
         <div className="flex items-center gap-2 shrink-0">
-          <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest hidden sm:inline">Por página</span>
+          <span className="text-[11px] font-medium text-slate-500 hidden sm:inline">Por página</span>
           <select
+            aria-label="Registros por página"
             value={pageSize}
             onChange={e => { onPageSizeChange(Number(e.target.value)); onPageChange(1); }}
-            className="h-8 px-2 text-xs font-black text-zinc-700 bg-white border border-zinc-200 rounded-xl outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-400/10 transition-all cursor-pointer"
+            className="h-8 px-2 text-xs font-medium text-zinc-700 bg-white border border-zinc-200 rounded-md outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/10 transition-all cursor-pointer"
           >
             {PAGE_SIZE_OPTIONS.map(s => (
               <option key={s} value={s}>{s}</option>

@@ -1,4 +1,5 @@
 import type { Express, Request, RequestHandler, Response } from "express";
+import { CONCLUDED_SALE_OR } from "../shared/utils";
 
 export interface RegisterFiscalRoutesOptions {
   app: Express;
@@ -20,6 +21,36 @@ export function registerFiscalRoutes({
   requireAuth,
   requireTenantById,
 }: RegisterFiscalRoutesOptions) {
+  // GET /api/fiscal-codes/ncm?search=... — consulta o catálogo NCM vigente (BrasilAPI) para o
+  // cadastro de produtos; a escolha final do código continua sendo do emissor.
+  app.get("/api/fiscal-codes/ncm", requireAuth, async (req, res) => {
+    const search = String(req.query.search || "").trim().slice(0, 80);
+    if (search.length < 2) {
+      return res.status(422).json({ error: "Digite ao menos 2 caracteres para consultar NCM." });
+    }
+    try {
+      const response = await fetch(
+        `https://brasilapi.com.br/api/ncm/v1?search=${encodeURIComponent(search)}`,
+        { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(8_000) }
+      );
+      if (!response.ok) throw new Error(`NCM ${response.status}`);
+      const payload = (await response.json()) as Array<{ codigo?: string; descricao?: string }>;
+      return res.json({
+        items: (Array.isArray(payload) ? payload : [])
+          .slice(0, 80)
+          .map((item) => ({
+            code: String(item.codigo || "").replace(/\D/g, ""),
+            formatted_code: item.codigo || "",
+            description: item.descricao || "",
+          }))
+          .filter((item) => item.code.length === 8),
+      });
+    } catch (error) {
+      console.error("Falha ao consultar NCM", error);
+      return res.status(502).json({ error: "A consulta de NCM está indisponível agora." });
+    }
+  });
+
   // ─── NFC-e Fiscal Endpoints ───────────────────────────────────────────────────
   // Precisa ficar registrado ANTES do catch-all "app.get(\"*\", ...)" do SPA (mais abaixo)
   // — Express avalia rotas na ordem de registro, e um catch-all sem guarda de path
@@ -318,6 +349,108 @@ export function registerFiscalRoutes({
       ]);
 
       res.json({ orders, total, page, pageSize });
+    }
+  );
+
+  // GET /api/owner/tenants/:tenantId/nfce/pending-orders — vendas concluídas que ainda NÃO têm
+  // NFC-e autorizada (sem nota, rejeitada ou pendente), com os itens e dados fiscais para a
+  // prévia da nota. Escopo estrito ao tenant autenticado.
+  app.get(
+    "/api/owner/tenants/:tenantId/nfce/pending-orders",
+    requireAuth,
+    async (req, res) => {
+      const tenant = await requireTenantById(req, res, req.params.tenantId, "finance");
+      if (!tenant) return;
+
+      const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
+      const pageSize = Math.min(100, Math.max(1, parseInt(String(req.query.pageSize ?? "20"), 10) || 20));
+      const from = typeof req.query.from === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.from) ? req.query.from : undefined;
+      const to = typeof req.query.to === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.to) ? req.query.to : undefined;
+      const search = typeof req.query.search === "string" ? req.query.search.trim().slice(0, 60) : "";
+
+      const and: any[] = [
+        { OR: CONCLUDED_SALE_OR },
+        { OR: [{ nfceStatus: null }, { nfceStatus: { in: ["REJECTED", "PENDING"] } }] },
+      ];
+      if (search) {
+        const searchOr: any[] = [
+          { customerName: { contains: search } },
+          { id: { contains: search } },
+        ];
+        if (/^\d{1,6}$/.test(search)) searchOr.push({ counterTicketNumber: parseInt(search, 10) });
+        and.push({ OR: searchOr });
+      }
+      const where: any = {
+        tenantId: tenant.id,
+        AND: and,
+        ...((from || to) && {
+          createdAt: {
+            ...(from && { gte: new Date(`${from}T00:00:00`) }),
+            ...(to && { lte: new Date(`${to}T23:59:59.999`) }),
+          },
+        }),
+      };
+
+      try {
+        const [total, orders] = await Promise.all([
+          prisma.order.count({ where }),
+          prisma.order.findMany({
+            where,
+            orderBy: { createdAt: "desc" },
+            skip: (page - 1) * pageSize,
+            take: pageSize,
+            select: {
+              id: true,
+              customerName: true,
+              customerCpf: true,
+              counterTicketNumber: true,
+              orderType: true,
+              paymentMethod: true,
+              paymentDetail: true,
+              discount: true,
+              discountType: true,
+              feeAmount: true,
+              feePassedToCustomer: true,
+              serviceFeeAmount: true,
+              total: true,
+              createdAt: true,
+              nfceStatus: true,
+              items: {
+                select: {
+                  id: true,
+                  productId: true,
+                  productName: true,
+                  quantity: true,
+                  price: true,
+                  ncm: true,
+                  cfop: true,
+                  csosn: true,
+                  product: { select: { name: true, ncm: true, cfop: true, csosn: true } },
+                },
+              },
+            },
+          }),
+        ]);
+
+        // Mesma regra de fallback da emissão: snapshot do item, senão produto vivo.
+        const rows = orders.map((o: any) => ({
+          ...o,
+          items: o.items.map((it: any) => ({
+            id: it.id,
+            productId: it.productId,
+            productName: it.productName ?? it.product?.name ?? "Produto",
+            quantity: it.quantity,
+            price: it.price,
+            ncm: String(it.ncm ?? it.product?.ncm ?? "").replace(/\D/g, ""),
+            cfop: String(it.cfop ?? it.product?.cfop ?? "").replace(/\D/g, ""),
+            csosn: it.csosn ?? it.product?.csosn ?? null,
+          })),
+        }));
+        res.json({ orders: rows, total, page, pageSize });
+      } catch (err: any) {
+        console.error("[NFC-e] Erro ao listar pedidos sem nota:", err);
+        res.status(500).json({ error: "Erro ao listar pedidos sem nota." });
+      }
     }
   );
 

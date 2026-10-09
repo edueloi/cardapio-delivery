@@ -1,5 +1,6 @@
 import React from "react";
 import { cn } from "@/src/lib/utils";
+import { uiTheme } from './theme';
 
 interface PanelCardProps extends React.HTMLAttributes<HTMLElement> {
   title?: string;
@@ -30,7 +31,8 @@ export function PanelCard({
   return (
     <section
       className={cn(
-        "overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-sm",
+        "overflow-hidden",
+        uiTheme.surface,
         className
       )}
       {...props}
@@ -38,29 +40,29 @@ export function PanelCard({
       {hasHeader && (
         <div
           className={cn(
-            "flex flex-col gap-4 border-b border-zinc-100 px-4 py-5 sm:px-6 sm:py-6 lg:flex-row lg:items-center lg:justify-between",
+            "flex flex-col gap-3 border-b border-slate-100 px-3 py-2.5 lg:flex-row lg:items-center lg:justify-between",
             headerClassName
           )}
         >
-          <div className="flex min-w-0 items-start gap-4">
+          <div className="flex min-w-0 items-start gap-3">
             {Icon && (
               <div
                 className={cn(
-                  "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-amber-100 bg-amber-50",
+                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-blue-100 bg-blue-50",
                   iconWrapClassName
                 )}
               >
-                <Icon size={20} className={cn("text-amber-600", iconClassName)} />
+                <Icon size={14} className={cn("text-blue-600", iconClassName)} />
               </div>
             )}
 
             {(title || description) && (
               <div className="min-w-0">
                 {title && (
-                  <h3 className="text-base font-black tracking-tight text-zinc-900">{title}</h3>
+                  <h3 className="text-sm font-medium text-slate-900">{title}</h3>
                 )}
                 {description && (
-                  <p className="mt-1 text-sm leading-relaxed text-zinc-500">{description}</p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-slate-500">{description}</p>
                 )}
               </div>
             )}
@@ -70,7 +72,7 @@ export function PanelCard({
         </div>
       )}
 
-      <div className={cn("p-4 sm:p-6", contentClassName)}>{children}</div>
+      <div className={cn("p-3", contentClassName)}>{children}</div>
     </section>
   );
 }

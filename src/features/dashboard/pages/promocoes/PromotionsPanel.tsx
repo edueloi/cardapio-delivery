@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Plus, Trash2, Edit2, Image as ImageIcon, Star, ToggleLeft, ToggleRight, GripVertical, X, Check, ExternalLink } from "lucide-react";
+import { Plus, Trash2, Edit2, Image as ImageIcon, Star, Check, FileText, Tag, CalendarClock } from "lucide-react";
 import { apiFetch, apiJson } from "../../../../lib/api";
-import { ConfirmModal, useToast, DatePicker } from "../../../../components";
+import { ConfirmModal, useToast, DatePicker, PageWrapper, SectionTitle, ContentCard, Button, IconButton, Input, Textarea, Select, Switch, Badge, EmptyState, Modal, ModalFooter, Tabs } from "../../../../components";
 import type { Tenant, Product } from "../../../../types";
 
 interface Promotion {
@@ -25,6 +25,14 @@ interface Props {
   tenant: Tenant;
   refresh?: () => void;
 }
+
+const formTabs = [
+  { id: "geral", label: "Geral", icon: FileText },
+  { id: "imagem", label: "Imagem", icon: ImageIcon },
+  { id: "produto", label: "Produto e preço", icon: Tag },
+  { id: "periodo", label: "Período", icon: CalendarClock },
+] as const;
+type FormTab = typeof formTabs[number]["id"];
 
 const emptyForm = {
   title: "",
@@ -68,6 +76,7 @@ export default function PromotionsPanel({ tenant }: Props) {
   const [products, setProducts] = useState<Product[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [formTab, setFormTab] = useState<FormTab>("geral");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
@@ -95,6 +104,7 @@ export default function PromotionsPanel({ tenant }: Props) {
   const openCreate = () => {
     setEditing(null);
     setForm(emptyForm);
+    setFormTab("geral");
     setShowForm(true);
   };
 
@@ -112,6 +122,7 @@ export default function PromotionsPanel({ tenant }: Props) {
       endDate: fromISO(p.endsAt).d,
       endTime: fromISO(p.endsAt).t,
     });
+    setFormTab("geral");
     setShowForm(true);
   };
 
@@ -180,316 +191,266 @@ export default function PromotionsPanel({ tenant }: Props) {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-[#0D1B3E] to-[#1a2d5a] rounded-3xl p-6 sm:p-8 text-white flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 overflow-hidden relative">
-        <div className="relative z-10">
-          <h3 className="text-2xl sm:text-3xl font-black tracking-tight mb-1">Promoções & Banners</h3>
-          <p className="text-[#C9A227]/80 font-medium text-sm">
-            Crie banners com imagem completa que aparecem no carrossel do cardápio.
-          </p>
-        </div>
-        <Star className="w-24 h-24 absolute -right-4 -bottom-4 text-[#C9A227]/10 rotate-12" />
-        <button
-          onClick={openCreate}
-          className="relative z-10 flex items-center gap-2 bg-[#C9A227] hover:bg-amber-400 text-black font-black px-5 py-3 rounded-2xl transition-all active:scale-95 text-sm shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          Nova Promoção
-        </button>
-      </div>
+    <PageWrapper>
+      <div className="space-y-4">
+        <SectionTitle
+          icon={Star}
+          title="Promoções e banners"
+          description="Crie banners com imagem completa que aparecem no carrossel do cardápio."
+          action={<Button size="sm" iconLeft={<Plus size={14} />} onClick={openCreate}>Nova promoção</Button>}
+        />
 
-      {/* List */}
-      {loading ? (
-        <div className="flex items-center justify-center py-16 text-slate-400 text-sm">Carregando...</div>
-      ) : promotions.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-4 text-slate-400">
-          <Star className="w-12 h-12 text-slate-200" />
-          <div className="text-center">
-            <p className="font-bold text-slate-600">Nenhuma promoção criada</p>
-            <p className="text-sm mt-1">Crie banners para destacar itens no cardápio</p>
-          </div>
-          <button onClick={openCreate} className="mt-2 flex items-center gap-2 bg-[#C9A227] text-black font-black px-5 py-2.5 rounded-xl text-sm hover:bg-amber-400 transition-all">
-            <Plus className="w-4 h-4" /> Criar primeira promoção
-          </button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {promotions.map(p => (
-            <div key={p.id} className={`bg-white rounded-2xl shadow-sm border overflow-hidden transition-all ${p.active ? 'border-slate-200' : 'border-slate-100 opacity-60'}`}>
-              {/* Banner Image */}
-              <div className="relative w-full aspect-[16/7] bg-slate-100 overflow-hidden">
-                {p.imageUrl ? (
-                  <img src={p.imageUrl} alt={p.title} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <ImageIcon className="w-10 h-10 text-slate-300" />
+        {loading ? (
+          <div role="status" className="flex items-center justify-center py-16 text-xs text-slate-500">Carregando...</div>
+        ) : promotions.length === 0 ? (
+          <ContentCard>
+            <EmptyState
+              icon={Star}
+              title="Nenhuma promoção criada"
+              description="Crie banners para destacar itens no cardápio"
+              action={<Button size="sm" iconLeft={<Plus size={14} />} onClick={openCreate}>Criar primeira promoção</Button>}
+            />
+          </ContentCard>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+            {promotions.map(p => (
+              <ContentCard key={p.id} padding="none" className={`overflow-hidden flex flex-col transition-all ${p.active ? '' : 'opacity-60'}`}>
+                <div className="relative w-full aspect-[16/7] bg-slate-100 overflow-hidden">
+                  {p.imageUrl ? (
+                    <img src={p.imageUrl} alt={p.title} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <ImageIcon className="w-10 h-10 text-slate-300" />
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+                  <div className="absolute bottom-3 left-3 right-3">
+                    <p className="text-white font-medium text-sm leading-tight line-clamp-1">{p.title}</p>
+                    {p.product && (
+                      <p className="text-white text-xs font-semibold mt-0.5">
+                        {p.promoPrice ? (
+                          <>
+                            <span className="line-through text-slate-300 font-normal mr-1.5">{fmt(p.product.price)}</span>
+                            {fmt(p.promoPrice)}
+                          </>
+                        ) : (
+                          fmt(p.product.price)
+                        )}
+                      </p>
+                    )}
                   </div>
-                )}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
-                <div className="absolute bottom-3 left-3 right-3">
-                  <p className="text-white font-bold text-sm leading-tight line-clamp-1">{p.title}</p>
+                  <div className="absolute top-2 right-2">
+                    <Badge color={p.active ? 'success' : 'default'} size="sm">{p.active ? 'Ativo' : 'Inativo'}</Badge>
+                  </div>
+                </div>
+
+                <div className="p-3 space-y-2 flex-1">
+                  {p.description && (
+                    <p className="text-slate-500 text-xs line-clamp-2">{p.description}</p>
+                  )}
                   {p.product && (
-                    <p className="text-amber-400 text-xs font-black mt-0.5">
-                      {p.promoPrice ? (
-                        <>
-                          <span className="line-through text-slate-300 font-normal mr-1.5">{fmt(p.product.price)}</span>
-                          {fmt(p.promoPrice)}
-                        </>
-                      ) : (
-                        fmt(p.product.price)
-                      )}
+                    <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2">
+                      {p.product.imageUrl && <img src={p.product.imageUrl} className="w-6 h-6 rounded-lg object-cover" />}
+                      <span className="text-xs font-medium text-slate-600">{p.product.name}</span>
+                      <div className="ml-auto text-right flex flex-col">
+                        {p.promoPrice ? (
+                          <>
+                            <span className="text-[11px] text-slate-500 line-through leading-none">{fmt(p.product.price)}</span>
+                            <span className="text-xs text-blue-700 font-semibold leading-none">{fmt(p.promoPrice)}</span>
+                          </>
+                        ) : (
+                          <span className="text-xs text-blue-700 font-semibold leading-none">{fmt(p.product.price)}</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {(p.startsAt || p.endsAt) && (
+                    <p className="text-[11px] text-slate-500">
+                      {p.startsAt ? `De ${new Date(p.startsAt).toLocaleDateString('pt-BR')} ` : ''}
+                      {p.startsAt && p.startsAt.length > 10 ? new Date(p.startsAt).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}) : ''}
+                      {p.endsAt ? ` até ${new Date(p.endsAt).toLocaleDateString('pt-BR')} ` : ''}
+                      {p.endsAt && p.endsAt.length > 10 ? new Date(p.endsAt).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}) : ''}
                     </p>
                   )}
                 </div>
-                <div className="absolute top-2 right-2">
-                  <span className={`text-[10px] font-black uppercase px-2 py-1 rounded-full ${p.active ? 'bg-green-500 text-white' : 'bg-slate-400 text-white'}`}>
-                    {p.active ? 'Ativo' : 'Inativo'}
-                  </span>
-                </div>
-              </div>
 
-              {/* Info */}
-              <div className="p-4 space-y-3">
-                {p.description && (
-                  <p className="text-slate-500 text-xs line-clamp-2">{p.description}</p>
-                )}
-                {p.product && (
-                  <div className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2">
-                    {p.product.imageUrl && <img src={p.product.imageUrl} className="w-6 h-6 rounded-lg object-cover" />}
-                    <span className="text-xs font-semibold text-slate-600">{p.product.name}</span>
-                    <div className="ml-auto text-right flex flex-col">
-                      {p.promoPrice ? (
-                        <>
-                          <span className="text-[10px] text-slate-400 line-through leading-none">{fmt(p.product.price)}</span>
-                          <span className="text-xs text-amber-600 font-black leading-none">{fmt(p.promoPrice)}</span>
-                        </>
-                      ) : (
-                        <span className="text-xs text-amber-600 font-black leading-none">{fmt(p.product.price)}</span>
-                      )}
-                    </div>
-                  </div>
-                )}
-                {(p.startsAt || p.endsAt) && (
-                  <p className="text-[10px] text-slate-400">
-                    {p.startsAt ? `De ${new Date(p.startsAt).toLocaleDateString('pt-BR')} ` : ''}
-                    {p.startsAt && p.startsAt.length > 10 ? new Date(p.startsAt).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}) : ''}
-                    {p.endsAt ? ` até ${new Date(p.endsAt).toLocaleDateString('pt-BR')} ` : ''}
-                    {p.endsAt && p.endsAt.length > 10 ? new Date(p.endsAt).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}) : ''}
-                  </p>
-                )}
-
-                <div className="flex items-center gap-2 pt-1">
-                  <button
-                    onClick={() => handleToggle(p)}
+                <div className="flex items-center gap-2 p-3 bg-slate-50/50 border-t border-slate-100">
+                  <Switch
+                    checked={p.active}
+                    onCheckedChange={() => handleToggle(p)}
                     title={p.active ? "Desativar" : "Ativar"}
-                    className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${p.active ? 'bg-green-50 text-green-600 hover:bg-green-100' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
-                  >
-                    {p.active ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
-                    {p.active ? 'Ativo' : 'Inativo'}
-                  </button>
-                  <button
-                    onClick={() => openEdit(p)}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold bg-blue-50 text-blue-600 hover:bg-blue-100 transition-all"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" /> Editar
-                  </button>
-                  <button
-                    onClick={() => setDeleteConfirm(p.id)}
-                    className="ml-auto p-1.5 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                    aria-label={p.active ? "Desativar promoção" : "Ativar promoção"}
+                    label={p.active ? 'Ativo' : 'Inativo'}
+                  />
+                  <Button variant="outline" size="xs" iconLeft={<Edit2 size={14} />} onClick={() => openEdit(p)} className="ml-auto">Editar</Button>
+                  <IconButton variant="ghost" size="xs" aria-label="Remover promoção" onClick={() => setDeleteConfirm(p.id)}>
+                    <Trash2 size={14} className="text-red-600" />
+                  </IconButton>
                 </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Form Modal */}
-      {showForm && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white px-6 py-5 border-b border-slate-100 flex items-center justify-between rounded-t-3xl">
-              <h3 className="text-lg font-black text-slate-800">
-                {editing ? "Editar Promoção" : "Nova Promoção"}
-              </h3>
-              <button onClick={() => setShowForm(false)} className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-all">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-5">
-              {/* Image Upload */}
-              <div className="space-y-2">
-                <label className="text-xs font-black uppercase tracking-widest text-slate-500">Imagem do Banner</label>
-                <div
-                  className="relative w-full aspect-[16/7] bg-slate-100 rounded-2xl overflow-hidden cursor-pointer group border-2 border-dashed border-slate-200 hover:border-amber-400 transition-all"
-                  onClick={() => fileRef.current?.click()}
-                >
-                  {form.imageUrl ? (
-                    <>
-                      <img src={form.imageUrl} className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center">
-                        <span className="text-white text-xs font-bold">Trocar imagem</span>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-400">
-                      {uploadingImage ? (
-                        <div className="w-6 h-6 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        <>
-                          <ImageIcon className="w-8 h-8" />
-                          <span className="text-xs font-medium">Clique para fazer upload da imagem</span>
-                          <span className="text-[10px] text-slate-300 text-center px-6">Recomendado: 1200×500px, foto do produto sem texto — o título e o preço já são escritos por cima automaticamente</span>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleUpload} />
-                {form.imageUrl && (
-                  <div className="flex justify-end mt-1">
-                    <button onClick={() => setForm(f => ({ ...f, imageUrl: "" }))} className="text-xs font-bold text-red-500 hover:text-red-600 flex items-center gap-1">
-                      <Trash2 className="w-3.5 h-3.5" /> Remover Imagem
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Title */}
-              <div className="space-y-1">
-                <label className="text-xs font-black uppercase tracking-widest text-slate-500">Título *</label>
-                <input
-                  value={form.title}
-                  onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-                  placeholder="Ex: Combo Especial do Dia"
-                  className="w-full border border-slate-200 rounded-2xl px-4 py-3 text-sm text-slate-700 focus:outline-none focus:border-amber-400 transition-all"
-                />
-              </div>
-
-              {/* Description */}
-              <div className="space-y-1">
-                <label className="text-xs font-black uppercase tracking-widest text-slate-500">Descrição</label>
-                <textarea
-                  value={form.description}
-                  onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                  placeholder="Texto que aparece no banner..."
-                  rows={2}
-                  className="w-full border border-slate-200 rounded-2xl px-4 py-3 text-sm text-slate-700 focus:outline-none focus:border-amber-400 transition-all resize-none"
-                />
-              </div>
-
-              {/* Link Product */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-black uppercase tracking-widest text-slate-500">Vincular a um Produto</label>
-                  <select
-                    value={form.linkProductId}
-                    onChange={e => {
-                      const linkProductId = e.target.value;
-                      if (!linkProductId) {
-                        setForm(f => ({ ...f, linkProductId, promoPrice: "" }));
-                      } else {
-                        setForm(f => ({ ...f, linkProductId }));
-                      }
-                    }}
-                    className="w-full border border-slate-200 rounded-2xl px-4 py-3 text-sm text-slate-700 focus:outline-none focus:border-amber-400 bg-white transition-all"
-                  >
-                    <option value="">— Nenhum produto —</option>
-                    {products.map(p => (
-                      <option key={p.id} value={p.id}>{p.name} — {fmt(p.price)}</option>
-                    ))}
-                  </select>
-                </div>
-                {form.linkProductId && (
-                  <div className="space-y-1">
-                    <label className="text-xs font-black uppercase tracking-widest text-slate-500">Valor da Promoção</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      placeholder="Opcional"
-                      value={form.promoPrice}
-                      onChange={e => setForm(f => ({ ...f, promoPrice: e.target.value }))}
-                      className="w-full border border-slate-200 rounded-2xl px-4 py-3 text-sm text-slate-700 focus:outline-none focus:border-amber-400 transition-all"
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Dates */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-black uppercase tracking-widest text-slate-500">Início (opcional)</label>
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <DatePicker
-                        value={form.startDate}
-                        onChange={v => setForm(f => ({ ...f, startDate: v || "" }))}
-                        placeholder="dd/mm/aaaa"
-                      />
-                    </div>
-                    <input
-                      type="time"
-                      value={form.startTime}
-                      onChange={e => setForm(f => ({ ...f, startTime: e.target.value }))}
-                      className="w-24 border border-zinc-200 rounded-xl px-3 h-10 text-xs font-bold text-zinc-800 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 bg-zinc-50"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-black uppercase tracking-widest text-slate-500">Fim (opcional)</label>
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <DatePicker
-                        value={form.endDate}
-                        onChange={v => setForm(f => ({ ...f, endDate: v || "" }))}
-                        placeholder="dd/mm/aaaa"
-                      />
-                    </div>
-                    <input
-                      type="time"
-                      value={form.endTime}
-                      onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))}
-                      className="w-24 border border-zinc-200 rounded-xl px-3 h-10 text-xs font-bold text-zinc-800 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 bg-zinc-50"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Active Toggle */}
-              <label className="flex items-center gap-3 cursor-pointer">
-                <div
-                  onClick={() => setForm(f => ({ ...f, active: !f.active }))}
-                  className={`w-12 h-6 rounded-full transition-all relative ${form.active ? 'bg-green-500' : 'bg-slate-200'}`}
-                >
-                  <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${form.active ? 'left-6' : 'left-0.5'}`} />
-                </div>
-                <span className="text-sm font-semibold text-slate-700">{form.active ? 'Promoção ativa (visível no cardápio)' : 'Promoção inativa (oculta)'}</span>
-              </label>
-            </div>
-
-            <div className="sticky bottom-0 bg-white px-6 py-4 border-t border-slate-100 flex gap-3 rounded-b-3xl">
-              <button
-                onClick={() => setShowForm(false)}
-                className="flex-1 py-3 rounded-2xl border border-slate-200 text-slate-500 font-bold text-sm hover:bg-slate-50 transition-all"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving || !form.title.trim()}
-                className="flex-1 py-3 rounded-2xl bg-[#C9A227] hover:bg-amber-400 text-black font-black text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {saving ? <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" /> : <Check className="w-4 h-4" />}
-                {editing ? "Salvar alterações" : "Criar promoção"}
-              </button>
-            </div>
+              </ContentCard>
+            ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
+
+      <Modal
+        isOpen={showForm}
+        onClose={() => setShowForm(false)}
+        title={editing ? "Editar Promoção" : "Nova Promoção"}
+        size="lg"
+        footer={
+          <ModalFooter>
+            <Button variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
+            <Button
+              onClick={handleSave}
+              disabled={saving || !form.title.trim()}
+              loading={saving}
+              iconLeft={<Check size={14} />}
+            >
+              {editing ? "Salvar alterações" : "Criar promoção"}
+            </Button>
+          </ModalFooter>
+        }
+      >
+        <Tabs<FormTab> items={formTabs} value={formTab} onChange={setFormTab} label="Dados da promoção">
+          {formTab === "geral" && (
+            <div className="space-y-3">
+              <Input
+                label="Título *"
+                value={form.title}
+                onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                placeholder="Ex: Combo Especial do Dia"
+              />
+              <Textarea
+                label="Descrição"
+                value={form.description}
+                onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                placeholder="Texto que aparece no banner..."
+                rows={2}
+              />
+              <Switch
+                checked={form.active}
+                onCheckedChange={v => setForm(f => ({ ...f, active: v }))}
+                label={form.active ? 'Promoção ativa (visível no cardápio)' : 'Promoção inativa (oculta)'}
+              />
+            </div>
+          )}
+
+          {formTab === "imagem" && (
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-slate-600">Imagem do Banner</label>
+              <div
+                className="relative w-full aspect-[16/7] bg-slate-100 rounded-lg overflow-hidden cursor-pointer group border-2 border-dashed border-slate-200 hover:border-blue-400 transition-all"
+                onClick={() => fileRef.current?.click()}
+              >
+                {form.imageUrl ? (
+                  <>
+                    <img src={form.imageUrl} className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center">
+                      <span className="text-white text-xs font-medium">Trocar imagem</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-500">
+                    {uploadingImage ? (
+                      <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <ImageIcon className="w-8 h-8" />
+                        <span className="text-xs font-medium">Clique para fazer upload da imagem</span>
+                        <span className="text-[11px] text-slate-500 text-center px-6">Recomendado: 1200×500px, foto do produto sem texto — o título e o preço já são escritos por cima automaticamente</span>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleUpload} />
+              {form.imageUrl && (
+                <div className="flex justify-end">
+                  <Button variant="ghost" size="xs" iconLeft={<Trash2 size={14} />} onClick={() => setForm(f => ({ ...f, imageUrl: "" }))} className="text-red-600">
+                    Remover Imagem
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {formTab === "produto" && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Select
+                label="Vincular a um Produto"
+                value={form.linkProductId}
+                onChange={e => {
+                  const linkProductId = e.target.value;
+                  if (!linkProductId) {
+                    setForm(f => ({ ...f, linkProductId, promoPrice: "" }));
+                  } else {
+                    setForm(f => ({ ...f, linkProductId }));
+                  }
+                }}
+              >
+                <option value="">— Nenhum produto —</option>
+                {products.map(p => (
+                  <option key={p.id} value={p.id}>{p.name} — {fmt(p.price)}</option>
+                ))}
+              </Select>
+              {form.linkProductId && (
+                <Input
+                  label="Valor da Promoção"
+                  type="number"
+                  step="0.01"
+                  placeholder="Opcional"
+                  value={form.promoPrice}
+                  onChange={e => setForm(f => ({ ...f, promoPrice: e.target.value }))}
+                />
+              )}
+            </div>
+          )}
+
+          {formTab === "periodo" && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Início (opcional)</label>
+                <div className="flex gap-2">
+                  <div className="flex-1 min-w-0">
+                    <DatePicker
+                      value={form.startDate}
+                      onChange={v => setForm(f => ({ ...f, startDate: v || "" }))}
+                      placeholder="dd/mm/aaaa"
+                    />
+                  </div>
+                  <Input
+                    type="time"
+                    aria-label="Hora de início"
+                    wrapperClassName="w-28"
+                    value={form.startTime}
+                    onChange={e => setForm(f => ({ ...f, startTime: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Fim (opcional)</label>
+                <div className="flex gap-2">
+                  <div className="flex-1 min-w-0">
+                    <DatePicker
+                      value={form.endDate}
+                      onChange={v => setForm(f => ({ ...f, endDate: v || "" }))}
+                      placeholder="dd/mm/aaaa"
+                    />
+                  </div>
+                  <Input
+                    type="time"
+                    aria-label="Hora de fim"
+                    wrapperClassName="w-28"
+                    value={form.endTime}
+                    onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+        </Tabs>
+      </Modal>
 
       <ConfirmModal
         isOpen={!!deleteConfirm}
@@ -503,6 +464,6 @@ export default function PromotionsPanel({ tenant }: Props) {
         confirmLabel="Remover"
         variant="danger"
       />
-    </div>
+    </PageWrapper>
   );
 }

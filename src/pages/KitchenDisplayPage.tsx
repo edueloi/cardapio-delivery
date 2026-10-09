@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { ChefHat, Lock, User, Eye, EyeOff } from "lucide-react";
 import KitchenBoard from "./KitchenBoard";
+import { Alert, Button, IconButton, Input } from "../components";
 
 function kitchenTokenKey(slug: string) {
   return `kitchen_token_${slug}`;
@@ -39,63 +40,57 @@ function KitchenLoginScreen({ slug, onLoggedIn }: { slug: string; onLoggedIn: (t
   };
 
   return (
-    <div className="fixed inset-0 bg-[#0D1B3E] flex items-center justify-center p-6">
-      <form onSubmit={handleSubmit} className="bg-black/20 border border-white/10 rounded-[2rem] p-8 w-full max-w-sm space-y-6">
-        <div className="text-center space-y-3">
-          <div className="w-16 h-16 rounded-2xl bg-[#C9A227] flex items-center justify-center mx-auto">
-            <ChefHat className="w-8 h-8 text-black" />
+    <div className="fixed inset-0 flex items-center justify-center bg-slate-50 p-4">
+      <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-5 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="space-y-3 text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg border border-blue-100 bg-blue-50">
+            <ChefHat className="h-6 w-6 text-blue-600" />
           </div>
           <div>
-            <h1 className="text-lg font-black text-white uppercase tracking-widest">Painel de Cozinha</h1>
-            <p className="text-xs text-white/40 font-bold mt-1">Digite seu nome e senha para entrar</p>
+            <h1 className="text-base font-medium text-slate-900 sm:text-lg">Painel de Cozinha</h1>
+            <p className="mt-0.5 text-xs text-slate-500">Digite seu nome e senha para entrar</p>
           </div>
         </div>
+
         <div className="space-y-3">
-          <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase text-white/40 tracking-widest ml-1">Seu nome</label>
-            <div className="relative">
-              <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-              <input
-                autoFocus
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Ex: João"
-                className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pl-11 pr-4 text-white placeholder-white/20 focus:border-[#C9A227] outline-none text-sm font-bold"
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase text-white/40 tracking-widest ml-1">Senha</label>
-            <div className="relative">
-              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-              <input
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••"
-                className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pl-11 pr-11 text-white placeholder-white/20 focus:border-[#C9A227] outline-none text-center text-lg font-black tracking-widest"
-              />
-              <button
+          <Input
+            label="Seu nome"
+            autoFocus
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Ex: João"
+            iconLeft={<User size={14} />}
+            size="lg"
+          />
+          <Input
+            label="Senha"
+            type={showPassword ? "text" : "password"}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••"
+            iconLeft={<Lock size={14} />}
+            iconRight={
+              <IconButton
                 type="button"
+                variant="ghost"
+                size="xs"
+                aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
                 onClick={() => setShowPassword((v) => !v)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60"
-                tabIndex={-1}
+                className="border-transparent"
               >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
-          {error && <p className="text-xs text-red-400 font-bold text-center">{error}</p>}
+                {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+              </IconButton>
+            }
+            size="lg"
+          />
+          {error && <Alert variant="error">{error}</Alert>}
         </div>
-        <button
-          type="submit"
-          disabled={loading || !password}
-          className="w-full bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-40 text-black font-black py-3.5 rounded-2xl text-xs uppercase tracking-widest transition-all"
-        >
-          {loading ? "Entrando..." : "Entrar"}
-        </button>
-        <p className="text-[10px] text-white/25 text-center leading-relaxed">
+
+        <Button type="submit" size="lg" fullWidth loading={loading} disabled={!password}>
+          Entrar
+        </Button>
+        <p className="text-center text-[11px] leading-relaxed text-slate-500">
           Sem usuário cadastrado? Deixe o nome em branco e use a senha geral da cozinha.
         </p>
       </form>

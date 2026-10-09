@@ -11,7 +11,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "../../lib/auth";
 import { apiFetch, apiJson } from "../../lib/api";
 import {
-  Button, Input, Modal, ModalFooter, EmptyState,
+  Button, IconButton, Input, Select, Textarea, Modal, ModalFooter, EmptyState, Tabs,
   StatCard, StatGrid, ContentCard, PageWrapper, SectionTitle,
   useToast,
 } from "../../components";
@@ -67,31 +67,31 @@ function inviteUrl(token: string) { return `${window.location.origin}/cadastro/$
 function StatusBadge({ status, expiresAt }: { status: string; expiresAt?: string }) {
   const expired = expiresAt && new Date(expiresAt) < new Date();
   if (status === "CANCELLED") return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
+    <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
       <X className="w-3 h-3" /> Cancelado
     </span>
   );
   if (status === "TRIAL") return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-violet-100 text-violet-700">
+    <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700">
       <Zap className="w-3 h-3" /> Trial
     </span>
   );
   if (expired || status === "EXPIRED") return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-red-100 text-red-700">
+    <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
       <XCircle className="w-3 h-3" /> Expirado
     </span>
   );
   return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+    <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700">
       <CheckCircle2 className="w-3 h-3" /> Ativo
     </span>
   );
 }
 
 function InviteStatusBadge({ invite }: { invite: Invite }) {
-  if (invite.usedAt) return <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-green-100 text-green-700"><CheckCircle2 className="w-3 h-3" /> Usado</span>;
-  if (new Date() > new Date(invite.expiresAt)) return <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-red-100 text-red-700"><XCircle className="w-3 h-3" /> Expirado</span>;
-  return <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-100 text-amber-700"><Clock className="w-3 h-3" /> Aguardando</span>;
+  if (invite.usedAt) return <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700"><CheckCircle2 className="w-3 h-3" /> Usado</span>;
+  if (new Date() > new Date(invite.expiresAt)) return <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700"><XCircle className="w-3 h-3" /> Expirado</span>;
+  return <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700"><Clock className="w-3 h-3" /> Aguardando</span>;
 }
 
 // Mini bar chart
@@ -107,13 +107,13 @@ function RevenueChart({ data }: { data: Record<string, number> }) {
         return (
           <div key={key} className="flex-1 flex flex-col items-center gap-1 group relative">
             <div
-              className={`w-full rounded-t-lg transition-all ${isLast ? "bg-amber-400" : "bg-slate-200 group-hover:bg-amber-300"}`}
+              className={`w-full rounded-t-lg transition-all ${isLast ? "bg-blue-400" : "bg-slate-200 group-hover:bg-blue-300"}`}
               style={{ height: `${pct}%` }}
             />
-            <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[9px] font-bold px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+            <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] font-semibold px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
               {monthLabel(key)}: {fmt(val)}
             </div>
-            <span className="text-[8px] text-slate-400 font-bold">{monthLabel(key)}</span>
+            <span className="text-[10px] text-slate-400 font-semibold">{monthLabel(key)}</span>
           </div>
         );
       })}
@@ -151,7 +151,7 @@ function CondominiumsTab() {
   // Form: criar/editar condomínio
   const [showForm, setShowForm] = useState(false);
   const [editingCond, setEditingCond] = useState<CondominiumItem | null>(null);
-  const [form, setForm] = useState({ name: "", slug: "", description: "", address: "", primaryColor: "#C9A227" });
+  const [form, setForm] = useState({ name: "", slug: "", description: "", address: "", primaryColor: "#2563eb" });
   const [saving, setSaving] = useState(false);
 
   // Vincular tenant
@@ -190,13 +190,13 @@ function CondominiumsTab() {
 
   function openCreate() {
     setEditingCond(null);
-    setForm({ name: "", slug: "", description: "", address: "", primaryColor: "#C9A227" });
+    setForm({ name: "", slug: "", description: "", address: "", primaryColor: "#2563eb" });
     setShowForm(true);
   }
 
   function openEdit(cond: CondominiumItem) {
     setEditingCond(cond);
-    setForm({ name: cond.name, slug: cond.slug, description: cond.description || "", address: cond.address || "", primaryColor: cond.primaryColor || "#C9A227" });
+    setForm({ name: cond.name, slug: cond.slug, description: cond.description || "", address: cond.address || "", primaryColor: cond.primaryColor || "#2563eb" });
     setShowForm(true);
   }
 
@@ -294,7 +294,7 @@ function CondominiumsTab() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-6 h-6 animate-spin text-amber-400" />
+        <Loader2 className="w-6 h-6 animate-spin text-blue-400" />
       </div>
     );
   }
@@ -320,8 +320,8 @@ function CondominiumsTab() {
               {/* Header */}
               <div className="flex items-center gap-3">
                 <div
-                  className="w-12 h-12 rounded-xl flex-shrink-0 overflow-hidden bg-slate-100 flex items-center justify-center border-2"
-                  style={{ borderColor: `${cond.primaryColor || "#C9A227"}44` }}
+                  className="w-12 h-12 rounded-lg flex-shrink-0 overflow-hidden bg-slate-100 flex items-center justify-center border-2"
+                  style={{ borderColor: `${cond.primaryColor || "#2563eb"}44` }}
                 >
                   {cond.logoUrl ? (
                     <img src={cond.logoUrl} alt="" className="w-full h-full object-cover" />
@@ -331,29 +331,29 @@ function CondominiumsTab() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-slate-900 truncate">{cond.name}</span>
-                    {!cond.isActive && <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-red-100 text-red-600">Inativo</span>}
+                    <span className="font-semibold text-slate-900 truncate">{cond.name}</span>
+                    {!cond.isActive && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-600">Inativo</span>}
                   </div>
                   <div className="flex items-center gap-3 mt-0.5">
-                    <code className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded font-mono">/cond/{cond.slug}</code>
-                    <span className="text-[10px] text-slate-400">{cond.tenants.length} estabelecimento{cond.tenants.length !== 1 ? "s" : ""}</span>
+                    <code className="text-[11px] text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded font-mono">/cond/{cond.slug}</code>
+                    <span className="text-[11px] text-slate-400">{cond.tenants.length} estabelecimento{cond.tenants.length !== 1 ? "s" : ""}</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => { navigator.clipboard.writeText(publicUrl(cond.slug)); }}
-                    className="p-2 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-xl transition-colors"
+                    className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
                     title="Copiar link público"
                   >
                     <Copy className="w-4 h-4" />
                   </button>
-                  <button onClick={() => openEdit(cond)} className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-xl transition-colors">
-                    <Edit3 className="w-4 h-4" />
-                  </button>
-                  <button onClick={() => setDeleteId(cond.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                  <button onClick={() => { setExpanded(isExpanded ? null : cond.id); setLinkTenantId(""); }} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
+                  <IconButton size="sm" onClick={() => openEdit(cond)} aria-label="Editar">
+<Edit3 className="w-4 h-4" />
+</IconButton>
+                  <IconButton size="sm" onClick={() => setDeleteId(cond.id)} aria-label="Excluir">
+<Trash2 className="w-4 h-4" />
+</IconButton>
+                  <button onClick={() => { setExpanded(isExpanded ? null : cond.id); setLinkTenantId(""); }} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
                     {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                   </button>
                 </div>
@@ -373,22 +373,22 @@ function CondominiumsTab() {
                       <div className="grid grid-cols-2 gap-3">
                         {/* LOGO */}
                         <div>
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Logo</label>
+                          <label className="text-[11px] font-semibold text-slate-400 mb-1.5 block">Logo</label>
                           {cond.logoUrl ? (
-                            <div className="relative group rounded-xl overflow-hidden border border-slate-200 bg-slate-50" style={{ height: 80 }}>
+                            <div className="relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-50" style={{ height: 80 }}>
                               <img src={cond.logoUrl} alt="logo" className="w-full h-full object-cover" />
                               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100">
-                                <label className="p-1.5 bg-white rounded-lg cursor-pointer hover:bg-amber-50 transition-colors" title="Trocar">
+                                <label className="p-1.5 bg-white rounded-lg cursor-pointer hover:bg-blue-50 transition-colors" title="Trocar">
                                   {uploadingLogo === cond.id ? <Loader2 className="w-4 h-4 animate-spin text-slate-500" /> : <Edit3 className="w-4 h-4 text-slate-600" />}
                                   <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleUpload(cond.id, "logo", e.target.files[0])} />
                                 </label>
-                                <button type="button" onClick={() => setRemoveImageConfirm({ condId: cond.id, type: "logo" })} className="p-1.5 bg-white rounded-lg hover:bg-red-50 transition-colors" title="Remover">
-                                  <Trash2 className="w-4 h-4 text-red-500" />
-                                </button>
+                                <IconButton size="sm" onClick={() => setRemoveImageConfirm({ condId: cond.id, type: "logo" })} aria-label="Remover" title="Remover">
+<Trash2 className="w-4 h-4" />
+</IconButton>
                               </div>
                             </div>
                           ) : (
-                            <label className="flex flex-col items-center justify-center gap-1 px-3 py-4 bg-slate-50 border border-dashed border-slate-200 rounded-xl cursor-pointer hover:bg-amber-50 hover:border-amber-300 transition-colors text-xs text-slate-400">
+                            <label className="flex flex-col items-center justify-center gap-1 px-3 py-4 bg-slate-50 border border-dashed border-slate-200 rounded-lg cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition-colors text-xs text-slate-400">
                               {uploadingLogo === cond.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
                               Enviar logo
                               <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleUpload(cond.id, "logo", e.target.files[0])} />
@@ -397,22 +397,22 @@ function CondominiumsTab() {
                         </div>
                         {/* BANNER */}
                         <div>
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Banner</label>
+                          <label className="text-[11px] font-semibold text-slate-400 mb-1.5 block">Banner</label>
                           {cond.bannerUrl ? (
-                            <div className="relative group rounded-xl overflow-hidden border border-slate-200 bg-slate-50" style={{ height: 80 }}>
+                            <div className="relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-50" style={{ height: 80 }}>
                               <img src={cond.bannerUrl} alt="banner" className="w-full h-full object-cover" />
                               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100">
-                                <label className="p-1.5 bg-white rounded-lg cursor-pointer hover:bg-amber-50 transition-colors" title="Trocar">
+                                <label className="p-1.5 bg-white rounded-lg cursor-pointer hover:bg-blue-50 transition-colors" title="Trocar">
                                   {uploadingBanner === cond.id ? <Loader2 className="w-4 h-4 animate-spin text-slate-500" /> : <Edit3 className="w-4 h-4 text-slate-600" />}
                                   <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleUpload(cond.id, "banner", e.target.files[0])} />
                                 </label>
-                                <button type="button" onClick={() => setRemoveImageConfirm({ condId: cond.id, type: "banner" })} className="p-1.5 bg-white rounded-lg hover:bg-red-50 transition-colors" title="Remover">
-                                  <Trash2 className="w-4 h-4 text-red-500" />
-                                </button>
+                                <IconButton size="sm" onClick={() => setRemoveImageConfirm({ condId: cond.id, type: "banner" })} aria-label="Remover" title="Remover">
+<Trash2 className="w-4 h-4" />
+</IconButton>
                               </div>
                             </div>
                           ) : (
-                            <label className="flex flex-col items-center justify-center gap-1 px-3 py-4 bg-slate-50 border border-dashed border-slate-200 rounded-xl cursor-pointer hover:bg-amber-50 hover:border-amber-300 transition-colors text-xs text-slate-400">
+                            <label className="flex flex-col items-center justify-center gap-1 px-3 py-4 bg-slate-50 border border-dashed border-slate-200 rounded-lg cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition-colors text-xs text-slate-400">
                               {uploadingBanner === cond.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
                               Enviar banner
                               <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleUpload(cond.id, "banner", e.target.files[0])} />
@@ -423,21 +423,21 @@ function CondominiumsTab() {
 
                       {/* Estabelecimentos vinculados */}
                       <div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Estabelecimentos vinculados</p>
+                        <p className="text-[11px] font-semibold text-slate-400 mb-2">Estabelecimentos vinculados</p>
                         {cond.tenants.length === 0 ? (
                           <p className="text-xs text-slate-400 italic">Nenhum estabelecimento vinculado ainda.</p>
                         ) : (
                           <div className="space-y-1.5">
                             {cond.tenants.map(ct => (
-                              <div key={ct.id} className="flex items-center gap-2 p-2 bg-slate-50 rounded-xl">
+                              <div key={ct.id} className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
                                 <div className="w-7 h-7 rounded-lg bg-white border border-slate-200 flex items-center justify-center overflow-hidden flex-shrink-0">
                                   {ct.tenant.logoUrl ? <img src={ct.tenant.logoUrl} alt="" className="w-full h-full object-cover" /> : <Store className="w-3.5 h-3.5 text-slate-300" />}
                                 </div>
                                 <span className="text-xs font-semibold text-slate-700 flex-1 truncate">{ct.tenant.name}</span>
-                                <code className="text-[10px] text-slate-400 font-mono">/{ct.tenant.slug}</code>
-                                <button onClick={() => handleUnlink(cond.id, ct.tenant.id)} className="p-1 text-slate-300 hover:text-red-500 transition-colors">
-                                  <X className="w-3.5 h-3.5" />
-                                </button>
+                                <code className="text-[11px] text-slate-400 font-mono">/{ct.tenant.slug}</code>
+                                <IconButton size="sm" onClick={() => handleUnlink(cond.id, ct.tenant.id)} aria-label="Remover">
+<X className="w-4 h-4" />
+</IconButton>
                               </div>
                             ))}
                           </div>
@@ -447,16 +447,15 @@ function CondominiumsTab() {
                       {/* Vincular novo */}
                       {availableTenants.length > 0 && (
                         <div className="flex gap-2">
-                          <select
+                          <Select wrapperClassName="flex-1"
                             value={availableTenants.some(t => t.id === linkTenantId) ? linkTenantId : ""}
                             onChange={e => setLinkTenantId(e.target.value)}
-                            className="flex-1 h-9 rounded-[10px] border border-zinc-200 bg-zinc-50 px-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400"
                           >
                             <option value="">Selecionar estabelecimento...</option>
                             {availableTenants.map(t => (
                               <option key={t.id} value={t.id}>{t.name} (/{t.slug})</option>
                             ))}
-                          </select>
+                          </Select>
                           <Button
                             variant="primary"
                             loading={linking === cond.id}
@@ -491,14 +490,14 @@ function CondominiumsTab() {
               placeholder="Residencial Park"
             />
             {!editingCond && form.slug && (
-              <p className="text-[11px] text-slate-400 mt-1">URL: <span className="font-mono text-amber-600">/cond/{form.slug}</span></p>
+              <p className="text-[11px] text-slate-400 mt-1">URL: <span className="font-mono text-blue-600">/cond/{form.slug}</span></p>
             )}
           </div>
           <Input label="Descrição (opcional)" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Condomínio localizado na Av. ..." />
           <Input label="Endereço (opcional)" value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="Av. das Flores, 100" />
           <div>
             <label className="ds-label mb-1.5 block">Cor principal</label>
-            <input type="color" value={form.primaryColor} onChange={e => setForm(f => ({ ...f, primaryColor: e.target.value }))} className="h-10 w-20 rounded-xl border border-zinc-200 cursor-pointer" />
+            <input type="color" value={form.primaryColor} onChange={e => setForm(f => ({ ...f, primaryColor: e.target.value }))} className="h-10 w-20 rounded-lg border border-zinc-200 cursor-pointer" />
           </div>
         </div>
         <ModalFooter>
@@ -535,6 +534,15 @@ function CondominiumsTab() {
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
+const SUPERADMIN_TABS = [
+  { id: "dashboard", label: "Dashboard", icon: BarChart3 },
+  { id: "accounts", label: "Contas", icon: Users },
+  { id: "subscriptions", label: "Assinaturas", icon: Crown },
+  { id: "plans", label: "Planos", icon: Package },
+  { id: "invites", label: "Convites", icon: LinkIcon },
+  { id: "condominiums", label: "Condomínios", icon: Building2 },
+] as const;
+
 export default function SuperAdminPage() {
   const navigate = useNavigate();
   const { account, logout } = useAuth();
@@ -573,7 +581,7 @@ export default function SuperAdminPage() {
   // Planos
   const [showPlanModal, setShowPlanModal] = useState(false);
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
-  const [planForm, setPlanForm] = useState({ name: "", description: "", price: "", durationDays: "30", features: "", color: "#C9A227" });
+  const [planForm, setPlanForm] = useState({ name: "", description: "", price: "", durationDays: "30", features: "", color: "#2563eb" });
   const [planDefaultPerms, setPlanDefaultPerms] = useState<string[] | null>(null);
   const [savingPlan, setSavingPlan] = useState(false);
 
@@ -710,11 +718,11 @@ export default function SuperAdminPage() {
   const openPlanModal = (plan?: Plan) => {
     if (plan) {
       setEditingPlan(plan);
-      setPlanForm({ name: plan.name, description: plan.description || "", price: String(plan.price), durationDays: String(plan.durationDays), features: plan.features || "", color: plan.color || "#C9A227" });
+      setPlanForm({ name: plan.name, description: plan.description || "", price: String(plan.price), durationDays: String(plan.durationDays), features: plan.features || "", color: plan.color || "#2563eb" });
       setPlanDefaultPerms(plan.defaultStaffPermissions ? JSON.parse(plan.defaultStaffPermissions) : null);
     } else {
       setEditingPlan(null);
-      setPlanForm({ name: "", description: "", price: "", durationDays: "30", features: "", color: "#C9A227" });
+      setPlanForm({ name: "", description: "", price: "", durationDays: "30", features: "", color: "#2563eb" });
       setPlanDefaultPerms(null);
     }
     setShowPlanModal(true);
@@ -722,20 +730,11 @@ export default function SuperAdminPage() {
 
   const pendingInvites = invites.filter(i => !i.usedAt && new Date() <= new Date(i.expiresAt));
 
-  const TABS = [
-    { id: "dashboard", label: "Dashboard", icon: BarChart3 },
-    { id: "accounts", label: "Contas", icon: Users },
-    { id: "subscriptions", label: "Assinaturas", icon: Crown },
-    { id: "plans", label: "Planos", icon: Package },
-    { id: "invites", label: "Convites", icon: LinkIcon },
-    { id: "condominiums", label: "Condomínios", icon: Building2 },
-  ] as const;
-
   if (loading) {
     return (
       <div className="min-h-screen bg-zinc-50 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-4 border-amber-400 border-t-transparent rounded-full animate-spin" />
+          <div className="w-10 h-10 border-4 border-blue-400 border-t-transparent rounded-full animate-spin" />
           <p className="text-slate-400 text-sm font-medium">Carregando painel...</p>
         </div>
       </div>
@@ -745,53 +744,34 @@ export default function SuperAdminPage() {
   return (
     <div className="min-h-screen bg-zinc-50">
       {/* Header */}
-      <header className="bg-white border-b border-zinc-200 sticky top-0 z-20 shadow-sm">
-        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+      <header className="bg-white border-b border-zinc-200 sticky top-0 z-20">
+        <div className="w-full px-4 sm:px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-[#0D1B3E] flex items-center justify-center">
-              <ShieldCheck className="w-5 h-5 text-amber-400" />
+            <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center">
+              <ShieldCheck className="w-4 h-4 text-blue-600" />
             </div>
             <div>
-              <p className="text-sm font-black text-slate-900">Super Admin</p>
-              <p className="text-[10px] text-slate-400 uppercase tracking-widest">Box Sys</p>
+              <p className="text-sm font-semibold text-slate-900">Super Admin</p>
+              <p className="text-[11px] text-slate-400">Box Sys</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={load} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-zinc-100 rounded-xl transition-colors" title="Atualizar">
+            <IconButton onClick={load} title="Atualizar" aria-label="Atualizar">
               <RefreshCw className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => navigate("/painel")}
-              className="hidden sm:flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors px-3 py-2 rounded-xl hover:bg-zinc-100"
-            >
-              <Building2 className="w-4 h-4" /> Ir ao Painel
-            </button>
-            <button
-              onClick={() => { logout(); navigate("/login"); }}
-              className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-red-600 transition-colors px-3 py-2 rounded-xl hover:bg-red-50"
-            >
-              <LogOut className="w-4 h-4" /> <span className="hidden sm:inline">Sair</span>
-            </button>
+            </IconButton>
+            <Button variant="ghost" size="sm" className="hidden sm:inline-flex" onClick={() => navigate("/painel")} iconLeft={<Building2 className="w-3.5 h-3.5" />}>
+              Ir ao Painel
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => { logout(); navigate("/login"); }} iconLeft={<LogOut className="w-3.5 h-3.5" />}>
+              <span className="hidden sm:inline">Sair</span>
+            </Button>
           </div>
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+      <div className="w-full px-4 sm:px-6 py-4 space-y-4">
         {/* Tabs */}
-        <div className="flex gap-1 bg-white border border-zinc-200 rounded-2xl p-1 overflow-x-auto">
-          {TABS.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
-                tab === t.id ? "bg-[#0D1B3E] text-amber-400 shadow-sm" : "text-slate-400 hover:text-slate-700 hover:bg-zinc-50"
-              }`}
-            >
-              <t.icon className="w-3.5 h-3.5 shrink-0" />
-              <span className="hidden sm:inline">{t.label}</span>
-            </button>
-          ))}
-        </div>
+        <Tabs items={SUPERADMIN_TABS} value={tab} onChange={(v) => setTab(v as (typeof SUPERADMIN_TABS)[number]["id"])} label="Seções do Super Admin">
 
         {/* ══ DASHBOARD ══ */}
         {tab === "dashboard" && stats && (
@@ -811,12 +791,12 @@ export default function SuperAdminPage() {
                 <ContentCard padding="lg">
                   <div className="flex items-center justify-between mb-4">
                     <div>
-                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Receita por mês</p>
-                      <p className="text-xl font-black text-slate-800 mt-0.5">{fmt(stats.monthlyRevenue)} <span className="text-xs text-slate-400 font-medium">este mês</span></p>
+                      <p className="text-[11px] font-semibold text-slate-400">Receita por mês</p>
+                      <p className="text-xl font-semibold text-slate-800 mt-0.5">{fmt(stats.monthlyRevenue)} <span className="text-xs text-slate-400 font-medium">este mês</span></p>
                     </div>
-                    <div className="flex items-center gap-1.5 text-green-600 bg-green-50 rounded-xl px-3 py-1.5">
+                    <div className="flex items-center gap-1.5 text-green-600 bg-green-50 rounded-lg px-3 py-1.5">
                       <TrendingUp className="w-3.5 h-3.5" />
-                      <span className="text-[10px] font-black uppercase">Receita</span>
+                      <span className="text-[11px] font-semibold">Receita</span>
                     </div>
                   </div>
                   <RevenueChart data={stats.revenueByMonth} />
@@ -826,7 +806,7 @@ export default function SuperAdminPage() {
               {/* Resumo rápido */}
               <div className="col-span-12 lg:col-span-4 space-y-3">
                 <ContentCard padding="lg">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Status assinaturas</p>
+                  <p className="text-[11px] font-semibold text-slate-400 mb-3">Status assinaturas</p>
                   <div className="space-y-2">
                     {[
                       { label: "Ativas", value: stats.activeSubscriptions, color: "bg-green-500" },
@@ -838,17 +818,17 @@ export default function SuperAdminPage() {
                           <div className={`w-2 h-2 rounded-full ${row.color}`} />
                           <span className="text-sm text-slate-600">{row.label}</span>
                         </div>
-                        <span className="text-sm font-black text-slate-800">{row.value}</span>
+                        <span className="text-sm font-semibold text-slate-800">{row.value}</span>
                       </div>
                     ))}
                   </div>
                 </ContentCard>
 
                 <ContentCard padding="lg">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Convites</p>
+                  <p className="text-[11px] font-semibold text-slate-400 mb-3">Convites</p>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-slate-600">Pendentes</span>
-                    <span className="text-xl font-black text-amber-500">{pendingInvites.length}</span>
+                    <span className="text-xl font-semibold text-blue-500">{pendingInvites.length}</span>
                   </div>
                 </ContentCard>
               </div>
@@ -858,23 +838,23 @@ export default function SuperAdminPage() {
             {stats.subscriptions.length > 0 && (
               <ContentCard padding="none">
                 <div className="px-5 py-4 border-b border-zinc-100 flex items-center justify-between">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Assinaturas Recentes</p>
-                  <button onClick={() => setTab("subscriptions")} className="text-[10px] font-black text-amber-500 hover:text-amber-600 flex items-center gap-1">
+                  <p className="text-[11px] font-semibold text-slate-400">Assinaturas Recentes</p>
+                  <button onClick={() => setTab("subscriptions")} className="text-[11px] font-semibold text-blue-500 hover:text-blue-600 flex items-center gap-1">
                     Ver todas <ArrowUpRight className="w-3 h-3" />
                   </button>
                 </div>
                 <div className="divide-y divide-zinc-50">
                   {stats.subscriptions.slice(0, 5).map(sub => (
                     <div key={sub.id} className="flex items-center gap-3 px-5 py-3 hover:bg-zinc-50 transition-colors">
-                      <div className="w-8 h-8 rounded-xl bg-zinc-100 flex items-center justify-center text-sm font-black text-slate-500 shrink-0">
+                      <div className="w-8 h-8 rounded-lg bg-zinc-100 flex items-center justify-center text-sm font-semibold text-slate-500 shrink-0">
                         {sub.account.name[0]?.toUpperCase()}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-slate-800 truncate">{sub.account.name}</p>
-                        <p className="text-[10px] text-slate-400 truncate">{sub.plan.name} · {fmtShort(sub.startsAt)} → {fmtShort(sub.expiresAt)}</p>
+                        <p className="text-sm font-semibold text-slate-800 truncate">{sub.account.name}</p>
+                        <p className="text-[11px] text-slate-400 truncate">{sub.plan.name} · {fmtShort(sub.startsAt)} → {fmtShort(sub.expiresAt)}</p>
                       </div>
                       <StatusBadge status={sub.status} expiresAt={sub.expiresAt} />
-                      <span className="text-sm font-black text-slate-700 shrink-0">{fmt(sub.pricePaid)}</span>
+                      <span className="text-sm font-semibold text-slate-700 shrink-0">{fmt(sub.pricePaid)}</span>
                     </div>
                   ))}
                 </div>
@@ -888,16 +868,14 @@ export default function SuperAdminPage() {
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
             <SectionTitle title="Contas" description={`${accounts.length} conta${accounts.length !== 1 ? "s" : ""} cadastrada${accounts.length !== 1 ? "s" : ""}`} icon={Users} />
 
-            <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={accountSearch}
-                onChange={e => setAccountSearch(e.target.value)}
-                placeholder="Buscar por nome, e-mail ou empresa..."
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-zinc-200 bg-white text-sm outline-none focus:border-[#C9A227] transition-colors"
-              />
-            </div>
+            <Input
+              type="text"
+              value={accountSearch}
+              onChange={e => setAccountSearch(e.target.value)}
+              placeholder="Buscar por nome, e-mail ou empresa..."
+              iconLeft={<Search className="w-4 h-4" />}
+              wrapperClassName="w-full sm:max-w-[280px]"
+            />
 
             {accounts.length === 0 ? (
               <EmptyState title="Nenhuma conta" description="Nenhuma conta cadastrada." icon={Users} />
@@ -922,26 +900,26 @@ export default function SuperAdminPage() {
                   return (
                     <ContentCard key={acc.id} padding="none">
                       <div className="flex items-center gap-4 px-4 py-3">
-                        <div className="w-10 h-10 rounded-xl bg-zinc-100 flex items-center justify-center text-sm font-black text-slate-500 shrink-0">
+                        <div className="w-10 h-10 rounded-lg bg-zinc-100 flex items-center justify-center text-sm font-semibold text-slate-500 shrink-0">
                           {acc.name[0]?.toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-sm font-black text-slate-800">{acc.name}</p>
+                            <p className="text-sm font-semibold text-slate-800">{acc.name}</p>
                             {acc.isSuperAdmin && (
-                              <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-700 border border-amber-200">Super Admin</span>
+                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-blue-100 text-blue-700 border border-blue-200">Super Admin</span>
                             )}
-                            {isMe && <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md bg-blue-100 text-blue-700">Você</span>}
+                            {isMe && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-blue-100 text-blue-700">Você</span>}
                             {activeSub && <StatusBadge status="ACTIVE" expiresAt={activeSub.expiresAt} />}
                           </div>
                           <div className="flex items-center gap-3 mt-0.5 flex-wrap">
                             <p className="text-xs text-slate-400 flex items-center gap-1"><Mail className="w-3 h-3" />{acc.email}</p>
                             {activeSub && (
-                              <p className="text-[10px] text-slate-400 flex items-center gap-1">
+                              <p className="text-[11px] text-slate-400 flex items-center gap-1">
                                 <CalendarDays className="w-3 h-3" />
                                 Expira {fmtDate(activeSub.expiresAt)}
                                 {daysUntil(activeSub.expiresAt) <= 7 && (
-                                  <span className="text-orange-500 font-bold">({daysUntil(activeSub.expiresAt)}d)</span>
+                                  <span className="text-orange-500 font-semibold">({daysUntil(activeSub.expiresAt)}d)</span>
                                 )}
                               </p>
                             )}
@@ -952,10 +930,10 @@ export default function SuperAdminPage() {
                           {acc.memberships.length > 0 && (
                             <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                               {acc.memberships.map(m => (
-                                <span key={m.tenant.id} className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-600 bg-zinc-100 rounded-md px-2 py-0.5">
+                                <span key={m.tenant.id} className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 bg-zinc-100 rounded-md px-2 py-0.5">
                                   <Building2 className="w-2.5 h-2.5 text-slate-400" />
                                   {m.tenant.name}
-                                  <span className="text-slate-400 font-black">· {m.role}</span>
+                                  <span className="text-slate-400 font-semibold">· {m.role}</span>
                                 </span>
                               ))}
                             </div>
@@ -964,22 +942,22 @@ export default function SuperAdminPage() {
                         <div className="flex items-center gap-1 shrink-0">
                           <button
                             onClick={() => { setSubForm(f => ({ ...f, accountId: acc.id })); setTab("subscriptions"); setTimeout(() => setShowSubModal(true), 100); }}
-                            className="p-2 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-xl transition-colors"
+                            className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
                             title="Criar assinatura"
                           >
                             <Crown className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => { setResetPasswordAccount(acc); setNewPassword(""); setResetPasswordError(""); }}
-                            className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-xl transition-colors"
+                            className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
                             title="Trocar senha"
                           >
                             <KeyRound className="w-4 h-4" />
                           </button>
                           {!isMe && !acc.isSuperAdmin && (
-                            <button onClick={() => setDeleteAccountId(acc.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            <IconButton size="sm" onClick={() => setDeleteAccountId(acc.id)} aria-label="Excluir">
+<Trash2 className="w-4 h-4" />
+</IconButton>
                           )}
                         </div>
                       </div>
@@ -1016,27 +994,27 @@ export default function SuperAdminPage() {
                     const isExpiring = days <= 7 && days > 0 && sub.status === "ACTIVE";
                     return (
                       <div key={sub.id} className={`flex items-center gap-3 px-5 py-4 hover:bg-zinc-50 transition-colors ${isExpiring ? "bg-orange-50/50" : ""}`}>
-                        <div className="w-9 h-9 rounded-xl bg-zinc-100 flex items-center justify-center text-sm font-black text-slate-500 shrink-0">
+                        <div className="w-9 h-9 rounded-lg bg-zinc-100 flex items-center justify-center text-sm font-semibold text-slate-500 shrink-0">
                           {sub.account.name[0]?.toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0 space-y-0.5">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-sm font-black text-slate-800">{sub.account.name}</p>
+                            <p className="text-sm font-semibold text-slate-800">{sub.account.name}</p>
                             <StatusBadge status={sub.status} expiresAt={sub.expiresAt} />
-                            {isExpiring && <span className="text-[10px] font-black text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full">Expira em {days}d</span>}
+                            {isExpiring && <span className="text-[11px] font-semibold text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full">Expira em {days}d</span>}
                           </div>
                           <p className="text-xs text-slate-400">{sub.account.email}</p>
-                          <div className="flex items-center gap-3 text-[10px] text-slate-400 flex-wrap">
-                            <span className="flex items-center gap-1"><Crown className="w-3 h-3 text-amber-400" />{sub.plan.name}</span>
+                          <div className="flex items-center gap-3 text-[11px] text-slate-400 flex-wrap">
+                            <span className="flex items-center gap-1"><Crown className="w-3 h-3 text-blue-400" />{sub.plan.name}</span>
                             <span className="flex items-center gap-1"><CalendarDays className="w-3 h-3" />{fmtDate(sub.startsAt)} → {fmtDate(sub.expiresAt)}</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-sm font-black text-slate-700">{fmt(sub.pricePaid)}</span>
+                          <span className="text-sm font-semibold text-slate-700">{fmt(sub.pricePaid)}</span>
                           {sub.status === "ACTIVE" && (
-                            <button onClick={() => setDeleteSubId(sub.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors">
-                              <X className="w-4 h-4" />
-                            </button>
+                            <IconButton size="sm" onClick={() => setDeleteSubId(sub.id)} aria-label="Remover">
+<X className="w-4 h-4" />
+</IconButton>
                           )}
                         </div>
                       </div>
@@ -1072,22 +1050,22 @@ export default function SuperAdminPage() {
                   return (
                     <ContentCard key={plan.id} padding="lg">
                       <div className="flex items-start justify-between mb-3">
-                        <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${plan.color}20` }}>
+                        <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${plan.color}20` }}>
                           <Star className="w-5 h-5" style={{ color: plan.color }} />
                         </div>
                         <div className="flex items-center gap-1">
-                          <button onClick={() => openPlanModal(plan)} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-zinc-100 rounded-lg transition-colors">
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
+                          <IconButton size="sm" onClick={() => openPlanModal(plan)} aria-label="Editar">
+<Edit3 className="w-4 h-4" />
+</IconButton>
                           {!plan.isActive && (
-                            <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md bg-zinc-100 text-zinc-500">Inativo</span>
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-zinc-100 text-zinc-500">Inativo</span>
                           )}
                         </div>
                       </div>
-                      <h3 className="font-black text-slate-800 text-base">{plan.name}</h3>
+                      <h3 className="font-semibold text-slate-800 text-base">{plan.name}</h3>
                       {plan.description && <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{plan.description}</p>}
                       <div className="mt-3">
-                        <span className="text-2xl font-black" style={{ color: plan.color }}>{fmt(plan.price)}</span>
+                        <span className="text-2xl font-semibold" style={{ color: plan.color }}>{fmt(plan.price)}</span>
                         <span className="text-xs text-slate-400 ml-1">/ {plan.durationDays}d</span>
                       </div>
                       {features.length > 0 && (
@@ -1101,8 +1079,8 @@ export default function SuperAdminPage() {
                         </ul>
                       )}
                       <div className="mt-4 pt-3 border-t border-zinc-100 flex items-center justify-between">
-                        <span className="text-[10px] text-slate-400">{subCount} assinante{subCount !== 1 ? "s" : ""} ativo{subCount !== 1 ? "s" : ""}</span>
-                        <span className="text-[10px] font-black text-slate-500">{plan.durationDays === 30 ? "Mensal" : plan.durationDays === 90 ? "Trimestral" : plan.durationDays === 365 ? "Anual" : `${plan.durationDays} dias`}</span>
+                        <span className="text-[11px] text-slate-400">{subCount} assinante{subCount !== 1 ? "s" : ""} ativo{subCount !== 1 ? "s" : ""}</span>
+                        <span className="text-[11px] font-semibold text-slate-500">{plan.durationDays === 30 ? "Mensal" : plan.durationDays === 90 ? "Trimestral" : plan.durationDays === 365 ? "Anual" : `${plan.durationDays} dias`}</span>
                       </div>
                     </ContentCard>
                   );
@@ -1146,24 +1124,24 @@ export default function SuperAdminPage() {
                             </div>
                             {active && (
                               <div className="flex items-center gap-2">
-                                <code className="text-[11px] text-amber-600 bg-amber-50 border border-amber-200 px-2 py-1 rounded-lg truncate max-w-xs font-mono">
+                                <code className="text-[11px] text-blue-600 bg-blue-50 border border-blue-200 px-2 py-1 rounded-lg truncate max-w-xs font-mono">
                                   {url}
                                 </code>
-                                <button onClick={() => copyLink(url)} className="p-1.5 text-slate-400 hover:text-amber-500 transition-colors shrink-0" title="Copiar link">
-                                  <Copy className="w-3.5 h-3.5" />
-                                </button>
+                                <IconButton size="sm" onClick={() => copyLink(url)} aria-label="Copiar link" title="Copiar link">
+<Copy className="w-4 h-4" />
+</IconButton>
                               </div>
                             )}
-                            <div className="flex items-center gap-3 text-[10px] text-slate-400 flex-wrap">
+                            <div className="flex items-center gap-3 text-[11px] text-slate-400 flex-wrap">
                               <span>Criado {fmtDate(invite.createdAt)}</span>
                               <span>Expira {fmtDate(invite.expiresAt)}</span>
-                              {invite.usedByEmail && <span>Usado por <span className="text-slate-600 font-bold">{invite.usedByEmail}</span></span>}
+                              {invite.usedByEmail && <span>Usado por <span className="text-slate-600 font-semibold">{invite.usedByEmail}</span></span>}
                             </div>
                           </div>
                           {!used && (
-                            <button onClick={() => setDeleteInviteId(invite.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors shrink-0">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            <IconButton size="sm" onClick={() => setDeleteInviteId(invite.id)} aria-label="Excluir">
+<Trash2 className="w-4 h-4" />
+</IconButton>
                           )}
                         </div>
                       </div>
@@ -1179,6 +1157,7 @@ export default function SuperAdminPage() {
         {tab === "condominiums" && (
           <CondominiumsTab />
         )}
+        </Tabs>
       </div>
 
       {/* ══ MODAIS ══ */}
@@ -1188,9 +1167,9 @@ export default function SuperAdminPage() {
         <p className="text-sm text-slate-500 -mt-2 mb-4">Link de uso único para cadastro de nova conta.</p>
         {newInviteUrl ? (
           <div className="space-y-4">
-            <div className="bg-green-50 border border-green-200 rounded-2xl p-4 text-center space-y-3">
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center space-y-3">
               <CheckCircle2 className="w-8 h-8 text-green-500 mx-auto" />
-              <p className="text-sm font-black text-green-800">Convite gerado!</p>
+              <p className="text-sm font-semibold text-green-800">Convite gerado!</p>
               <code className="text-xs text-green-700 break-all font-mono block">{newInviteUrl}</code>
             </div>
             <Button fullWidth variant="primary" iconLeft={<Copy className="w-4 h-4" />} onClick={() => copyLink(newInviteUrl)}>
@@ -1207,7 +1186,7 @@ export default function SuperAdminPage() {
                 <div className="grid grid-cols-4 gap-2">
                   {[{ label: "1h", value: "1" }, { label: "24h", value: "24" }, { label: "48h", value: "48" }, { label: "7 dias", value: "168" }].map(opt => (
                     <button key={opt.value} type="button" onClick={() => setInviteHours(opt.value)}
-                      className={`py-2 rounded-xl text-xs font-black border transition-all ${inviteHours === opt.value ? "bg-[#0D1B3E] border-[#0D1B3E] text-amber-400" : "border-zinc-200 text-slate-600 hover:border-zinc-400"}`}
+                      className={`py-2 rounded-lg text-xs font-semibold border transition-all ${inviteHours === opt.value ? "bg-blue-600 border-blue-600 text-white" : "border-zinc-200 text-slate-600 hover:border-zinc-400"}`}
                     >
                       {opt.label}
                     </button>
@@ -1235,7 +1214,7 @@ export default function SuperAdminPage() {
               <div className="grid grid-cols-2 gap-1.5">
                 {[{ label: "30d", value: "30" }, { label: "60d", value: "60" }, { label: "90d", value: "90" }, { label: "365d", value: "365" }].map(opt => (
                   <button key={opt.value} type="button" onClick={() => setPlanForm(f => ({ ...f, durationDays: opt.value }))}
-                    className={`py-1.5 rounded-lg text-xs font-black border transition-all ${planForm.durationDays === opt.value ? "bg-[#0D1B3E] border-[#0D1B3E] text-amber-400" : "border-zinc-200 text-slate-600 hover:border-zinc-400"}`}
+                    className={`py-1.5 rounded-lg text-xs font-semibold border transition-all ${planForm.durationDays === opt.value ? "bg-blue-600 border-blue-600 text-white" : "border-zinc-200 text-slate-600 hover:border-zinc-400"}`}
                   >
                     {opt.label}
                   </button>
@@ -1245,33 +1224,32 @@ export default function SuperAdminPage() {
           </div>
           <div>
             <label className="ds-label mb-1.5 block">Funcionalidades (uma por linha)</label>
-            <textarea
+            <Textarea
               value={planForm.features}
               onChange={e => setPlanForm(f => ({ ...f, features: e.target.value }))}
               placeholder={"PDV ilimitado\nWhatsApp Bot\nRelatórios avançados"}
               rows={4}
-              className="w-full rounded-[10px] border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-sm text-slate-800 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 resize-none"
             />
           </div>
           <div className="flex items-center gap-3">
             <div>
               <label className="ds-label mb-1.5 block">Cor do plano</label>
-              <input type="color" value={planForm.color} onChange={e => setPlanForm(f => ({ ...f, color: e.target.value }))} className="h-10 w-20 rounded-xl border border-zinc-200 cursor-pointer" />
+              <input type="color" value={planForm.color} onChange={e => setPlanForm(f => ({ ...f, color: e.target.value }))} className="h-10 w-20 rounded-lg border border-zinc-200 cursor-pointer" />
             </div>
           </div>
 
           {/* Permissões padrão para novos membros da equipe */}
           <div>
             <label className="ds-label mb-2 block">Permissões padrão de equipe (staff/admin)</label>
-            <p className="text-[10px] text-slate-400 mb-3">Define quais telas os membros adicionados por clientes deste plano poderão acessar por padrão.</p>
+            <p className="text-[11px] text-slate-400 mb-3">Define quais telas os membros adicionados por clientes deste plano poderão acessar por padrão.</p>
             <div
               onClick={() => setPlanDefaultPerms(null)}
-              className={`flex items-center gap-3 p-3 rounded-2xl border cursor-pointer transition-all mb-3 ${planDefaultPerms === null ? "bg-[#0D1B3E] border-[#0D1B3E] text-white" : "bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300"}`}
+              className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all mb-3 ${planDefaultPerms === null ? "bg-blue-600 border-blue-600 text-white" : "bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300"}`}
             >
               <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${planDefaultPerms === null ? "border-white bg-white" : "border-slate-300"}`}>
-                {planDefaultPerms === null && <div className="w-2 h-2 rounded-full bg-[#0D1B3E]" />}
+                {planDefaultPerms === null && <div className="w-2 h-2 rounded-full bg-blue-600" />}
               </div>
-              <span className="text-[10px] font-black uppercase tracking-widest">Acesso total por padrão</span>
+              <span className="text-[11px] font-semibold">Acesso total por padrão</span>
             </div>
             <div className="grid grid-cols-2 gap-2">
               {[
@@ -1296,12 +1274,12 @@ export default function SuperAdminPage() {
                         setPlanDefaultPerms(has ? planDefaultPerms.filter(p => p !== tab.id) : [...planDefaultPerms, tab.id]);
                       }
                     }}
-                    className={`flex items-center gap-2 p-2.5 rounded-xl border text-left transition-all ${enabled ? "bg-white border-amber-300 text-slate-800" : "bg-slate-50 border-slate-100 text-slate-400"}`}
+                    className={`flex items-center gap-2 p-2.5 rounded-lg border text-left transition-all ${enabled ? "bg-white border-blue-300 text-slate-800" : "bg-slate-50 border-slate-100 text-slate-400"}`}
                   >
-                    <div className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center shrink-0 ${enabled ? "bg-amber-400 border-amber-400" : "border-slate-300"}`}>
+                    <div className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center shrink-0 ${enabled ? "bg-blue-400 border-blue-400" : "border-slate-300"}`}>
                       {enabled && <CheckCircle2 className="w-2.5 h-2.5 text-white" />}
                     </div>
-                    <span className="text-[9px] font-black leading-tight">{tab.label}</span>
+                    <span className="text-[10px] font-semibold leading-tight">{tab.label}</span>
                   </button>
                 );
               })}
@@ -1319,32 +1297,30 @@ export default function SuperAdminPage() {
         <div className="space-y-4">
           <div>
             <label className="ds-label mb-1.5 block">Conta</label>
-            <select
+            <Select
               value={subForm.accountId}
               onChange={e => setSubForm(f => ({ ...f, accountId: e.target.value }))}
-              className="w-full h-10 rounded-[10px] border border-zinc-200 bg-zinc-50 px-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400"
             >
               <option value="">Selecione uma conta...</option>
               {accounts.filter(a => !a.isSuperAdmin).map(a => (
                 <option key={a.id} value={a.id}>{a.name} — {a.email}</option>
               ))}
-            </select>
+            </Select>
           </div>
           <div>
             <label className="ds-label mb-1.5 block">Plano</label>
-            <select
+            <Select
               value={subForm.planId}
               onChange={e => {
                 const plan = stats?.plans.find(p => p.id === e.target.value);
                 setSubForm(f => ({ ...f, planId: e.target.value, pricePaid: plan ? String(plan.price) : f.pricePaid }));
               }}
-              className="w-full h-10 rounded-[10px] border border-zinc-200 bg-zinc-50 px-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400"
             >
               <option value="">Selecione um plano...</option>
               {(stats?.plans ?? []).filter(p => p.isActive).map(p => (
                 <option key={p.id} value={p.id}>{p.name} — {fmt(p.price)} / {p.durationDays}d</option>
               ))}
-            </select>
+            </Select>
           </div>
           <Input label="Valor cobrado (R$)" type="number" value={subForm.pricePaid} onChange={e => setSubForm(f => ({ ...f, pricePaid: e.target.value }))} placeholder="0,00" hint="Deixe em branco para usar o preço do plano" />
           <Input label="Observações (opcional)" value={subForm.notes} onChange={e => setSubForm(f => ({ ...f, notes: e.target.value }))} placeholder="Ex: Desconto de inauguração" />
@@ -1358,7 +1334,7 @@ export default function SuperAdminPage() {
       {/* Modal: Trocar senha */}
       <Modal isOpen={!!resetPasswordAccount} onClose={() => setResetPasswordAccount(null)} title="Trocar senha" size="sm">
         <p className="text-sm text-slate-500 -mt-2 mb-4">
-          Defina uma nova senha para <span className="font-bold text-slate-700">{resetPasswordAccount?.name}</span> ({resetPasswordAccount?.email}). A senha atual será substituída imediatamente, sem precisar confirmá-la.
+          Defina uma nova senha para <span className="font-semibold text-slate-700">{resetPasswordAccount?.name}</span> ({resetPasswordAccount?.email}). A senha atual será substituída imediatamente, sem precisar confirmá-la.
         </p>
         <Input
           label="Nova senha"
@@ -1367,7 +1343,7 @@ export default function SuperAdminPage() {
           onChange={e => { setNewPassword(e.target.value); setResetPasswordError(""); }}
           placeholder="Mínimo 6 caracteres"
         />
-        {resetPasswordError && <p className="text-xs text-red-500 font-bold mt-2">{resetPasswordError}</p>}
+        {resetPasswordError && <p className="text-xs text-red-500 font-semibold mt-2">{resetPasswordError}</p>}
         <ModalFooter>
           <Button variant="ghost" onClick={() => setResetPasswordAccount(null)}>Cancelar</Button>
           <Button variant="primary" loading={resettingPassword} onClick={handleResetPassword}>Trocar senha</Button>

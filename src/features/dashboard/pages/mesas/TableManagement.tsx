@@ -1,6 +1,6 @@
 ﻿import React, { useEffect, useState } from "react";
 import { Monitor, X } from "lucide-react";
-import { Button, ContentCard, EmptyState } from "../../../../components";
+import { Button, IconButton, ContentCard, EmptyState, Input, SectionTitle } from "../../../../components";
 import { apiJson } from "../../../../lib/api";
 import { Tenant } from "../../../../types";
 
@@ -65,18 +65,17 @@ export function TableManagement({
 
   return (
     <ContentCard padding="none" className="overflow-hidden">
-      <div className="p-6 sm:p-8 border-b border-slate-100 bg-slate-50/50">
-        <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Gestão de QR Codes</h3>
-        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Gere códigos para Balcão ou Mesas específicas</p>
+      <div className="p-4 sm:p-5 border-b border-slate-100">
+        <SectionTitle title="Gestão de QR Codes" description="Gere códigos para Balcão ou Mesas específicas" icon={Monitor} />
       </div>
       
-      <div className="p-6 sm:p-8 space-y-10">
+      <div className="p-4 sm:p-5 space-y-6">
         
         {/* Balcão Section */}
         <section className="space-y-4">
-          <h4 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Ponto de Venda Geral</h4>
-          <div className="max-w-md bg-amber-50 border border-amber-100 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
-            <div className="w-20 h-20 shrink-0 bg-white rounded-xl flex items-center justify-center border border-amber-200 p-1.5">
+          <h4 className="text-sm font-medium text-slate-800">Ponto de Venda Geral</h4>
+          <div className="w-full sm:max-w-md bg-blue-50 border border-blue-100 rounded-lg p-4 flex items-center gap-4">
+            <div className="w-20 h-20 shrink-0 bg-white rounded-lg flex items-center justify-center border border-blue-200 p-1.5">
               <img
                 src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(counterUrl)}`}
                 alt="QR Balcão"
@@ -86,23 +85,23 @@ export function TableManagement({
 
             <div className="flex-1 min-w-0 space-y-2">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 shrink-0 rounded-full bg-amber-200 flex items-center justify-center text-amber-700">
+                <div className="w-7 h-7 shrink-0 rounded-full bg-blue-100 flex items-center justify-center text-blue-700">
                   <Monitor className="w-3.5 h-3.5" />
                 </div>
                 <div className="min-w-0">
-                  <h4 className="text-sm font-black text-amber-900 leading-tight truncate">Balcão</h4>
-                  <p className="text-[9px] font-black text-amber-600 uppercase tracking-widest">Pedido sem mesa fixa</p>
+                  <h4 className="text-sm font-medium text-slate-900 leading-tight truncate">Balcão</h4>
+                  <p className="text-[11px] text-slate-500">Pedido sem mesa fixa</p>
                 </div>
               </div>
-              <button
+              <Button
+                size="xs"
                 onClick={() => {
                   const link = `https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&data=${encodeURIComponent(counterUrl)}`;
                   window.open(link, '_blank');
                 }}
-                className="text-[9px] font-black uppercase text-white bg-amber-600 hover:bg-amber-700 transition-colors px-3 py-1.5 rounded-lg"
               >
                 Imprimir QR Balcão
-              </button>
+              </Button>
             </div>
           </div>
         </section>
@@ -110,29 +109,29 @@ export function TableManagement({
         <div className="h-px bg-slate-100 w-full" />
 
         {/* Dynamic Tables Section */}
-        <section className="space-y-6">
+        <section className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <h4 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Mesas do Salão</h4>
+            <h4 className="text-sm font-medium text-slate-800">Mesas do Salão</h4>
             <div className="flex flex-col items-end gap-1">
               <div className="flex gap-2">
-                <input
+                <Input
                   value={newTable}
                   onChange={e => setNewTable(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter") addTable(); }}
                   placeholder="Nº da Mesa"
-                  className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 w-28"
+                  wrapperClassName="w-28"
                 />
                 <Button variant="primary" size="sm" onClick={addTable}>
                   + Adicionar Mesa
                 </Button>
               </div>
-              {addTableError && <p className="text-[10px] font-bold text-red-500">{addTableError}</p>}
+              {addTableError && <p className="text-[11px] font-medium text-red-600">{addTableError}</p>}
             </div>
           </div>
 
           {tablesLoading ? (
             <div className="flex items-center justify-center p-16">
-              <div className="w-8 h-8 border-4 border-[#C9A227] border-t-transparent rounded-full animate-spin" />
+              <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
             </div>
           ) : (
           <>
@@ -143,27 +142,30 @@ export function TableManagement({
               return (
                 <div 
                   key={table} 
-                  className={`bg-white border rounded-3xl p-4 space-y-3 hover:shadow-xl hover:shadow-slate-100 transition-all group relative ${
+                  className={`bg-white border rounded-lg p-4 space-y-3 transition-all group relative ${
                     isRequestingAccount 
-                      ? "border-red-500 shadow-lg shadow-red-100 animate-pulse" 
-                      : "border-zinc-100 hover:border-amber-400"
+                      ? "border-red-500 animate-pulse" 
+                      : "border-slate-200 hover:border-blue-400"
                   }`}
                 >
-                  <button 
+                  <IconButton
+                    size="sm"
+                    variant="danger"
+                    aria-label={`Remover mesa ${table}`}
                     onClick={() => removeTable(table)}
-                    className="absolute top-2 right-2 w-6 h-6 rounded-full bg-red-50 text-red-400 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute top-2 right-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
                   >
                     <X className="w-3 h-3" />
-                  </button>
+                  </IconButton>
 
                   <div className="text-center">
-                    <h4 className="text-lg font-black text-slate-800 leading-tight">Mesa {table}</h4>
+                    <h4 className="text-sm font-medium text-slate-800 leading-tight">Mesa {table}</h4>
                     {isRequestingAccount && (
-                      <p className="text-[9px] font-black text-red-600 uppercase tracking-widest mt-1">Pediu a Conta!</p>
+                      <p className="text-[11px] font-medium text-red-600 mt-1">Pediu a Conta!</p>
                     )}
                   </div>
 
-                  <div className="aspect-square bg-slate-50 rounded-xl flex items-center justify-center p-2 border border-slate-100">
+                  <div className="aspect-square bg-slate-50 rounded-lg flex items-center justify-center p-2 border border-slate-100">
                     <img 
                       src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(menuUrl + table)}`} 
                       alt={`QR Mesa ${table}`}
@@ -173,29 +175,25 @@ export function TableManagement({
 
                   <div className="flex flex-col gap-1.5">
                     {isRequestingAccount ? (
-                      <button 
-                        onClick={() => onClearTable?.(table)}
-                        className="text-[9px] font-black uppercase text-white bg-red-600 py-2 rounded-lg hover:bg-red-700 transition-colors shadow-lg shadow-red-200"
-                      >
+                      <Button variant="danger" size="xs" fullWidth onClick={() => onClearTable?.(table)}>
                         Liberar Mesa
-                      </button>
+                      </Button>
                     ) : (
-                      <button 
+                      <Button
+                        variant="outline"
+                        size="xs"
+                        fullWidth
                         onClick={() => {
                           const link = `https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&data=${encodeURIComponent(menuUrl + table)}`;
                           window.open(link, '_blank');
                         }}
-                        className="text-[9px] font-black uppercase text-amber-600 bg-amber-50 py-2 rounded-lg hover:bg-amber-100 transition-colors"
                       >
                         Baixar QR
-                      </button>
+                      </Button>
                     )}
-                    <button 
-                      onClick={() => window.open(menuUrl + table, '_blank')}
-                      className="text-[9px] font-black uppercase text-slate-400 hover:text-slate-600 transition-colors"
-                    >
+                    <Button variant="ghost" size="xs" fullWidth onClick={() => window.open(menuUrl + table, '_blank')}>
                       Testar Link
-                    </button>
+                    </Button>
                   </div>
                 </div>
               );

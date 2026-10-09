@@ -3,11 +3,14 @@ import {
   ArrowDownCircle, ArrowUpCircle, Plus, Filter, Download,
   Trash2, Edit2, TrendingUp, TrendingDown, Wallet,
   FileSpreadsheet, FileText, Search, X, CheckCircle2, AlertCircle,
-  CalendarDays, RefreshCw, Tag, ChevronDown, Repeat, Clock, Percent, Pause, Play,
+  CalendarDays, RefreshCw, Tag, ChevronDown, Repeat, Clock, Percent, Pause, Play, Loader2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import {
-  PageWrapper, Modal, ModalFooter, Button, Input, EmptyState,
+  PageWrapper, SectionTitle, StatGrid, StatCard, ContentCard, FormRow, Tabs, Alert, Badge, IconButton, Select, Switch,
+  GridTable, usePagination, FilterLine, FilterLineSection, FilterLineItem, FilterLineSearch,
+  FilterLineSegmented, FilterLineDateRange, type Column,
+  Modal, ModalFooter, Button, Input, EmptyState,
   useToast,
 } from "../../../../components";
 import { DatePicker } from "../../../../components/DatePicker";
@@ -79,25 +82,13 @@ const EXPENSE_CATEGORIES = [
   "Manutenção", "Marketing", "Equipamentos", "Taxa iFood", "Outros"
 ];
 
-// ─── Cores por categoria ──────────────────────────────────────────────────────
-const CATEGORY_COLORS: Record<string, string> = {
-  "Fornecedores": "bg-orange-100 text-orange-700",
-  "Aluguel": "bg-red-100 text-red-700",
-  "Energia Elétrica": "bg-yellow-100 text-yellow-700",
-  "Água": "bg-blue-100 text-blue-700",
-  "Gás": "bg-amber-100 text-amber-700",
-  "Internet": "bg-cyan-100 text-cyan-700",
-  "Funcionários": "bg-purple-100 text-purple-700",
-  "Impostos": "bg-pink-100 text-pink-700",
-  "Vendas Balcão": "bg-green-100 text-green-700",
-  "Delivery": "bg-emerald-100 text-emerald-700",
-  "iFood": "bg-red-100 text-red-700",
-  "Taxa iFood": "bg-rose-100 text-rose-700",
-};
+type MainTabId = "ALL" | "INCOME" | "EXPENSE" | "recurring";
 
-function catColor(cat: string): string {
-  return CATEGORY_COLORS[cat] || "bg-slate-100 text-slate-600";
-}
+const REC_TABS = [
+  { id: "dados", label: "Dados", icon: Tag },
+  { id: "regras", label: "Regras", icon: Percent },
+] as const;
+type RecTabId = (typeof REC_TABS)[number]["id"];
 
 // ─── Hook de dados (usa /api/tenants/:slug/entries) ──────────────────────────
 function useEntries(slug: string, dateFrom: string | null, dateTo: string | null) {
@@ -238,19 +229,19 @@ function exportPDF(entries: Entry[], tenant: Tenant, dateFrom: string | null, da
     <style>
       * { box-sizing: border-box; margin: 0; padding: 0; }
       body { font-family: 'Segoe UI', Arial, sans-serif; background: #fff; color: #1e293b; padding: 32px; }
-      h1 { font-size: 22px; font-weight: 900; color: #0D1B3E; }
+      h1 { font-size: 22px; font-weight: 900; color: #0f172a; }
       .sub { font-size: 13px; color: #64748b; margin-top: 4px; }
-      .logo-row { display: flex; align-items: center; gap: 14px; margin-bottom: 24px; border-bottom: 2px solid #C9A227; padding-bottom: 16px; }
-      .logo-box { width: 48px; height: 48px; background: #0D1B3E; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
+      .logo-row { display: flex; align-items: center; gap: 14px; margin-bottom: 24px; border-bottom: 2px solid #2563eb; padding-bottom: 16px; }
+      .logo-box { width: 48px; height: 48px; background: #0f172a; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
       .kpis { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin: 20px 0 24px; }
       .kpi { border-radius: 12px; padding: 14px 16px; }
       .kpi-income  { background: #f0fdf4; border: 1px solid #bbf7d0; }
       .kpi-expense { background: #fff1f2; border: 1px solid #fecdd3; }
       .kpi-balance { background: #fefce8; border: 1px solid #fde68a; }
-      .kpi-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #94a3b8; }
+      .kpi-label { font-size: 10px; font-weight: 700; text-transform: ; letter-spacing: 0.1em; color: #94a3b8; }
       .kpi-value { font-size: 20px; font-weight: 900; margin-top: 6px; }
       table { width: 100%; border-collapse: collapse; }
-      thead th { background: #0D1B3E; color: white; padding: 10px 10px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; text-align: left; }
+      thead th { background: #0f172a; color: white; padding: 10px 10px; font-size: 11px; font-weight: 700; text-transform: ; letter-spacing: 0.08em; text-align: left; }
       thead th:last-child { text-align: right; }
       tbody tr:nth-child(even) { background: #f8fafc; }
       .footer { margin-top: 24px; font-size: 11px; color: #94a3b8; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 12px; }
@@ -259,7 +250,7 @@ function exportPDF(entries: Entry[], tenant: Tenant, dateFrom: string | null, da
     </head><body>
     <div class="logo-row">
       <div class="logo-box">
-        <svg viewBox="0 0 24 24" fill="none" stroke="#C9A227" stroke-width="2" width="28" height="28">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" width="28" height="28">
           <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
         </svg>
       </div>
@@ -281,7 +272,7 @@ function exportPDF(entries: Entry[], tenant: Tenant, dateFrom: string | null, da
       </div>
       <div class="kpi kpi-balance">
         <div class="kpi-label">Saldo</div>
-        <div class="kpi-value" style="color:${saldo >= 0 ? "#15803d" : "#b91c1c"};">${fmt(saldo)}</div>
+        <div class="kpi-value" style="color:${saldo >= 0 ?"#15803d":"#b91c1c"};">${fmt(saldo)}</div>
       </div>
     </div>
 
@@ -435,6 +426,7 @@ export default function EntradasSaidasPanel({ slug, tenant }: Props) {
   const [recLateFeeInterval, setRecLateFeeInterval] = useState<LateFeeInterval>("MONTHLY");
   const [recNotes,           setRecNotes]           = useState("");
   const [recError,           setRecError]           = useState("");
+  const [recTab,             setRecTab]             = useState<RecTabId>("dados");
 
   const openNewRec = (type: EntryType = "EXPENSE") => {
     setEditRec(null);
@@ -443,7 +435,7 @@ export default function EntradasSaidasPanel({ slug, tenant }: Props) {
     setRecHasEndDate(false); setRecEndDate(todayISO());
     setRecHasInstallments(false); setRecInstallments("12");
     setRecLateFeeEnabled(false); setRecLateFeeRate("1"); setRecLateFeeInterval("MONTHLY");
-    setRecNotes(""); setRecError("");
+    setRecNotes(""); setRecError(""); setRecTab("dados");
     setShowRecModal(true);
   };
 
@@ -456,22 +448,22 @@ export default function EntradasSaidasPanel({ slug, tenant }: Props) {
     setRecHasInstallments(!!r.installmentsTotal); setRecInstallments(r.installmentsTotal ? String(r.installmentsTotal) : "12");
     setRecLateFeeEnabled(r.lateFeeEnabled); setRecLateFeeRate(r.lateFeeRate != null ? String(r.lateFeeRate) : "1");
     setRecLateFeeInterval(r.lateFeeInterval || "MONTHLY");
-    setRecNotes(r.notes || ""); setRecError("");
+    setRecNotes(r.notes || ""); setRecError(""); setRecTab("dados");
     setShowRecModal(true);
   };
 
   const handleSaveRec = async () => {
-    if (!recDesc.trim()) { setRecError("Informe uma descrição."); return; }
-    if (!recCat) { setRecError("Selecione uma categoria."); return; }
+    if (!recDesc.trim()) { setRecTab("dados"); setRecError("Informe uma descrição."); return; }
+    if (!recCat) { setRecTab("dados"); setRecError("Selecione uma categoria."); return; }
     if (recFrequency === "FIXED") {
       const amount = parseFloat(recAmount);
-      if (!amount || amount <= 0) { setRecError("Informe o valor fixo mensal."); return; }
+      if (!amount || amount <= 0) { setRecTab("dados"); setRecError("Informe o valor fixo mensal."); return; }
     }
     const dueDay = parseInt(recDueDay, 10);
-    if (!dueDay || dueDay < 1 || dueDay > 28) { setRecError("Dia de vencimento deve ser entre 1 e 28."); return; }
+    if (!dueDay || dueDay < 1 || dueDay > 28) { setRecTab("dados"); setRecError("Dia de vencimento deve ser entre 1 e 28."); return; }
     if (recLateFeeEnabled) {
       const rate = parseFloat(recLateFeeRate);
-      if (!rate || rate <= 0) { setRecError("Informe a taxa de juros por atraso."); return; }
+      if (!rate || rate <= 0) { setRecTab("regras"); setRecError("Informe a taxa de juros por atraso."); return; }
     }
 
     setSavingRec(true);
@@ -560,301 +552,236 @@ export default function EntradasSaidasPanel({ slug, tenant }: Props) {
 
   const categories = formType === "INCOME" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
 
+  const typeCounts = useMemo(() => {
+    const base = entries.filter(e => {
+      if (catFilter !== "ALL" && e.category !== catFilter) return false;
+      if (search && !e.description.toLowerCase().includes(search.toLowerCase()) && !e.category.toLowerCase().includes(search.toLowerCase())) return false;
+      return true;
+    });
+    return {
+      ALL: base.length,
+      INCOME: base.filter(e => e.type === "INCOME").length,
+      EXPENSE: base.filter(e => e.type === "EXPENSE").length,
+    };
+  }, [entries, catFilter, search]);
+  const activeRecurring = recurring.filter(r => r.active).length;
+
+  const mainTabs = [
+    { id: "ALL" as const, label: "Todos", icon: Wallet, badge: typeCounts.ALL },
+    { id: "INCOME" as const, label: "Entradas", icon: ArrowDownCircle, badge: typeCounts.INCOME },
+    { id: "EXPENSE" as const, label: "Saídas", icon: ArrowUpCircle, badge: typeCounts.EXPENSE },
+    { id: "recurring" as const, label: "Recorrências", icon: Repeat, badge: activeRecurring },
+  ];
+  const mainTabValue: MainTabId = tab === "recurring" ? "recurring" : typeFilter;
+  const handleMainTab = (v: MainTabId) => {
+    if (v === "recurring") { setTab("recurring"); return; }
+    setTab("entries");
+    setTypeFilter(v);
+  };
+
+  const entriesPag = usePagination(filtered, 15);
+
+  const entryColumns: Column<Entry>[] = [
+    {
+      header: "Lançamento",
+      render: (e) => (
+        <div className="flex items-center gap-3 min-w-0">
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${e.status === "PENDING" ? "bg-amber-50" : e.type === "INCOME" ? "bg-emerald-50" : "bg-red-50"}`}>
+            {e.status === "PENDING"
+              ? <Clock size={14} className="text-amber-600" />
+              : e.type === "INCOME"
+              ? <ArrowDownCircle size={14} className="text-emerald-600" />
+              : <ArrowUpCircle size={14} className="text-red-600" />}
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <p className="text-xs font-medium text-slate-800 break-words">{e.description}</p>
+              {e.recurringEntryId && <Badge size="sm" icon={<Repeat size={10} />}>recorrente</Badge>}
+              {e.status === "PENDING" && <Badge size="sm" color="warning">aguardando valor</Badge>}
+              {!!e.lateFeeApplied && <Badge size="sm" color="danger" icon={<Percent size={10} />}>+{fmt(e.lateFeeApplied)} juros</Badge>}
+            </div>
+            {e.notes && <p className="text-[11px] text-slate-500 mt-0.5 break-words">{e.notes}</p>}
+          </div>
+        </div>
+      ),
+    },
+    { header: "Categoria", render: (e) => <Badge size="sm">{e.category}</Badge> },
+    {
+      header: "Data",
+      render: (e) => (
+        <span className="text-xs text-slate-600 whitespace-nowrap">
+          {e.status === "PENDING" ? `Venc. ${fmtDate(e.dueDate || e.date)}` : fmtDate(e.date)}
+        </span>
+      ),
+    },
+    {
+      header: "Valor",
+      render: (e) => e.status === "PENDING" ? (
+        <Button size="xs" variant="outline" onClick={() => openConfirm(e)} iconLeft={<CheckCircle2 size={14} />}>Preencher valor</Button>
+      ) : (
+        <span className={`text-xs font-semibold tabular-nums whitespace-nowrap ${e.type === "INCOME" ? "text-emerald-700" : "text-red-600"}`}>
+          {e.type === "INCOME" ? "+" : "−"}{fmt(e.amount)}
+        </span>
+      ),
+    },
+    {
+      header: "",
+      render: (e) => (
+        <div className="flex items-center gap-1 justify-end">
+          <IconButton variant="ghost" size="xs" aria-label="Editar lançamento" onClick={() => openEdit(e)}><Edit2 size={14} /></IconButton>
+          <IconButton variant="ghost" size="xs" aria-label="Excluir lançamento" onClick={() => setDeleteEntry(e)}><Trash2 size={14} /></IconButton>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <PageWrapper>
-      {/* ── Header ── */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
-        <div>
-          <h2 className="text-xl font-black text-slate-800">Entradas e Saídas</h2>
-          <p className="text-xs text-slate-400 mt-0.5">Controle financeiro completo do estabelecimento</p>
-        </div>
-        {tab === "entries" ? (
-          <div className="flex items-center gap-2 flex-wrap">
-            <button onClick={refetch} className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors shrink-0">
-              <RefreshCw className="w-4 h-4" />
-            </button>
-            <div className="relative group">
-              <button className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:border-slate-300 hover:bg-slate-50 transition-colors">
-                <Download className="w-3.5 h-3.5" /> <span className="hidden xs:inline">Exportar</span> <ChevronDown className="w-3 h-3" />
-              </button>
-              <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-20 py-1 hidden group-hover:block w-44">
-                <button onClick={() => exportExcel(filtered, tenant, dateFrom, dateTo)} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
-                  <FileSpreadsheet className="w-4 h-4 text-green-600" /> Exportar Excel
-                </button>
-                <button onClick={() => exportPDF(filtered, tenant, dateFrom, dateTo)} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
-                  <FileText className="w-4 h-4 text-red-500" /> Exportar PDF
-                </button>
-              </div>
-            </div>
-            <button onClick={() => openNew("INCOME")} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-green-600 hover:bg-green-700 text-white text-xs font-bold transition-colors shadow-sm">
-              <ArrowDownCircle className="w-3.5 h-3.5" /> <span>Entrada</span>
-            </button>
-            <button onClick={() => openNew("EXPENSE")} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-xs font-bold transition-colors shadow-sm">
-              <ArrowUpCircle className="w-3.5 h-3.5" /> <span>Saída</span>
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 flex-wrap">
-            <button onClick={refetchRecurring} className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors shrink-0">
-              <RefreshCw className="w-4 h-4" />
-            </button>
-            <button onClick={() => openNewRec("INCOME")} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-green-600 hover:bg-green-700 text-white text-xs font-bold transition-colors shadow-sm">
-              <ArrowDownCircle className="w-3.5 h-3.5" /> <span>Receita</span>
-            </button>
-            <button onClick={() => openNewRec("EXPENSE")} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-xs font-bold transition-colors shadow-sm">
-              <ArrowUpCircle className="w-3.5 h-3.5" /> <span>Despesa</span>
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* ── Abas ── */}
-      <div className="flex bg-slate-100 p-1 rounded-xl mb-5 w-full sm:w-auto sm:inline-flex">
-        <button onClick={() => setTab("entries")}
-          className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-xs font-black transition-all ${tab === "entries" ? "bg-white text-slate-800 shadow-sm" : "text-slate-400"}`}
-        >
-          <Wallet className="w-3.5 h-3.5" /> Lançamentos
-        </button>
-        <button onClick={() => setTab("recurring")}
-          className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-xs font-black transition-all ${tab === "recurring" ? "bg-white text-slate-800 shadow-sm" : "text-slate-400"}`}
-        >
-          <Repeat className="w-3.5 h-3.5" /> Recorrências
-          {recurring.filter(r => r.active).length > 0 && (
-            <span className="ml-1 bg-[#C9A227] text-white text-[9px] font-black rounded-full px-1.5 py-0.5">{recurring.filter(r => r.active).length}</span>
+      <div className="space-y-4">
+        {/* ── Header ── */}
+        <SectionTitle
+          title="Entradas e Saídas"
+          description="Controle financeiro completo do estabelecimento"
+          icon={Wallet}
+          action={tab === "entries" ? (
+            <>
+              <IconButton variant="outline" size="sm" aria-label="Atualizar" onClick={refetch}><RefreshCw size={14} /></IconButton>
+              <Button variant="outline" size="sm" onClick={() => exportExcel(filtered, tenant, dateFrom, dateTo)} iconLeft={<FileSpreadsheet size={14} />}>Excel</Button>
+              <Button variant="outline" size="sm" onClick={() => exportPDF(filtered, tenant, dateFrom, dateTo)} iconLeft={<FileText size={14} />}>PDF</Button>
+              <Button variant="success" size="sm" onClick={() => openNew("INCOME")} iconLeft={<ArrowDownCircle size={14} />}>Entrada</Button>
+              <Button variant="danger" size="sm" onClick={() => openNew("EXPENSE")} iconLeft={<ArrowUpCircle size={14} />}>Saída</Button>
+            </>
+          ) : (
+            <>
+              <IconButton variant="outline" size="sm" aria-label="Atualizar" onClick={refetchRecurring}><RefreshCw size={14} /></IconButton>
+              <Button variant="success" size="sm" onClick={() => openNewRec("INCOME")} iconLeft={<ArrowDownCircle size={14} />}>Receita</Button>
+              <Button variant="danger" size="sm" onClick={() => openNewRec("EXPENSE")} iconLeft={<ArrowUpCircle size={14} />}>Despesa</Button>
+            </>
           )}
-        </button>
-      </div>
-
-      {tab === "recurring" ? (
-        <RecurringEntriesTab
-          recurring={recurring}
-          loading={loadingRecurring}
-          onEdit={openEditRec}
-          onToggleActive={handleToggleActiveRec}
-          onDelete={setDeleteRec}
         />
-      ) : (
-      <>
-      {/* ── KPIs ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
-        <div className="rounded-2xl bg-green-50 border border-green-100 p-4 flex sm:flex-col items-center sm:items-start gap-3 sm:gap-0">
-          <div className="flex items-center gap-2 sm:mb-2">
-            <ArrowDownCircle className="w-4 h-4 text-green-600" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-green-600">Total Entradas</span>
-          </div>
-          <div className="ml-auto sm:ml-0">
-            <p className="text-xl sm:text-2xl font-black text-green-700 text-right sm:text-left">{fmt(totalIncome)}</p>
-            <p className="text-[10px] text-green-500 mt-0.5 text-right sm:text-left">{filtered.filter(e => e.type === "INCOME").length} lançamentos</p>
-          </div>
-        </div>
-        <div className="rounded-2xl bg-red-50 border border-red-100 p-4 flex sm:flex-col items-center sm:items-start gap-3 sm:gap-0">
-          <div className="flex items-center gap-2 sm:mb-2">
-            <ArrowUpCircle className="w-4 h-4 text-red-600" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-red-600">Total Saídas</span>
-          </div>
-          <div className="ml-auto sm:ml-0">
-            <p className="text-xl sm:text-2xl font-black text-red-700 text-right sm:text-left">{fmt(totalExpense)}</p>
-            <p className="text-[10px] text-red-500 mt-0.5 text-right sm:text-left">{filtered.filter(e => e.type === "EXPENSE").length} lançamentos</p>
-          </div>
-        </div>
-        <div className={`rounded-2xl border p-4 flex sm:flex-col items-center sm:items-start gap-3 sm:gap-0 ${saldo >= 0 ? "bg-amber-50 border-amber-100" : "bg-red-50 border-red-100"}`}>
-          <div className="flex items-center gap-2 sm:mb-2">
-            <Wallet className={`w-4 h-4 ${saldo >= 0 ? "text-[#C9A227]" : "text-red-600"}`} />
-            <span className={`text-[10px] font-black uppercase tracking-widest ${saldo >= 0 ? "text-[#C9A227]" : "text-red-600"}`}>Saldo</span>
-          </div>
-          <div className="ml-auto sm:ml-0">
-            <p className={`text-xl sm:text-2xl font-black text-right sm:text-left ${saldo >= 0 ? "text-amber-700" : "text-red-700"}`}>{fmt(saldo)}</p>
-            <p className={`text-[10px] mt-0.5 text-right sm:text-left ${saldo >= 0 ? "text-amber-500" : "text-red-500"}`}>{filtered.length} lançamentos no período</p>
-          </div>
-        </div>
-      </div>
 
-      {/* ── Filtros ── */}
-      <div className="bg-white rounded-2xl border border-slate-100 p-4 mb-5 space-y-3">
-        {/* Presets + botão filtros */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex flex-wrap gap-1.5">
-            {[
-              { id: "today", label: "Hoje" },
-              { id: "week", label: "Semana" },
-              { id: "month", label: "Mês" },
-              { id: "last-month", label: "Mês ant." },
-            ].map(p => (
-              <button key={p.id} onClick={() => setPreset(p.id)}
-                className="px-2.5 py-1.5 rounded-full border border-slate-200 text-[11px] font-semibold text-slate-500 hover:border-[#C9A227] hover:text-[#C9A227] transition-all"
-              >{p.label}</button>
-            ))}
-          </div>
-          <button onClick={() => setShowFilters(v => !v)}
-            className={`flex items-center gap-1.5 text-xs font-semibold shrink-0 px-2.5 py-1.5 rounded-xl border transition-all ${showFilters ? "border-[#C9A227] text-[#C9A227] bg-amber-50" : "border-slate-200 text-slate-500 hover:text-slate-700"}`}
-          >
-            <Filter className="w-3.5 h-3.5" /> Filtros
-          </button>
-        </div>
+        {/* ── KPIs ── */}
+        {tab === "entries" && (
+          <StatGrid cols={3}>
+            <StatCard title="Total entradas" value={fmt(totalIncome)} icon={ArrowDownCircle} color="success" description={`${filtered.filter(e => e.type === "INCOME").length} lançamentos`} />
+            <StatCard title="Total saídas" value={fmt(totalExpense)} icon={ArrowUpCircle} color="danger" description={`${filtered.filter(e => e.type === "EXPENSE").length} lançamentos`} />
+            <StatCard title="Saldo" value={fmt(saldo)} icon={Wallet} color={saldo >= 0 ? "info" : "danger"} description={`${filtered.length} lançamentos no período`} />
+          </StatGrid>
+        )}
 
-        {/* Datas */}
-        <div className="grid grid-cols-2 gap-3">
-          <DatePicker label="De" value={dateFrom} onChange={setDateFrom} max={dateTo ?? undefined} />
-          <DatePicker label="Até" value={dateTo} onChange={setDateTo} min={dateFrom ?? undefined} />
-        </div>
+        <Tabs<MainTabId> items={mainTabs} value={mainTabValue} onChange={handleMainTab} label="Entradas e saídas">
+          {tab === "recurring" ? (
+            <RecurringEntriesTab
+              recurring={recurring}
+              loading={loadingRecurring}
+              onEdit={openEditRec}
+              onToggleActive={handleToggleActiveRec}
+              onDelete={setDeleteRec}
+            />
+          ) : (
+            <div className="space-y-3">
+              {/* ── Filtros ── */}
+              <FilterLine>
+                <FilterLineSection grow>
+                  <FilterLineItem grow minWidth={180}>
+                    <FilterLineSearch value={search} onChange={setSearch} placeholder="Buscar descrição ou categoria..." aria-label="Buscar lançamentos" className="max-w-[280px]" />
+                  </FilterLineItem>
+                  <FilterLineItem minWidth={260}>
+                    <FilterLineDateRange from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
+                  </FilterLineItem>
+                </FilterLineSection>
+                <FilterLineSection align="right">
+                  <FilterLineItem fullOnMobile={false}>
+                    <Button variant="outline" size="sm" onClick={() => setShowFilters(v => !v)} iconLeft={<Filter size={14} />}>
+                      Filtros{catFilter !== "ALL" ? " (1)" : ""}
+                    </Button>
+                  </FilterLineItem>
+                </FilterLineSection>
+              </FilterLine>
 
-        {/* Filtros avançados */}
-        {showFilters && (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="overflow-hidden">
-            <div className="pt-2 flex flex-col gap-3">
-              {/* Busca */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                <input
-                  value={search} onChange={e => setSearch(e.target.value)}
-                  placeholder="Buscar descrição ou categoria..."
-                  className="w-full pl-9 pr-8 py-2.5 rounded-xl border border-slate-200 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40"
-                />
-                {search && <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2"><X className="w-3.5 h-3.5 text-slate-400" /></button>}
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Tipo */}
-                <div className="flex bg-slate-100 p-0.5 rounded-xl">
-                  {(["ALL", "INCOME", "EXPENSE"] as const).map(t => (
-                    <button key={t} onClick={() => setTypeFilter(t)}
-                      className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${typeFilter === t ? (t === "INCOME" ? "bg-green-500 text-white shadow-sm" : t === "EXPENSE" ? "bg-red-500 text-white shadow-sm" : "bg-white text-slate-700 shadow-sm") : "text-slate-400"}`}
-                    >{t === "ALL" ? "Todos" : t === "INCOME" ? "Entradas" : "Saídas"}</button>
-                  ))}
+              {showFilters && (
+                <FilterLine>
+                  <FilterLineSection grow>
+                    <FilterLineItem fullOnMobile={false}>
+                      <FilterLineSegmented
+                        value=""
+                        onChange={(v) => setPreset(String(v))}
+                        options={[
+                          { value: "today", label: "Hoje" },
+                          { value: "week", label: "Semana" },
+                          { value: "month", label: "Mês" },
+                          { value: "last-month", label: "Mês ant." },
+                        ]}
+                      />
+                    </FilterLineItem>
+                    <FilterLineItem minWidth={200} fullOnMobile={false}>
+                      <Select value={catFilter} onChange={e => setCatFilter(e.target.value)} aria-label="Categoria">
+                        <option value="ALL">Todas as categorias</option>
+                        {allCats.map(c => <option key={c} value={c}>{c}</option>)}
+                      </Select>
+                    </FilterLineItem>
+                  </FilterLineSection>
+                </FilterLine>
+              )}
+
+              {/* ── Por categoria ── */}
+              {byCat.length > 0 && (
+                <div>
+                  <p className="text-[11px] font-medium text-slate-500 mb-2">Por categoria</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2">
+                    {byCat.map(([cat, vals]) => {
+                      const total = vals.income + vals.expense;
+                      const maxTotal = byCat.reduce((m, [, v]) => Math.max(m, v.income + v.expense), 1);
+                      return (
+                        <button key={cat} type="button" onClick={() => setCatFilter(catFilter === cat ? "ALL" : cat)}
+                          className={`rounded-lg px-3 py-2.5 text-left border transition-all ${catFilter === cat ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white hover:border-slate-300"}`}
+                        >
+                          <span className="text-[11px] font-medium text-slate-700 block mb-1 truncate">{cat}</span>
+                          {vals.income > 0 && <p className="text-xs font-semibold tabular-nums text-emerald-700">+{fmt(vals.income)}</p>}
+                          {vals.expense > 0 && <p className="text-xs font-semibold tabular-nums text-red-600">−{fmt(vals.expense)}</p>}
+                          <div className="mt-2 h-1 bg-slate-100 rounded-full overflow-hidden">
+                            <motion.div
+                              initial={{ width: 0 }}
+                              animate={{ width: `${(total / maxTotal) * 100}%` }}
+                              transition={{ duration: 0.5 }}
+                              className="h-full bg-blue-600 rounded-full"
+                            />
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                {/* Categoria */}
-                <select value={catFilter} onChange={e => setCatFilter(e.target.value)}
-                  className="px-3 py-2 rounded-xl border border-slate-200 text-sm font-medium bg-white focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40"
-                >
-                  <option value="ALL">Todas as categorias</option>
-                  {allCats.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </div>
+              )}
 
-      {/* ── Por categoria ── */}
-      {byCat.length > 0 && (
-        <div className="mb-5">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Por categoria</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {byCat.map(([cat, vals]) => {
-              const total = vals.income + vals.expense;
-              const maxTotal = byCat.reduce((m, [, v]) => Math.max(m, v.income + v.expense), 1);
-              return (
-                <button key={cat} onClick={() => setCatFilter(catFilter === cat ? "ALL" : cat)}
-                  className={`rounded-xl px-3 py-2.5 text-left border transition-all ${catFilter === cat ? "border-[#C9A227] bg-amber-50" : "border-slate-100 bg-white hover:border-slate-200"}`}
-                >
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full inline-block mb-1.5 ${catColor(cat)}`}>{cat}</span>
-                  {vals.income > 0 && <p className="text-xs font-black text-green-700">+{fmt(vals.income)}</p>}
-                  {vals.expense > 0 && <p className="text-xs font-black text-red-600">−{fmt(vals.expense)}</p>}
-                  <div className="mt-2 h-1 bg-slate-100 rounded-full overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${(total / maxTotal) * 100}%` }}
-                      transition={{ duration: 0.5 }}
-                      className="h-full bg-[#C9A227] rounded-full"
+              {/* ── Lista de lançamentos ── */}
+              <ContentCard padding="none">
+                <GridTable
+                  noDesktopCard
+                  data={entriesPag.paginatedData}
+                  columns={entryColumns}
+                  keyExtractor={(e) => e.id}
+                  isLoading={loading}
+                  emptyMessage={
+                    <EmptyState
+                      icon={Tag}
+                      title="Nenhum lançamento no período"
+                      description={search || catFilter !== "ALL" ? "Ajuste a busca ou os filtros." : "Registre a primeira entrada ou saída."}
+                      action={<Button size="sm" onClick={() => openNew()} iconLeft={<Plus size={14} />}>Adicionar lançamento</Button>}
                     />
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ── Lista de lançamentos ── */}
-      <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
-        <div className="flex items-center justify-between px-4 sm:px-5 py-4 border-b border-slate-50">
-          <p className="text-sm font-black text-slate-800">Lançamentos</p>
-          <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-full">{filtered.length}</span>
-        </div>
-
-        {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <div className="w-7 h-7 border-4 border-[#C9A227] border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-slate-300 px-4 text-center">
-            <Tag className="w-10 h-10 mb-3" />
-            <p className="text-sm font-medium text-slate-400">Nenhum lançamento no período</p>
-            <button onClick={() => openNew()} className="mt-4 flex items-center gap-2 px-4 py-2 rounded-xl bg-[#C9A227] text-white text-xs font-bold hover:bg-[#b8911f] transition-colors">
-              <Plus className="w-3.5 h-3.5" /> Adicionar primeiro lançamento
-            </button>
-          </div>
-        ) : (
-          <div className="divide-y divide-slate-50">
-            <AnimatePresence>
-              {filtered.map(e => (
-                <motion.div
-                  key={e.id}
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, x: -10 }}
-                  className="flex items-start sm:items-center gap-3 px-4 sm:px-5 py-3.5 hover:bg-slate-50/70 transition-colors group"
-                >
-                  {/* Ícone */}
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 sm:mt-0 ${e.status === "PENDING" ? "bg-amber-100" : e.type === "INCOME" ? "bg-green-100" : "bg-red-100"}`}>
-                    {e.status === "PENDING"
-                      ? <Clock className="w-4 h-4 text-amber-600" />
-                      : e.type === "INCOME"
-                      ? <ArrowDownCircle className="w-4 h-4 text-green-600" />
-                      : <ArrowUpCircle className="w-4 h-4 text-red-600" />
-                    }
-                  </div>
-
-                  {/* Descrição + categoria + data */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-semibold text-slate-800 truncate max-w-[160px] sm:max-w-none">{e.description}</p>
-                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${catColor(e.category)}`}>{e.category}</span>
-                      {e.recurringEntryId && (
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 bg-slate-100 text-slate-500 flex items-center gap-0.5">
-                          <Repeat className="w-2.5 h-2.5" /> recorrente
-                        </span>
-                      )}
-                      {e.status === "PENDING" && (
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 bg-amber-100 text-amber-700">aguardando valor</span>
-                      )}
-                      {!!e.lateFeeApplied && (
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 bg-red-100 text-red-700 flex items-center gap-0.5">
-                          <Percent className="w-2.5 h-2.5" /> +{fmt(e.lateFeeApplied)} juros
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[10px] text-slate-400 mt-0.5">
-                      {e.status === "PENDING" ? `Venc. ${fmtDate(e.dueDate || e.date)}` : fmtDate(e.date)}
-                      {e.notes ? ` · ${e.notes}` : ""}
-                    </p>
-                  </div>
-
-                  {/* Valor + ações — empilha em mobile */}
-                  <div className="flex flex-col items-end gap-1.5 sm:flex-row sm:items-center sm:gap-2 shrink-0">
-                    {e.status === "PENDING" ? (
-                      <button onClick={() => openConfirm(e)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold transition-colors shadow-sm">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Preencher valor
-                      </button>
-                    ) : (
-                      <p className={`text-sm font-black tabular-nums ${e.type === "INCOME" ? "text-green-700" : "text-red-600"}`}>
-                        {e.type === "INCOME" ? "+" : "−"}{fmt(e.amount)}
-                      </p>
-                    )}
-                    {/* Botões: sempre visíveis em mobile, hover em desktop */}
-                    <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => openEdit(e)} className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors">
-                        <Edit2 className="w-3 h-3" />
-                      </button>
-                      <button onClick={() => setDeleteEntry(e)} className="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 flex items-center justify-center text-red-500 transition-colors">
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-        )}
+                  }
+                  pagination={{
+                    total: filtered.length,
+                    page: entriesPag.page,
+                    pageSize: entriesPag.pageSize,
+                    onPageChange: entriesPag.setPage,
+                    onPageSizeChange: entriesPag.setPageSize,
+                  }}
+                />
+              </ContentCard>
+            </div>
+          )}
+        </Tabs>
       </div>
 
       {/* ── MODAL: Novo / Editar ── */}
@@ -870,7 +797,7 @@ export default function EntradasSaidasPanel({ slug, tenant }: Props) {
               variant={formType === "INCOME" ? "success" : "danger"}
               loading={saving}
               onClick={handleSave}
-              iconLeft={formType === "INCOME" ? <ArrowDownCircle className="w-4 h-4" /> : <ArrowUpCircle className="w-4 h-4" />}
+              iconLeft={formType === "INCOME" ? <ArrowDownCircle size={14} /> : <ArrowUpCircle size={14} />}
             >
               {editEntry ? "Salvar" : formType === "INCOME" ? "Registrar Entrada" : "Registrar Saída"}
             </Button>
@@ -878,41 +805,32 @@ export default function EntradasSaidasPanel({ slug, tenant }: Props) {
         }
       >
         <div className="space-y-4 p-1">
-          {/* Toggle Entrada/Saída */}
-          <div className="flex bg-slate-100 p-0.5 rounded-xl">
-            {(["INCOME", "EXPENSE"] as const).map(t => (
-              <button key={t} onClick={() => { setFormType(t); setFormCat(""); }}
-                className={`flex-1 py-2.5 rounded-lg text-[11px] font-black uppercase tracking-wider transition-all ${formType === t ? (t === "INCOME" ? "bg-green-500 text-white shadow-sm" : "bg-red-500 text-white shadow-sm") : "text-slate-400"}`}
-              >
-                {t === "INCOME" ? "Entrada" : "Saída"}
-              </button>
-            ))}
-          </div>
+          <FilterLineSegmented
+            value={formType}
+            onChange={(t) => { setFormType(t as EntryType); setFormCat(""); }}
+            options={[{ value: "INCOME", label: "Entrada" }, { value: "EXPENSE", label: "Saída" }]}
+          />
 
           {/* Categoria */}
           <div>
-            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-2">Categoria</p>
+            <p className="text-xs font-medium text-slate-600 mb-2">Categoria</p>
             <div className="flex flex-wrap gap-1.5">
               {categories.map(c => (
-                <button key={c} onClick={() => setFormCat(c)}
-                  className={`px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-all ${formCat === c ? (formType === "INCOME" ? "bg-green-500 text-white border-green-500" : "bg-red-500 text-white border-red-500") : "border-slate-200 text-slate-600 hover:border-slate-300 bg-white"}`}
+                <button key={c} type="button" onClick={() => setFormCat(c)}
+                  className={`px-3 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${formCat === c ? "bg-blue-600 text-white border-blue-600" : "border-slate-200 text-slate-600 hover:border-slate-300 bg-white"}`}
                 >{c}</button>
               ))}
             </div>
           </div>
 
           <Input label="Descrição" placeholder="Ex: Compra de insumos para o dia" value={formDesc} onChange={e => setFormDesc(e.target.value)} />
-          <div className="grid grid-cols-2 gap-3">
+          <FormRow cols={2}>
             <Input label="Valor (R$)" type="number" placeholder="0,00" value={formAmount} onChange={e => setFormAmount(e.target.value)} />
             <DatePicker label="Data" value={formDate} onChange={v => setFormDate(v || todayISO())} />
-          </div>
+          </FormRow>
           <Input label="Observações (opcional)" placeholder="Detalhes adicionais..." value={formNotes} onChange={e => setFormNotes(e.target.value)} />
 
-          {formError && (
-            <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 rounded-xl px-3 py-2.5 text-xs font-semibold">
-              <AlertCircle className="w-4 h-4 shrink-0" />{formError}
-            </div>
-          )}
+          {formError && <Alert variant="error">{formError}</Alert>}
         </div>
       </Modal>
 
@@ -925,23 +843,21 @@ export default function EntradasSaidasPanel({ slug, tenant }: Props) {
         footer={
           <ModalFooter>
             <Button variant="ghost" onClick={() => setDeleteEntry(null)}>Cancelar</Button>
-            <Button variant="danger" loading={deleting} onClick={handleDelete} iconLeft={<Trash2 className="w-4 h-4" />}>Excluir</Button>
+            <Button variant="danger" loading={deleting} onClick={handleDelete} iconLeft={<Trash2 size={14} />}>Excluir</Button>
           </ModalFooter>
         }
       >
         <div className="space-y-3 p-1">
-          <div className={`rounded-xl p-4 ${deleteEntry?.type === "INCOME" ? "bg-green-50" : "bg-red-50"}`}>
-            <p className="text-sm font-bold text-slate-800">{deleteEntry?.description}</p>
+          <div className={`rounded-lg p-3 border ${deleteEntry?.type === "INCOME" ? "bg-emerald-50 border-emerald-100" : "bg-red-50 border-red-100"}`}>
+            <p className="text-[13px] font-medium text-slate-800">{deleteEntry?.description}</p>
             <p className="text-xs text-slate-500 mt-1">{deleteEntry?.category} · {deleteEntry ? fmtDate(deleteEntry.date) : ""}</p>
-            <p className={`text-lg font-black mt-2 ${deleteEntry?.type === "INCOME" ? "text-green-700" : "text-red-600"}`}>
+            <p className={`text-base font-semibold mt-2 ${deleteEntry?.type === "INCOME" ? "text-emerald-700" : "text-red-600"}`}>
               {deleteEntry?.type === "INCOME" ? "+" : "−"}{deleteEntry ? fmt(deleteEntry.amount) : ""}
             </p>
           </div>
           <p className="text-xs text-slate-500 text-center">Esta ação não pode ser desfeita.</p>
         </div>
       </Modal>
-      </>
-      )}
 
       {/* ── MODAL: Confirmar/preencher lançamento pendente (recorrência variável) ── */}
       <Modal
@@ -952,15 +868,14 @@ export default function EntradasSaidasPanel({ slug, tenant }: Props) {
         footer={
           <ModalFooter>
             <Button variant="ghost" onClick={() => setConfirmEntry(null)}>Cancelar</Button>
-            <Button variant="success" loading={confirming} onClick={handleConfirmPending} iconLeft={<CheckCircle2 className="w-4 h-4" />}>Confirmar</Button>
+            <Button variant="success" loading={confirming} onClick={handleConfirmPending} iconLeft={<CheckCircle2 size={14} />}>Confirmar</Button>
           </ModalFooter>
         }
       >
         <div className="space-y-4 p-1">
-          <div className="rounded-xl p-4 bg-amber-50 border border-amber-100">
-            <p className="text-sm font-bold text-slate-800">{confirmEntry?.description}</p>
-            <p className="text-xs text-slate-500 mt-1">{confirmEntry?.category} · Venc. {confirmEntry ? fmtDate(confirmEntry.dueDate || confirmEntry.date) : ""}</p>
-          </div>
+          <Alert variant="warning" title={confirmEntry?.description}>
+            {confirmEntry?.category} · Venc. {confirmEntry ? fmtDate(confirmEntry.dueDate || confirmEntry.date) : ""}
+          </Alert>
           <Input label="Valor deste mês (R$)" type="number" placeholder="0,00" value={confirmAmount} onChange={e => setConfirmAmount(e.target.value)} />
         </div>
       </Modal>
@@ -970,7 +885,7 @@ export default function EntradasSaidasPanel({ slug, tenant }: Props) {
         isOpen={showRecModal}
         onClose={() => setShowRecModal(false)}
         title={editRec ? "Editar Recorrência" : recType === "INCOME" ? "Nova Receita Recorrente" : "Nova Despesa Recorrente"}
-        size="sm"
+        size="md"
         footer={
           <ModalFooter>
             <Button variant="ghost" onClick={() => setShowRecModal(false)}>Cancelar</Button>
@@ -978,127 +893,112 @@ export default function EntradasSaidasPanel({ slug, tenant }: Props) {
               variant={recType === "INCOME" ? "success" : "danger"}
               loading={savingRec}
               onClick={handleSaveRec}
-              iconLeft={<Repeat className="w-4 h-4" />}
+              iconLeft={<Repeat size={14} />}
             >
               {editRec ? "Salvar" : "Criar Recorrência"}
             </Button>
           </ModalFooter>
         }
       >
-        <div className="space-y-4 p-1">
-          {/* Toggle Receita/Despesa */}
-          <div className="flex bg-slate-100 p-0.5 rounded-xl">
-            {(["INCOME", "EXPENSE"] as const).map(t => (
-              <button key={t} onClick={() => { setRecType(t); setRecCat(""); }}
-                className={`flex-1 py-2.5 rounded-lg text-[11px] font-black uppercase tracking-wider transition-all ${recType === t ? (t === "INCOME" ? "bg-green-500 text-white shadow-sm" : "bg-red-500 text-white shadow-sm") : "text-slate-400"}`}
-              >
-                {t === "INCOME" ? "Receita" : "Despesa"}
-              </button>
-            ))}
-          </div>
+        <div className="space-y-3 p-1">
+          <Tabs<RecTabId> items={REC_TABS} value={recTab} onChange={setRecTab} label="Dados da recorrência">
+            {recTab === "dados" && (
+              <div className="space-y-4">
+                <FilterLineSegmented
+                  value={recType}
+                  onChange={(t) => { setRecType(t as EntryType); setRecCat(""); }}
+                  options={[{ value: "INCOME", label: "Receita" }, { value: "EXPENSE", label: "Despesa" }]}
+                />
 
-          {/* Categoria */}
-          <div>
-            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-2">Categoria</p>
-            <div className="flex flex-wrap gap-1.5">
-              {recCategories.map(c => (
-                <button key={c} onClick={() => setRecCat(c)}
-                  className={`px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-all ${recCat === c ? (recType === "INCOME" ? "bg-green-500 text-white border-green-500" : "bg-red-500 text-white border-red-500") : "border-slate-200 text-slate-600 hover:border-slate-300 bg-white"}`}
-                >{c}</button>
-              ))}
-            </div>
-          </div>
-
-          <Input label="Descrição" placeholder="Ex: Conta de energia elétrica" value={recDesc} onChange={e => setRecDesc(e.target.value)} />
-
-          {/* Fixo x Variável */}
-          <div>
-            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-2">Tipo de valor</p>
-            <div className="grid grid-cols-2 gap-2">
-              <button onClick={() => setRecFrequency("FIXED")}
-                className={`text-left rounded-xl border p-3 transition-all ${recFrequency === "FIXED" ? "border-[#C9A227] bg-amber-50" : "border-slate-200 bg-white hover:border-slate-300"}`}
-              >
-                <p className="text-xs font-black text-slate-800">Fixo</p>
-                <p className="text-[10px] text-slate-500 mt-0.5">Mesmo valor todo mês, lançado automaticamente</p>
-              </button>
-              <button onClick={() => setRecFrequency("VARIABLE")}
-                className={`text-left rounded-xl border p-3 transition-all ${recFrequency === "VARIABLE" ? "border-[#C9A227] bg-amber-50" : "border-slate-200 bg-white hover:border-slate-300"}`}
-              >
-                <p className="text-xs font-black text-slate-800">Variável</p>
-                <p className="text-[10px] text-slate-500 mt-0.5">Você preenche o valor todo mês (ex: conta de luz)</p>
-              </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            {recFrequency === "FIXED" && (
-              <Input label="Valor fixo (R$)" type="number" placeholder="0,00" value={recAmount} onChange={e => setRecAmount(e.target.value)} />
-            )}
-            <Input label="Dia do vencimento" type="number" min={1} max={28} placeholder="Ex: 5" value={recDueDay} onChange={e => setRecDueDay(e.target.value)}
-              className={recFrequency === "VARIABLE" ? "col-span-2" : undefined}
-            />
-          </div>
-
-          <DatePicker label="Começa em" value={recStartDate} onChange={v => setRecStartDate(v || todayISO())} />
-
-          {/* Parcelas */}
-          <div className="rounded-xl border border-slate-200 p-3">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={recHasInstallments} onChange={e => setRecHasInstallments(e.target.checked)} className="w-4 h-4 rounded accent-[#C9A227]" />
-              <span className="text-xs font-bold text-slate-700">Tem número de parcelas definido</span>
-            </label>
-            {recHasInstallments && (
-              <div className="mt-3">
-                <Input label="Total de parcelas" type="number" min={1} placeholder="Ex: 12" value={recInstallments} onChange={e => setRecInstallments(e.target.value)} />
-                <p className="text-[10px] text-slate-400 mt-1">A recorrência para de gerar lançamentos automaticamente após a última parcela.</p>
-              </div>
-            )}
-          </div>
-
-          {/* Data de término opcional (independente de parcelas) */}
-          <div className="rounded-xl border border-slate-200 p-3">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={recHasEndDate} onChange={e => setRecHasEndDate(e.target.checked)} className="w-4 h-4 rounded accent-[#C9A227]" />
-              <span className="text-xs font-bold text-slate-700">Definir data final</span>
-            </label>
-            {recHasEndDate && (
-              <div className="mt-3">
-                <DatePicker label="Termina em" value={recEndDate} onChange={v => setRecEndDate(v || todayISO())} min={recStartDate} />
-              </div>
-            )}
-          </div>
-
-          {/* Juros por atraso */}
-          <div className="rounded-xl border border-slate-200 p-3">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={recLateFeeEnabled} onChange={e => setRecLateFeeEnabled(e.target.checked)} className="w-4 h-4 rounded accent-[#C9A227]" />
-              <span className="text-xs font-bold text-slate-700">Aplicar juros se atrasar o pagamento</span>
-            </label>
-            {recLateFeeEnabled && (
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <Input label="Taxa de juros (%)" type="number" step="0.01" placeholder="Ex: 1" value={recLateFeeRate} onChange={e => setRecLateFeeRate(e.target.value)} />
+                {/* Categoria */}
                 <div>
-                  <p className="text-[11px] font-bold text-slate-500 mb-1.5">Periodicidade</p>
-                  <select value={recLateFeeInterval} onChange={e => setRecLateFeeInterval(e.target.value as LateFeeInterval)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm font-medium bg-white focus:outline-none focus:ring-2 focus:ring-[#C9A227]/40"
-                  >
-                    <option value="DAILY">Ao dia</option>
-                    <option value="MONTHLY">Ao mês</option>
-                    <option value="YEARLY">Ao ano</option>
-                  </select>
+                  <p className="text-xs font-medium text-slate-600 mb-2">Categoria</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {recCategories.map(c => (
+                      <button key={c} type="button" onClick={() => setRecCat(c)}
+                        className={`px-3 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${recCat === c ? "bg-blue-600 text-white border-blue-600" : "border-slate-200 text-slate-600 hover:border-slate-300 bg-white"}`}
+                      >{c}</button>
+                    ))}
+                  </div>
                 </div>
-                <p className="col-span-2 text-[10px] text-slate-400">O juros é calculado sobre o valor do lançamento a partir do dia seguinte ao vencimento, e somado automaticamente.</p>
+
+                <Input label="Descrição" placeholder="Ex: Conta de energia elétrica" value={recDesc} onChange={e => setRecDesc(e.target.value)} />
+
+                {/* Fixo x Variável */}
+                <div>
+                  <p className="text-xs font-medium text-slate-600 mb-2">Tipo de valor</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button type="button" onClick={() => setRecFrequency("FIXED")}
+                      className={`text-left rounded-lg border p-3 transition-all ${recFrequency === "FIXED" ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white hover:border-slate-300"}`}
+                    >
+                      <p className="text-xs font-medium text-slate-800">Fixo</p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Mesmo valor todo mês, lançado automaticamente</p>
+                    </button>
+                    <button type="button" onClick={() => setRecFrequency("VARIABLE")}
+                      className={`text-left rounded-lg border p-3 transition-all ${recFrequency === "VARIABLE" ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white hover:border-slate-300"}`}
+                    >
+                      <p className="text-xs font-medium text-slate-800">Variável</p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Você preenche o valor todo mês (ex: conta de luz)</p>
+                    </button>
+                  </div>
+                </div>
+
+                <FormRow cols={2}>
+                  {recFrequency === "FIXED" && (
+                    <Input label="Valor fixo (R$)" type="number" placeholder="0,00" value={recAmount} onChange={e => setRecAmount(e.target.value)} />
+                  )}
+                  <Input label="Dia do vencimento" type="number" min={1} max={28} placeholder="Ex: 5" value={recDueDay} onChange={e => setRecDueDay(e.target.value)}
+                    wrapperClassName={recFrequency === "VARIABLE" ? "col-span-2" : undefined}
+                  />
+                </FormRow>
+
+                <DatePicker label="Começa em" value={recStartDate} onChange={v => setRecStartDate(v || todayISO())} />
               </div>
             )}
-          </div>
 
-          <Input label="Observações (opcional)" placeholder="Detalhes adicionais..." value={recNotes} onChange={e => setRecNotes(e.target.value)} />
+            {recTab === "regras" && (
+              <div className="space-y-3">
+                {/* Parcelas */}
+                <div className="rounded-lg border border-slate-200 p-3 space-y-3">
+                  <Switch checked={recHasInstallments} onCheckedChange={setRecHasInstallments} label="Tem número de parcelas definido" />
+                  {recHasInstallments && (
+                    <div>
+                      <Input label="Total de parcelas" type="number" min={1} placeholder="Ex: 12" value={recInstallments} onChange={e => setRecInstallments(e.target.value)} />
+                      <p className="text-[11px] text-slate-500 mt-1">A recorrência para de gerar lançamentos automaticamente após a última parcela.</p>
+                    </div>
+                  )}
+                </div>
 
-          {recError && (
-            <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 rounded-xl px-3 py-2.5 text-xs font-semibold">
-              <AlertCircle className="w-4 h-4 shrink-0" />{recError}
-            </div>
-          )}
+                {/* Data de término opcional (independente de parcelas) */}
+                <div className="rounded-lg border border-slate-200 p-3 space-y-3">
+                  <Switch checked={recHasEndDate} onCheckedChange={setRecHasEndDate} label="Definir data final" />
+                  {recHasEndDate && (
+                    <DatePicker label="Termina em" value={recEndDate} onChange={v => setRecEndDate(v || todayISO())} min={recStartDate} />
+                  )}
+                </div>
+
+                {/* Juros por atraso */}
+                <div className="rounded-lg border border-slate-200 p-3 space-y-3">
+                  <Switch checked={recLateFeeEnabled} onCheckedChange={setRecLateFeeEnabled} label="Aplicar juros se atrasar o pagamento" />
+                  {recLateFeeEnabled && (
+                    <FormRow cols={2}>
+                      <Input label="Taxa de juros (%)" type="number" step="0.01" placeholder="Ex: 1" value={recLateFeeRate} onChange={e => setRecLateFeeRate(e.target.value)} />
+                      <Select label="Periodicidade" value={recLateFeeInterval} onChange={e => setRecLateFeeInterval(e.target.value as LateFeeInterval)}>
+                        <option value="DAILY">Ao dia</option>
+                        <option value="MONTHLY">Ao mês</option>
+                        <option value="YEARLY">Ao ano</option>
+                      </Select>
+                      <p className="col-span-2 text-[11px] text-slate-500">O juros é calculado sobre o valor do lançamento a partir do dia seguinte ao vencimento, e somado automaticamente.</p>
+                    </FormRow>
+                  )}
+                </div>
+
+                <Input label="Observações (opcional)" placeholder="Detalhes adicionais..." value={recNotes} onChange={e => setRecNotes(e.target.value)} />
+              </div>
+            )}
+          </Tabs>
+
+          {recError && <Alert variant="error">{recError}</Alert>}
         </div>
       </Modal>
 
@@ -1111,13 +1011,13 @@ export default function EntradasSaidasPanel({ slug, tenant }: Props) {
         footer={
           <ModalFooter>
             <Button variant="ghost" onClick={() => setDeleteRec(null)}>Cancelar</Button>
-            <Button variant="danger" loading={deletingRec} onClick={handleDeleteRec} iconLeft={<Trash2 className="w-4 h-4" />}>Excluir</Button>
+            <Button variant="danger" loading={deletingRec} onClick={handleDeleteRec} iconLeft={<Trash2 size={14} />}>Excluir</Button>
           </ModalFooter>
         }
       >
         <div className="space-y-3 p-1">
-          <div className={`rounded-xl p-4 ${deleteRec?.type === "INCOME" ? "bg-green-50" : "bg-red-50"}`}>
-            <p className="text-sm font-bold text-slate-800">{deleteRec?.description}</p>
+          <div className={`rounded-lg p-3 border ${deleteRec?.type === "INCOME" ? "bg-emerald-50 border-emerald-100" : "bg-red-50 border-red-100"}`}>
+            <p className="text-[13px] font-medium text-slate-800">{deleteRec?.description}</p>
             <p className="text-xs text-slate-500 mt-1">{deleteRec?.category}</p>
           </div>
           <p className="text-xs text-slate-500 text-center">Os lançamentos já gerados por esta recorrência permanecem no histórico. Apenas a regra de recorrência é excluída.</p>
@@ -1139,72 +1039,64 @@ interface RecurringEntriesTabProps {
 function RecurringEntriesTab({ recurring, loading, onEdit, onToggleActive, onDelete }: RecurringEntriesTabProps) {
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <div className="w-7 h-7 border-4 border-[#C9A227] border-t-transparent rounded-full animate-spin" />
+      <div role="status" className="flex items-center justify-center gap-2 py-16 text-sm text-slate-500">
+        <Loader2 size={18} className="animate-spin" />Carregando recorrências…
       </div>
     );
   }
 
   if (recurring.length === 0) {
     return (
-      <div className="bg-white rounded-2xl border border-slate-100 flex flex-col items-center justify-center py-16 text-slate-300 px-4 text-center">
-        <Repeat className="w-10 h-10 mb-3" />
-        <p className="text-sm font-medium text-slate-400">Nenhuma recorrência cadastrada</p>
-        <p className="text-xs text-slate-300 mt-1 max-w-xs">Cadastre gastos e receitas que se repetem todo mês, como água, luz, aluguel ou assinaturas de sistema.</p>
-      </div>
+      <ContentCard>
+        <EmptyState
+          icon={Repeat}
+          title="Nenhuma recorrência cadastrada"
+          description="Cadastre gastos e receitas que se repetem todo mês, como água, luz, aluguel ou assinaturas de sistema."
+        />
+      </ContentCard>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
       {recurring.map(r => (
-        <div key={r.id} className={`bg-white rounded-2xl border p-4 ${r.active ? "border-slate-100" : "border-slate-100 opacity-60"}`}>
+        <ContentCard key={r.id} padding="md" className={r.active ? "" : "opacity-60"}>
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
-              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${r.type === "INCOME" ? "bg-green-100" : "bg-red-100"}`}>
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${r.type === "INCOME" ? "bg-emerald-50" : "bg-red-50"}`}>
                 {r.type === "INCOME"
-                  ? <ArrowDownCircle className="w-4 h-4 text-green-600" />
-                  : <ArrowUpCircle className="w-4 h-4 text-red-600" />
+                  ? <ArrowDownCircle size={14} className="text-emerald-600" />
+                  : <ArrowUpCircle size={14} className="text-red-600" />
                 }
               </div>
               <div className="min-w-0">
-                <p className="text-sm font-bold text-slate-800 truncate">{r.description}</p>
-                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full inline-block ${catColor(r.category)}`}>{r.category}</span>
+                <p className="text-[13px] font-medium text-slate-800 truncate">{r.description}</p>
+                <Badge size="sm">{r.category}</Badge>
               </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
-              <button onClick={() => onToggleActive(r)} title={r.active ? "Pausar" : "Reativar"} className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors">
-                {r.active ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
-              </button>
-              <button onClick={() => onEdit(r)} className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors">
-                <Edit2 className="w-3 h-3" />
-              </button>
-              <button onClick={() => onDelete(r)} className="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 flex items-center justify-center text-red-500 transition-colors">
-                <Trash2 className="w-3 h-3" />
-              </button>
+              <IconButton variant="ghost" size="xs" aria-label={r.active ? "Pausar recorrência" : "Reativar recorrência"} title={r.active ? "Pausar" : "Reativar"} onClick={() => onToggleActive(r)}>
+                {r.active ? <Pause size={14} /> : <Play size={14} />}
+              </IconButton>
+              <IconButton variant="ghost" size="xs" aria-label="Editar recorrência" onClick={() => onEdit(r)}><Edit2 size={14} /></IconButton>
+              <IconButton variant="ghost" size="xs" aria-label="Excluir recorrência" onClick={() => onDelete(r)}><Trash2 size={14} /></IconButton>
             </div>
           </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
-            <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${r.frequency === "FIXED" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}`}>
+            <Badge size="sm" color={r.frequency === "FIXED" ? "primary" : "warning"}>
               {r.frequency === "FIXED" ? `Fixo · ${fmt(r.amount || 0)}` : "Variável"}
-            </span>
-            <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-slate-100 text-slate-500 flex items-center gap-1">
-              <CalendarDays className="w-2.5 h-2.5" /> Todo dia {r.dueDay}
-            </span>
-            {r.installmentsTotal && (
-              <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-purple-100 text-purple-700">{r.installmentsTotal}x parcelas</span>
-            )}
+            </Badge>
+            <Badge size="sm" icon={<CalendarDays size={10} />}>Todo dia {r.dueDay}</Badge>
+            {r.installmentsTotal && <Badge size="sm" color="purple">{r.installmentsTotal}x parcelas</Badge>}
             {r.lateFeeEnabled && r.lateFeeRate && (
-              <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-red-100 text-red-700 flex items-center gap-1">
-                <Percent className="w-2.5 h-2.5" /> {r.lateFeeRate}% {LATE_FEE_INTERVAL_LABELS[r.lateFeeInterval || "MONTHLY"]}
-              </span>
+              <Badge size="sm" color="danger" icon={<Percent size={10} />}>
+                {r.lateFeeRate}% {LATE_FEE_INTERVAL_LABELS[r.lateFeeInterval || "MONTHLY"]}
+              </Badge>
             )}
-            {!r.active && (
-              <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-slate-200 text-slate-600">Pausada</span>
-            )}
+            {!r.active && <Badge size="sm">Pausada</Badge>}
           </div>
-        </div>
+        </ContentCard>
       ))}
     </div>
   );

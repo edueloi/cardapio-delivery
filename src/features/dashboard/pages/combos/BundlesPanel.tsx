@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-  Plus, Trash2, Edit2, Package, X, Check, Image as ImageIcon,
-  Layers, ChevronDown, ChevronRight, Sparkles, Copy,
+  Plus, Trash2, Edit2, X, Check, Image as ImageIcon,
+  Layers, ChevronDown, Sparkles, Copy, ArrowLeft, FileText, ListOrdered,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { Button, Modal, ModalFooter, Input, Switch, Badge, useToast } from "../../../../components";
+import { Button, IconButton, Input, Select, Switch, Badge, Tabs, PageWrapper, SectionTitle, ContentCard, EmptyState, useToast } from "../../../../components";
 import { apiFetch } from "../../../../lib/api";
 import type { Tenant, Category, ProductBundle, BundleStep } from "../../../../types";
 
-const BRAND = "#C9A227";
+type EditorTab = "dados" | "etapas";
 
 function fmtCurrency(n: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
@@ -255,6 +255,7 @@ export default function BundlesPanel({ tenant }: Props) {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [uploadingImg, setUploadingImg] = useState(false);
   const [templateCat, setTemplateCat] = useState<string>(TEMPLATE_CATEGORIES[0]);
+  const [editorTab, setEditorTab] = useState<EditorTab>("dados");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState<{
@@ -291,12 +292,14 @@ export default function BundlesPanel({ tenant }: Props) {
       sortOrder: "0",
       steps: fromTemplate(tpl),
     });
+    setEditorTab("dados");
     setView("editor");
   }
 
   function openBlank() {
     setEditing(null);
     setForm({ name: "", description: "", imageUrl: "", price: "", available: true, sortOrder: "0", steps: [newStep()] });
+    setEditorTab("dados");
     setView("editor");
   }
 
@@ -311,6 +314,7 @@ export default function BundlesPanel({ tenant }: Props) {
       sortOrder: String(b.sortOrder),
       steps: b.steps.length ? b.steps : [newStep()],
     });
+    setEditorTab("dados");
     setView("editor");
   }
 
@@ -390,324 +394,284 @@ export default function BundlesPanel({ tenant }: Props) {
 
   const allProducts = categories.flatMap(c => c.products.map(p => ({ ...p, categoryName: c.name })));
 
+  const handleSave = () => {
+    if (saving) return;
+    if (!form.name.trim()) {
+      setEditorTab("dados");
+      toast.error("Informe o nome do combo.");
+      return;
+    }
+    save();
+  };
+
   // ── VIEW: LIST ─────────────────────────────────────────────────────────────
   if (view === "list") {
     return (
-      <div className="space-y-6">
-        {/* Header banner */}
-        <div className="bg-[#0D1B3E] rounded-[28px] p-6 sm:p-8 text-white shadow-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5 overflow-hidden relative">
-          <div className="relative z-10">
-            <h3 className="text-2xl sm:text-3xl font-black tracking-tight mb-1">Combos</h3>
-            <p className="text-[#C9A227]/80 text-sm sm:text-base font-medium">
-              Crie combos montáveis por etapas — pizzas, lanches, marmitas e mais.
-            </p>
-          </div>
-          <Layers className="w-24 h-24 sm:w-28 sm:h-28 absolute -right-6 -bottom-6 text-[#C9A227]/15 rotate-12" />
-          <button
-            onClick={() => setView("new-choose")}
-            className="relative z-10 shrink-0 flex items-center gap-2 px-5 py-3 bg-[#C9A227] hover:bg-[#b8911f] rounded-2xl text-white font-black text-sm shadow-lg transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Novo combo
-          </button>
-        </div>
+      <PageWrapper>
+        <div className="space-y-4">
+          <SectionTitle
+            icon={Layers}
+            title="Combos"
+            description="Crie combos montáveis por etapas — pizzas, lanches, marmitas e mais."
+            action={<Button size="sm" iconLeft={<Plus size={14} />} onClick={() => setView("new-choose")}>Novo combo</Button>}
+          />
 
-        {loading ? (
-          <div className="flex justify-center py-20">
-            <div className="w-8 h-8 rounded-full border-2 border-transparent animate-spin" style={{ borderTopColor: BRAND }} />
-          </div>
-        ) : bundles.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center gap-4">
-            <div className="w-20 h-20 rounded-3xl bg-slate-100 flex items-center justify-center">
-              <Layers className="w-10 h-10 text-slate-300" />
+          {loading ? (
+            <div role="status" className="flex justify-center py-16">
+              <div className="w-6 h-6 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
             </div>
-            <div>
-              <p className="font-black text-slate-600 text-lg">Nenhum combo criado</p>
-              <p className="text-sm text-slate-400 mt-1">Use os modelos prontos para começar em segundos.</p>
-            </div>
-            <button onClick={() => setView("new-choose")} className="flex items-center gap-2 px-5 py-2.5 bg-[#C9A227] hover:bg-[#b8911f] text-white rounded-xl font-black text-sm transition-colors">
-              <Sparkles className="w-4 h-4" />
-              Escolher modelo
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {bundles.map((b) => (
-              <div key={b.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden hover:border-slate-300 transition-all">
-                <div className="flex items-center gap-3 p-4">
-                  {b.imageUrl ? (
-                    <img src={b.imageUrl} alt={b.name} className="w-14 h-14 rounded-xl object-cover shrink-0" />
-                  ) : (
-                    <div className="w-14 h-14 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0">
-                      <Layers className="w-6 h-6 text-slate-300" />
+          ) : bundles.length === 0 ? (
+            <ContentCard>
+              <EmptyState
+                icon={Layers}
+                title="Nenhum combo criado"
+                description="Use os modelos prontos para começar em segundos."
+                action={<Button size="sm" iconLeft={<Sparkles size={14} />} onClick={() => setView("new-choose")}>Escolher modelo</Button>}
+              />
+            </ContentCard>
+          ) : (
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+              {bundles.map((b) => (
+                <ContentCard key={b.id} padding="none" className="overflow-hidden hover:border-slate-300 transition-all">
+                  <div className="flex items-center gap-3 p-3">
+                    {b.imageUrl ? (
+                      <img src={b.imageUrl} alt={b.name} className="w-12 h-12 rounded-lg object-cover shrink-0" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0">
+                        <Layers className="w-5 h-5 text-slate-300" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-sm font-medium text-slate-900">{b.name}</h3>
+                        <Badge color={b.available ? "success" : "default"} size="sm">{b.available ? "Ativo" : "Inativo"}</Badge>
+                      </div>
+                      {b.description && <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{b.description}</p>}
+                      <div className="flex items-center gap-3 mt-1">
+                        <span className="text-xs font-semibold text-blue-700">{fmtCurrency(b.price)}</span>
+                        <span className="text-[11px] text-slate-500">{b.steps.length} etapa{b.steps.length !== 1 ? "s" : ""}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Switch size="sm" aria-label="Disponível no cardápio" checked={b.available} onCheckedChange={() => toggleAvail(b)} />
+                      <IconButton size="xs" variant="ghost" aria-label="Editar combo" onClick={() => openEdit(b)}><Edit2 size={14} /></IconButton>
+                      <IconButton size="xs" variant="ghost" aria-label="Remover combo" onClick={() => remove(b.id)} loading={deleting === b.id}><Trash2 size={14} className="text-red-600" /></IconButton>
+                    </div>
+                  </div>
+                  {b.steps.length > 0 && (
+                    <div className="px-3 pb-3 flex gap-1.5 flex-wrap border-t border-slate-50 pt-2">
+                      {b.steps.map((s, i) => (
+                        <div key={s.id} className="flex items-center gap-1 bg-slate-50 border border-slate-100 rounded-full px-2.5 py-1">
+                          <span className="text-[11px] font-medium text-slate-500">{i + 1}</span>
+                          <span className="text-[11px] font-medium text-slate-600">{s.label || "Sem título"}</span>
+                          {s.flavorMode === "half" && <span className="text-[11px] font-medium text-blue-600 ml-0.5">½½</span>}
+                          {!s.required && <span className="text-[11px] text-slate-500 ml-0.5">opt.</span>}
+                        </div>
+                      ))}
                     </div>
                   )}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-sm font-black text-slate-900">{b.name}</h3>
-                      <Badge color={b.available ? "success" : "default"} size="sm">{b.available ? "Ativo" : "Inativo"}</Badge>
-                    </div>
-                    {b.description && <p className="text-xs text-slate-400 mt-0.5 line-clamp-1">{b.description}</p>}
-                    <div className="flex items-center gap-3 mt-1.5">
-                      <span className="text-sm font-black" style={{ color: BRAND }}>{fmtCurrency(b.price)}</span>
-                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{b.steps.length} etapa{b.steps.length !== 1 ? "s" : ""}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <Switch size="sm" checked={b.available} onCheckedChange={() => toggleAvail(b)} />
-                    <Button size="xs" variant="ghost" onClick={() => openEdit(b)}><Edit2 className="w-3.5 h-3.5" /></Button>
-                    <Button size="xs" variant="ghost" onClick={() => remove(b.id)} loading={deleting === b.id}><Trash2 className="w-3.5 h-3.5 text-red-400" /></Button>
-                  </div>
-                </div>
-                {b.steps.length > 0 && (
-                  <div className="px-4 pb-3 flex gap-1.5 flex-wrap border-t border-slate-50 pt-2.5">
-                    {b.steps.map((s, i) => (
-                      <div key={s.id} className="flex items-center gap-1 bg-slate-50 border border-slate-100 rounded-full px-2.5 py-1">
-                        <span className="text-[9px] font-black text-slate-400">{i + 1}</span>
-                        <span className="text-[11px] font-bold text-slate-600">{s.label || "Sem título"}</span>
-                        {s.flavorMode === "half" && <span className="text-[9px] font-black text-amber-500 ml-0.5">½½</span>}
-                        {!s.required && <span className="text-[9px] text-slate-400 ml-0.5">opt.</span>}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+                </ContentCard>
+              ))}
+            </div>
+          )}
+        </div>
+      </PageWrapper>
     );
   }
 
   // ── VIEW: NEW — CHOOSE ────────────────────────────────────────────────────
   if (view === "new-choose") {
+    const templateTabs = TEMPLATE_CATEGORIES.map(cat => ({ id: cat, label: cat, icon: Sparkles }));
     return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <button onClick={() => setView("list")} className="p-2 rounded-xl hover:bg-slate-100 transition-colors">
-            <ChevronRight className="w-5 h-5 text-slate-400 rotate-180" />
+      <PageWrapper>
+        <div className="space-y-4">
+          <Button type="button" variant="ghost" size="sm" iconLeft={<ArrowLeft size={14} />} onClick={() => setView("list")}>Voltar</Button>
+          <SectionTitle icon={Layers} title="Escolha um modelo" description="Selecione um modelo pronto ou comece do zero" />
+
+          <button
+            onClick={openBlank}
+            className="w-full flex items-center gap-3 p-3 bg-white border-2 border-dashed border-slate-200 rounded-lg hover:border-blue-400 hover:bg-blue-50/40 transition-all group text-left"
+          >
+            <div className="w-10 h-10 rounded-lg bg-slate-100 group-hover:bg-blue-100 flex items-center justify-center shrink-0 transition-colors">
+              <Plus className="w-5 h-5 text-slate-500 group-hover:text-blue-600 transition-colors" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-700">Começar do zero</p>
+              <p className="text-xs text-slate-500 mt-0.5">Crie um combo completamente personalizado</p>
+            </div>
           </button>
-          <div>
-            <h2 className="text-lg font-black text-slate-900">Escolha um modelo</h2>
-            <p className="text-xs text-slate-400 mt-0.5">Selecione um modelo pronto ou comece do zero</p>
-          </div>
-        </div>
 
-        {/* Blank option */}
-        <button
-          onClick={openBlank}
-          className="w-full flex items-center gap-4 p-5 bg-white border-2 border-dashed border-slate-200 rounded-2xl hover:border-[#C9A227] hover:bg-[#C9A227]/5 transition-all group text-left"
-        >
-          <div className="w-12 h-12 rounded-2xl bg-slate-100 group-hover:bg-[#C9A227]/10 flex items-center justify-center shrink-0 transition-colors">
-            <Plus className="w-6 h-6 text-slate-400 group-hover:text-[#C9A227] transition-colors" />
-          </div>
-          <div>
-            <p className="font-black text-slate-700 group-hover:text-[#0A1628] transition-colors">Começar do zero</p>
-            <p className="text-xs text-slate-400 mt-0.5">Crie um combo completamente personalizado</p>
-          </div>
-        </button>
-
-        {/* Category tabs */}
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Modelos prontos</p>
-          <div className="flex gap-2 flex-wrap mb-4">
-            {TEMPLATE_CATEGORIES.map(cat => (
-              <button
-                key={cat}
-                onClick={() => setTemplateCat(cat)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${
-                  templateCat === cat
-                    ? "bg-[#0A1628] text-white"
-                    : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-                }`}
-              >
-                {cat}
-              </button>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {TEMPLATES.filter(t => t.category === templateCat).map(tpl => (
-              <button
-                key={tpl.id}
-                onClick={() => openFromTemplate(tpl)}
-                className="text-left p-5 bg-white border border-slate-200 rounded-2xl hover:border-[#C9A227]/60 hover:shadow-md transition-all group"
-              >
-                <div className="flex items-start gap-3 mb-3">
-                  <span className="text-3xl">{tpl.emoji}</span>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-black text-slate-800 text-sm group-hover:text-[#0A1628] leading-tight">{tpl.name}</p>
-                    <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">{tpl.description}</p>
+          <Tabs<string> items={templateTabs} value={templateCat} onChange={setTemplateCat} label="Categorias de modelos">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+              {TEMPLATES.filter(t => t.category === templateCat).map(tpl => (
+                <button
+                  key={tpl.id}
+                  onClick={() => openFromTemplate(tpl)}
+                  className="text-left p-3 bg-white border border-slate-200 rounded-lg hover:border-blue-300 transition-all group"
+                >
+                  <div className="flex items-start gap-3 mb-2">
+                    <span className="text-2xl">{tpl.emoji}</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-slate-800 text-sm leading-tight">{tpl.name}</p>
+                      <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{tpl.description}</p>
+                    </div>
+                    <span className="font-semibold text-xs shrink-0 text-blue-700">R$ {tpl.price}</span>
                   </div>
-                  <span className="font-black text-sm shrink-0" style={{ color: BRAND }}>R$ {tpl.price}</span>
-                </div>
-                <div className="flex gap-1 flex-wrap">
-                  {tpl.steps.map((s, i) => (
-                    <span key={i} className="text-[10px] font-bold px-2 py-0.5 bg-slate-50 border border-slate-100 rounded-full text-slate-500">
-                      {s.qty > 1 ? `${s.qty}×` : ""}{s.label || `Etapa ${i+1}`}
-                    </span>
-                  ))}
-                </div>
-                <div className="mt-3 flex items-center gap-1.5 text-[#C9A227] opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span className="text-xs font-black">Usar este modelo</span>
-                </div>
-              </button>
-            ))}
-          </div>
+                  <div className="flex gap-1 flex-wrap">
+                    {tpl.steps.map((s, i) => (
+                      <span key={i} className="text-[11px] px-2 py-0.5 bg-slate-50 border border-slate-100 rounded-full text-slate-500">
+                        {s.qty > 1 ? `${s.qty}×` : ""}{s.label || `Etapa ${i+1}`}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="mt-2 flex items-center gap-1.5 text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span className="text-xs font-medium">Usar este modelo</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </Tabs>
         </div>
-      </div>
+      </PageWrapper>
     );
   }
 
   // ── VIEW: EDITOR ──────────────────────────────────────────────────────────
   return (
-    <div className="space-y-5 pb-8">
-      {/* Top bar */}
-      <div className="flex items-center gap-3 sticky top-0 bg-[#F4F6FA] z-10 py-2 -mx-4 px-4 sm:-mx-7 sm:px-7">
-        <button onClick={() => setView("list")} className="p-2 rounded-xl hover:bg-slate-100 transition-colors">
-          <ChevronRight className="w-5 h-5 text-slate-400 rotate-180" />
-        </button>
-        <div className="flex-1 min-w-0">
-          <p className="text-xs text-slate-400 font-bold">
-            {editing ? "Editando combo" : "Novo combo"}
-          </p>
-          <p className="font-black text-slate-800 text-sm truncate">{form.name || "Sem título"}</p>
-        </div>
-        <button
-          onClick={save}
-          disabled={saving || !form.name.trim()}
-          className="flex items-center gap-2 px-5 py-2.5 bg-[#C9A227] hover:bg-[#b8911f] disabled:opacity-50 text-white rounded-xl font-black text-sm transition-all"
-        >
-          {saving ? <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" /> : <Check className="w-4 h-4" />}
-          {editing ? "Salvar" : "Criar combo"}
-        </button>
-      </div>
-
-      {/* ── Dados básicos ── */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4">
-        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Dados do combo</p>
-
-        {/* Image + name */}
-        <div className="flex items-start gap-4">
-          <div
-            className="w-20 h-20 rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center cursor-pointer hover:border-amber-300 transition-colors overflow-hidden shrink-0"
-            onClick={() => fileRef.current?.click()}
-          >
-            {form.imageUrl ? (
-              <img src={form.imageUrl} className="w-full h-full object-cover" alt="combo" />
-            ) : uploadingImg ? (
-              <div className="w-5 h-5 rounded-full border-2 border-transparent animate-spin" style={{ borderTopColor: BRAND }} />
-            ) : (
-              <ImageIcon className="w-6 h-6 text-slate-300" />
-            )}
-          </div>
-          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => { if (e.target.files?.[0]) uploadImage(e.target.files[0]); }} />
-          <div className="flex-1 space-y-3">
-            <Input
-              label="Nome do combo *"
-              value={form.name}
-              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              placeholder="Ex: Combo 2 Pizzas + Refri"
-            />
-          </div>
-        </div>
-
-        <Input
-          label="Descrição (opcional)"
-          value={form.description}
-          onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-          placeholder="Ex: Economize R$ 15 no combo • 2 pizzas grandes + refri 2L"
+    <PageWrapper>
+      <div className="space-y-4">
+        <Button type="button" variant="ghost" size="sm" iconLeft={<ArrowLeft size={14} />} onClick={() => setView("list")}>Voltar</Button>
+        <SectionTitle
+          icon={Layers}
+          title={editing ? "Editar combo" : "Novo combo"}
+          description={form.name || "Sem título"}
         />
 
-        {/* Price + order */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Preço total (R$)</label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">R$</span>
-              <input
-                type="text"
-                inputMode="numeric"
-                value={form.price}
-                onChange={e => setForm(f => ({ ...f, price: maskMoney(e.target.value) }))}
-                placeholder="0,00"
-                className="w-full pl-9 pr-3 py-3 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#C9A227]/30 focus:border-[#C9A227] bg-white"
-              />
-            </div>
-          </div>
-          <Input
-            label="Ordem de exibição"
-            type="number"
-            min="0"
-            value={form.sortOrder}
-            onChange={e => setForm(f => ({ ...f, sortOrder: e.target.value }))}
-          />
-        </div>
+        <ContentCard padding="md">
+          <Tabs<EditorTab>
+            items={[
+              { id: "dados", label: "Dados", icon: FileText },
+              { id: "etapas", label: "Etapas", icon: ListOrdered, badge: form.steps.length },
+            ]}
+            value={editorTab}
+            onChange={setEditorTab}
+            label="Dados do combo"
+          >
+            {editorTab === "dados" && (
+              <div className="space-y-3">
+                <div className="flex items-start gap-3">
+                  <div
+                    className="w-20 h-20 rounded-lg border-2 border-dashed border-slate-200 flex items-center justify-center cursor-pointer hover:border-blue-400 transition-colors overflow-hidden shrink-0"
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    {form.imageUrl ? (
+                      <img src={form.imageUrl} className="w-full h-full object-cover" alt="combo" />
+                    ) : uploadingImg ? (
+                      <div className="w-5 h-5 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
+                    ) : (
+                      <ImageIcon className="w-6 h-6 text-slate-300" />
+                    )}
+                  </div>
+                  <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => { if (e.target.files?.[0]) uploadImage(e.target.files[0]); }} />
+                  <div className="flex-1 min-w-0">
+                    <Input
+                      label="Nome do combo *"
+                      value={form.name}
+                      onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                      placeholder="Ex: Combo 2 Pizzas + Refri"
+                    />
+                  </div>
+                </div>
 
-        {/* Toggle disponível */}
-        <div className="flex items-center justify-between py-3 border-t border-slate-100">
-          <div>
-            <p className="text-sm font-bold text-slate-700">Disponível no cardápio</p>
-            <p className="text-xs text-slate-400">Visível para os clientes</p>
-          </div>
-          <Switch checked={form.available} onCheckedChange={v => setForm(f => ({ ...f, available: v }))} />
+                <Input
+                  label="Descrição (opcional)"
+                  value={form.description}
+                  onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                  placeholder="Ex: Economize R$ 15 no combo • 2 pizzas grandes + refri 2L"
+                />
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Input
+                    label="Preço total (R$)"
+                    type="text"
+                    inputMode="numeric"
+                    addonLeft="R$"
+                    value={form.price}
+                    onChange={e => setForm(f => ({ ...f, price: maskMoney(e.target.value) }))}
+                    placeholder="0,00"
+                  />
+                  <Input
+                    label="Ordem de exibição"
+                    type="number"
+                    min="0"
+                    value={form.sortOrder}
+                    onChange={e => setForm(f => ({ ...f, sortOrder: e.target.value }))}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                  <div>
+                    <p className="text-xs font-medium text-slate-700">Disponível no cardápio</p>
+                    <p className="text-[11px] text-slate-500">Visível para os clientes</p>
+                  </div>
+                  <Switch aria-label="Disponível no cardápio" checked={form.available} onCheckedChange={v => setForm(f => ({ ...f, available: v }))} />
+                </div>
+              </div>
+            )}
+
+            {editorTab === "etapas" && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-medium text-slate-800">Etapas do combo</p>
+                    <p className="text-[11px] text-slate-500">Cada etapa é uma escolha que o cliente faz</p>
+                  </div>
+                  <Button size="sm" iconLeft={<Plus size={14} />} onClick={addStep}>Etapa</Button>
+                </div>
+
+                <AnimatePresence mode="popLayout">
+                  {form.steps.map((step, idx) => (
+                    <StepCard
+                      key={step.id}
+                      step={step}
+                      idx={idx}
+                      categories={categories}
+                      allProducts={allProducts}
+                      onUpdate={patch => updateStep(idx, patch)}
+                      onRemove={() => removeStep(idx)}
+                      onDuplicate={() => duplicateStep(idx)}
+                    />
+                  ))}
+                </AnimatePresence>
+
+                {form.steps.length === 0 && (
+                  <div
+                    className="flex flex-col items-center justify-center py-10 bg-white border-2 border-dashed border-slate-200 rounded-lg cursor-pointer hover:border-blue-400 transition-colors"
+                    onClick={addStep}
+                  >
+                    <Layers className="w-8 h-8 text-slate-300 mb-2" />
+                    <p className="text-xs font-medium text-slate-500">Clique para adicionar a primeira etapa</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">Ex: "Escolha a pizza", "Escolha o refrigerante"</p>
+                  </div>
+                )}
+
+                {form.steps.length > 0 && (
+                  <Button variant="outline" fullWidth iconLeft={<Plus size={14} />} onClick={addStep}>Adicionar etapa</Button>
+                )}
+              </div>
+            )}
+          </Tabs>
+        </ContentCard>
+
+        <div className="sticky bottom-0 z-10 flex flex-wrap justify-end gap-2 rounded-lg border border-slate-200 bg-white p-3">
+          <Button variant="secondary" onClick={() => setView("list")} disabled={saving}>Cancelar</Button>
+          <Button onClick={handleSave} loading={saving} disabled={saving} iconLeft={<Check size={14} />}>
+            {saving ? "Salvando..." : editing ? "Salvar" : "Criar combo"}
+          </Button>
         </div>
       </div>
-
-      {/* ── Etapas ── */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="font-black text-slate-800">Etapas do combo</p>
-            <p className="text-xs text-slate-400 mt-0.5">Cada etapa é uma escolha que o cliente faz</p>
-          </div>
-          <button
-            onClick={addStep}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#0A1628] hover:bg-[#1a2d4e] text-white text-xs font-black transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Etapa
-          </button>
-        </div>
-
-        <AnimatePresence mode="popLayout">
-          {form.steps.map((step, idx) => (
-            <StepCard
-              key={step.id}
-              step={step}
-              idx={idx}
-              categories={categories}
-              allProducts={allProducts}
-              onUpdate={patch => updateStep(idx, patch)}
-              onRemove={() => removeStep(idx)}
-              onDuplicate={() => duplicateStep(idx)}
-            />
-          ))}
-        </AnimatePresence>
-
-        {form.steps.length === 0 && (
-          <div
-            className="flex flex-col items-center justify-center py-12 bg-white border-2 border-dashed border-slate-200 rounded-2xl cursor-pointer hover:border-[#C9A227] transition-colors"
-            onClick={addStep}
-          >
-            <Layers className="w-8 h-8 text-slate-300 mb-2" />
-            <p className="text-sm font-bold text-slate-400">Clique para adicionar a primeira etapa</p>
-            <p className="text-xs text-slate-300 mt-0.5">Ex: "Escolha a pizza", "Escolha o refrigerante"</p>
-          </div>
-        )}
-
-        {form.steps.length > 0 && (
-          <button
-            onClick={addStep}
-            className="w-full py-3 border-2 border-dashed border-slate-200 rounded-2xl text-sm text-slate-400 font-bold hover:border-[#C9A227] hover:text-[#C9A227] transition-all flex items-center justify-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            Adicionar etapa
-          </button>
-        )}
-      </div>
-    </div>
+    </PageWrapper>
   );
 }
 
@@ -742,140 +706,111 @@ function StepCard({ step, idx, categories, allProducts, onUpdate, onRemove, onDu
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
-      className="bg-white rounded-2xl border border-slate-200 overflow-hidden"
+      className="bg-white rounded-lg border border-slate-200 overflow-hidden"
     >
-      {/* Step header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100">
-        <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-black text-white shrink-0" style={{ background: BRAND }}>
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 bg-slate-50/50">
+        <div className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-semibold text-white bg-blue-600 shrink-0">
           {idx + 1}
         </div>
-        <input
+        <Input
+          aria-label={`Título da etapa ${idx + 1}`}
+          wrapperClassName="flex-1 min-w-0"
           value={step.label}
           onChange={e => onUpdate({ label: e.target.value })}
           placeholder={`Etapa ${idx + 1} — Ex: Escolha a pizza`}
-          className="flex-1 text-sm font-bold text-slate-800 bg-transparent focus:outline-none placeholder:text-slate-300"
         />
         <div className="flex items-center gap-1 shrink-0">
-          <button onClick={onDuplicate} title="Duplicar etapa" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 transition-colors">
-            <Copy className="w-3.5 h-3.5" />
-          </button>
-          <button onClick={() => setExpanded(v => !v)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 transition-colors">
-            <ChevronDown className={`w-4 h-4 transition-transform ${expanded ? "" : "-rotate-90"}`} />
-          </button>
-          <button onClick={onRemove} className="p-1.5 rounded-lg hover:bg-red-50 text-red-400 transition-colors">
-            <X className="w-4 h-4" />
-          </button>
+          <IconButton size="xs" variant="ghost" onClick={onDuplicate} title="Duplicar etapa" aria-label="Duplicar etapa"><Copy size={14} /></IconButton>
+          <IconButton size="xs" variant="ghost" onClick={() => setExpanded(v => !v)} aria-label={expanded ? "Recolher etapa" : "Expandir etapa"}>
+            <ChevronDown size={14} className={`transition-transform ${expanded ? "" : "-rotate-90"}`} />
+          </IconButton>
+          <IconButton size="xs" variant="ghost" onClick={onRemove} aria-label="Remover etapa"><X size={14} className="text-red-600" /></IconButton>
         </div>
       </div>
 
       {expanded && (
-        <div className="p-4 space-y-4">
-          {/* Description */}
-          <input
+        <div className="p-3 space-y-3">
+          <Input
+            aria-label="Instrução para o cliente"
             value={step.description ?? ""}
             onChange={e => onUpdate({ description: e.target.value })}
             placeholder="Instrução para o cliente (ex: Escolha o sabor da pizza)"
-            className="w-full text-sm text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#C9A227]/30 focus:border-[#C9A227]"
           />
 
-          {/* Mode + Qty + Required row */}
-          <div className="grid grid-cols-3 gap-3">
-            {/* Flavor mode */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Modo de sabor</p>
-              <div className="flex flex-col gap-1">
+              <p className="text-xs font-medium text-slate-600 mb-1">Modo de sabor</p>
+              <div className="flex gap-1">
                 {(["single", "half"] as const).map(mode => (
-                  <button
-                    key={mode}
-                    onClick={() => onUpdate({ flavorMode: mode })}
-                    className={`py-2 rounded-xl text-[11px] font-black border-2 transition-all ${step.flavorMode === mode ? "text-white shadow-sm" : "border-slate-200 text-slate-500 bg-white"}`}
-                    style={step.flavorMode === mode ? { background: BRAND, borderColor: BRAND } : {}}
-                  >
+                  <Button key={mode} size="sm" className="flex-1" variant={step.flavorMode === mode ? "primary" : "outline"} onClick={() => onUpdate({ flavorMode: mode })}>
                     {mode === "single" ? "1 sabor" : "½ a ½"}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
 
-            {/* Qty */}
             <div>
-              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Quantidade</p>
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-2 flex flex-col items-center gap-1">
-                <button onClick={() => onUpdate({ qty: step.qty + 1 })} className="w-full flex items-center justify-center h-7 rounded-lg hover:bg-slate-200 text-slate-600 font-black transition-colors text-lg leading-none">+</button>
-                <span className="text-xl font-black text-slate-800">{step.qty}</span>
-                <button onClick={() => onUpdate({ qty: Math.max(1, step.qty - 1) })} className="w-full flex items-center justify-center h-7 rounded-lg hover:bg-slate-200 text-slate-600 font-black transition-colors text-lg leading-none">−</button>
+              <p className="text-xs font-medium text-slate-600 mb-1">Quantidade</p>
+              <div className="flex items-center gap-1">
+                <IconButton size="sm" variant="outline" aria-label="Diminuir quantidade" onClick={() => onUpdate({ qty: Math.max(1, step.qty - 1) })}>−</IconButton>
+                <span className="flex-1 text-center text-sm font-semibold text-slate-800">{step.qty}</span>
+                <IconButton size="sm" variant="outline" aria-label="Aumentar quantidade" onClick={() => onUpdate({ qty: step.qty + 1 })}>+</IconButton>
               </div>
             </div>
 
-            {/* Required toggle */}
             <div>
-              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Obrigatorio</p>
-              <div className="flex flex-col gap-1">
+              <p className="text-xs font-medium text-slate-600 mb-1">Obrigatório</p>
+              <div className="flex gap-1">
                 {[true, false].map(v => (
-                  <button
-                    key={String(v)}
-                    onClick={() => onUpdate({ required: v })}
-                    className={`py-2 rounded-xl text-[11px] font-black border-2 transition-all ${step.required === v ? "bg-[#0A1628] border-[#0A1628] text-white" : "border-slate-200 text-slate-500 bg-white"}`}
-                  >
+                  <Button key={String(v)} size="sm" className="flex-1" variant={step.required === v ? "primary" : "outline"} onClick={() => onUpdate({ required: v })}>
                     {v ? "Sim" : "Opcional"}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
           </div>
 
-          {/* Source type */}
-          <div>
-            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Fonte de produtos</p>
-            <div className="flex gap-2 mb-3">
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-slate-600">Fonte de produtos</p>
+            <div className="flex gap-1">
               {(["category", "products"] as const).map(src => (
-                <button
-                  key={src}
-                  onClick={() => onUpdate({ sourceType: src })}
-                  className={`flex-1 py-2.5 rounded-xl text-xs font-black border-2 transition-all ${step.sourceType === src ? "bg-[#0A1628] text-white border-[#0A1628]" : "border-slate-200 text-slate-500 bg-white"}`}
-                >
+                <Button key={src} size="sm" className="flex-1" variant={step.sourceType === src ? "primary" : "outline"} onClick={() => onUpdate({ sourceType: src })}>
                   {src === "category" ? "Por categoria" : "Seleção manual"}
-                </button>
+                </Button>
               ))}
             </div>
 
             {step.sourceType === "category" && (
-              <div className="relative">
-                <select
-                  value={step.categoryId ?? ""}
-                  onChange={e => onUpdate({ categoryId: e.target.value || undefined })}
-                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#C9A227]/30 focus:border-[#C9A227] appearance-none pr-8"
-                >
-                  <option value="">— Selecione uma categoria —</option>
-                  {categories.map(c => (
-                    <option key={c.id} value={c.id}>{c.name} ({c.products.length} produto{c.products.length !== 1 ? "s" : ""})</option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-              </div>
+              <Select
+                aria-label="Categoria"
+                value={step.categoryId ?? ""}
+                onChange={e => onUpdate({ categoryId: e.target.value || undefined })}
+              >
+                <option value="">— Selecione uma categoria —</option>
+                {categories.map(c => (
+                  <option key={c.id} value={c.id}>{c.name} ({c.products.length} produto{c.products.length !== 1 ? "s" : ""})</option>
+                ))}
+              </Select>
             )}
 
             {step.sourceType === "products" && (
               <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                {allProducts.length === 0 && <p className="text-xs text-slate-400 text-center py-4">Nenhum produto cadastrado</p>}
+                {allProducts.length === 0 && <p className="text-xs text-slate-500 text-center py-4">Nenhum produto cadastrado</p>}
                 {allProducts.map(p => {
                   const checked = step.productIds?.includes(p.id) ?? false;
                   return (
                     <label
                       key={p.id}
-                      className={`flex items-center gap-2.5 px-3 py-2 rounded-xl border cursor-pointer transition-all ${checked ? "border-amber-300 bg-amber-50" : "border-slate-100 bg-slate-50 hover:bg-slate-100"}`}
+                      className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border cursor-pointer transition-all ${checked ? "border-blue-300 bg-blue-50" : "border-slate-100 bg-slate-50 hover:bg-slate-100"}`}
                     >
-                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all ${checked ? "border-amber-400" : "border-slate-300"}`} style={checked ? { background: BRAND } : {}}>
-                        {checked && <Check className="w-2.5 h-2.5 text-white" />}
-                      </div>
-                      <input type="checkbox" className="hidden" checked={checked} onChange={() => {
+                      <input type="checkbox" className="h-4 w-4 accent-blue-600" checked={checked} onChange={() => {
                         const ids = step.productIds ?? [];
                         onUpdate({ productIds: checked ? ids.filter(id => id !== p.id) : [...ids, p.id] });
                       }} />
                       {p.imageUrl && <img src={p.imageUrl} className="w-8 h-8 rounded-lg object-cover shrink-0" alt={p.name} />}
                       <div className="flex-1 min-w-0">
-                        <p className="text-[12px] font-bold text-slate-800 leading-snug truncate">{p.name}</p>
-                        <p className="text-[10px] text-slate-400">{p.categoryName}</p>
+                        <p className="text-xs font-medium text-slate-800 leading-snug truncate">{p.name}</p>
+                        <p className="text-[11px] text-slate-500">{p.categoryName}</p>
                       </div>
                     </label>
                   );
@@ -884,22 +819,18 @@ function StepCard({ step, idx, categories, allProducts, onUpdate, onRemove, onDu
             )}
           </div>
 
-          {/* Variant filter — only if relevant products have variants */}
           {variantOptions.length > 0 && (
             <div>
-              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Filtrar por variante (opcional)</p>
-              <p className="text-[10px] text-slate-400 mb-2">Restringe esta etapa a somente uma variante (ex: "Grande", "Com borda")</p>
-              <div className="relative">
-                <select
-                  value={step.variantId ?? ""}
-                  onChange={e => onUpdate({ variantId: e.target.value || undefined })}
-                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#C9A227]/30 focus:border-[#C9A227] appearance-none pr-8"
-                >
-                  <option value="">Qualquer variante</option>
-                  {variantOptions.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-              </div>
+              <p className="text-xs font-medium text-slate-600">Filtrar por variante (opcional)</p>
+              <p className="text-[11px] text-slate-500 mb-1.5">Restringe esta etapa a somente uma variante (ex: "Grande", "Com borda")</p>
+              <Select
+                aria-label="Variante"
+                value={step.variantId ?? ""}
+                onChange={e => onUpdate({ variantId: e.target.value || undefined })}
+              >
+                <option value="">Qualquer variante</option>
+                {variantOptions.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+              </Select>
             </div>
           )}
         </div>

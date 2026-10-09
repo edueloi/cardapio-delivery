@@ -1,9 +1,45 @@
 import { useState } from "react";
-import { ChefHat, Lock, User, Store, Phone, ArrowLeft, CheckCircle2, Download, Eye, EyeOff } from "lucide-react";
+import { ChefHat, Lock, User, Store, Phone, CheckCircle2, Download, Eye, EyeOff } from "lucide-react";
 import KitchenBoard from "./KitchenBoard";
+import { Alert, Button, IconButton, Input, Tabs } from "../components";
 
 const TOKEN_KEY = "kitchen_global_token";
 const STAFF_KEY = "kitchen_global_staff";
+
+const AUTH_TABS = [
+  { id: "login", label: "Entrar", icon: Lock },
+  { id: "request-access", label: "Solicitar acesso", icon: User },
+] as const;
+type AuthTab = (typeof AUTH_TABS)[number]["id"];
+
+function AuthShell({
+  tab, onTabChange, title, subtitle, children,
+}: {
+  tab: AuthTab;
+  onTabChange: (t: AuthTab) => void;
+  title: string;
+  subtitle: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="fixed inset-0 flex items-center justify-center overflow-y-auto bg-slate-50 p-4">
+      <div className="my-auto w-full max-w-sm space-y-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="space-y-3 text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg border border-blue-100 bg-blue-50">
+            <ChefHat className="h-6 w-6 text-blue-600" />
+          </div>
+          <div>
+            <h1 className="text-base font-medium text-slate-900 sm:text-lg">{title}</h1>
+            <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>
+          </div>
+        </div>
+        <Tabs items={AUTH_TABS} value={tab} onChange={onTabChange} label="Acesso à cozinha">
+          <div className="pt-4">{children}</div>
+        </Tabs>
+      </div>
+    </div>
+  );
+}
 
 function KitchenGlobalLoginScreen({
   onLoggedIn, onRequestAccess,
@@ -39,79 +75,63 @@ function KitchenGlobalLoginScreen({
   };
 
   return (
-    <div className="fixed inset-0 bg-gradient-to-br from-[#111318] via-[#0D1B3E] to-[#1a1030] flex items-center justify-center p-6">
-      <form onSubmit={handleSubmit} className="bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-[2rem] p-8 w-full max-w-sm space-y-6 shadow-2xl">
-        <div className="text-center space-y-3">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#C9A227] to-[#8f6f16] flex items-center justify-center mx-auto shadow-lg">
-            <ChefHat className="w-8 h-8 text-black" />
-          </div>
-          <div>
-            <h1 className="text-lg font-black text-white uppercase tracking-widest">Cozinha BoxSys</h1>
-            <p className="text-xs text-white/40 font-bold mt-1">Entre com seu usuário e senha</p>
-          </div>
-        </div>
+    <AuthShell
+      tab="login"
+      onTabChange={(t) => { if (t === "request-access") onRequestAccess(); }}
+      title="Cozinha BoxSys"
+      subtitle="Entre com seu usuário e senha"
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-3">
-          <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase text-white/40 tracking-widest ml-1">Usuário</label>
-            <div className="relative">
-              <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-              <input
-                autoFocus
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Ex: joao.pizzaria"
-                className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pl-11 pr-4 text-white placeholder-white/20 focus:border-[#C9A227] outline-none text-sm font-bold"
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase text-white/40 tracking-widest ml-1">Senha</label>
-            <div className="relative">
-              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-              <input
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••"
-                className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pl-11 pr-11 text-white placeholder-white/20 focus:border-[#C9A227] outline-none text-center text-lg font-black tracking-widest"
-              />
-              <button
+          <Input
+            label="Usuário"
+            autoFocus
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="Ex: joao.pizzaria"
+            iconLeft={<User size={14} />}
+            size="lg"
+          />
+          <Input
+            label="Senha"
+            type={showPassword ? "text" : "password"}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••"
+            iconLeft={<Lock size={14} />}
+            iconRight={
+              <IconButton
                 type="button"
+                variant="ghost"
+                size="xs"
+                aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
                 onClick={() => setShowPassword((v) => !v)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60"
-                tabIndex={-1}
+                className="border-transparent"
               >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
-          {error && <p className="text-xs text-red-400 font-bold text-center">{error}</p>}
+                {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+              </IconButton>
+            }
+            size="lg"
+          />
+          {error && <Alert variant="error">{error}</Alert>}
         </div>
-        <button
-          type="submit"
-          disabled={loading || !username || !password}
-          className="w-full bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-40 text-black font-black py-3.5 rounded-2xl text-xs uppercase tracking-widest transition-all"
-        >
-          {loading ? "Entrando..." : "Entrar"}
-        </button>
-        <button
-          type="button"
-          onClick={onRequestAccess}
-          className="w-full text-center text-[11px] font-bold text-white/40 hover:text-white transition-colors underline underline-offset-4"
-        >
-          Ainda não tenho acesso — solicitar ao admin da loja
-        </button>
+        <Button type="submit" size="lg" fullWidth loading={loading} disabled={!username || !password}>
+          Entrar
+        </Button>
+        <p className="text-center text-[11px] leading-relaxed text-slate-500">
+          Ainda não tenho acesso — use a aba Solicitar acesso para pedir ao admin da loja.
+        </p>
         <a
           href="/downloads/BoxSys-Cozinha.apk"
           download
-          className="flex items-center justify-center gap-2 w-full py-3 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white text-[10px] font-black uppercase tracking-widest transition-all"
+          className="flex h-8 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-blue-500"
         >
-          <Download className="w-3.5 h-3.5" />
+          <Download size={14} />
           Baixar app para tablet/celular (Android)
         </a>
       </form>
-    </div>
+    </AuthShell>
   );
 }
 
@@ -147,82 +167,47 @@ function KitchenAccessRequestScreen({ onBack }: { onBack: () => void }) {
 
   if (sent) {
     return (
-      <div className="fixed inset-0 bg-gradient-to-br from-[#111318] via-[#0D1B3E] to-[#1a1030] flex items-center justify-center p-6">
-        <div className="bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-[2rem] p-8 w-full max-w-sm space-y-6 text-center shadow-2xl">
-          <div className="w-16 h-16 rounded-2xl bg-emerald-500/20 flex items-center justify-center mx-auto">
-            <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+      <div className="fixed inset-0 flex items-center justify-center overflow-y-auto bg-slate-50 p-4">
+        <div className="my-auto w-full max-w-sm space-y-5 rounded-lg border border-slate-200 bg-white p-6 text-center shadow-sm">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg border border-emerald-100 bg-emerald-50">
+            <CheckCircle2 className="h-6 w-6 text-emerald-600" />
           </div>
           <div>
-            <h1 className="text-lg font-black text-white">Pedido enviado!</h1>
-            <p className="text-xs text-white/50 font-bold mt-2 leading-relaxed">
+            <h1 className="text-base font-medium text-slate-900 sm:text-lg">Pedido enviado!</h1>
+            <p className="mt-1 text-xs leading-relaxed text-slate-500">
               {sent.matchedStore
                 ? <>Solicite ao admin de <strong>{sent.matchedStore}</strong> que aprove seu acesso em Configurações → Equipe da Cozinha.</>
                 : "Não encontramos uma loja com esse nome automaticamente — avise o dono para conferir e aprovar manualmente."}
             </p>
           </div>
-          <button onClick={onBack} className="w-full bg-[#C9A227] hover:bg-[#E8B93A] text-black font-black py-3.5 rounded-2xl text-xs uppercase tracking-widest transition-all">
+          <Button type="button" size="lg" fullWidth onClick={onBack}>
             Voltar ao login
-          </button>
+          </Button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 bg-gradient-to-br from-[#111318] via-[#0D1B3E] to-[#1a1030] flex items-center justify-center p-6">
-      <form onSubmit={handleSubmit} className="bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-[2rem] p-8 w-full max-w-sm space-y-5 shadow-2xl">
-        <button type="button" onClick={onBack} className="flex items-center gap-1.5 text-[11px] font-bold text-white/40 hover:text-white transition-colors">
-          <ArrowLeft className="w-3.5 h-3.5" />
-          Voltar
-        </button>
-        <div className="text-center space-y-2">
-          <h1 className="text-lg font-black text-white">Solicitar acesso</h1>
-          <p className="text-xs text-white/40 font-bold">O admin da sua loja vai aprovar e definir sua senha</p>
-        </div>
+    <AuthShell
+      tab="request-access"
+      onTabChange={(t) => { if (t === "login") onBack(); }}
+      title="Solicitar acesso"
+      subtitle="O admin da sua loja vai aprovar e definir sua senha"
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-3">
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-black uppercase text-white/40 tracking-widest ml-1">Seu nome</label>
-            <div className="relative">
-              <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-              <input autoFocus type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: João"
-                className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-11 pr-4 text-white placeholder-white/20 focus:border-[#C9A227] outline-none text-sm font-bold" />
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-black uppercase text-white/40 tracking-widest ml-1">Usuário desejado</label>
-            <div className="relative">
-              <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-              <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Ex: joao.pizzaria"
-                className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-11 pr-4 text-white placeholder-white/20 focus:border-[#C9A227] outline-none text-sm font-bold" />
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-black uppercase text-white/40 tracking-widest ml-1">Nome da loja</label>
-            <div className="relative">
-              <Store className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-              <input type="text" value={storeQuery} onChange={(e) => setStoreQuery(e.target.value)} placeholder="Ex: Pizzaria do Zé"
-                className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-11 pr-4 text-white placeholder-white/20 focus:border-[#C9A227] outline-none text-sm font-bold" />
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-black uppercase text-white/40 tracking-widest ml-1">Contato (opcional)</label>
-            <div className="relative">
-              <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-              <input type="text" value={contact} onChange={(e) => setContact(e.target.value)} placeholder="WhatsApp ou telefone"
-                className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-11 pr-4 text-white placeholder-white/20 focus:border-[#C9A227] outline-none text-sm font-bold" />
-            </div>
-          </div>
-          {error && <p className="text-xs text-red-400 font-bold text-center">{error}</p>}
+          <Input label="Seu nome" autoFocus type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: João" iconLeft={<User size={14} />} size="lg" />
+          <Input label="Usuário desejado" type="text" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Ex: joao.pizzaria" iconLeft={<User size={14} />} size="lg" />
+          <Input label="Nome da loja" type="text" value={storeQuery} onChange={(e) => setStoreQuery(e.target.value)} placeholder="Ex: Pizzaria do Zé" iconLeft={<Store size={14} />} size="lg" />
+          <Input label="Contato (opcional)" type="text" value={contact} onChange={(e) => setContact(e.target.value)} placeholder="WhatsApp ou telefone" iconLeft={<Phone size={14} />} size="lg" />
+          {error && <Alert variant="error">{error}</Alert>}
         </div>
-        <button
-          type="submit"
-          disabled={loading || !name.trim() || !username.trim() || !storeQuery.trim()}
-          className="w-full bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-40 text-black font-black py-3.5 rounded-2xl text-xs uppercase tracking-widest transition-all"
-        >
-          {loading ? "Enviando..." : "Enviar pedido"}
-        </button>
+        <Button type="submit" size="lg" fullWidth loading={loading} disabled={!name.trim() || !username.trim() || !storeQuery.trim()}>
+          Enviar pedido
+        </Button>
       </form>
-    </div>
+    </AuthShell>
   );
 }
 

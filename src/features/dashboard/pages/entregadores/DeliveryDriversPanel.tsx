@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   Bike,
+  ClipboardList,
   Edit2,
-  Filter,
-  Package,
   Phone,
   Plus,
   Trash2,
@@ -11,8 +10,11 @@ import {
   Truck,
 } from "lucide-react";
 import type { DeliveryDriver, Tenant } from "../../../../types";
-import { Modal, ModalFooter, Button, Input, Switch, SectionTitle, EmptyState, useToast } from "../../../../components";
-import { DatePicker } from "../../../../components/DatePicker";
+import {
+  Modal, ModalFooter, ConfirmModal, Button, IconButton, Input, Switch, SectionTitle, Alert, Badge, Tabs,
+  PageWrapper, StatGrid, StatCard, FilterLine, FilterLineSection, FilterLineDateRange, GridTable, useToast,
+} from "../../../../components";
+import type { Column } from "../../../../components";
 import { apiFetch, apiJson } from "../../../../lib/api";
 
 interface Props {
@@ -27,6 +29,11 @@ interface DriverReportRow {
   deliveries: number;
   total: number;
 }
+
+const TABS = [
+  { id: "list", label: "Cadastro", icon: Bike },
+  { id: "report", label: "Relatório de Entregas", icon: ClipboardList },
+] as const;
 
 const fmt = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -96,21 +103,15 @@ function DriverModal({ driver, slug, onClose, onSaved }: { driver: DeliveryDrive
     >
       <form onSubmit={handleSubmit} className="space-y-3 py-1">
         {error && (
-          <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-red-50 border border-red-100">
-            <div className="w-2 h-2 rounded-full bg-red-400 shrink-0" />
-            <p className="text-sm text-red-600 font-medium">{error}</p>
-          </div>
+          <Alert variant="error">{error}</Alert>
         )}
         <Input label="Nome *" value={name} onChange={(e) => setName(e.target.value)} placeholder="João da Silva" />
         <Input label="Telefone / WhatsApp" value={phone} onChange={(e) => setPhone(maskPhone(e.target.value))} placeholder="(11) 99999-9999" inputMode="numeric" />
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Input label="Veículo" value={vehicle} onChange={(e) => setVehicle(e.target.value)} placeholder="Moto CG 160" />
           <Input label="Placa" value={plate} onChange={(e) => setPlate(e.target.value.toUpperCase())} placeholder="ABC1D23" />
         </div>
-        <div className="flex items-center justify-between pt-1">
-          <span className="text-sm text-slate-600 font-medium">Ativo</span>
-          <Switch checked={active} onCheckedChange={setActive} />
-        </div>
+        <Switch checked={active} onCheckedChange={setActive} label="Ativo" />
       </form>
     </Modal>
   );
@@ -126,7 +127,7 @@ function firstOfMonthISO() {
 
 export default function DeliveryDriversPanel({ slug }: Props) {
   const toast = useToast();
-  const [tab, setTab] = useState<"list" | "report">("list");
+  const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("list");
   const [drivers, setDrivers] = useState<DeliveryDriver[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -195,153 +196,139 @@ export default function DeliveryDriversPanel({ slug }: Props) {
   const totalDeliveries = report?.reduce((s, r) => s + r.deliveries, 0) ?? 0;
   const totalValue = report?.reduce((s, r) => s + r.total, 0) ?? 0;
 
-  return (
-    <div className="space-y-6">
-      <SectionTitle
-        title="Entregadores"
-        description="Cadastre os motoboys e acompanhe as entregas de cada um."
-        icon={Bike}
-      />
-
-      <div className="flex gap-2">
-        <button
-          onClick={() => setTab("list")}
-          className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${tab === "list" ? "bg-[#0A1628] text-white" : "bg-white border border-slate-200 text-slate-500 hover:border-slate-300"}`}
-        >
-          Cadastro
-        </button>
-        <button
-          onClick={() => setTab("report")}
-          className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${tab === "report" ? "bg-[#0A1628] text-white" : "bg-white border border-slate-200 text-slate-500 hover:border-slate-300"}`}
-        >
-          Relatório de Entregas
-        </button>
-      </div>
-
-      {tab === "list" && (
-        <div className="space-y-4">
-          <div className="flex justify-end">
-            <button
-              onClick={() => { setEditingDriver(null); setShowModal(true); }}
-              className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#C9A227] hover:bg-[#b8911f] text-white text-xs font-black transition-colors"
+  const driverColumns: Column<DeliveryDriver>[] = [
+    {
+      header: "Entregador",
+      render: (d) => (
+        <div className={`flex min-w-0 items-center gap-3 ${d.active ? "" : "opacity-60"}`}>
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50">
+            <Bike className="h-4 w-4 text-blue-600" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="truncate text-[13px] font-medium text-slate-800">{d.name}</p>
+              {!d.active && <Badge color="default" size="sm">Inativo</Badge>}
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      header: "Contato / Veículo",
+      render: (d) => (
+        <span className="text-xs text-slate-500">
+          {[d.phone && fmtPhone(d.phone), d.vehicle, d.plate].filter(Boolean).join(" · ") || "—"}
+        </span>
+      ),
+    },
+    {
+      header: "Ações",
+      className: "text-right",
+      headerClassName: "text-right",
+      render: (d) => (
+        <div className="flex items-center justify-end gap-1">
+          {d.phone && (
+            <a
+              href={whatsappUrl(d.phone)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-emerald-600 transition-colors hover:bg-emerald-50"
+              title="WhatsApp"
             >
-              <Plus className="w-3.5 h-3.5" />
-              Novo Entregador
-            </button>
-          </div>
-
-          {loading ? (
-            <div className="flex justify-center py-16">
-              <div className="w-6 h-6 border-2 border-slate-200 border-t-[#C9A227] rounded-full animate-spin" />
-            </div>
-          ) : drivers.length === 0 ? (
-            <EmptyState
-              icon={Bike}
-              title="Nenhum entregador cadastrado"
-              description="Cadastre os motoboys pra poder atribuir quem entrega cada pedido."
-            />
-          ) : (
-            <div className="space-y-2">
-              {drivers.map((d) => (
-                <div
-                  key={d.id}
-                  className={`flex items-center gap-4 px-4 py-3 bg-white rounded-xl border ${d.active ? "border-slate-200" : "border-slate-100 opacity-60"}`}
-                >
-                  <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">
-                    <Bike className="w-5 h-5 text-slate-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-black text-slate-800">{d.name}</p>
-                      {!d.active && (
-                        <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md bg-zinc-100 text-slate-500">Inativo</span>
-                      )}
-                    </div>
-                    {(d.phone || d.vehicle || d.plate) && (
-                      <p className="text-xs text-slate-400 truncate mt-0.5">
-                        {[d.phone && fmtPhone(d.phone), d.vehicle, d.plate].filter(Boolean).join(" · ")}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    {d.phone && (
-                      <a
-                        href={whatsappUrl(d.phone)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2 rounded-xl text-green-600 hover:bg-green-50 transition-colors"
-                        title="WhatsApp"
-                      >
-                        <Phone className="w-4 h-4" />
-                      </a>
-                    )}
-                    <Switch checked={d.active} onCheckedChange={() => handleToggleActive(d)} />
-                    <button onClick={() => { setEditingDriver(d); setShowModal(true); }} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 transition-colors">
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => setDeleteDriver(d)} className="p-2 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+              <Phone className="h-4 w-4" />
+            </a>
           )}
+          <Switch checked={d.active} onCheckedChange={() => handleToggleActive(d)} aria-label={d.active ? "Desativar entregador" : "Ativar entregador"} />
+          <IconButton aria-label="Editar entregador" variant="ghost" size="sm" onClick={() => { setEditingDriver(d); setShowModal(true); }}>
+            <Edit2 size={14} />
+          </IconButton>
+          <IconButton aria-label="Remover entregador" variant="ghost" size="sm" onClick={() => setDeleteDriver(d)}>
+            <Trash2 size={14} />
+          </IconButton>
         </div>
-      )}
+      ),
+    },
+  ];
 
-      {tab === "report" && (
-        <div className="space-y-4">
-          <div className="bg-white rounded-2xl border border-slate-100 p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <Filter className="w-4 h-4 text-slate-400" />
-              <p className="text-sm font-bold text-slate-700">Filtrar período</p>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <DatePicker label="De" value={dateFrom} onChange={setDateFrom} max={dateTo ?? undefined} />
-              <DatePicker label="Até" value={dateTo} onChange={setDateTo} min={dateFrom ?? undefined} />
-            </div>
+  const reportColumns: Column<DriverReportRow>[] = [
+    {
+      header: "Entregador",
+      render: (r) => (
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50">
+            <Bike className="h-4 w-4 text-blue-600" />
           </div>
-
-          {report && (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-2xl border p-4 bg-blue-50 border-blue-100">
-                <Truck className="w-5 h-5 mb-2 text-blue-700" />
-                <p className="text-xl font-black text-blue-700">{totalDeliveries}</p>
-                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mt-1">Entregas no período</p>
-              </div>
-              <div className="rounded-2xl border p-4 bg-green-50 border-green-100">
-                <TrendingUp className="w-5 h-5 mb-2 text-green-700" />
-                <p className="text-xl font-black text-green-700">{fmt(totalValue)}</p>
-                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mt-1">Valor total entregue</p>
-              </div>
-            </div>
-          )}
-
-          {reportLoading ? (
-            <div className="flex justify-center py-16">
-              <div className="w-6 h-6 border-2 border-slate-200 border-t-[#C9A227] rounded-full animate-spin" />
-            </div>
-          ) : !report || report.length === 0 ? (
-            <EmptyState icon={Package} title="Nenhuma entrega no período" description="Sem entregas atribuídas a entregadores nesse período." />
-          ) : (
-            <div className="space-y-2">
-              {report.map((r) => (
-                <div key={r.driverId} className="flex items-center gap-4 px-4 py-3 bg-white rounded-xl border border-slate-200">
-                  <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">
-                    <Bike className="w-5 h-5 text-slate-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-black text-slate-800 truncate">{r.name}</p>
-                    <p className="text-xs text-slate-400">{r.deliveries} entrega{r.deliveries !== 1 ? "s" : ""}</p>
-                  </div>
-                  <p className="text-sm font-black text-[#C9A227] shrink-0">{fmt(r.total)}</p>
-                </div>
-              ))}
-            </div>
-          )}
+          <p className="truncate text-[13px] font-medium text-slate-800">{r.name}</p>
         </div>
-      )}
+      ),
+    },
+    {
+      header: "Entregas",
+      render: (r) => <span className="text-xs text-slate-500">{r.deliveries} entrega{r.deliveries !== 1 ? "s" : ""}</span>,
+    },
+    {
+      header: "Valor",
+      className: "text-right",
+      headerClassName: "text-right",
+      render: (r) => <span className="text-[13px] font-medium text-slate-800">{fmt(r.total)}</span>,
+    },
+  ];
+
+  return (
+    <PageWrapper>
+      <div className="space-y-4">
+        <SectionTitle
+          title="Entregadores"
+          description="Cadastre os motoboys e acompanhe as entregas de cada um."
+          icon={Bike}
+          action={
+            tab === "list" ? (
+              <Button size="sm" iconLeft={<Plus size={14} />} onClick={() => { setEditingDriver(null); setShowModal(true); }}>
+                Novo Entregador
+              </Button>
+            ) : undefined
+          }
+        />
+
+        <Tabs<(typeof TABS)[number]["id"]> items={TABS} value={tab} onChange={setTab} label="Entregadores">
+          {tab === "list" && (
+            <div className="space-y-3">
+              <GridTable
+                data={drivers}
+                columns={driverColumns}
+                keyExtractor={(d) => d.id}
+                isLoading={loading}
+                emptyMessage="Nenhum entregador cadastrado. Cadastre os motoboys pra poder atribuir quem entrega cada pedido."
+              />
+            </div>
+          )}
+
+          {tab === "report" && (
+            <div className="space-y-3">
+              <FilterLine>
+                <FilterLineSection>
+                  <FilterLineDateRange from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
+                </FilterLineSection>
+              </FilterLine>
+
+              {report && (
+                <StatGrid cols={2}>
+                  <StatCard title="Entregas no período" value={totalDeliveries} icon={Truck} color="info" />
+                  <StatCard title="Valor total entregue" value={totalValue} isCurrency icon={TrendingUp} color="success" />
+                </StatGrid>
+              )}
+
+              <GridTable
+                data={report ?? []}
+                columns={reportColumns}
+                keyExtractor={(r) => r.driverId}
+                isLoading={reportLoading}
+                emptyMessage="Nenhuma entrega no período. Sem entregas atribuídas a entregadores nesse período."
+              />
+            </div>
+          )}
+        </Tabs>
+      </div>
 
       {showModal && (
         <DriverModal
@@ -352,15 +339,15 @@ export default function DeliveryDriversPanel({ slug }: Props) {
         />
       )}
 
-      <Modal isOpen={!!deleteDriver} onClose={() => setDeleteDriver(null)} title="Remover entregador" size="sm">
-        <p className="text-sm text-slate-500 -mt-2 mb-4">
-          Tem certeza que quer remover <span className="font-bold text-slate-700">{deleteDriver?.name}</span>? Pedidos antigos continuam mostrando o nome dele no histórico.
-        </p>
-        <ModalFooter>
-          <Button variant="ghost" onClick={() => setDeleteDriver(null)}>Cancelar</Button>
-          <Button variant="danger" loading={deleting} onClick={handleDelete}>Remover</Button>
-        </ModalFooter>
-      </Modal>
-    </div>
+      <ConfirmModal
+        isOpen={!!deleteDriver}
+        onClose={() => setDeleteDriver(null)}
+        onConfirm={handleDelete}
+        title="Remover entregador"
+        confirmLabel="Remover"
+        loading={deleting}
+        message={<>Tem certeza que quer remover <span className="font-medium text-slate-800">{deleteDriver?.name}</span>? Pedidos antigos continuam mostrando o nome dele no histórico.</>}
+      />
+    </PageWrapper>
   );
 }

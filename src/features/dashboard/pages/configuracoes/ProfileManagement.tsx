@@ -3,7 +3,6 @@ import { motion } from "motion/react";
 import {
   AlertTriangle,
   AlertCircle,
-  ArrowUp,
   Banknote,
   CalendarClock,
   CheckCircle2,
@@ -36,10 +35,15 @@ import {
 } from "lucide-react";
 import {
   Button,
+  IconButton,
   ContentCard,
   FilterLineSegmented,
+  Tabs,
   Input,
   PageWrapper,
+  PanelCard,
+  FormRow,
+  Alert,
   Select,
   SectionTitle,
   Switch,
@@ -118,51 +122,74 @@ const UF_OPTIONS = [
 ];
 
 const SETTINGS_TABS = [
-  {
-    id: "general",
-    label: "Loja",
-    description: "Identidade, endereço, operação e impressão",
-    icon: Store,
-    accent: "bg-amber-50 text-amber-600 border-amber-100",
-  },
+  { id: "general", label: "Loja", icon: Store },
+  { id: "address", label: "Endereço", icon: MapPin },
+  { id: "service", label: "Atendimento", icon: Info },
+  { id: "orders", label: "Pedidos", icon: PackageCheck },
+  { id: "pdv", label: "PDV e impressão", icon: Monitor },
+  { id: "kitchen", label: "Cozinha e TV", icon: Utensils },
   {
     id: "hours",
     label: "Horários",
-    description: "Abertura, intervalos e dias de atendimento",
     icon: Clock3,
-    accent: "bg-sky-50 text-sky-600 border-sky-100",
   },
   {
     id: "delivery",
     label: "Entrega",
-    description: "Taxas, zonas, raio e regras de entrega",
     icon: Truck,
-    accent: "bg-violet-50 text-violet-600 border-violet-100",
   },
   {
     id: "payments",
     label: "Pagamentos",
-    description: "Formas aceitas e opções do checkout",
     icon: Wallet,
-    accent: "bg-emerald-50 text-emerald-600 border-emerald-100",
   },
   {
     id: "maquinhas",
     label: "Maquininhas",
-    description: "Taxas, bandeiras e integrações de cartão",
     icon: Smartphone,
-    accent: "bg-rose-50 text-rose-600 border-rose-100",
   },
   {
     id: "fiscal",
     label: "Fiscal",
-    description: "NFC-e, certificado e dados da SEFAZ",
     icon: FileText,
-    accent: "bg-indigo-50 text-indigo-600 border-indigo-100",
   },
 ] as const;
 
 type SettingsTabId = typeof SETTINGS_TABS[number]["id"];
+const STORE_TAB_IDS: readonly SettingsTabId[] = ["general", "address", "service", "orders", "pdv", "kitchen"];
+
+const DELIVERY_MODES = [
+  { id: "free", label: "Grátis", icon: CheckCircle2 },
+  { id: "fixed", label: "Taxa Fixa", icon: CircleDollarSign },
+  { id: "zones", label: "Por Bairro/CEP", icon: Truck },
+  { id: "km", label: "Por Distância (KM)", icon: Ruler },
+] as const;
+type DeliveryModeId = typeof DELIVERY_MODES[number]["id"];
+
+const MACHINE_TABS = [
+  { id: "terminals", label: "Terminais", icon: Smartphone },
+  { id: "fees", label: "Taxas", icon: CircleDollarSign },
+] as const;
+type MachineTabId = typeof MACHINE_TABS[number]["id"];
+
+const FISCAL_TABS = [
+  { id: "issuer", label: "Emitente", icon: Store },
+  { id: "emission", label: "Emissão", icon: Rocket },
+  { id: "credentials", label: "Credenciais", icon: FileText },
+] as const;
+type FiscalTabId = typeof FISCAL_TABS[number]["id"];
+
+function SettingRow({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-3">
+      <div className="min-w-0">
+        <p className="text-[13px] font-medium text-slate-800">{title}</p>
+        {description && <p className="mt-0.5 text-[11px] text-slate-500">{description}</p>}
+      </div>
+      <div className="flex shrink-0 items-center gap-3">{children}</div>
+    </div>
+  );
+}
 
 export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, refresh: () => void }) {
   const toast = useToast();
@@ -192,6 +219,8 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
   });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [machineTab, setMachineTab] = useState<MachineTabId>("terminals");
+  const [fiscalTab, setFiscalTab] = useState<FiscalTabId>("issuer");
 
   const parseDeliveryConfig = (raw?: string | null): DeliveryConfig => {
     try { return raw ? JSON.parse(raw) : { mode: "free" }; } catch { return { mode: "free" }; }
@@ -258,6 +287,20 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
     }
   }, [tenant]);
 
+  // Alterações não salvas: compara o estado atual com o último estado vindo do tenant.
+  const currentSnapshot = JSON.stringify({ form, scheduleDays, addr, hours, delivery, payments, stone, cielo, fiscal, printing });
+  const [baseline, setBaseline] = useState<string | null>(null);
+  const [syncVersion, setSyncVersion] = useState(0);
+  const baselineVersionRef = React.useRef(-1);
+  useEffect(() => { setSyncVersion(v => v + 1); }, [tenant]);
+  useEffect(() => {
+    if (baselineVersionRef.current !== syncVersion) {
+      baselineVersionRef.current = syncVersion;
+      setBaseline(currentSnapshot);
+    }
+  }, [currentSnapshot, syncVersion]);
+  const dirty = baseline !== null && currentSnapshot !== baseline;
+
   const fetchCep = async (cep: string) => {
     const digits = cep.replace(/\D/g, "");
     if (digits.length !== 8) return;
@@ -309,399 +352,302 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
 
   const setA = (field: keyof AddressForm, value: string) => setAddr(a => ({ ...a, [field]: value }));
 
-  const selectTab = (tabId: SettingsTabId) => {
-    setActiveTab(tabId);
-    window.setTimeout(() => document.getElementById("settings-content")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
-  };
-
-  const scrollToCategories = () => document.getElementById("settings-categories")?.scrollIntoView({ behavior: "smooth", block: "start" });
-
   return (
     <PageWrapper>
+      <div className="space-y-4">
       <SectionTitle
         title="Configurações"
         description="Dados da loja, funcionamento e integrações de pagamento"
         icon={Store}
-        divider
-        className="mb-5"
       />
 
-      <section id="settings-categories" className="mb-6 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-bold text-[#0D1B3E]">Central de configurações</p>
-            <p className="text-xs text-slate-500">Escolha uma categoria para editar sem percorrer uma página longa.</p>
-          </div>
-          <span className="w-fit rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-500">6 categorias</span>
-        </div>
-
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
-          {SETTINGS_TABS.map((tab) => {
-            const selected = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => selectTab(tab.id)}
-                aria-pressed={selected}
-                className={`group flex items-center gap-3 rounded-2xl border p-3.5 text-left transition-all ${
-                  selected
-                    ? "border-[#0D1B3E] bg-[#0D1B3E] text-white shadow-md shadow-[#0D1B3E]/15"
-                    : "border-slate-200 bg-white hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-sm"
-                }`}
-              >
-                <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${selected ? "border-white/15 bg-white/15 text-white" : tab.accent}`}>
-                  <tab.icon className="h-5 w-5" strokeWidth={2} />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className={`block text-sm font-bold ${selected ? "text-white" : "text-slate-800"}`}>{tab.label}</span>
-                  <span className={`mt-0.5 block text-[11px] leading-4 ${selected ? "text-white/70" : "text-slate-500"}`}>{tab.description}</span>
-                </span>
-                <span className={`text-lg transition-transform group-hover:translate-x-0.5 ${selected ? "text-white" : "text-slate-300"}`}>›</span>
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      <form id="settings-content" onSubmit={handleUpdate} className="scroll-mt-24 space-y-6">
-        <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <span className="font-semibold text-[#0D1B3E]">Editando:</span>
-            <span>{SETTINGS_TABS.find(tab => tab.id === activeTab)?.label}</span>
-          </div>
-          <button type="button" onClick={scrollToCategories} className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-[#0D1B3E] hover:bg-slate-100">
-            <ArrowUp className="h-3.5 w-3.5" />
-            Categorias
-          </button>
-        </div>
-        {activeTab === "general" && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-            <ContentCard padding="lg">
-              <SectionTitle title="Identidade" icon={Store} divider className="mb-5" />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-                <ImageUploader label="Logo / Imagem da Unidade" value={form.logoUrl} onChange={(val) => setForm({...form, logoUrl: val})} description="Aparecerá no topo do cardápio digital." />
+      <Tabs<SettingsTabId> items={SETTINGS_TABS} value={activeTab} onChange={setActiveTab} label="Configurações da loja">
+      <form id="settings-content" onSubmit={handleUpdate} className="space-y-4">
+        {STORE_TAB_IDS.includes(activeTab) && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+            <>
+              {(activeTab === "general" || activeTab === "address") && (
                 <div className="space-y-4">
-                  <Input label="Nome do estabelecimento" value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="Ex: Pastel do Edu" />
-                  <Input label="WhatsApp de contato" value={form.whatsapp} onChange={e => setForm({...form, whatsapp: maskPhone(e.target.value)})} placeholder="(00) 00000-0000" hint="Digite apenas o DDD + Número" />
-                </div>
-              </div>
-              <Input label="Slogan / Descrição curta" value={form.description} onChange={e => setForm({...form, description: e.target.value})} placeholder="Ex: Os melhores pastéis da cidade" />
-            </ContentCard>
+                  {activeTab === "general" && (
+                  <PanelCard title="Identidade da loja" description="Nome, logo e contato exibidos no cardápio digital." icon={Store}>
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                      <ImageUploader label="Logo / Imagem da Unidade" value={form.logoUrl} onChange={(val) => setForm({...form, logoUrl: val})} description="Aparecerá no topo do cardápio digital." />
+                      <div className="space-y-3 md:col-span-2">
+                        <FormRow cols={2}>
+                          <Input label="Nome do estabelecimento" value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="Ex: Pastel do Edu" />
+                          <Input label="WhatsApp de contato" value={form.whatsapp} onChange={e => setForm({...form, whatsapp: maskPhone(e.target.value)})} placeholder="(00) 00000-0000" hint="Digite apenas o DDD + Número" />
+                        </FormRow>
+                        <Input label="Slogan / Descrição curta" value={form.description} onChange={e => setForm({...form, description: e.target.value})} placeholder="Ex: Os melhores pastéis da cidade" />
+                      </div>
+                    </div>
+                  </PanelCard>
+                  )}
 
-            <ContentCard padding="lg">
-              <SectionTitle title="Localização" icon={MapPin} divider className="mb-5" />
-              <div className="space-y-4">
-                <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
-                  <Input
-                    label="CEP"
-                    value={addr.cep}
-                    onChange={e => { setA("cep", e.target.value); setCepError(""); }}
-                    onBlur={e => fetchCep(e.target.value)}
-                    placeholder="00000-000"
-                    wrapperClassName="w-full sm:w-44"
-                    error={cepError || undefined}
-                  />
-                  <Button type="button" variant="outline" size="sm" loading={cepLoading}
-                    onClick={() => fetchCep(addr.cep)} className="w-full sm:w-auto mb-0.5">
-                    Buscar CEP
-                  </Button>
-                </div>
+                  {activeTab === "address" && (
+                  <PanelCard title="Endereço" description="Localização da loja. Digite o CEP para preencher automaticamente." icon={MapPin}>
+                    <div className="space-y-3">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                        <Input
+                          label="CEP"
+                          value={addr.cep}
+                          onChange={e => { setA("cep", e.target.value); setCepError(""); }}
+                          onBlur={e => fetchCep(e.target.value)}
+                          placeholder="00000-000"
+                          wrapperClassName="w-full sm:w-44"
+                          error={cepError || undefined}
+                        />
+                        <Button type="button" variant="outline" size="sm" loading={cepLoading}
+                          onClick={() => fetchCep(addr.cep)} className="w-full sm:w-auto mb-0.5">
+                          Buscar CEP
+                        </Button>
+                      </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <Input label="Logradouro" value={addr.street} onChange={e => setA("street", e.target.value)} placeholder="Rua, Av, Travessa..." wrapperClassName="md:col-span-2" />
-                  <Input label="Número" value={addr.number} onChange={e => setA("number", e.target.value)} placeholder="123" />
-                </div>
+                      <FormRow cols={3}>
+                        <Input label="Logradouro" value={addr.street} onChange={e => setA("street", e.target.value)} placeholder="Rua, Av, Travessa..." wrapperClassName="xl:col-span-2" />
+                        <Input label="Número" value={addr.number} onChange={e => setA("number", e.target.value)} placeholder="123" />
+                        <Input label="Complemento" value={addr.complement} onChange={e => setA("complement", e.target.value)} placeholder="Apto, Sala, Bloco..." />
+                        <Input label="Bairro" value={addr.neighborhood} onChange={e => setA("neighborhood", e.target.value)} placeholder="Bairro" />
+                        <Input label="Cidade" value={addr.city} onChange={e => setA("city", e.target.value)} placeholder="Cidade" />
+                        <Select
+                          label="Estado (UF)"
+                          value={addr.state}
+                          onChange={e => setA("state", e.target.value)}
+                          options={UF_OPTIONS}
+                          placeholder="Selecione..."
+                        />
+                        <Input label="País" value={addr.country} onChange={e => setA("country", e.target.value)} placeholder="Brasil" />
+                      </FormRow>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input label="Complemento" value={addr.complement} onChange={e => setA("complement", e.target.value)} placeholder="Apto, Sala, Bloco..." />
-                  <Input label="Bairro" value={addr.neighborhood} onChange={e => setA("neighborhood", e.target.value)} placeholder="Bairro" />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <Input label="Cidade" value={addr.city} onChange={e => setA("city", e.target.value)} placeholder="Cidade" />
-                  <Select
-                    label="Estado (UF)"
-                    value={addr.state}
-                    onChange={e => setA("state", e.target.value)}
-                    options={UF_OPTIONS}
-                    placeholder="Selecione..."
-                  />
-                  <Input label="País" value={addr.country} onChange={e => setA("country", e.target.value)} placeholder="Brasil" />
-                </div>
-              </div>
-
-              {/* Preview */}
-              {(addr.street || addr.city) && (
-                <div className="mt-4 flex items-start gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-500 font-medium">
-                  <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                  {buildAddressString(addr)}
+                      {(addr.street || addr.city) && (
+                        <div className="flex items-start gap-2 text-[11px] text-slate-500">
+                          <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                          {buildAddressString(addr)}
+                        </div>
+                      )}
+                    </div>
+                  </PanelCard>
+                  )}
                 </div>
               )}
-            </ContentCard>
 
-            <ContentCard padding="lg">
-              <SectionTitle title="Atendimento e balcão" icon={Info} divider className="mb-1" />
-              <p className="mb-1 text-xs text-slate-500">Controle a disponibilidade da loja e a forma de atender pedidos presenciais.</p>
-              <div className="divide-y divide-slate-100 space-y-0">
-                <div className="flex items-center justify-between gap-4 py-5">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">Loja Aberta</p>
-                    <p className="text-xs text-slate-500 mt-1">Forçar fechamento imediato do cardápio digital.</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className={`text-[11px] font-semibold ${form.isOpen ? 'text-emerald-600' : 'text-red-500'}`}>
-                      {form.isOpen ? 'Aberta' : 'Fechada'}
-                    </span>
-                    <Switch checked={form.isOpen} onCheckedChange={v => setForm(f => ({ ...f, isOpen: v }))} />
-                  </div>
-                </div>
-                <div className="flex items-center justify-between gap-4 py-5">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">Delivery</p>
-                    <p className="text-xs text-slate-500 mt-1">Quando desligado, a opção de entrega some do cardápio digital — o cliente só consegue fazer Retirada no Balcão. Mesa e Balcão continuam funcionando normalmente.</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className={`text-[11px] font-semibold ${form.isDeliveryOpen ? 'text-emerald-600' : 'text-red-500'}`}>
-                      {form.isDeliveryOpen ? 'Ativo' : 'Pausado'}
-                    </span>
-                    <Switch checked={form.isDeliveryOpen} onCheckedChange={v => setForm(f => ({ ...f, isDeliveryOpen: v }))} />
-                  </div>
-                </div>
-                <div className="py-5 space-y-3">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">Senha do Balcão</p>
-                    <p className="text-xs text-slate-500 mt-1">Como identificar um pedido de Balcão sem mesa. Nem todo estabelecimento chama por número — algumas lojas preferem identificar só pelo nome do cliente.</p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2.5">
-                    {([
-                      { value: "TICKET", label: "Senha sequencial", desc: "Cada pedido de balcão recebe um número (Senha 01, 02...) — ideal quando o cliente aguarda ser chamado.", icon: Ticket },
-                      { value: "NAME",   label: "Nome do cliente",  desc: "Sem número de senha — identifica pelo nome (se não digitar nada, o pedido fica só com o ID curto).", icon: User },
-                    ] as const).map((opt) => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => setForm(f => ({ ...f, counterTicketMode: opt.value }))}
-                        className={`text-left p-3 rounded-xl border transition-all ${form.counterTicketMode === opt.value ? "border-[#0D1B3E] bg-slate-50" : "border-slate-200 bg-white hover:border-slate-300"}`}
-                      >
-                        <opt.icon className={`w-4 h-4 mb-2 ${form.counterTicketMode === opt.value ? "text-[#0D1B3E]" : "text-slate-400"}`} strokeWidth={2} />
-                        <p className={`text-xs font-semibold ${form.counterTicketMode === opt.value ? "text-[#0D1B3E]" : "text-slate-700"}`}>{opt.label}</p>
-                        <p className="text-[11px] text-slate-500 mt-0.5">{opt.desc}</p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex items-center justify-between gap-4 py-5">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">Avisar Garçom quando a Comanda Ficar Pronta</p>
-                    <p className="text-xs text-slate-500 mt-1">Notifica o garçom, em qualquer tela do sistema, quando a cozinha marcar a comanda da mesa como pronta para servir.</p>
-                  </div>
-                  <Switch checked={form.waiterNotifyOnReady} onCheckedChange={v => setForm(f => ({ ...f, waiterNotifyOnReady: v }))} />
-                </div>
-              </div>
-            </ContentCard>
-
-            <ContentCard padding="lg">
-              <SectionTitle title="PDV e impressão" icon={Monitor} divider className="mb-1" />
-              <p className="mb-1 text-xs text-slate-500">Defina as regras do caixa, da impressora térmica e das vias dos comprovantes.</p>
-              <div className="divide-y divide-slate-100 space-y-0">
-                <div className="flex items-center justify-between gap-4 py-5">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">Exigir Abertura/Fechamento de Caixa no PDV</p>
-                    <p className="text-xs text-slate-500 mt-1">Se desligado, o PDV vende sem precisar abrir caixa (sem fundo, sangria/suprimento ou fechamento) — venda liberada direto.</p>
-                  </div>
-                  <Switch checked={form.requireCashRegister} onCheckedChange={v => setForm(f => ({ ...f, requireCashRegister: v }))} />
-                </div>
-                <div className="flex items-center justify-between gap-4 py-5">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">Largura da Impressora Térmica</p>
-                    <p className="text-xs text-slate-500 mt-1">Define o formato do recibo gerado no PDV (imprimir ou baixar em PDF) para caber certinho na bobina da sua impressora.</p>
-                  </div>
-                  <FilterLineSegmented
-                    value={String(form.receiptPaperWidth)}
-                    onChange={v => setForm(f => ({ ...f, receiptPaperWidth: (Number(v) === 58 ? 58 : 80) as 58 | 80 }))}
-                    options={[
-                      { value: "80", label: "80mm" },
-                      { value: "58", label: "58mm" },
-                    ]}
-                    size="sm"
-                  />
-                </div>
-                <div className="flex items-center justify-between gap-4 py-5">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">Imprimir Automaticamente ao Criar Pedido</p>
-                    <p className="text-xs text-slate-500 mt-1">Assim que um pedido é criado (PDV, comanda/mesa via QR Code, delivery), imprime sozinho na impressora térmica configurada no app desktop — sem precisar clicar em "Imprimir".</p>
-                  </div>
-                  <Switch checked={printing.autoPrintOnOrderCreate} onCheckedChange={v => setPrinting(p => ({ ...p, autoPrintOnOrderCreate: v }))} />
-                </div>
-                {printing.autoPrintOnOrderCreate && (
-                  <div className="flex items-center justify-between gap-4 py-5">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">2ª Via para o Estabelecimento</p>
-                      <p className="text-xs text-slate-500 mt-1">Quando ativada, imprime a via do cliente e uma segunda via marcada "VIA DO ESTABELECIMENTO" em todos os pedidos automáticos: PDV, comanda, balcão, cardápio e delivery.</p>
-                    </div>
-                    <Switch checked={printing.autoPrintEstablishmentCopy} onCheckedChange={v => setPrinting(p => ({ ...p, autoPrintEstablishmentCopy: v }))} />
-                  </div>
-                )}
-                <div className="flex items-center justify-between gap-4 py-5">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">Imprimir Resumo ao Fechar Caixa</p>
-                    <p className="text-xs text-slate-500 mt-1">Ao fechar o caixa, imprime automaticamente o resumo consolidado do turno (totais por forma de pagamento, quantidade de pedidos, sangrias/suprimentos) para conferência.</p>
-                  </div>
-                  <Switch checked={printing.autoPrintCashClosingReport} onCheckedChange={v => setPrinting(p => ({ ...p, autoPrintCashClosingReport: v }))} />
-                </div>
-                <div className="py-5">
-                  <DesktopPrinterSettings />
-                </div>
-              </div>
-            </ContentCard>
-
-            <ContentCard padding="lg">
-              <SectionTitle title="Canais de pedido" icon={Truck} divider className="mb-1" />
-              <p className="mb-1 text-xs text-slate-500">Escolha se a loja aceita delivery, encomendas e em quais dias as entregas ficam disponíveis.</p>
-              <div>
-                {/* ── Modo de Operação (Delivery / Encomenda / Misto) ── */}
-                <div className="pt-5">
-                  <div className="mb-3">
-                    <p className="text-sm font-semibold text-slate-800">Modo de Operação</p>
-                    <p className="text-xs text-slate-500 mt-0.5">Define como os clientes podem fazer pedidos no cardápio digital.</p>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
-                    {([
-                      { value: "DELIVERY_ONLY",  label: "Só Delivery",          desc: "Entregas imediatas — cliente recebe no mesmo dia", icon: Truck },
-                      { value: "PREORDER_ONLY",  label: "Só Encomenda",         desc: "Você define os dias de entrega (ex: só sábados). Cliente pede e você entrega na próxima data disponível", icon: PackageCheck },
-                      { value: "BOTH",           label: "Delivery + Encomenda", desc: "Aceita tanto entregas imediatas quanto encomendas com data definida por você", icon: Sparkles },
-                    ] as const).map(opt => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => setForm(f => ({
-                          ...f,
-                          orderMode: opt.value,
-                          scheduleMode: opt.value !== "DELIVERY_ONLY",
-                        }))}
-                        className={`text-left p-3 rounded-xl border transition-all ${form.orderMode === opt.value ? "border-[#0D1B3E] bg-slate-50" : "border-slate-200 bg-white hover:border-slate-300"}`}
-                      >
-                        <opt.icon className={`w-4 h-4 mb-1.5 ${form.orderMode === opt.value ? "text-[#0D1B3E]" : "text-slate-400"}`} strokeWidth={2} />
-                        <p className={`text-xs font-semibold ${form.orderMode === opt.value ? "text-[#0D1B3E]" : "text-slate-700"}`}>{opt.label}</p>
-                        <p className="text-[11px] text-slate-400 mt-0.5 leading-tight">{opt.desc}</p>
-                      </button>
-                    ))}
-                  </div>
-
-                  {form.orderMode !== "DELIVERY_ONLY" && (
-                    <div className="space-y-4 bg-slate-50 border border-slate-200 rounded-2xl p-4">
-                      {/* Tipo de agendamento */}
-                      <div>
-                        <p className="text-xs font-semibold text-slate-600 mb-2">Quando o estabelecimento entrega?</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {(activeTab === "service" || activeTab === "orders") && (
+                <div className="space-y-4">
+                  {activeTab === "service" && (
+                  <PanelCard title="Atendimento e balcão" description="Disponibilidade da loja e atendimento presencial." icon={Info}>
+                    <div className="divide-y divide-slate-100">
+                      <SettingRow title="Loja Aberta" description="Forçar fechamento imediato do cardápio digital.">
+                        <span className={`text-[11px] font-semibold ${form.isOpen ? 'text-emerald-600' : 'text-red-500'}`}>
+                          {form.isOpen ? 'Aberta' : 'Fechada'}
+                        </span>
+                        <Switch checked={form.isOpen} onCheckedChange={v => setForm(f => ({ ...f, isOpen: v }))} />
+                      </SettingRow>
+                      <SettingRow title="Delivery" description="Desligado, a entrega some do cardápio e o cliente só retira no balcão. Mesa e Balcão seguem normais.">
+                        <span className={`text-[11px] font-semibold ${form.isDeliveryOpen ? 'text-emerald-600' : 'text-red-500'}`}>
+                          {form.isDeliveryOpen ? 'Ativo' : 'Pausado'}
+                        </span>
+                        <Switch checked={form.isDeliveryOpen} onCheckedChange={v => setForm(f => ({ ...f, isDeliveryOpen: v }))} />
+                      </SettingRow>
+                      <SettingRow title="Avisar garçom quando a comanda ficar pronta" description="Notifica o garçom em qualquer tela quando a cozinha marcar a comanda como pronta.">
+                        <Switch checked={form.waiterNotifyOnReady} onCheckedChange={v => setForm(f => ({ ...f, waiterNotifyOnReady: v }))} />
+                      </SettingRow>
+                      <div className="space-y-2 py-3">
+                        <div>
+                          <p className="text-[13px] font-medium text-slate-800">Senha do Balcão</p>
+                          <p className="mt-0.5 text-[11px] text-slate-500">Como identificar um pedido de balcão sem mesa.</p>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                           {([
-                            { value: "CLIENT_CHOOSES", label: "Cliente informa a data", desc: "O cliente digita a data desejada — você decide se aceita ou não" },
-                            { value: "OWNER_DEFINES",  label: "Você define os dias (recomendado)", desc: "Configure os dias e horários fixos de entrega. O cliente vê apenas as datas disponíveis" },
-                          ] as const).map(opt => (
+                            { value: "TICKET", label: "Senha sequencial", desc: "Cada pedido de balcão recebe um número (Senha 01, 02...) — ideal quando o cliente aguarda ser chamado.", icon: Ticket },
+                            { value: "NAME",   label: "Nome do cliente",  desc: "Sem número de senha — identifica pelo nome (se não digitar nada, o pedido fica só com o ID curto).", icon: User },
+                          ] as const).map((opt) => (
                             <button
                               key={opt.value}
                               type="button"
-                              onClick={() => setForm(f => ({ ...f, scheduleType: opt.value }))}
-                              className={`text-left p-3 rounded-xl border transition-all ${form.scheduleType === opt.value ? "border-[#0D1B3E] bg-white" : "border-slate-200 bg-white/60 hover:border-slate-300"}`}
+                              onClick={() => setForm(f => ({ ...f, counterTicketMode: opt.value }))}
+                              className={`text-left p-3 rounded-lg border transition-all ${form.counterTicketMode === opt.value ? "border-blue-600 bg-blue-50" : "border-slate-200 bg-white hover:border-slate-300"}`}
                             >
-                              <p className={`text-xs font-semibold ${form.scheduleType === opt.value ? "text-[#0D1B3E]" : "text-slate-600"}`}>{opt.label}</p>
-                              <p className="text-[11px] text-slate-400 mt-0.5">{opt.desc}</p>
+                              <opt.icon className={`w-4 h-4 mb-2 ${form.counterTicketMode === opt.value ? "text-blue-700" : "text-slate-400"}`} strokeWidth={2} />
+                              <p className={`text-xs font-semibold ${form.counterTicketMode === opt.value ? "text-blue-700" : "text-slate-700"}`}>{opt.label}</p>
+                              <p className="text-[11px] text-slate-500 mt-0.5">{opt.desc}</p>
                             </button>
                           ))}
                         </div>
                       </div>
+                    </div>
+                  </PanelCard>
+                  )}
 
-                      {/* Dias e horários (só para OWNER_DEFINES) */}
-                      {form.scheduleType === "OWNER_DEFINES" && (
-                        <div>
-                          <p className="text-xs font-semibold text-slate-600 mb-2">Dias e turnos de entrega</p>
-                          <div className="space-y-2">
-                            {scheduleDays.map((day: any, idx: number) => (
-                              <div key={day.weekday} className={`rounded-xl border p-3 transition-all ${day.enabled ? "bg-white border-slate-200" : "bg-slate-50/60 border-slate-100"}`}>
-                                <div className="flex items-center gap-3 mb-2">
-                                  <Switch
-                                    checked={day.enabled}
-                                    onCheckedChange={v => setScheduleDays(days => days.map((d, i) => i === idx ? { ...d, enabled: v } : d))}
-                                  />
-                                  <span className={`text-xs font-semibold w-16 shrink-0 ${day.enabled ? "text-slate-800" : "text-slate-400"}`}>{day.label}</span>
-                                  {day.enabled && (
-                                    <div className="flex flex-wrap gap-1.5 flex-1">
-                                      {day.times.map((t: string, ti: number) => (
-                                        <div key={ti} className="flex items-center gap-1 bg-slate-100 border border-slate-200 rounded-lg px-2 py-0.5">
-                                          <TimeInput
-                                            value={t}
-                                            onChange={v => setScheduleDays(days => days.map((d, i) => i === idx ? { ...d, times: d.times.map((tt: string, tii: number) => tii === ti ? v : tt) } : d))}
-                                          />
-                                          {day.times.length > 1 && (
-                                            <button type="button" onClick={() => setScheduleDays(days => days.map((d, i) => i === idx ? { ...d, times: d.times.filter((_: string, tii: number) => tii !== ti) } : d))} className="text-slate-400 hover:text-red-500 transition-colors">
-                                              <X className="w-3 h-3" />
-                                            </button>
-                                          )}
-                                        </div>
-                                      ))}
-                                      <button
-                                        type="button"
-                                        onClick={() => setScheduleDays(days => days.map((d, i) => i === idx ? { ...d, times: [...d.times, "12:00"] } : d))}
-                                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg border border-dashed border-slate-300 text-slate-500 hover:border-slate-400 transition-colors text-[11px] font-medium"
-                                      >
-                                        <Plus className="w-3 h-3" /> horário
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
+                  {activeTab === "orders" && (
+                  <PanelCard title="Pedidos e agendamento" description="Delivery, encomendas e dias de entrega." icon={Truck}>
+                    <div className="space-y-3">
+                      <div>
+                        <p className="text-[13px] font-medium text-slate-800">Modo de operação</p>
+                        <p className="mt-0.5 text-[11px] text-slate-500">Define como os clientes podem fazer pedidos no cardápio digital.</p>
+                      </div>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                        {([
+                          { value: "DELIVERY_ONLY",  label: "Só Delivery",          desc: "Entregas imediatas — cliente recebe no mesmo dia", icon: Truck },
+                          { value: "PREORDER_ONLY",  label: "Só Encomenda",         desc: "Você define os dias de entrega (ex: só sábados). Cliente pede e você entrega na próxima data disponível", icon: PackageCheck },
+                          { value: "BOTH",           label: "Delivery + Encomenda", desc: "Aceita tanto entregas imediatas quanto encomendas com data definida por você", icon: Sparkles },
+                        ] as const).map(opt => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => setForm(f => ({
+                              ...f,
+                              orderMode: opt.value,
+                              scheduleMode: opt.value !== "DELIVERY_ONLY",
+                            }))}
+                            className={`text-left p-3 rounded-lg border transition-all ${form.orderMode === opt.value ? "border-blue-600 bg-blue-50" : "border-slate-200 bg-white hover:border-slate-300"}`}
+                          >
+                            <opt.icon className={`w-4 h-4 mb-1.5 ${form.orderMode === opt.value ? "text-blue-700" : "text-slate-400"}`} strokeWidth={2} />
+                            <p className={`text-xs font-semibold ${form.orderMode === opt.value ? "text-blue-700" : "text-slate-700"}`}>{opt.label}</p>
+                            <p className="text-[11px] text-slate-500 mt-0.5 leading-tight">{opt.desc}</p>
+                          </button>
+                        ))}
+                      </div>
+
+                      {form.orderMode !== "DELIVERY_ONLY" && (
+                        <div className="space-y-3 border-t border-slate-100 pt-3">
+                          <p className="text-[13px] font-medium text-slate-800">Quando o estabelecimento entrega?</p>
+                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            {([
+                              { value: "CLIENT_CHOOSES", label: "Cliente informa a data", desc: "O cliente digita a data desejada — você decide se aceita ou não" },
+                              { value: "OWNER_DEFINES",  label: "Você define os dias (recomendado)", desc: "Configure os dias e horários fixos de entrega. O cliente vê apenas as datas disponíveis" },
+                            ] as const).map(opt => (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => setForm(f => ({ ...f, scheduleType: opt.value }))}
+                                className={`text-left p-3 rounded-lg border transition-all ${form.scheduleType === opt.value ? "border-blue-600 bg-blue-50" : "border-slate-200 bg-white hover:border-slate-300"}`}
+                              >
+                                <p className={`text-xs font-semibold ${form.scheduleType === opt.value ? "text-blue-700" : "text-slate-600"}`}>{opt.label}</p>
+                                <p className="text-[11px] text-slate-500 mt-0.5">{opt.desc}</p>
+                              </button>
                             ))}
                           </div>
+
+                          {form.scheduleType === "OWNER_DEFINES" && (
+                            <div>
+                              <p className="mb-1 text-[13px] font-medium text-slate-800">Dias e turnos de entrega</p>
+                              <div className="divide-y divide-slate-100">
+                                {scheduleDays.map((day: any, idx: number) => (
+                                  <div key={day.weekday} className="flex flex-wrap items-center gap-3 py-2.5">
+                                    <Switch
+                                      checked={day.enabled}
+                                      onCheckedChange={v => setScheduleDays(days => days.map((d, i) => i === idx ? { ...d, enabled: v } : d))}
+                                    />
+                                    <span className={`text-xs font-semibold w-16 shrink-0 ${day.enabled ? "text-slate-800" : "text-slate-400"}`}>{day.label}</span>
+                                    {day.enabled && (
+                                      <div className="flex flex-wrap gap-1.5 flex-1">
+                                        {day.times.map((t: string, ti: number) => (
+                                          <div key={ti} className="flex items-center gap-1 bg-slate-100 border border-slate-200 rounded-lg px-2 py-0.5">
+                                            <TimeInput
+                                              value={t}
+                                              onChange={v => setScheduleDays(days => days.map((d, i) => i === idx ? { ...d, times: d.times.map((tt: string, tii: number) => tii === ti ? v : tt) } : d))}
+                                            />
+                                            {day.times.length > 1 && (
+                                              <IconButton size="xs" variant="ghost" aria-label="Remover horário" onClick={() => setScheduleDays(days => days.map((d, i) => i === idx ? { ...d, times: d.times.filter((_: string, tii: number) => tii !== ti) } : d))}>
+                                                <X size={12} />
+                                              </IconButton>
+                                            )}
+                                          </div>
+                                        ))}
+                                        <Button
+                                          size="xs"
+                                          variant="outline"
+                                          iconLeft={<Plus size={12} />}
+                                          onClick={() => setScheduleDays(days => days.map((d, i) => i === idx ? { ...d, times: [...d.times, "12:00"] } : d))}
+                                        >
+                                          horário
+                                        </Button>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          <Textarea
+                            label="Mensagem para o cliente (opcional)"
+                            value={form.scheduleNotes}
+                            onChange={e => setForm(f => ({ ...f, scheduleNotes: e.target.value }))}
+                            placeholder="Ex: Encomendas entregues toda semana aos sábados a partir das 10h. Pedido mínimo 48h antes."
+                            rows={2}
+                          />
                         </div>
                       )}
-
-                      {/* Aviso para o cliente */}
-                      <div>
-                        <p className="text-xs font-semibold text-slate-600 mb-1.5">Mensagem para o cliente (opcional)</p>
-                        <textarea
-                          value={form.scheduleNotes}
-                          onChange={e => setForm(f => ({ ...f, scheduleNotes: e.target.value }))}
-                          placeholder="Ex: Encomendas entregues toda semana aos sábados a partir das 10h. Pedido mínimo 48h antes."
-                          rows={2}
-                          className="w-full rounded-[10px] border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0D1B3E]/10 focus:border-[#0D1B3E] resize-none"
-                        />
-                      </div>
                     </div>
+                  </PanelCard>
                   )}
                 </div>
-              </div>
-            </ContentCard>
+              )}
 
-            <ContentCard padding="lg">
-              <div className="flex items-center gap-3 mb-1">
-                <Monitor className="w-4 h-4 text-slate-400" />
-                <p className="text-xs font-semibold text-slate-600">Painel de Pedidos (TV)</p>
-              </div>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Tipos de pedido exibidos, tema, cores, sons, voz, carrossel de propaganda e pareamento de TVs agora
-                ficam em uma página própria: menu lateral → <strong className="text-slate-500">Config. Painel TV</strong>.
-              </p>
-            </ContentCard>
+              {activeTab === "pdv" && (
+                <div className="space-y-4">
+                  <PanelCard title="Caixa e impressão" description="Regras do caixa, da impressora térmica e das vias dos comprovantes." icon={Monitor}>
+                    <div className="divide-y divide-slate-100">
+                      <SettingRow title="Exigir abertura/fechamento de caixa no PDV" description="Desligado, o PDV vende sem abrir caixa (sem fundo, sangria/suprimento ou fechamento).">
+                        <Switch checked={form.requireCashRegister} onCheckedChange={v => setForm(f => ({ ...f, requireCashRegister: v }))} />
+                      </SettingRow>
+                      <SettingRow title="Largura da impressora térmica" description="Formato do recibo do PDV (imprimir ou PDF) para caber na bobina.">
+                        <FilterLineSegmented
+                          value={String(form.receiptPaperWidth)}
+                          onChange={v => setForm(f => ({ ...f, receiptPaperWidth: (Number(v) === 58 ? 58 : 80) as 58 | 80 }))}
+                          options={[
+                            { value: "80", label: "80mm" },
+                            { value: "58", label: "58mm" },
+                          ]}
+                          size="sm"
+                        />
+                      </SettingRow>
+                      <SettingRow title="Imprimir automaticamente ao criar pedido" description="Imprime sozinho na térmica do app desktop (PDV, comanda via QR Code, delivery).">
+                        <Switch checked={printing.autoPrintOnOrderCreate} onCheckedChange={v => setPrinting(p => ({ ...p, autoPrintOnOrderCreate: v }))} />
+                      </SettingRow>
+                      {printing.autoPrintOnOrderCreate && (
+                        <SettingRow title="2ª via para o estabelecimento" description='Imprime também uma via marcada "VIA DO ESTABELECIMENTO" em todos os pedidos automáticos.'>
+                          <Switch checked={printing.autoPrintEstablishmentCopy} onCheckedChange={v => setPrinting(p => ({ ...p, autoPrintEstablishmentCopy: v }))} />
+                        </SettingRow>
+                      )}
+                      <SettingRow title="Imprimir resumo ao fechar caixa" description="Imprime o resumo do turno (totais por pagamento, pedidos, sangrias/suprimentos).">
+                        <Switch checked={printing.autoPrintCashClosingReport} onCheckedChange={v => setPrinting(p => ({ ...p, autoPrintCashClosingReport: v }))} />
+                      </SettingRow>
+                    </div>
+                  </PanelCard>
 
-            {tenant?.id && <KitchenPasswordCard tenantId={tenant.id} />}
-            {tenant?.id && <KitchenAccessRequestsCard tenantId={tenant.id} onApproved={() => {}} />}
-            {tenant?.id && <KitchenStaffCard tenantId={tenant.id} />}
+                  <PanelCard title="Impressora do app desktop" description="Impressora térmica usada pelo aplicativo no computador do caixa." icon={Monitor}>
+                    <DesktopPrinterSettings />
+                  </PanelCard>
+                </div>
+              )}
 
+              {activeTab === "kitchen" && (
+                <div className="space-y-4">
+                  <PanelCard title="Painel de Pedidos (TV)" description="Tipos de pedido, tema, cores, sons, voz, propaganda e pareamento de TVs." icon={Monitor}>
+                    <p className="text-[11px] text-slate-500">
+                      Ficam em uma página própria: menu lateral → <strong className="text-slate-700">Config. Painel TV</strong>.
+                    </p>
+                  </PanelCard>
+
+                  {tenant?.id && <KitchenPasswordCard tenantId={tenant.id} />}
+                  {tenant?.id && <KitchenAccessRequestsCard tenantId={tenant.id} onApproved={() => {}} />}
+                  {tenant?.id && <KitchenStaffCard tenantId={tenant.id} />}
+                </div>
+              )}
+            </>
           </motion.div>
         )}
 
         {activeTab === "hours" && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-            <ContentCard padding="lg">
-              <SectionTitle title="Horários de Funcionamento" icon={Clock3} divider className="mb-5" />
-              <div className="space-y-2">
+            <PanelCard title="Horários de funcionamento" description="Ative os dias em que a loja abre e defina abertura, fechamento e intervalo." icon={Clock3}>
+              <div className="divide-y divide-slate-100">
                 {DAY_KEYS_UI.map(day => {
                   const d = hours[day] ?? { enabled: false, open: "08:00", close: "22:00", breakEnabled: false, breakStart: "12:00", breakEnd: "13:00" };
                   return (
-                    <div key={day} className={`rounded-xl border transition-all duration-200 ${d.enabled ? "bg-white border-slate-200" : "bg-slate-50 border-slate-100"}`}>
-                      {/* Row principal */}
-                      <div className="flex items-center gap-3 px-4 py-3">
+                    <div key={day} className="py-2.5">
+                      <div className="flex flex-wrap items-center gap-3">
                         <Switch checked={d.enabled} onCheckedChange={v => setDay(day, "enabled", v)} />
                         <span className={`text-xs font-semibold w-[72px] shrink-0 ${d.enabled ? "text-slate-800" : "text-slate-400"}`}>
                           {DAY_LABELS[day]}
@@ -713,149 +659,113 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                               <span className="text-slate-300 font-semibold text-sm pb-2 select-none">–</span>
                               <TimeInput label="Fechamento" value={d.close} onChange={v => setDay(day, "close", v)} />
                             </div>
-                            <button
-                              type="button"
+                            <Button
+                              size="sm"
+                              variant={d.breakEnabled ? "secondary" : "outline"}
                               onClick={() => setDay(day, "breakEnabled", !d.breakEnabled)}
-                              className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg border text-[11px] font-semibold transition-all ${
-                                d.breakEnabled
-                                  ? "bg-slate-50 border-slate-300 text-slate-600"
-                                  : "bg-slate-50 border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-600"
-                              }`}
+                              iconLeft={d.breakEnabled ? <Clock size={14} /> : <Plus size={14} />}
                             >
-                              {d.breakEnabled ? <Clock className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
                               <span className="hidden sm:inline">{d.breakEnabled ? "Pausa" : "Intervalo"}</span>
-                            </button>
+                            </Button>
                           </>
                         ) : (
-                          <span className="ml-auto text-xs font-medium text-slate-300">Fechado</span>
+                          <span className="ml-auto text-[11px] text-slate-400">Fechado</span>
                         )}
                       </div>
-                      {/* Pausa */}
                       {d.enabled && d.breakEnabled && (
-                        <div className="flex items-end gap-2 px-4 py-3 border-t border-slate-100 bg-slate-50/50">
-                          <div className="w-[111px] shrink-0 pb-2">
-                            <span className="text-[11px] font-semibold text-slate-400">Intervalo</span>
-                          </div>
-                          <TimeInput label="Início" value={d.breakStart ?? "12:00"} onChange={v => setDay(day, "breakStart", v)} />
+                        <div className="mt-2 flex items-end gap-2 sm:pl-[104px]">
+                          <TimeInput label="Início do intervalo" value={d.breakStart ?? "12:00"} onChange={v => setDay(day, "breakStart", v)} />
                           <span className="text-slate-300 font-semibold text-sm pb-2 select-none">–</span>
-                          <TimeInput label="Fim" value={d.breakEnd ?? "13:00"} onChange={v => setDay(day, "breakEnd", v)} />
+                          <TimeInput label="Fim do intervalo" value={d.breakEnd ?? "13:00"} onChange={v => setDay(day, "breakEnd", v)} />
                         </div>
                       )}
                     </div>
                   );
                 })}
               </div>
-            </ContentCard>
+            </PanelCard>
           </motion.div>
         )}
 
         {activeTab === "delivery" && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-            <ContentCard padding="lg">
-              <SectionTitle title="Regras de Entrega" icon={Truck} divider className="mb-6" />
-              <div className="space-y-8">
-                <div className="flex gap-2 flex-wrap">
-                  {([
-                    { id: "free", label: "Grátis", icon: CheckCircle2 },
-                    { id: "fixed", label: "Taxa Fixa", icon: CircleDollarSign },
-                    { id: "zones", label: "Por Bairro/CEP", icon: Truck },
-                    { id: "km", label: "Por Distância (KM)", icon: Ruler },
-                  ] as const).map(opt => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => setDelivery(d => ({ ...d, mode: opt.id }))}
-                      className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all border ${delivery.mode === opt.id ? "bg-[#0D1B3E] text-white border-[#0D1B3E]" : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"}`}
-                    >
-                      <opt.icon className="w-4 h-4" />
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+            <PanelCard title="Regras de entrega" description="Escolha como a taxa de entrega é cobrada." icon={Truck}>
+              <Tabs<DeliveryModeId>
+                items={DELIVERY_MODES}
+                value={delivery.mode as DeliveryModeId}
+                onChange={m => setDelivery(d => ({ ...d, mode: m }))}
+                label="Modo de cobrança da entrega"
+              >
+                {delivery.mode === "free" && (
+                  <p className="text-[11px] text-slate-500">Entrega sem custo para o cliente.</p>
+                )}
 
                 {delivery.mode === "fixed" && (
-                  <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 flex items-center gap-5">
-                    <div className="w-12 h-12 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-slate-400 shadow-sm">
-                      <CircleDollarSign className="w-5 h-5" />
-                    </div>
-                    <div className="flex-1 space-y-2">
-                      <label className="text-xs font-semibold text-slate-500">Valor Único de Entrega</label>
-                      <div className="flex items-center gap-3">
-                        <span className="text-base font-semibold text-slate-400">R$</span>
-                        <input
-                          type="number" min="0" step="0.50"
-                          value={delivery.fixedFee ?? ""}
-                          onChange={e => setDelivery(d => ({ ...d, fixedFee: parseFloat(e.target.value) || 0 }))}
-                          className="w-32 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-base font-bold text-slate-800 focus:border-[#0D1B3E] outline-none transition-all shadow-sm"
-                          placeholder="0,00"
-                        />
-                      </div>
-                    </div>
-                  </div>
+                  <FormRow cols={3}>
+                    <Input
+                      label="Valor único de entrega (R$)"
+                      type="number" min="0" step="0.50"
+                      value={delivery.fixedFee ?? ""}
+                      onChange={e => setDelivery(d => ({ ...d, fixedFee: parseFloat(e.target.value) || 0 }))}
+                      placeholder="0,00"
+                    />
+                  </FormRow>
                 )}
 
                 {delivery.mode === "zones" && (
-                  <div className="space-y-6">
-                    <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200 flex items-center justify-between gap-4">
-                      <div className="space-y-0.5">
-                        <p className="text-sm font-semibold text-slate-800">Cobrança fallback</p>
-                        <p className="text-xs text-slate-400">Para locais não cadastrados</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-slate-400">R$</span>
-                        <input
-                          type="number" min="0" step="0.50"
-                          value={delivery.defaultFee ?? ""}
-                          onChange={e => setDelivery(d => ({ ...d, defaultFee: parseFloat(e.target.value) || 0 }))}
-                          className="w-24 bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-800 focus:border-[#0D1B3E] outline-none"
-                          placeholder="0,00"
-                        />
-                      </div>
-                    </div>
+                  <div className="space-y-3">
+                    <FormRow cols={3}>
+                      <Input
+                        label="Cobrança fallback (R$)"
+                        type="number" min="0" step="0.50"
+                        value={delivery.defaultFee ?? ""}
+                        onChange={e => setDelivery(d => ({ ...d, defaultFee: parseFloat(e.target.value) || 0 }))}
+                        placeholder="0,00"
+                        hint="Para locais não cadastrados"
+                      />
+                    </FormRow>
 
-                    <div className="space-y-3">
+                    <div className="space-y-2 border-t border-slate-100 pt-3">
                       <div className="flex items-center justify-between">
-                        <p className="text-xs font-semibold text-slate-500">Zonas de Entrega</p>
-                        <span className="text-xs text-slate-400 font-medium">{delivery.zones?.length || 0} zonas</span>
+                        <p className="text-[13px] font-medium text-slate-800">Zonas de entrega</p>
+                        <span className="text-[11px] text-slate-500">{delivery.zones?.length || 0} zonas</span>
                       </div>
-                      {delivery.zones?.map((zone, idx) => (
-                        <div key={zone.id} className="bg-white border border-slate-100 rounded-2xl p-4 flex items-center justify-between group hover:border-slate-300 transition-all">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-slate-100 transition-all">
-                              <Truck className="w-4 h-4" />
+                      <div className="divide-y divide-slate-100">
+                        {delivery.zones?.map((zone, idx) => (
+                          <div key={zone.id} className="flex items-center justify-between gap-3 py-2.5">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400">
+                                <Truck className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <p className="text-[13px] font-medium text-slate-800">{zone.label}</p>
+                                <p className="text-[11px] text-slate-500">CEP: {zone.ceps.join(", ")}</p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="text-sm font-semibold text-slate-800">{zone.label}</p>
-                              <p className="text-xs text-slate-400">CEP: {zone.ceps.join(", ")}</p>
+                            <div className="flex items-center gap-3">
+                              <span className="text-sm font-semibold text-blue-700">{zone.fee === 0 ? "Grátis" : fmt(zone.fee)}</span>
+                              <IconButton
+                                size="sm"
+                                variant="ghost"
+                                aria-label="Remover zona"
+                                onClick={() => setDelivery(d => ({ ...d, zones: d.zones?.filter((_, i) => i !== idx) }))}
+                              >
+                                <Trash2 size={14} />
+                              </IconButton>
                             </div>
                           </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-sm font-bold text-[#0D1B3E]">{zone.fee === 0 ? "Grátis" : fmt(zone.fee)}</span>
-                            <button
-                              type="button"
-                              onClick={() => setDelivery(d => ({ ...d, zones: d.zones?.filter((_, i) => i !== idx) }))}
-                              className="p-2 text-slate-300 hover:text-red-500 transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                       <ZoneAdder onAdd={z => setDelivery(d => ({ ...d, zones: [...(d.zones || []), z] }))} />
                     </div>
                   </div>
                 )}
 
                 {delivery.mode === "km" && (
-                  <div className="space-y-6">
-                    {/* Origin CEP */}
-                    <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200 space-y-3">
-                      <div className="flex items-center gap-2 mb-1">
-                        <MapPin className="w-4 h-4 text-slate-400" />
-                        <p className="text-xs font-semibold text-slate-600">CEP de Origem (seu estabelecimento)</p>
-                      </div>
-                      <p className="text-xs text-slate-400">O cálculo de distância parte deste CEP até o CEP do cliente.</p>
-                      <input
+                  <div className="space-y-3">
+                    <FormRow cols={3}>
+                      <Input
+                        label="CEP de origem (seu estabelecimento)"
                         type="text"
                         inputMode="numeric"
                         maxLength={9}
@@ -867,85 +777,82 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                           setDelivery(d => ({ ...d, originCep: digits }));
                         }}
                         placeholder="00000-000"
-                        className="w-40 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-800 focus:border-[#0D1B3E] outline-none transition-all shadow-sm"
+                        hint="O cálculo de distância parte deste CEP até o CEP do cliente."
                       />
-                    </div>
+                    </FormRow>
 
-                    {/* KM ranges */}
-                    <div className="space-y-3">
+                    <div className="space-y-2 border-t border-slate-100 pt-3">
                       <div className="flex items-center justify-between">
-                        <p className="text-xs font-semibold text-slate-500">Faixas de Distância</p>
-                        <span className="text-xs text-slate-400 font-medium">{delivery.kmRanges?.length || 0} faixas</span>
+                        <p className="text-[13px] font-medium text-slate-800">Faixas de distância</p>
+                        <span className="text-[11px] text-slate-500">{delivery.kmRanges?.length || 0} faixas</span>
                       </div>
 
-                      {[...(delivery.kmRanges || [])].sort((a, b) => a.upToKm - b.upToKm).map((range, idx, arr) => {
-                        const from = idx === 0 ? 0 : arr[idx - 1].upToKm;
-                        return (
-                          <div key={range.id} className="bg-white border border-slate-100 rounded-2xl p-4 flex items-center justify-between group hover:border-slate-300 transition-all">
-                            <div className="flex items-center gap-3">
-                              <div className="w-9 h-9 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-slate-100 transition-all">
-                                <Ruler className="w-4 h-4" />
+                      <div className="divide-y divide-slate-100">
+                        {[...(delivery.kmRanges || [])].sort((a, b) => a.upToKm - b.upToKm).map((range, idx, arr) => {
+                          const from = idx === 0 ? 0 : arr[idx - 1].upToKm;
+                          return (
+                            <div key={range.id} className="flex items-center justify-between gap-3 py-2.5">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400">
+                                  <Ruler className="w-4 h-4" />
+                                </div>
+                                <div>
+                                  <p className="text-[13px] font-medium text-slate-800">
+                                    {from === 0 ? `Até ${range.upToKm} km` : `De ${from} km até ${range.upToKm} km`}
+                                  </p>
+                                  <p className="text-[11px] text-slate-500">Faixa {idx + 1}</p>
+                                </div>
                               </div>
-                              <div>
-                                <p className="text-sm font-semibold text-slate-800">
-                                  {from === 0 ? `Até ${range.upToKm} km` : `De ${from} km até ${range.upToKm} km`}
-                                </p>
-                                <p className="text-xs text-slate-400">Faixa {idx + 1}</p>
+                              <div className="flex items-center gap-3">
+                                <span className="text-sm font-semibold text-blue-700">{range.fee === 0 ? "Grátis" : fmt(range.fee)}</span>
+                                <IconButton
+                                  size="sm"
+                                  variant="ghost"
+                                  aria-label="Remover faixa"
+                                  onClick={() => setDelivery(d => ({ ...d, kmRanges: d.kmRanges?.filter(r => r.id !== range.id) }))}
+                                >
+                                  <Trash2 size={14} />
+                                </IconButton>
                               </div>
                             </div>
-                            <div className="flex items-center gap-3">
-                              <span className="text-sm font-bold text-[#0D1B3E]">{range.fee === 0 ? "Grátis" : fmt(range.fee)}</span>
-                              <button
-                                type="button"
-                                onClick={() => setDelivery(d => ({ ...d, kmRanges: d.kmRanges?.filter(r => r.id !== range.id) }))}
-                                className="p-2 text-slate-300 hover:text-red-500 transition-colors"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
 
                       <KmRangeAdder onAdd={r => setDelivery(d => ({ ...d, kmRanges: [...(d.kmRanges || []), r] }))} />
                     </div>
 
-                    {/* Beyond last range */}
-                    <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200 space-y-4">
-                      <p className="text-xs font-semibold text-slate-500">Além da última faixa</p>
-                      <label className="flex items-center gap-3 cursor-pointer select-none">
+                    <div className="divide-y divide-slate-100 border-t border-slate-100">
+                      <SettingRow title="Aceitar pedidos além da última faixa" description="Cobra a taxa abaixo para distâncias maiores que a última faixa.">
                         <Switch
                           checked={delivery.kmAllowBeyond ?? true}
                           onCheckedChange={v => setDelivery(d => ({ ...d, kmAllowBeyond: v }))}
                         />
-                        <span className="text-sm font-medium text-slate-700">Aceitar pedidos além da última faixa</span>
-                      </label>
-                      {(delivery.kmAllowBeyond ?? true) && (
-                        <div className="flex items-center gap-3">
-                          <span className="text-xs font-semibold text-slate-400">Taxa R$</span>
-                          <input
-                            type="number" min="0" step="0.50"
-                            value={delivery.kmDefaultFee ?? ""}
-                            onChange={e => setDelivery(d => ({ ...d, kmDefaultFee: parseFloat(e.target.value) || 0 }))}
-                            className="w-28 bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-800 focus:border-[#0D1B3E] outline-none"
-                            placeholder="0,00"
-                          />
-                          <span className="text-xs text-slate-400">(0 = grátis)</span>
-                        </div>
-                      )}
+                      </SettingRow>
                     </div>
+                    {(delivery.kmAllowBeyond ?? true) && (
+                      <FormRow cols={3}>
+                        <Input
+                          label="Taxa além da última faixa (R$)"
+                          type="number" min="0" step="0.50"
+                          value={delivery.kmDefaultFee ?? ""}
+                          onChange={e => setDelivery(d => ({ ...d, kmDefaultFee: parseFloat(e.target.value) || 0 }))}
+                          placeholder="0,00"
+                          hint="0 = grátis"
+                        />
+                      </FormRow>
+                    )}
                   </div>
                 )}
-              </div>
-            </ContentCard>
+              </Tabs>
+            </PanelCard>
           </motion.div>
         )}
 
         {activeTab === "payments" && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-            <ContentCard padding="lg">
-              <SectionTitle title="Meios de Pagamento Disponíveis" icon={Wallet} divider className="mb-6" />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+            <PanelCard title="Meios de pagamento" description="Ative as formas de pagamento aceitas e as bandeiras de cada uma." icon={Wallet}>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {[
                   { id: "pix", label: "PIX Dinâmico", icon: QrCode, desc: "Aprovação instantânea" },
                   { id: "credit", label: "Cartão de Crédito", icon: CreditCard, desc: "Visa, Master, Elo..." },
@@ -961,20 +868,20 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                   return (
                     <div
                       key={method.id}
-                      className={`p-4 rounded-2xl border transition-all space-y-3 ${
-                        isEnabled ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-50 border-slate-100 opacity-60'
+                      className={`p-3 rounded-lg border transition-all space-y-3 ${
+                        isEnabled ? 'bg-white border-slate-200' : 'bg-slate-50 border-slate-100 opacity-60'
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                            isEnabled ? 'bg-[#0D1B3E]/5 text-[#0D1B3E]' : 'bg-slate-200 text-slate-400'
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                            isEnabled ? 'bg-blue-50 text-blue-700' : 'bg-slate-200 text-slate-400'
                           }`}>
                             <method.icon className="w-4 h-4" />
                           </div>
                           <div className="min-w-0">
-                            <p className="text-sm font-semibold text-slate-800 truncate">{method.label}</p>
-                            <p className="text-xs text-slate-400 truncate">{method.desc}</p>
+                            <p className="text-[13px] font-medium text-slate-800 truncate">{method.label}</p>
+                            <p className="text-[11px] text-slate-500 truncate">{method.desc}</p>
                           </div>
                         </div>
                         <Switch
@@ -987,8 +894,8 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                       </div>
 
                       {isEnabled && (
-                        <div className="pt-3 border-t border-slate-100 space-y-3">
-                          <p className="text-xs font-semibold text-slate-500">Bandeiras Aceitas</p>
+                        <div className="pt-3 border-t border-slate-100 space-y-2">
+                          <p className="text-[11px] font-medium text-slate-500">Bandeiras aceitas</p>
                           <div className="flex flex-wrap gap-1.5">
                             {allBrands.map(brand => {
                               const isSelected = acceptedBrands.includes(brand);
@@ -1007,7 +914,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                                   }}
                                   className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all border ${
                                     isSelected
-                                      ? 'bg-[#0D1B3E] border-[#0D1B3E] text-white'
+                                      ? 'bg-blue-600 border-blue-600 text-white'
                                       : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
                                   }`}
                                 >
@@ -1018,9 +925,10 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                           </div>
 
                           <div className="flex gap-2">
-                            <input
+                            <Input
                               type="text"
-                              placeholder="Nova bandeira..."
+                              wrapperClassName="flex-1"
+                              placeholder="Nova bandeira... (Enter)"
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter') {
                                   e.preventDefault();
@@ -1043,7 +951,6 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                                   }
                                 }
                               }}
-                              className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium outline-none focus:border-[#0D1B3E] transition-all"
                             />
                             <div className="p-2 text-slate-300">
                               <Plus className="w-3.5 h-3.5" />
@@ -1057,20 +964,20 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
 
                 <div
                   key="cash"
-                  className={`p-5 rounded-2xl border transition-all sm:col-span-2 ${
-                    payments.cash?.enabled ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-50 border-slate-100 opacity-60'
+                  className={`p-3 rounded-lg border transition-all space-y-3 ${
+                    payments.cash?.enabled ? 'bg-white border-slate-200' : 'bg-slate-50 border-slate-100 opacity-60'
                   }`}
                 >
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                        payments.cash?.enabled ? 'bg-[#0D1B3E]/5 text-[#0D1B3E]' : 'bg-slate-200 text-slate-400'
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                        payments.cash?.enabled ? 'bg-blue-50 text-blue-700' : 'bg-slate-200 text-slate-400'
                       }`}>
-                        <Banknote className="w-5 h-5" />
+                        <Banknote className="w-4 h-4" />
                       </div>
-                      <div>
-                        <p className="text-sm font-semibold text-slate-800">Dinheiro no Local</p>
-                        <p className="text-xs text-slate-400">Pagamento na entrega ou balcão</p>
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-medium text-slate-800 truncate">Dinheiro no Local</p>
+                        <p className="text-[11px] text-slate-500 truncate">Pagamento na entrega ou balcão</p>
                       </div>
                     </div>
                     <Switch
@@ -1082,716 +989,556 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                     />
                   </div>
                   {payments.cash?.enabled && (
-                    <label className="flex items-center gap-3 px-4 py-3 bg-slate-50 rounded-xl cursor-pointer transition-all hover:bg-slate-100">
-                      <input 
-                        type="checkbox" 
+                    <label className="flex items-center gap-3 pt-3 border-t border-slate-100 cursor-pointer">
+                      <input
+                        type="checkbox"
                         checked={payments.cash?.allowChange !== false}
                         onChange={e => setPayments({
                           ...payments,
                           cash: { ...payments.cash!, allowChange: e.target.checked }
                         })}
-                        className="w-4 h-4 rounded accent-[#C9A227]"
+                        className="w-4 h-4 rounded accent-blue-600"
                       />
                       <span className="text-xs font-medium text-slate-600">Perguntar sobre troco no checkout</span>
                     </label>
                   )}
                 </div>
               </div>
-            </ContentCard>
+            </PanelCard>
           </motion.div>
         )}
 
         {activeTab === "maquinhas" && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-            {/* Stone / Pagar.me */}
-            <ContentCard padding="lg">
-              <div className="flex items-center gap-4 mb-6">
-                <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${stone.enabled ? "bg-[#00A859]/10 text-[#00A859]" : "bg-slate-100 text-slate-400"}`}>
-                  <Smartphone className="w-5 h-5" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-semibold text-slate-800">Stone / Pagar.me</p>
-                  <p className="text-xs text-slate-400">Maquininha física via API Pagar.me</p>
-                </div>
-                <Switch checked={stone.enabled} onCheckedChange={v => setStone({ ...stone, enabled: v })} />
-              </div>
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+            <Tabs<MachineTabId> items={MACHINE_TABS} value={machineTab} onChange={setMachineTab} label="Seções das maquininhas">
+              {machineTab === "terminals" && (
+                <div className="space-y-4">
+                  {/* Stone / Pagar.me */}
+                  <PanelCard
+                    title="Stone / Pagar.me"
+                    description="Maquininha física via API Pagar.me"
+                    icon={Smartphone}
+                    action={<Switch checked={stone.enabled} onCheckedChange={v => setStone({ ...stone, enabled: v })} />}
+                  >
+                    {stone.enabled ? (
+                      <div className="space-y-3">
+                        <Alert variant="warning" title="Como configurar">
+                          <ol className="list-decimal ml-3 space-y-1">
+                            <li>Acesse o <strong>Partner Hub da Stone</strong> ou painel do Pagar.me.</li>
+                            <li>Copie sua <strong>Secret Key</strong> (sk_live_... ou sk_test_...).</li>
+                            <li>O <strong>Stonecode</strong> é o código do estabelecimento que vincula ao terminal físico.</li>
+                            <li>Salve as configurações — a maquininha aparecerá como opção no PDV.</li>
+                          </ol>
+                        </Alert>
 
-              {stone.enabled && (
-                <div className="space-y-4 pt-4 border-t border-slate-100">
-                  <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex gap-3">
-                    <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                    <div className="text-xs text-amber-700 leading-relaxed">
-                      <p className="font-semibold mb-1">Como configurar:</p>
-                      <ol className="list-decimal ml-3 space-y-1">
-                        <li>Acesse o <strong>Partner Hub da Stone</strong> ou painel do Pagar.me.</li>
-                        <li>Copie sua <strong>Secret Key</strong> (sk_live_... ou sk_test_...).</li>
-                        <li>O <strong>Stonecode</strong> é o código do estabelecimento que vincula ao terminal físico.</li>
-                        <li>Salve as configurações — a maquininha aparecerá como opção no PDV.</li>
-                      </ol>
-                    </div>
-                  </div>
+                        <FormRow cols={2}>
+                          <Input
+                            label="Secret Key (Pagar.me)"
+                            value={stone.secretKey}
+                            onChange={e => setStone({ ...stone, secretKey: e.target.value })}
+                            placeholder="sk_live_xxxxxxxxxxxx"
+                            type="password"
+                          />
+                          <Input
+                            label="Stonecode (código do estabelecimento)"
+                            value={stone.stonecode}
+                            onChange={e => setStone({ ...stone, stonecode: e.target.value })}
+                            placeholder="Ex: 123456789"
+                          />
+                        </FormRow>
 
-                  <Input
-                    label="Secret Key (Pagar.me)"
-                    value={stone.secretKey}
-                    onChange={e => setStone({ ...stone, secretKey: e.target.value })}
-                    placeholder="sk_live_xxxxxxxxxxxx"
-                    type="password"
-                  />
-                  <Input
-                    label="Stonecode (código do estabelecimento)"
-                    value={stone.stonecode}
-                    onChange={e => setStone({ ...stone, stonecode: e.target.value })}
-                    placeholder="Ex: 123456789"
-                  />
+                        <p className="text-[11px] text-slate-500">
+                          Fluxo: no PDV, selecione "Maquininha" e o tipo (crédito, débito ou PIX). O sistema envia a cobrança ao terminal físico, o cliente paga e o sistema confirma.
+                        </p>
 
-                  <div className="bg-slate-50 rounded-2xl p-4 flex items-start gap-3 border border-slate-100">
-                    <div className="w-8 h-8 rounded-xl bg-[#00A859]/10 text-[#00A859] flex items-center justify-center shrink-0">
-                      <Smartphone className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-slate-700 mb-1">Fluxo de pagamento</p>
-                      <p className="text-xs text-slate-500 leading-relaxed">
-                        No PDV, selecione "Maquininha" e o tipo (crédito, débito ou PIX). O sistema envia a cobrança automaticamente para o terminal físico. O cliente paga e o sistema confirma.
-                      </p>
-                    </div>
-                  </div>
+                        {stone.secretKey && (
+                          <Alert variant="success">Credenciais configuradas — salve para ativar.</Alert>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-slate-500">Maquininha desativada. Ative para configurar a integração com a Stone.</p>
+                    )}
+                  </PanelCard>
 
-                  {stone.secretKey && (
-                    <div className="flex items-center gap-2 text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      Credenciais configuradas — salve para ativar.
-                    </div>
-                  )}
-                </div>
-              )}
+                  {/* Cielo LIO Smart */}
+                  <PanelCard
+                    title="Cielo LIO Smart"
+                    description="Maquininha física via Cielo Order Manager (integração remota)"
+                    icon={Smartphone}
+                    action={<Switch checked={cielo.enabled} onCheckedChange={v => setCielo({ ...cielo, enabled: v })} />}
+                  >
+                    {cielo.enabled ? (
+                      <div className="space-y-3">
+                        <Alert variant="warning" title="Só funciona com terminais Cielo Smart">
+                          DX8000, L300 (V3/V4) ou L400 — as maquininhas com tela grande tipo tablet. A maquininha simples de botões não tem essa API.
+                        </Alert>
 
-              {!stone.enabled && (
-                <div className="text-center py-8 text-slate-400">
-                  <Smartphone className="w-8 h-8 mx-auto mb-3 opacity-40" strokeWidth={1.5} />
-                  <p className="text-xs font-semibold mb-1">Maquininha desativada</p>
-                  <p className="text-xs">Ative acima para configurar a integração com a Stone.</p>
-                </div>
-              )}
-            </ContentCard>
+                        <Alert variant="info" title="Como pegar o código do estabelecimento na maquininha do cliente">
+                          <ol className="list-decimal ml-3 space-y-0.5">
+                            <li>Na tela principal da maquininha, toque em <strong>Configurações</strong></li>
+                            <li>Role até o final e entre em <strong>Sistema</strong></li>
+                            <li>Toque em <strong>"Sobre a máquina"</strong></li>
+                            <li>O código do estabelecimento aparece ali — é esse número que vai no campo abaixo</li>
+                          </ol>
+                        </Alert>
 
-            {/* Cielo LIO Smart */}
-            <ContentCard padding="lg">
-              <div className="flex items-center gap-4 mb-6">
-                <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${cielo.enabled ? "bg-[#0072CE]/10 text-[#0072CE]" : "bg-slate-100 text-slate-400"}`}>
-                  <Smartphone className="w-5 h-5" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-semibold text-slate-800">Cielo LIO Smart</p>
-                  <p className="text-xs text-slate-400">Maquininha física via Cielo Order Manager (integração remota)</p>
-                </div>
-                <Switch checked={cielo.enabled} onCheckedChange={v => setCielo({ ...cielo, enabled: v })} />
-              </div>
+                        <FormRow cols={2}>
+                          <Input
+                            label="Código do estabelecimento na Cielo"
+                            value={cielo.merchantId}
+                            onChange={e => setCielo({ ...cielo, merchantId: e.target.value })}
+                            placeholder="Configurações > Sistema > Sobre a máquina"
+                          />
+                        </FormRow>
 
-              {cielo.enabled && (
-                <div className="space-y-4 pt-4 border-t border-slate-100">
-                  <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex gap-3">
-                    <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                    <div className="text-xs text-amber-700 leading-relaxed">
-                      <p className="font-semibold mb-1">Só funciona com terminais Cielo Smart:</p>
-                      <p>DX8000, L300 (V3/V4) ou L400 — as maquininhas com tela grande tipo tablet. A maquininha simples de botões não tem essa API.</p>
-                    </div>
-                  </div>
+                        <p className="text-[11px] text-slate-500">
+                          Fluxo: no PDV, selecione "Maquininha Cielo" e o tipo (crédito, débito ou PIX). O pedido vai para a nuvem da Cielo, o terminal exibe ao cliente e a confirmação chega por webhook.
+                        </p>
 
-                  <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex gap-3">
-                    <Smartphone className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
-                    <div className="text-xs text-blue-700 leading-relaxed">
-                      <p className="font-semibold mb-1">Como pegar o código do estabelecimento na maquininha do cliente:</p>
-                      <ol className="list-decimal ml-3 space-y-0.5">
-                        <li>Na tela principal da maquininha, toque em <strong>Configurações</strong></li>
-                        <li>Role até o final e entre em <strong>Sistema</strong></li>
-                        <li>Toque em <strong>"Sobre a máquina"</strong></li>
-                        <li>O código do estabelecimento aparece ali — é esse número que vai no campo abaixo</li>
-                      </ol>
-                    </div>
-                  </div>
+                        {cielo.merchantId && (
+                          <Alert variant="success">Código do estabelecimento configurado — salve para ativar.</Alert>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-slate-500">Maquininha desativada. Ative para configurar a integração com a Cielo.</p>
+                    )}
+                  </PanelCard>
 
-                  <Input
-                    label="Código do estabelecimento na Cielo"
-                    value={cielo.merchantId}
-                    onChange={e => setCielo({ ...cielo, merchantId: e.target.value })}
-                    placeholder="Peça ao cliente: Configurações > Sistema > Sobre a máquina"
-                  />
-
-                  <div className="bg-slate-50 rounded-2xl p-4 flex items-start gap-3 border border-slate-100">
-                    <div className="w-8 h-8 rounded-xl bg-[#0072CE]/10 text-[#0072CE] flex items-center justify-center shrink-0">
-                      <Smartphone className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-slate-700 mb-1">Fluxo de pagamento</p>
-                      <p className="text-xs text-slate-500 leading-relaxed">
-                        No PDV, selecione "Maquininha Cielo" e o tipo (crédito, débito ou PIX). O sistema envia o pedido para a nuvem da Cielo, o terminal físico busca e exibe pro cliente. A confirmação chega automaticamente por webhook.
-                      </p>
-                    </div>
-                  </div>
-
-                  {cielo.merchantId && (
-                    <div className="flex items-center gap-2 text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      Código do estabelecimento configurado — salve para ativar.
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {!cielo.enabled && (
-                <div className="text-center py-8 text-slate-400">
-                  <Smartphone className="w-8 h-8 mx-auto mb-3 opacity-40" strokeWidth={1.5} />
-                  <p className="text-xs font-semibold mb-1">Maquininha desativada</p>
-                  <p className="text-xs">Ative acima para configurar a integração com a Cielo.</p>
-                </div>
-              )}
-            </ContentCard>
-
-            {/* Taxas da Maquininha */}
-            <ContentCard padding="lg">
-              <SectionTitle title="Taxas da Maquininha" icon={CircleDollarSign} className="mb-1" />
-              <p className="text-xs text-slate-400 mb-6 mt-2">Configure o percentual cobrado pela adquirente por bandeira/provedor. Esses valores alimentam o custo exibido no financeiro e, se ativado, o acréscimo cobrado do cliente no PDV.</p>
-
-              {/* PIX — taxa única do provedor, sem bandeira/parcela */}
-              {payments.pix?.enabled && (
-                <div className="mb-6 pb-6 border-b border-slate-100">
-                  <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-                    <p className="text-sm font-semibold text-slate-800">Pix</p>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <span className="text-xs font-medium text-slate-400">Repassar taxa ao cliente</span>
-                      <Switch
-                        checked={!!payments.pix.passFeeToCustomer}
-                        onCheckedChange={(v) => setPayments({ ...payments, pix: { ...payments.pix!, passFeeToCustomer: v } })}
-                      />
-                    </label>
-                  </div>
-                  <div className="flex items-center gap-3 bg-slate-50 border border-slate-100 rounded-2xl p-3 max-w-xs">
-                    <span className="text-xs font-medium text-slate-400 flex-1">Taxa do provedor</span>
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={payments.pix.brandFees?.["PIX"]?.installmentFees?.["1"] ?? ""}
-                        onChange={(e) => {
-                          const pct = parseFloat(e.target.value.replace(",", ".")) || 0;
-                          setPayments({
-                            ...payments,
-                            pix: { ...payments.pix!, brandFees: { PIX: { installmentFees: { "1": pct } } } },
-                          });
-                        }}
-                        placeholder="0,0"
-                        className="w-16 text-center bg-white border border-slate-200 rounded-lg py-1.5 text-xs font-semibold outline-none focus:border-[#0D1B3E] transition-all"
-                      />
-                      <span className="text-xs font-semibold text-slate-400">%</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {(["credit", "debit"] as const).map((methodKey) => {
-                const methodConfig = payments[methodKey] as PaymentMethodConfig | undefined;
-                if (!methodConfig?.enabled) return null;
-                const brands = methodConfig.acceptedBrands?.length ? methodConfig.acceptedBrands : [];
-                const installmentsRange = methodKey === "credit" ? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] : [1];
-                const brandFees = methodConfig.brandFees || {};
-
-                const updateFee = (brand: string, installment: number, value: string) => {
-                  const pct = parseFloat(value.replace(",", ".")) || 0;
-                  const current = brandFees[brand]?.installmentFees || {};
-                  setPayments({
-                    ...payments,
-                    [methodKey]: {
-                      ...methodConfig,
-                      brandFees: {
-                        ...brandFees,
-                        [brand]: { installmentFees: { ...current, [String(installment)]: pct } },
-                      },
-                    },
-                  });
-                };
-
-                const addBrand = (name: string) => {
-                  const trimmed = name.trim();
-                  if (!trimmed || brands.includes(trimmed)) return;
-                  setPayments({
-                    ...payments,
-                    [methodKey]: { ...methodConfig, acceptedBrands: [...brands, trimmed] },
-                  });
-                };
-
-                const removeBrand = (name: string) => {
-                  const { [name]: _removed, ...restFees } = brandFees;
-                  setPayments({
-                    ...payments,
-                    [methodKey]: {
-                      ...methodConfig,
-                      acceptedBrands: brands.filter((b) => b !== name),
-                      brandFees: restFees,
-                    },
-                  });
-                };
-
-                return (
-                  <div key={methodKey} className="mb-6 last:mb-0 pb-6 last:pb-0 border-b last:border-0 border-slate-100">
-                    <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-                      <p className="text-sm font-semibold text-slate-800">
-                        {methodKey === "credit" ? "Cartão de Crédito" : "Cartão de Débito"}
-                      </p>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <span className="text-xs font-medium text-slate-400">Repassar taxa ao cliente</span>
-                        <Switch
-                          checked={!!methodConfig.passFeeToCustomer}
-                          onCheckedChange={(v) => setPayments({
-                            ...payments,
-                            [methodKey]: { ...methodConfig, passFeeToCustomer: v },
-                          })}
-                        />
-                      </label>
-                    </div>
-
-                    {/* Cards por bandeira — responsivo, uma bandeira por bloco */}
-                    <div className="space-y-3">
-                      {brands.map((brand) => (
-                        <div key={brand} className="bg-slate-50 border border-slate-100 rounded-2xl p-4">
-                          <div className="flex items-center justify-between mb-3">
-                            <p className="text-xs font-semibold text-slate-700">{brand}</p>
-                            <button
-                              type="button"
-                              onClick={() => removeBrand(brand)}
-                              className="text-slate-300 hover:text-red-400 transition-colors"
-                              title="Remover bandeira"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
-                            {installmentsRange.map((n) => (
-                              <div key={n} className="flex flex-col gap-1">
-                                <span className="text-[11px] font-medium text-slate-400 text-center">
-                                  {methodKey === "credit" ? `${n}x` : "à vista"}
-                                </span>
-                                <div className="flex items-center gap-0.5">
-                                  <input
-                                    type="text"
-                                    inputMode="decimal"
-                                    value={brandFees[brand]?.installmentFees?.[String(n)] ?? ""}
-                                    onChange={(e) => updateFee(brand, n, e.target.value)}
-                                    placeholder="0,0"
-                                    className="w-full min-w-0 text-center bg-white border border-slate-200 rounded-lg py-1.5 text-xs font-semibold outline-none focus:border-[#0D1B3E] transition-all"
-                                  />
-                                  <span className="text-xs font-semibold text-slate-400 shrink-0">%</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
+                  {/* Futuras integrações */}
+                  <PanelCard title="Outras maquininhas" description="Em breve" icon={CreditCard}>
+                    <div className="grid grid-cols-2 gap-3 opacity-50 pointer-events-none select-none sm:grid-cols-4">
+                      {["Rede", "GetNet", "PagSeguro", "Mercado Pago"].map(name => (
+                        <div key={name} className="p-3 rounded-lg border border-slate-100 text-center">
+                          <CreditCard className="w-5 h-5 mx-auto mb-1.5 text-slate-300" strokeWidth={1.5} />
+                          <p className="text-xs font-medium text-slate-400">{name}</p>
                         </div>
                       ))}
                     </div>
+                  </PanelCard>
+                </div>
+              )}
 
-                    {/* Adicionar nova bandeira */}
-                    <div className="flex gap-2 mt-3">
-                      <input
-                        type="text"
-                        placeholder="Adicionar bandeira (ex: Cabal, Banricompras...)"
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            addBrand(e.currentTarget.value);
-                            e.currentTarget.value = "";
-                          }
-                        }}
-                        className="flex-1 min-w-0 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium outline-none focus:border-[#0D1B3E] transition-all"
-                      />
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          const input = (e.currentTarget.previousSibling as HTMLInputElement);
-                          addBrand(input.value);
-                          input.value = "";
-                        }}
-                        className="shrink-0 px-3 py-2 bg-[#0D1B3E] text-white rounded-xl hover:bg-[#0D1B3E]/90 transition-colors"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
+              {machineTab === "fees" && (
+                <div className="space-y-4">
+                  {/* Taxas da Maquininha */}
+                  <PanelCard title="Taxas da maquininha" description="Percentual cobrado pela adquirente por bandeira. Alimenta o custo no financeiro e, se ativado, o acréscimo no PDV." icon={CircleDollarSign}>
+                    <div className="space-y-4">
+                      {/* PIX — taxa única do provedor, sem bandeira/parcela */}
+                      {payments.pix?.enabled && (
+                        <div className="space-y-3">
+                          <SettingRow title="Pix" description="Taxa única do provedor, sem bandeira/parcela.">
+                            <span className="text-[11px] text-slate-500">Repassar taxa ao cliente</span>
+                            <Switch
+                              checked={!!payments.pix.passFeeToCustomer}
+                              onCheckedChange={(v) => setPayments({ ...payments, pix: { ...payments.pix!, passFeeToCustomer: v } })}
+                            />
+                          </SettingRow>
+                          <FormRow cols={3}>
+                            <Input
+                              label="Taxa do provedor (%)"
+                              type="text"
+                              inputMode="decimal"
+                              value={payments.pix.brandFees?.["PIX"]?.installmentFees?.["1"] ?? ""}
+                              onChange={(e) => {
+                                const pct = parseFloat(e.target.value.replace(",", ".")) || 0;
+                                setPayments({
+                                  ...payments,
+                                  pix: { ...payments.pix!, brandFees: { PIX: { installmentFees: { "1": pct } } } },
+                                });
+                              }}
+                              placeholder="0,0"
+                            />
+                          </FormRow>
+                        </div>
+                      )}
+
+                      {(["credit", "debit"] as const).map((methodKey) => {
+                        const methodConfig = payments[methodKey] as PaymentMethodConfig | undefined;
+                        if (!methodConfig?.enabled) return null;
+                        const brands = methodConfig.acceptedBrands?.length ? methodConfig.acceptedBrands : [];
+                        const installmentsRange = methodKey === "credit" ? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] : [1];
+                        const brandFees = methodConfig.brandFees || {};
+
+                        const updateFee = (brand: string, installment: number, value: string) => {
+                          const pct = parseFloat(value.replace(",", ".")) || 0;
+                          const current = brandFees[brand]?.installmentFees || {};
+                          setPayments({
+                            ...payments,
+                            [methodKey]: {
+                              ...methodConfig,
+                              brandFees: {
+                                ...brandFees,
+                                [brand]: { installmentFees: { ...current, [String(installment)]: pct } },
+                              },
+                            },
+                          });
+                        };
+
+                        const addBrand = (name: string) => {
+                          const trimmed = name.trim();
+                          if (!trimmed || brands.includes(trimmed)) return;
+                          setPayments({
+                            ...payments,
+                            [methodKey]: { ...methodConfig, acceptedBrands: [...brands, trimmed] },
+                          });
+                        };
+
+                        const removeBrand = (name: string) => {
+                          const { [name]: _removed, ...restFees } = brandFees;
+                          setPayments({
+                            ...payments,
+                            [methodKey]: {
+                              ...methodConfig,
+                              acceptedBrands: brands.filter((b) => b !== name),
+                              brandFees: restFees,
+                            },
+                          });
+                        };
+
+                        return (
+                          <div key={methodKey} className="space-y-3 border-t border-slate-100 pt-3 first:border-0 first:pt-0">
+                            <SettingRow title={methodKey === "credit" ? "Cartão de Crédito" : "Cartão de Débito"}>
+                              <span className="text-[11px] text-slate-500">Repassar taxa ao cliente</span>
+                              <Switch
+                                checked={!!methodConfig.passFeeToCustomer}
+                                onCheckedChange={(v) => setPayments({
+                                  ...payments,
+                                  [methodKey]: { ...methodConfig, passFeeToCustomer: v },
+                                })}
+                              />
+                            </SettingRow>
+
+                            {/* Uma bandeira por bloco */}
+                            <div className="space-y-3">
+                              {brands.map((brand) => (
+                                <div key={brand} className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <p className="text-xs font-semibold text-slate-700">{brand}</p>
+                                    <IconButton
+                                      size="xs"
+                                      variant="ghost"
+                                      aria-label="Remover bandeira"
+                                      onClick={() => removeBrand(brand)}
+                                      title="Remover bandeira"
+                                    >
+                                      <X size={14} />
+                                    </IconButton>
+                                  </div>
+                                  <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 xl:grid-cols-6">
+                                    {installmentsRange.map((n) => (
+                                      <Input
+                                        key={n}
+                                        label={methodKey === "credit" ? `${n}x (%)` : "à vista (%)"}
+                                        type="text"
+                                        inputMode="decimal"
+                                        value={brandFees[brand]?.installmentFees?.[String(n)] ?? ""}
+                                        onChange={(e) => updateFee(brand, n, e.target.value)}
+                                        placeholder="0,0"
+                                        className="text-center"
+                                      />
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* Adicionar nova bandeira */}
+                            <div className="flex gap-2">
+                              <Input
+                                type="text"
+                                wrapperClassName="flex-1 min-w-0"
+                                placeholder="Adicionar bandeira (ex: Cabal, Banricompras...)"
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    addBrand(e.currentTarget.value);
+                                    e.currentTarget.value = "";
+                                  }
+                                }}
+                              />
+                              <IconButton
+                                variant="primary"
+                                aria-label="Adicionar bandeira"
+                                onClick={(e) => {
+                                  const input = (e.currentTarget.previousSibling as HTMLElement).querySelector("input") as HTMLInputElement;
+                                  addBrand(input.value);
+                                  input.value = "";
+                                }}
+                              >
+                                <Plus size={14} />
+                              </IconButton>
+                            </div>
+
+                            {brands.length === 0 && (
+                              <p className="text-[11px] text-slate-500">Nenhuma bandeira cadastrada ainda — adicione acima ou na aba "Pagamentos".</p>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      {!payments.pix?.enabled && !payments.credit?.enabled && !payments.debit?.enabled && (
+                        <div className="text-center py-6 text-slate-400">
+                          <CreditCard className="w-8 h-8 mx-auto mb-2 opacity-40" strokeWidth={1.5} />
+                          <p className="text-xs font-semibold mb-1">Nenhum meio de pagamento habilitado</p>
+                          <p className="text-[11px]">Ative Pix, Crédito ou Débito na aba "Pagamentos" para configurar as taxas.</p>
+                        </div>
+                      )}
                     </div>
+                  </PanelCard>
 
-                    {brands.length === 0 && (
-                      <p className="text-xs text-slate-400 mt-2">Nenhuma bandeira cadastrada ainda — adicione acima ou na aba "Pagamentos".</p>
+                  {/* Taxa de Serviço */}
+                  <PanelCard
+                    title="Taxa de serviço"
+                    description="Percentual sobre o subtotal dos itens (ex: 10% em mesas). Vem pré-marcada no PDV, mas o operador pode desmarcar ou ajustar."
+                    icon={CircleDollarSign}
+                    action={
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <span className="text-[11px] text-slate-500">Ativar</span>
+                        <Switch
+                          checked={!!payments.serviceCharge?.enabled}
+                          onCheckedChange={(v) => setPayments({
+                            ...payments,
+                            serviceCharge: { enabled: v, percent: payments.serviceCharge?.percent ?? 10 },
+                          })}
+                        />
+                      </label>
+                    }
+                  >
+                    {payments.serviceCharge?.enabled ? (
+                      <FormRow cols={3}>
+                        <Input
+                          label="Percentual (%)"
+                          type="text"
+                          inputMode="decimal"
+                          value={payments.serviceCharge?.percent ?? ""}
+                          onChange={(e) => {
+                            const pct = parseFloat(e.target.value.replace(",", ".")) || 0;
+                            setPayments({
+                              ...payments,
+                              serviceCharge: { enabled: true, percent: pct },
+                            });
+                          }}
+                          placeholder="10"
+                        />
+                      </FormRow>
+                    ) : (
+                      <p className="text-[11px] text-slate-500">Taxa de serviço desativada.</p>
                     )}
-                  </div>
-                );
-              })}
-
-              {!payments.pix?.enabled && !payments.credit?.enabled && !payments.debit?.enabled && (
-                <div className="text-center py-8 text-slate-400">
-                  <CreditCard className="w-8 h-8 mx-auto mb-3 opacity-40" strokeWidth={1.5} />
-                  <p className="text-xs font-semibold mb-1">Nenhum meio de pagamento habilitado</p>
-                  <p className="text-xs">Ative Pix, Crédito ou Débito na aba "Pagamentos" para configurar as taxas.</p>
+                  </PanelCard>
                 </div>
               )}
-            </ContentCard>
-
-            {/* Taxa de Serviço */}
-            <ContentCard padding="lg">
-              <div className="flex flex-wrap items-center justify-between gap-3 mb-1">
-                <SectionTitle title="Taxa de Serviço" icon={CircleDollarSign} />
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <span className="text-xs font-medium text-slate-400">Ativar</span>
-                  <Switch
-                    checked={!!payments.serviceCharge?.enabled}
-                    onCheckedChange={(v) => setPayments({
-                      ...payments,
-                      serviceCharge: { enabled: v, percent: payments.serviceCharge?.percent ?? 10 },
-                    })}
-                  />
-                </label>
-              </div>
-              <p className="text-xs text-slate-400 mb-6 mt-2">
-                Percentual sobre o subtotal dos itens (ex: 10% em mesas). Quando ativada, vem pré-marcada no pagamento do PDV,
-                mas o operador sempre pode desmarcar ou ajustar caso o cliente não queira pagar.
-              </p>
-
-              {payments.serviceCharge?.enabled && (
-                <div className="flex items-center gap-3 bg-slate-50 border border-slate-100 rounded-2xl p-3 max-w-xs">
-                  <span className="text-xs font-medium text-slate-400 flex-1">Percentual</span>
-                  <div className="flex items-center gap-1">
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={payments.serviceCharge?.percent ?? ""}
-                      onChange={(e) => {
-                        const pct = parseFloat(e.target.value.replace(",", ".")) || 0;
-                        setPayments({
-                          ...payments,
-                          serviceCharge: { enabled: true, percent: pct },
-                        });
-                      }}
-                      placeholder="10"
-                      className="w-16 text-center bg-white border border-slate-200 rounded-lg py-1.5 text-xs font-semibold outline-none focus:border-[#0D1B3E] transition-all"
-                    />
-                    <span className="text-xs font-semibold text-slate-400">%</span>
-                  </div>
-                </div>
-              )}
-            </ContentCard>
-
-            {/* Futuras integrações */}
-            <ContentCard padding="lg">
-              <p className="text-xs font-semibold text-slate-500 mb-4">Outras Maquininhas (em breve)</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 opacity-50 pointer-events-none select-none">
-                {["Rede", "GetNet", "PagSeguro", "Mercado Pago"].map(name => (
-                  <div key={name} className="p-4 rounded-2xl border border-slate-100 text-center">
-                    <CreditCard className="w-5 h-5 mx-auto mb-2 text-slate-300" strokeWidth={1.5} />
-                    <p className="text-xs font-medium text-slate-400">{name}</p>
-                  </div>
-                ))}
-              </div>
-            </ContentCard>
+            </Tabs>
           </motion.div>
         )}
 
         {/* ── ABA FISCAL ─────────────────────────────────────────────────── */}
         {activeTab === "fiscal" && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-            <ContentCard padding="lg">
-              <div className="flex items-center gap-4 mb-6">
-                <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${fiscal.enabled ? "bg-[#0D1B3E]/5 text-[#0D1B3E]" : "bg-slate-100 text-slate-400"}`}>
-                  <FileText className="w-5 h-5" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-semibold text-slate-800">Módulo Fiscal — NFC-e</p>
-                  <p className="text-xs text-slate-400">Nota Fiscal do Consumidor Eletrônica (Modelo 65)</p>
-                </div>
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+            <PanelCard
+              title="Módulo Fiscal — NFC-e"
+              description="Nota Fiscal do Consumidor Eletrônica (Modelo 65)"
+              icon={FileText}
+              action={
                 <label className="flex items-center gap-3 cursor-pointer select-none">
                   <Switch checked={fiscal.enabled} onCheckedChange={v => setFiscal(f => ({ ...f, enabled: v }))} />
                   <span className="text-xs font-medium text-slate-600">{fiscal.enabled ? "Ativo" : "Inativo"}</span>
                 </label>
-              </div>
+              }
+            >
+              <p className="text-[11px] text-slate-500">
+                {fiscal.enabled
+                  ? "Configure o emitente, a emissão automática e as credenciais nas seções abaixo."
+                  : "Módulo fiscal inativo. Ative para configurar a emissão de NFC-e."}
+              </p>
+            </PanelCard>
 
-              {fiscal.enabled && (
-                <div className="space-y-6 pt-4 border-t border-slate-100">
-                  {/* Ambiente */}
-                  <div>
-                    <p className="text-xs font-semibold text-slate-500 mb-3">Ambiente SEFAZ</p>
-                    <div className="flex gap-3">
-                      {(["homologacao", "producao"] as const).map(env => (
-                        <button key={env} type="button"
-                          onClick={() => setFiscal(f => ({ ...f, ambiente: env }))}
-                          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold border transition-all ${fiscal.ambiente === env ? "bg-[#0D1B3E] text-white border-[#0D1B3E]" : "bg-white text-slate-400 border-slate-200"}`}
-                        >
-                          {env === "homologacao" ? <FlaskConical className="w-3.5 h-3.5" /> : <Rocket className="w-3.5 h-3.5" />}
-                          {env === "homologacao" ? "Homologação (teste)" : "Produção"}
-                        </button>
-                      ))}
+            {fiscal.enabled && (
+              <Tabs<FiscalTabId> items={FISCAL_TABS} value={fiscalTab} onChange={setFiscalTab} label="Seções do módulo fiscal">
+                {fiscalTab === "issuer" && (
+                  <div className="space-y-4">
+                    <PanelCard title="Ambiente SEFAZ" description="Homologação é só para testes, sem valor fiscal." icon={FlaskConical}>
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          {(["homologacao", "producao"] as const).map(env => (
+                            <Button key={env}
+                              fullWidth
+                              variant={fiscal.ambiente === env ? "primary" : "outline"}
+                              onClick={() => setFiscal(f => ({ ...f, ambiente: env }))}
+                              iconLeft={env === "homologacao" ? <FlaskConical size={14} /> : <Rocket size={14} />}
+                            >
+                              {env === "homologacao" ? "Homologação (teste)" : "Produção"}
+                            </Button>
+                          ))}
+                        </div>
+                        {fiscal.ambiente === "homologacao" && (
+                          <Alert variant="warning">
+                            Em homologação as notas <strong>não têm valor fiscal</strong>. Use para testar a integração com a SEFAZ antes de ir para produção.
+                          </Alert>
+                        )}
+                      </div>
+                    </PanelCard>
+
+                    <PanelCard title="Dados do emitente" description="CNPJ, regime tributário e município da loja." icon={Store}>
+                      <FormRow cols={3}>
+                        <Input label="CNPJ" type="text" maxLength={18} value={fiscal.cnpj} onChange={e => setFiscal(f => ({ ...f, cnpj: e.target.value }))} placeholder="00.000.000/0000-00" />
+                        <Input label="Inscrição Estadual (IE)" type="text" value={fiscal.ie} onChange={e => setFiscal(f => ({ ...f, ie: e.target.value }))} placeholder="000.000.000.000" />
+                        <Select
+                          label="Regime Tributário (CRT)"
+                          value={fiscal.crt}
+                          onChange={e => setFiscal(f => ({ ...f, crt: e.target.value as any }))}
+                          options={[
+                            { value: "1", label: "1 — Simples Nacional" },
+                            { value: "2", label: "2 — Simples Nacional (excesso sublimite)" },
+                            { value: "3", label: "3 — Regime Normal" },
+                          ]}
+                        />
+                        <Select
+                          label="UF"
+                          value={fiscal.uf}
+                          onChange={e => setFiscal(f => ({ ...f, uf: e.target.value }))}
+                          options={["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"].map(uf => ({ value: uf, label: uf }))}
+                        />
+                        <Input label="Código IBGE do Município" type="text" value={fiscal.cMun} onChange={e => setFiscal(f => ({ ...f, cMun: e.target.value }))} placeholder="Ex: 3550308 (São Paulo)" />
+                        <Input label="Nome do Município" type="text" value={fiscal.xMun} onChange={e => setFiscal(f => ({ ...f, xMun: e.target.value }))} placeholder="Ex: São Paulo" />
+                      </FormRow>
+                    </PanelCard>
+
+                    <PanelCard title="Numeração NFC-e" description="Série e próximo número a ser emitido." icon={FileText}>
+                      <FormRow cols={3}>
+                        <Input label="Série" type="number" min={1} max={999} value={fiscal.serie} onChange={e => setFiscal(f => ({ ...f, serie: parseInt(e.target.value) || 1 }))} />
+                        <Input label="Próximo Número" type="number" min={1} value={fiscal.proximoNumero} onChange={e => setFiscal(f => ({ ...f, proximoNumero: parseInt(e.target.value) || 1 }))} />
+                      </FormRow>
+                    </PanelCard>
+                  </div>
+                )}
+
+                {fiscalTab === "emission" && (
+                  <PanelCard title="Emissão automática" description="O que acontece sozinho ao concluir uma venda no PDV." icon={Rocket}>
+                    <div className="divide-y divide-slate-100">
+                      <SettingRow title="Emitir NFC-e automaticamente no PDV" description="Ao concluir a venda, envia a NFC-e na hora à SEFAZ. Use só depois de conferir certificado, CSC e dados fiscais dos produtos.">
+                        <Switch checked={fiscal.autoEmitNfce === true} onCheckedChange={value => setFiscal(current => ({ ...current, autoEmitNfce: value, ...(!value ? { autoPrintDanfe: false } : {}) }))} />
+                      </SettingRow>
+                      <SettingRow title="Imprimir DANFE NFC-e automaticamente" description="Após a autorização, imprime o DANFE na impressora do PDV. O cupom comercial automático não será impresso nessa venda.">
+                        <Switch checked={fiscal.autoPrintDanfe === true} disabled={!fiscal.autoEmitNfce} onCheckedChange={value => setFiscal(current => ({ ...current, autoPrintDanfe: value }))} />
+                      </SettingRow>
                     </div>
                     {fiscal.ambiente === "homologacao" && (
-                      <div className="mt-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-700">
-                        Em homologação as notas <strong>não têm valor fiscal</strong>. Use para testar a integração com a SEFAZ antes de ir para produção.
-                      </div>
+                      <Alert variant="warning" className="mt-3">Em homologação, a emissão automática gera somente notas de teste, sem valor fiscal.</Alert>
                     )}
-                  </div>
+                  </PanelCard>
+                )}
 
-                  {/* Dados do Emitente */}
-                  <div>
-                    <p className="text-xs font-semibold text-slate-500 mb-3">Dados do Emitente</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-xs font-semibold text-slate-500 block mb-1">CNPJ</label>
-                        <input type="text" maxLength={18} value={fiscal.cnpj}
-                          onChange={e => setFiscal(f => ({ ...f, cnpj: e.target.value }))}
-                          placeholder="00.000.000/0000-00"
-                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-800 focus:border-[#0D1B3E] outline-none bg-white"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-semibold text-slate-500 block mb-1">Inscrição Estadual (IE)</label>
-                        <input type="text" value={fiscal.ie}
-                          onChange={e => setFiscal(f => ({ ...f, ie: e.target.value }))}
-                          placeholder="000.000.000.000"
-                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-800 focus:border-[#0D1B3E] outline-none bg-white"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-semibold text-slate-500 block mb-1">Regime Tributário (CRT)</label>
-                        <select value={fiscal.crt} onChange={e => setFiscal(f => ({ ...f, crt: e.target.value as any }))}
-                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-800 focus:border-[#0D1B3E] outline-none bg-white"
-                        >
-                          <option value="1">1 — Simples Nacional</option>
-                          <option value="2">2 — Simples Nacional (excesso sublimite)</option>
-                          <option value="3">3 — Regime Normal</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-xs font-semibold text-slate-500 block mb-1">UF</label>
-                        <select value={fiscal.uf} onChange={e => setFiscal(f => ({ ...f, uf: e.target.value }))}
-                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-800 focus:border-[#0D1B3E] outline-none bg-white"
-                        >
-                          {["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"].map(uf => (
-                            <option key={uf} value={uf}>{uf}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-xs font-semibold text-slate-500 block mb-1">Código IBGE do Município</label>
-                        <input type="text" value={fiscal.cMun}
-                          onChange={e => setFiscal(f => ({ ...f, cMun: e.target.value }))}
-                          placeholder="Ex: 3550308 (São Paulo)"
-                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-800 focus:border-[#0D1B3E] outline-none bg-white"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-semibold text-slate-500 block mb-1">Nome do Município</label>
-                        <input type="text" value={fiscal.xMun}
-                          onChange={e => setFiscal(f => ({ ...f, xMun: e.target.value }))}
-                          placeholder="Ex: São Paulo"
-                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-800 focus:border-[#0D1B3E] outline-none bg-white"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* NFC-e — Série e número */}
-                  <div>
-                    <p className="text-xs font-semibold text-slate-500 mb-3">Numeração NFC-e</p>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-xs font-semibold text-slate-500 block mb-1">Série</label>
-                        <input type="number" min={1} max={999} value={fiscal.serie}
-                          onChange={e => setFiscal(f => ({ ...f, serie: parseInt(e.target.value) || 1 }))}
-                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-800 focus:border-[#0D1B3E] outline-none bg-white"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-semibold text-slate-500 block mb-1">Próximo Número</label>
-                        <input type="number" min={1} value={fiscal.proximoNumero}
-                          onChange={e => setFiscal(f => ({ ...f, proximoNumero: parseInt(e.target.value) || 1 }))}
-                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-800 focus:border-[#0D1B3E] outline-none bg-white"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 flex items-start gap-4">
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-slate-800">Emitir NFC-e automaticamente no PDV</p>
-                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">Ao concluir uma venda no PDV, o sistema envia a NFC-e imediatamente para a SEFAZ. Use somente depois de conferir certificado, CSC e dados fiscais dos produtos.</p>
-                      {fiscal.ambiente === "homologacao" && <p className="text-xs text-amber-700 font-semibold mt-2">Em homologação, a emissão automática gera somente notas de teste, sem valor fiscal.</p>}
-                    </div>
-                    <Switch checked={fiscal.autoEmitNfce === true} onCheckedChange={value => setFiscal(current => ({ ...current, autoEmitNfce: value, ...(!value ? { autoPrintDanfe: false } : {}) }))} />
-                  </div>
-
-                  <div className={`rounded-2xl border p-4 flex items-start gap-4 ${fiscal.autoEmitNfce ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50 opacity-60"}`}>
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-slate-800">Imprimir DANFE NFC-e automaticamente</p>
-                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">Depois da autorização da SEFAZ, imprime o DANFE NFC-e na impressora do PDV. O cupom comercial automático não será impresso nessa venda.</p>
-                    </div>
-                    <Switch checked={fiscal.autoPrintDanfe === true} disabled={!fiscal.autoEmitNfce} onCheckedChange={value => setFiscal(current => ({ ...current, autoPrintDanfe: value }))} />
-                  </div>
-
-                  {/* CSC — o credenciamento e o CSC são registros SEPARADOS por ambiente na
-                      SEFAZ (o de homologação não vale em produção, e vice-versa), então
-                      cada ambiente tem seu próprio par de campos aqui — trocar o Ambiente
-                      acima não apaga o CSC do outro, o sistema já escolhe o par certo
-                      automaticamente na hora de emitir (ver getCsc/getCscId em fiscal.ts). */}
-                  <div>
-                    <p className="text-xs font-semibold text-slate-500 mb-3">CSC — Código de Segurança do Contribuinte</p>
-                    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-xs text-slate-500 mb-3 leading-relaxed">
-                      O CSC é cadastrado no portal da SEFAZ do seu estado (para SP: <span className="font-semibold text-slate-700">nfce.fazenda.sp.gov.br</span>, menu "Gerenciar Cód Segurança"). Homologação e produção têm portais e códigos separados — gere um CSC em cada ambiente antes de emitir notas nele.
-                    </div>
-                    <div className="space-y-4">
-                      <div>
-                        <p className="text-[11px] font-bold uppercase tracking-wide text-amber-600 mb-2">Ambiente de Homologação</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div>
-                            <label className="text-xs font-semibold text-slate-500 block mb-1">ID do CSC</label>
-                            <input type="text" value={fiscal.cscIdHomologacao ?? ""}
-                              onChange={e => setFiscal(f => ({ ...f, cscIdHomologacao: e.target.value }))}
-                              placeholder="Ex: 1"
-                              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-800 focus:border-[#0D1B3E] outline-none bg-white"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-xs font-semibold text-slate-500 block mb-1">Token CSC</label>
-                            <input type="password" value={fiscal.cscHomologacao ?? ""}
-                              onChange={e => setFiscal(f => ({ ...f, cscHomologacao: e.target.value }))}
-                              placeholder="Token UUID da SEFAZ"
-                              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-800 focus:border-[#0D1B3E] outline-none bg-white"
-                            />
-                          </div>
+                {fiscalTab === "credentials" && (
+                  <div className="space-y-4">
+                    {/* CSC — o credenciamento e o CSC são registros SEPARADOS por ambiente na
+                        SEFAZ (o de homologação não vale em produção, e vice-versa), então
+                        cada ambiente tem seu próprio par de campos aqui — trocar o Ambiente
+                        acima não apaga o CSC do outro, o sistema já escolhe o par certo
+                        automaticamente na hora de emitir (ver getCsc/getCscId em fiscal.ts). */}
+                    <PanelCard title="CSC — Código de Segurança do Contribuinte" description="Cadastrado no portal da SEFAZ do seu estado, um para cada ambiente." icon={FileText}>
+                      <div className="space-y-3">
+                        <p className="text-[11px] text-slate-500">
+                          Para SP: <span className="font-semibold text-slate-700">nfce.fazenda.sp.gov.br</span>, menu "Gerenciar Cód Segurança". Homologação e produção têm portais e códigos separados — gere um CSC em cada ambiente antes de emitir notas nele.
+                        </p>
+                        <div>
+                          <p className="mb-2 text-[11px] font-medium text-amber-700">Ambiente de Homologação</p>
+                          <FormRow cols={2}>
+                            <Input label="ID do CSC" type="text" value={fiscal.cscIdHomologacao ?? ""} onChange={e => setFiscal(f => ({ ...f, cscIdHomologacao: e.target.value }))} placeholder="Ex: 1" />
+                            <Input label="Token CSC" type="password" value={fiscal.cscHomologacao ?? ""} onChange={e => setFiscal(f => ({ ...f, cscHomologacao: e.target.value }))} placeholder="Token UUID da SEFAZ" />
+                          </FormRow>
+                        </div>
+                        <div>
+                          <p className="mb-2 text-[11px] font-medium text-emerald-700">Ambiente de Produção</p>
+                          <FormRow cols={2}>
+                            <Input label="ID do CSC" type="text" value={fiscal.cscIdProducao ?? ""} onChange={e => setFiscal(f => ({ ...f, cscIdProducao: e.target.value }))} placeholder="Ex: 1" />
+                            <Input label="Token CSC" type="password" value={fiscal.cscProducao ?? ""} onChange={e => setFiscal(f => ({ ...f, cscProducao: e.target.value }))} placeholder="Token UUID da SEFAZ" />
+                          </FormRow>
                         </div>
                       </div>
-                      <div>
-                        <p className="text-[11px] font-bold uppercase tracking-wide text-emerald-600 mb-2">Ambiente de Produção</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div>
-                            <label className="text-xs font-semibold text-slate-500 block mb-1">ID do CSC</label>
-                            <input type="text" value={fiscal.cscIdProducao ?? ""}
-                              onChange={e => setFiscal(f => ({ ...f, cscIdProducao: e.target.value }))}
-                              placeholder="Ex: 1"
-                              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-800 focus:border-[#0D1B3E] outline-none bg-white"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-xs font-semibold text-slate-500 block mb-1">Token CSC</label>
-                            <input type="password" value={fiscal.cscProducao ?? ""}
-                              onChange={e => setFiscal(f => ({ ...f, cscProducao: e.target.value }))}
-                              placeholder="Token UUID da SEFAZ"
-                              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-800 focus:border-[#0D1B3E] outline-none bg-white"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                    </PanelCard>
 
-                  {/* Certificado A1 */}
-                  <div>
-                    <p className="text-xs font-semibold text-slate-500 mb-3">Certificado Digital A1 (.pfx)</p>
-                    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
-                      {fiscal.certBase64 ? (
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
-                            <CheckCircle2 className="w-4 h-4" />
+                    <PanelCard title="Certificado Digital A1 (.pfx)" description="Certificado emitido pela AC, usado para assinar as notas." icon={FileDown}>
+                      <div className="space-y-3">
+                        {fiscal.certBase64 ? (
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                              <CheckCircle2 className="w-4 h-4" />
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-xs font-semibold text-slate-700">Certificado carregado</p>
+                              <p className="text-[11px] text-slate-500">Remova para substituir por outro</p>
+                            </div>
+                            <Button size="xs" variant="danger" onClick={() => setFiscal(f => ({ ...f, certBase64: undefined, certPassword: undefined }))}>
+                              Remover
+                            </Button>
                           </div>
-                          <div className="flex-1">
-                            <p className="text-xs font-semibold text-slate-700">Certificado carregado</p>
-                            <p className="text-xs text-slate-400">Clique em "Trocar" para substituir</p>
-                          </div>
-                          <button type="button" onClick={() => setFiscal(f => ({ ...f, certBase64: undefined, certPassword: undefined }))}
-                            className="text-xs font-medium text-red-500 hover:text-red-700 px-3 py-1 rounded-lg border border-red-200 hover:border-red-300 transition-colors"
-                          >
-                            Remover
-                          </button>
-                        </div>
-                      ) : (
-                        <label className="flex items-center gap-3 cursor-pointer group">
-                          <div className="w-10 h-10 rounded-xl bg-slate-100 group-hover:bg-slate-200 text-slate-400 flex items-center justify-center transition-all">
-                            <FileDown className="w-5 h-5" />
-                          </div>
-                          <div>
-                            <p className="text-xs font-semibold text-slate-700">Selecionar arquivo .pfx</p>
-                            <p className="text-xs text-slate-400">Certificado A1 emitido pela AC</p>
-                          </div>
-                          <input type="file" accept=".pfx,.p12" className="hidden"
-                            onChange={e => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
-                              const reader = new FileReader();
-                              reader.onload = ev => {
-                                const b64 = (ev.target?.result as string).split(",")[1];
-                                setFiscal(f => ({ ...f, certBase64: b64 }));
-                              };
-                              reader.readAsDataURL(file);
-                            }}
-                          />
-                        </label>
-                      )}
-                      <div>
-                        <label className="text-xs font-semibold text-slate-500 block mb-1">Senha do Certificado</label>
-                        <input type="password" value={fiscal.certPassword ?? ""}
-                          onChange={e => setFiscal(f => ({ ...f, certPassword: e.target.value }))}
-                          placeholder="Senha do arquivo .pfx"
-                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-800 focus:border-[#0D1B3E] outline-none bg-white"
-                        />
+                        ) : (
+                          <label className="flex items-center gap-3 cursor-pointer group">
+                            <div className="w-8 h-8 rounded-lg bg-slate-100 group-hover:bg-slate-200 text-slate-400 flex items-center justify-center transition-all">
+                              <FileDown className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <p className="text-xs font-semibold text-slate-700">Selecionar arquivo .pfx</p>
+                              <p className="text-[11px] text-slate-500">Certificado A1 emitido pela AC</p>
+                            </div>
+                            <input type="file" accept=".pfx,.p12" className="hidden"
+                              onChange={e => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                const reader = new FileReader();
+                                reader.onload = ev => {
+                                  const b64 = (ev.target?.result as string).split(",")[1];
+                                  setFiscal(f => ({ ...f, certBase64: b64 }));
+                                };
+                                reader.readAsDataURL(file);
+                              }}
+                            />
+                          </label>
+                        )}
+                        <FormRow cols={2}>
+                          <Input label="Senha do Certificado" type="password" value={fiscal.certPassword ?? ""} onChange={e => setFiscal(f => ({ ...f, certPassword: e.target.value }))} placeholder="Senha do arquivo .pfx" />
+                        </FormRow>
                       </div>
-                    </div>
+                    </PanelCard>
                   </div>
-                </div>
-              )}
-
-              {!fiscal.enabled && (
-                <div className="text-center py-8 text-slate-400">
-                  <FileText className="w-8 h-8 mx-auto mb-3 opacity-40" strokeWidth={1.5} />
-                  <p className="text-xs font-semibold mb-1">Módulo Fiscal Inativo</p>
-                  <p className="text-xs">Ative acima para configurar a emissão de NFC-e.</p>
-                </div>
-              )}
-            </ContentCard>
+                )}
+              </Tabs>
+            )}
           </motion.div>
         )}
 
-        <div className="fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 w-full max-w-2xl px-4">
-          <div className="bg-white/90 backdrop-blur-md border border-slate-200/50 p-2.5 sm:p-3 rounded-2xl shadow-xl flex items-center justify-between gap-3">
-            <div className="hidden sm:flex items-center gap-2 pl-4">
+        {/* Barra de salvar única e fixa */}
+        <div className="sticky bottom-3 z-30">
+          <div className="flex w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white/95 p-2.5 backdrop-blur">
+            <div className="flex min-w-0 items-center gap-2 pl-2">
               {saved ? (
-                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
               ) : saving ? (
-                <Clock className="w-4 h-4 text-slate-400 animate-pulse" />
+                <Clock className="w-4 h-4 shrink-0 text-slate-400 animate-pulse" />
+              ) : dirty ? (
+                <AlertCircle className="w-4 h-4 shrink-0 text-amber-500" />
               ) : (
-                <AlertCircle className="w-4 h-4 text-amber-500" />
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-slate-300" />
               )}
-              <div>
-                <p className="text-[11px] font-semibold text-slate-400">Status das Alterações</p>
-                <p className="text-xs font-semibold text-slate-800">
-                  {saved ? "Tudo salvo" : saving ? "Salvando..." : "Alterações pendentes"}
-                </p>
-              </div>
+              <p className="truncate text-xs font-medium text-slate-700">
+                {saved ? "Tudo salvo" : saving ? "Salvando..." : dirty ? "Alterações não salvas" : "Nenhuma alteração"}
+              </p>
             </div>
-            <div className="flex gap-2 w-full sm:w-auto">
-              <Button 
-                type="button" 
-                variant="ghost" 
-                onClick={() => refresh()}
-                className="flex-1 sm:flex-none"
-              >
+            <div className="flex shrink-0 gap-2">
+              <Button type="button" variant="ghost" size="sm" onClick={() => refresh()} disabled={!dirty || saving}>
                 Descartar
               </Button>
-              <Button 
-                type="submit" 
-                variant="primary" 
-                loading={saving}
-                className="flex-1 sm:min-w-[200px]"
-                iconLeft={<CheckCircle2 className="w-4 h-4" />}
-              >
+              <Button type="submit" variant="primary" size="sm" loading={saving} disabled={!dirty && !saved} iconLeft={<CheckCircle2 size={14} />}>
                 {saved ? "Salvo com Sucesso" : "Salvar Alterações"}
               </Button>
             </div>
           </div>
         </div>
       </form>
+      </Tabs>
 
       <CondominiumsCard tenant={tenant} />
+      </div>
     </PageWrapper>
   );
 }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { DashboardShell, useToast } from "../../components";
+import { Badge, DashboardShell, useToast } from "../../components";
 import { apiFetch, apiJson, AuthError } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import socket from "../../lib/socket";
@@ -347,29 +347,17 @@ export default function DashboardPage() {
 
   const liveOrdersHeaderBadges = activeTab === "live-orders" ? (
     <>
-      <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-700 rounded-lg border border-amber-200 whitespace-nowrap">
-        <Clock className="w-3.5 h-3.5" />
-        <span className="text-[10px] font-black uppercase tracking-wider">Pendentes: {pendingOrders}</span>
-      </div>
-      <div className="flex items-center gap-1.5 px-2.5 py-1 bg-orange-50 text-orange-700 rounded-lg border border-orange-200 whitespace-nowrap">
-        <ChefHat className="w-3.5 h-3.5" />
-        <span className="text-[10px] font-black uppercase tracking-wider">Em preparo: {preparingOrders}</span>
-      </div>
-      <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-200 whitespace-nowrap">
-        <CheckCircle2 className="w-3.5 h-3.5" />
-        <span className="text-[10px] font-black uppercase tracking-wider">Prontos: {shippedOrders}</span>
-      </div>
-      <div className="flex items-center gap-1.5 px-2.5 py-1 bg-red-50 text-red-600 rounded-lg border border-red-200 whitespace-nowrap">
-        <AlertCircle className="w-3.5 h-3.5" />
-        <span className="text-[10px] font-black uppercase tracking-wider">Atrasados: {delayedOrders}</span>
-      </div>
+      <Badge color="warning" icon={<Clock className="w-3.5 h-3.5" />}>Pendentes: {pendingOrders}</Badge>
+      <Badge color="orange" icon={<ChefHat className="w-3.5 h-3.5" />}>Em preparo: {preparingOrders}</Badge>
+      <Badge color="success" icon={<CheckCircle2 className="w-3.5 h-3.5" />}>Prontos: {shippedOrders}</Badge>
+      <Badge color="danger" icon={<AlertCircle className="w-3.5 h-3.5" />}>Atrasados: {delayedOrders}</Badge>
     </>
   ) : null;
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0D1B3E] flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-[#C9A227] border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-zinc-50 flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -377,15 +365,15 @@ export default function DashboardPage() {
   if (!tenant) {
     return (
       <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6 text-center">
-        <h1 className="text-2xl font-bold text-slate-800 mb-2">Painel nao encontrado</h1>
+        <h1 className="text-2xl font-semibold text-slate-800 mb-2">Painel nao encontrado</h1>
         <p className="text-slate-400 mb-6">
           Nao conseguimos localizar as configuracoes para {slug}
         </p>
         <div className="flex flex-wrap items-center justify-center gap-3">
-          <Link to="/painel" className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold">
+          <Link to="/painel" className="bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold">
             Ir para Meu Painel
           </Link>
-          <Link to="/" className="bg-slate-100 text-slate-700 px-6 py-2 rounded-lg font-bold">
+          <Link to="/" className="bg-slate-100 text-slate-700 px-6 py-2 rounded-lg font-semibold">
             Voltar ao Inicio
           </Link>
         </div>
@@ -454,14 +442,14 @@ export default function DashboardPage() {
               initial={{ opacity: 0, x: 100, scale: 0.9 }}
               animate={{ opacity: 1, x: 0, scale: 1 }}
               exit={{ opacity: 0, scale: 0.5, transition: { duration: 0.2 } }}
-              className="pointer-events-auto bg-emerald-500 text-white p-3 rounded-2xl shadow-xl ring-2 ring-emerald-500/20 flex flex-col gap-2"
+              className="pointer-events-auto bg-emerald-500 text-white p-3 rounded-lg shadow-sm ring-2 ring-emerald-500/20 flex flex-col gap-2"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center animate-bounce shrink-0">
                     <ShoppingBag className="w-4 h-4" />
                   </div>
-                  <span className="text-[11px] font-black uppercase tracking-widest">
+                  <span className="text-[11px] font-semibold">
                     Novo Pedido — {alert.orderType === "DELIVERY" ? "Delivery" : alert.orderType === "PICKUP" ? "Retirada" : "Mesa"}
                   </span>
                 </div>
@@ -472,8 +460,8 @@ export default function DashboardPage() {
                   <X className="w-4 h-4" />
                 </button>
               </div>
-              <p className="text-sm font-black leading-tight">{alert.customerName}</p>
-              <p className="text-xs font-bold opacity-80">
+              <p className="text-sm font-semibold leading-tight">{alert.customerName}</p>
+              <p className="text-xs font-semibold opacity-80">
                 Total: R$ {alert.total.toFixed(2).replace(".", ",")}
               </p>
               <button
@@ -481,7 +469,7 @@ export default function DashboardPage() {
                   navigateToTab("live-orders");
                   setNewOrderAlerts((prev) => prev.filter((a) => a.timestamp !== alert.timestamp));
                 }}
-                className="w-full bg-white text-emerald-600 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-50 transition-colors"
+                className="w-full bg-white text-emerald-600 py-2 rounded-lg text-[11px] font-semibold hover:bg-emerald-50 transition-colors"
               >
                 Ver Pedido
               </button>
@@ -493,14 +481,14 @@ export default function DashboardPage() {
               initial={{ opacity: 0, x: 100, scale: 0.9 }}
               animate={{ opacity: 1, x: 0, scale: 1 }}
               exit={{ opacity: 0, scale: 0.5, transition: { duration: 0.2 } }}
-              className="pointer-events-auto bg-sky-500 text-white p-3 rounded-2xl shadow-xl ring-2 ring-sky-500/20 flex flex-col gap-2"
+              className="pointer-events-auto bg-sky-500 text-white p-3 rounded-lg shadow-sm ring-2 ring-sky-500/20 flex flex-col gap-2"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center animate-bounce shrink-0">
                     <BellRing className="w-4 h-4" />
                   </div>
-                  <span className="text-[11px] font-black uppercase tracking-widest">Pronto na Cozinha</span>
+                  <span className="text-[11px] font-semibold">Pronto na Cozinha</span>
                 </div>
                 <button
                   onClick={() => setKitchenReadyAlerts((prev) => prev.filter((a) => a.timestamp !== alert.timestamp))}
@@ -509,10 +497,10 @@ export default function DashboardPage() {
                   <X className="w-4 h-4" />
                 </button>
               </div>
-              <p className="text-sm font-black leading-tight">{alert.label}</p>
+              <p className="text-sm font-semibold leading-tight">{alert.label}</p>
               <button
                 onClick={() => setKitchenReadyAlerts((prev) => prev.filter((a) => a.timestamp !== alert.timestamp))}
-                className="w-full bg-white text-sky-600 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-sky-50 transition-colors"
+                className="w-full bg-white text-sky-600 py-2 rounded-lg text-[11px] font-semibold hover:bg-sky-50 transition-colors"
               >
                 Ciente
               </button>
@@ -524,14 +512,14 @@ export default function DashboardPage() {
               initial={{ opacity: 0, x: 100, scale: 0.9 }}
               animate={{ opacity: 1, x: 0, scale: 1 }}
               exit={{ opacity: 0, scale: 0.5, transition: { duration: 0.2 } }}
-              className="pointer-events-auto bg-amber-500 text-black p-3 rounded-2xl shadow-xl ring-2 ring-amber-500/20 flex flex-col gap-2"
+              className="pointer-events-auto bg-amber-500 text-black p-3 rounded-lg shadow-sm ring-2 ring-amber-500/20 flex flex-col gap-2"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-black/10 flex items-center justify-center animate-pulse shrink-0">
                     <Bell className="w-4 h-4" />
                   </div>
-                  <span className="text-[11px] font-black uppercase tracking-widest">
+                  <span className="text-[11px] font-semibold">
                     {w.requestBill ? "Pedir Conta — " : "Garçom — "}Mesa {w.tableId}
                   </span>
                 </div>
@@ -539,11 +527,11 @@ export default function DashboardPage() {
                   <X className="w-4 h-4" />
                 </button>
               </div>
-              <p className="text-xs font-bold opacity-80">{w.customerName}</p>
-              {w.note && <p className="text-xs bg-black/10 rounded-xl px-2.5 py-2 italic">{w.note}</p>}
+              <p className="text-xs font-semibold opacity-80">{w.customerName}</p>
+              {w.note && <p className="text-xs bg-black/10 rounded-lg px-2.5 py-2 italic">{w.note}</p>}
               <button
                 onClick={() => setWaiterCalls(prev => prev.filter(c => c.timestamp !== w.timestamp))}
-                className="w-full bg-black text-amber-400 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black/80 transition-colors"
+                className="w-full bg-black text-amber-400 py-2 rounded-lg text-[11px] font-semibold hover:bg-black/80 transition-colors"
               >
                 Ciente
               </button>
@@ -555,14 +543,14 @@ export default function DashboardPage() {
               initial={{ opacity: 0, x: 100, scale: 0.9 }}
               animate={{ opacity: 1, x: 0, scale: 1 }}
               exit={{ opacity: 0, scale: 0.5, transition: { duration: 0.2 } }}
-              className="pointer-events-auto bg-red-600 text-white p-3 rounded-2xl shadow-xl ring-2 ring-red-600/20 border border-red-500 flex flex-col gap-2"
+              className="pointer-events-auto bg-red-600 text-white p-3 rounded-lg shadow-sm ring-2 ring-red-600/20 border border-red-500 flex flex-col gap-2"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center animate-pulse shrink-0">
                     <Receipt className="w-4 h-4" />
                   </div>
-                  <span className="text-[11px] font-black uppercase tracking-widest">Fechar Mesa {req.tableId}</span>
+                  <span className="text-[11px] font-semibold">Fechar Mesa {req.tableId}</span>
                 </div>
                 <button
                   onClick={() => setCheckoutRequests(prev => prev.filter(r => r.timestamp !== req.timestamp))}
@@ -572,14 +560,14 @@ export default function DashboardPage() {
                 </button>
               </div>
               <div className="space-y-1">
-                <p className="text-[11px] font-bold opacity-70 uppercase tracking-widest">Cliente</p>
-                <p className="text-sm font-black">{req.customerName}</p>
+                <p className="text-[11px] font-semibold opacity-70">Cliente</p>
+                <p className="text-sm font-semibold">{req.customerName}</p>
               </div>
               <button
                 onClick={() => {
                   navigateToTab("pos");
                 }}
-                className="w-full bg-white text-red-600 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-50 transition-colors"
+                className="w-full bg-white text-red-600 py-2 rounded-lg text-[11px] font-semibold hover:bg-red-50 transition-colors"
               >
                 Abrir no PDV
               </button>

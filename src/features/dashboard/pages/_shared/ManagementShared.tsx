@@ -34,11 +34,13 @@ import {
 } from "lucide-react";
 import {
   Button,
+  IconButton,
   ConfirmModal,
   ContentCard,
   Input,
   Modal,
   ModalFooter,
+  Select,
   Switch,
   useToast,
 } from "../../../../components";
@@ -92,9 +94,9 @@ export function ImageUploader({ value, onChange, label, description }: { value: 
 
   return (
     <div className="space-y-2">
-      {label && <label className="block text-[11px] font-black uppercase text-slate-600 tracking-widest px-1">{label}</label>}
+      {label && <label className="ds-label">{label}</label>}
       <div className="flex flex-col sm:flex-row items-start gap-4">
-        <div className="relative w-24 h-24 rounded-3xl bg-slate-100 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden group shrink-0 shadow-inner">
+        <div className="relative w-24 h-24 rounded-lg bg-slate-100 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden group shrink-0 ">
           {uploading ? (
             <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
           ) : value ? (
@@ -106,27 +108,27 @@ export function ImageUploader({ value, onChange, label, description }: { value: 
               >
                 <div className="flex flex-col items-center gap-1">
                    <Trash2 className="w-5 h-5" />
-                   <span className="text-[8px] font-black uppercase tracking-widest">Remover</span>
+                   <span className="text-[10px] font-semibold">Remover</span>
                 </div>
               </div>
             </>
           ) : (
             <label className="cursor-pointer flex flex-col items-center gap-1 w-full h-full justify-center hover:bg-slate-50 transition-colors">
               <ImageIcon className="w-6 h-6 text-slate-300" />
-              <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Upload</span>
+              <span className="text-[10px] font-semibold text-slate-400">Upload</span>
               <input type="file" className="hidden" accept="image/*" onChange={handleFileChange} />
             </label>
           )}
         </div>
         <div className="flex-1 py-1">
-           <p className="text-[10px] text-slate-400 font-medium italic leading-tight">
+           <p className="text-[11px] text-slate-500 leading-tight">
               {description || "Escolha uma imagem do seu dispositivo para carregar. Formatos aceitos: PNG, JPG, WEBP."}
            </p>
-           <p className="text-[9px] text-slate-300 font-medium leading-tight mt-1">
+           <p className="text-[11px] text-slate-400 leading-tight mt-1">
               Recomendado: imagem quadrada (ex: 500x500px), máximo {MAX_UPLOAD_SIZE_MB}MB.
            </p>
            {value && (
-              <div className="mt-2 text-[9px] bg-green-50 text-green-600 font-black uppercase tracking-widest px-2 py-0.5 rounded-full w-fit flex items-center gap-1">
+              <div className="mt-2 text-[10px] bg-green-50 text-green-600 font-semibold px-2 py-0.5 rounded-full w-fit flex items-center gap-1">
                  <CheckCircle2 className="w-3 h-3" />
                  Imagem Carregada
               </div>
@@ -208,9 +210,9 @@ export function DesktopPrinterSettings() {
 
   return (
     <div className="pt-5 border-t border-zinc-100">
-      <p className="text-sm font-black text-slate-900">Impressora Térmica (App Desktop)</p>
+      <p className="text-[13px] font-medium text-slate-900">Impressora Térmica (App Desktop)</p>
       <p className="text-xs text-slate-500 mt-1">
-        Aperte <kbd className="px-1.5 py-0.5 bg-zinc-100 rounded font-black text-slate-600">F9</kbd> no app desktop para escolher a impressora e testar a impressão direta (sem diálogo do navegador).
+        Aperte <kbd className="px-1.5 py-0.5 bg-zinc-100 rounded font-semibold text-slate-600">F9</kbd> no app desktop para escolher a impressora e testar a impressão direta (sem diálogo do navegador).
       </p>
     </div>
   );
@@ -273,17 +275,17 @@ export function InventoryLinkField({
 
   return (
     <div className="space-y-2">
-      <label className="block text-[11px] font-black uppercase tracking-widest text-slate-600">Vincular ao estoque <span className="text-slate-400 font-bold normal-case">(opcional)</span></label>
+      <label className="block text-[11px] font-semibold text-slate-600">Vincular ao estoque <span className="text-slate-400 font-semibold normal-case">(opcional)</span></label>
 
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="w-full flex items-center justify-between gap-3 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2.5 text-sm font-bold text-left hover:border-amber-300 hover:bg-amber-50/30 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-400"
+        className="w-full flex items-center justify-between gap-3 bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-2.5 text-sm font-semibold text-left hover:border-blue-300 hover:bg-blue-50/30 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400"
       >
         {selectedItem ? (
           <div className="flex-1 min-w-0">
             <span className="text-slate-800 truncate block">{selectedItem.name}</span>
-            <span className={`text-[10px] font-black uppercase ${selectedItem.quantity <= 0 ? "text-red-500" : selectedItem.quantity < 5 ? "text-amber-500" : "text-green-600"}`}>
+            <span className={`text-[11px] font-semibold  ${selectedItem.quantity <= 0 ? "text-red-500" : selectedItem.quantity < 5 ? "text-amber-500" : "text-green-600"}`}>
               {selectedItem.quantity <= 0 ? "Esgotado" : `${selectedItem.quantity} ${selectedItem.unit || 'un'}`}
             </span>
           </div>
@@ -295,7 +297,7 @@ export function InventoryLinkField({
 
       {value && (
         <label className="flex items-center gap-2.5 cursor-pointer select-none">
-          <input type="checkbox" checked={autoDisable} onChange={e => onAutoDisableChange(e.target.checked)} className="w-4 h-4 rounded accent-amber-500" />
+          <input type="checkbox" checked={autoDisable} onChange={e => onAutoDisableChange(e.target.checked)} className="w-4 h-4 rounded accent-blue-600" />
           <span className="text-xs font-semibold text-slate-600">Desativar automaticamente quando o estoque zerar</span>
         </label>
       )}
@@ -310,38 +312,38 @@ export function InventoryLinkField({
       >
         <div className="space-y-2 p-1">
           <div className="flex gap-2">
-            <input
+            <Input
               autoFocus
+              wrapperClassName="flex-1"
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Buscar item..."
-              className="flex-1 min-w-0 bg-zinc-50 border border-zinc-200 rounded-lg px-2.5 py-1.5 text-[13px] font-semibold focus:outline-none focus:ring-2 focus:ring-amber-400"
             />
             {inventoryCategories.length > 0 && (
-              <select
+              <Select
+                wrapperClassName="w-36 shrink-0"
                 value={categoryFilter}
                 onChange={e => setCategoryFilter(e.target.value)}
-                className="w-32 shrink-0 bg-zinc-50 border border-zinc-200 rounded-lg px-2 py-1.5 text-[12px] font-semibold focus:outline-none focus:ring-2 focus:ring-amber-400"
               >
                 <option value="all">Categorias</option>
                 {inventoryCategories.map((cat: any) => (
                   <option key={cat.id} value={cat.id}>{cat.name}</option>
                 ))}
-              </select>
+              </Select>
             )}
           </div>
           <div className="max-h-[55vh] overflow-y-auto rounded-lg border border-zinc-100 divide-y divide-zinc-100">
             <button
               type="button"
               onClick={() => { onChange(""); setOpen(false); setSearch(""); setCategoryFilter("all"); }}
-              className={`w-full flex items-center px-2.5 py-2 text-[13px] font-semibold text-left transition-colors ${!value ? "bg-amber-50 text-amber-800" : "hover:bg-slate-50 text-slate-500"}`}
+              className={`w-full flex items-center px-2.5 py-2 text-[13px] font-semibold text-left transition-colors ${!value ? "bg-blue-50 text-blue-800" : "hover:bg-slate-50 text-slate-500"}`}
             >
               Sem vínculo de estoque
             </button>
             {groupedFiltered.map(group => (
               <div key={group.label}>
                 {categoryFilter === "all" && (
-                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 bg-slate-50/80 px-2.5 py-1 sticky top-0">{group.label}</p>
+                  <p className="text-[11px] font-medium text-slate-500 bg-slate-50/80 px-2.5 py-1 sticky top-0">{group.label}</p>
                 )}
                 {group.items.map((item: any) => {
                   const alreadyUsed = usedItemIds.has(item.id);
@@ -355,17 +357,17 @@ export function InventoryLinkField({
                       disabled={alreadyUsed && !isSelected}
                       onClick={() => { onChange(item.id); setOpen(false); setSearch(""); setCategoryFilter("all"); }}
                       className={`w-full flex items-center gap-2 px-2.5 py-2 text-left transition-colors ${
-                        isSelected ? "bg-amber-50" :
+                        isSelected ? "bg-blue-50" :
                         alreadyUsed ? "opacity-45 cursor-not-allowed" :
                         "hover:bg-slate-50"
                       }`}
                     >
                       <div className="flex-1 min-w-0">
                         <p className="text-[13px] font-semibold text-slate-800 truncate leading-tight">{item.name}</p>
-                        {alreadyUsed && !isSelected && <p className="text-[10px] text-slate-400 leading-tight">Já vinculado a outro produto</p>}
+                        {alreadyUsed && !isSelected && <p className="text-[11px] text-slate-400 leading-tight">Já vinculado a outro produto</p>}
                       </div>
-                      <span className={`text-[10px] font-bold uppercase shrink-0 ${statusColor}`}>{statusLabel}</span>
-                      {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
+                      <span className={`text-[11px] font-semibold shrink-0 ${statusColor}`}>{statusLabel}</span>
+                      {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-blue-500 shrink-0" />}
                     </button>
                   );
                 })}
@@ -418,18 +420,18 @@ export function ProductionLinkField({
 
   return (
     <div className="space-y-2">
-      <label className="block text-[11px] font-black uppercase tracking-widest text-orange-600">Vincular à produção (opcional)</label>
+      <label className="block text-[11px] font-semibold text-blue-600">Vincular à produção (opcional)</label>
       <p className="text-[11px] text-slate-500 -mt-1">Ao vender, os insumos da receita são descontados do estoque automaticamente.</p>
 
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="w-full flex items-center justify-between gap-3 bg-orange-50/60 border border-orange-200 rounded-xl px-3 py-2.5 text-sm font-bold text-left hover:border-orange-300 hover:bg-orange-50 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-400"
+        className="w-full flex items-center justify-between gap-3 bg-blue-50/60 border border-blue-200 rounded-lg px-3 py-2.5 text-sm font-semibold text-left hover:border-blue-300 hover:bg-blue-50 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400"
       >
         {selectedRecipe ? (
           <div className="flex-1 min-w-0">
             <span className="text-slate-800 truncate block">{selectedRecipe.name}</span>
-            <span className="text-[10px] text-orange-600 font-semibold">Rende {selectedRecipe.outputQuantity} {selectedRecipe.outputUnit}</span>
+            <span className="text-[11px] text-blue-600 font-semibold">Rende {selectedRecipe.outputQuantity} {selectedRecipe.outputUnit}</span>
           </div>
         ) : (
           <span className="text-slate-400">Sem vínculo de produção</span>
@@ -438,11 +440,11 @@ export function ProductionLinkField({
       </button>
 
       {selectedRecipe && (
-        <div className="rounded-xl border border-orange-200 bg-white px-3 py-2 text-[11px] text-orange-800 space-y-1">
-          <p className="font-black">📋 {selectedRecipe.name}</p>
-          <p className="text-orange-600">A cada <b>1 unidade</b> vendida, o sistema desconta <b>1/{selectedRecipe.outputQuantity} {selectedRecipe.outputUnit}</b> dos insumos.</p>
+        <div className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-[11px] text-blue-800 space-y-1">
+          <p className="font-semibold">📋 {selectedRecipe.name}</p>
+          <p className="text-blue-600">A cada <b>1 unidade</b> vendida, o sistema desconta <b>1/{selectedRecipe.outputQuantity} {selectedRecipe.outputUnit}</b> dos insumos.</p>
           {selectedRecipe.ingredients?.length > 0 && (
-            <p className="text-orange-500">Insumos: {selectedRecipe.ingredients.map((i: any) => i.itemName).join(", ")}</p>
+            <p className="text-blue-500">Insumos: {selectedRecipe.ingredients.map((i: any) => i.itemName).join(", ")}</p>
           )}
         </div>
       )}
@@ -452,18 +454,17 @@ export function ProductionLinkField({
         footer={<ModalFooter><Button variant="ghost" onClick={() => { onChange(""); setOpen(false); setSearch(""); }}>Remover vínculo</Button><Button variant="outline" onClick={() => { setOpen(false); setSearch(""); }}>Fechar</Button></ModalFooter>}
       >
         <div className="space-y-2 p-1">
-          <input
+          <Input
             autoFocus
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Buscar receita..."
-            className="w-full bg-zinc-50 border border-zinc-200 rounded-lg px-2.5 py-1.5 text-[13px] font-semibold focus:outline-none focus:ring-2 focus:ring-orange-400"
           />
           <div className="max-h-[55vh] overflow-y-auto rounded-lg border border-zinc-100 divide-y divide-zinc-100">
             <button
               type="button"
               onClick={() => { onChange(""); setOpen(false); setSearch(""); }}
-              className={`w-full flex items-center px-2.5 py-2 text-[13px] font-semibold text-left transition-colors ${!value ? "bg-orange-50 text-orange-800" : "hover:bg-slate-50 text-slate-500"}`}
+              className={`w-full flex items-center px-2.5 py-2 text-[13px] font-semibold text-left transition-colors ${!value ? "bg-blue-50 text-blue-800" : "hover:bg-slate-50 text-slate-500"}`}
             >
               Sem vínculo de produção
             </button>
@@ -477,20 +478,20 @@ export function ProductionLinkField({
                   disabled={alreadyUsed && !isSelected}
                   onClick={() => { onChange(recipe.id); setOpen(false); setSearch(""); }}
                   className={`w-full flex items-start gap-2 px-2.5 py-2 text-left transition-colors ${
-                    isSelected ? "bg-orange-50" :
+                    isSelected ? "bg-blue-50" :
                     alreadyUsed ? "opacity-45 cursor-not-allowed" :
                     "hover:bg-slate-50"
                   }`}
                 >
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-semibold text-slate-800 leading-tight">{recipe.name}</p>
-                    <p className="text-[10px] text-orange-600 font-semibold leading-tight">Rende {recipe.outputQuantity} {recipe.outputUnit}</p>
+                    <p className="text-[11px] text-blue-600 font-semibold leading-tight">Rende {recipe.outputQuantity} {recipe.outputUnit}</p>
                     {recipe.ingredients?.length > 0 && (
-                      <p className="text-[10px] text-slate-400 truncate leading-tight">Insumos: {recipe.ingredients.map((i: any) => i.itemName).join(", ")}</p>
+                      <p className="text-[11px] text-slate-400 truncate leading-tight">Insumos: {recipe.ingredients.map((i: any) => i.itemName).join(", ")}</p>
                     )}
-                    {alreadyUsed && !isSelected && <p className="text-[10px] text-slate-400 leading-tight">Já vinculado a outro produto</p>}
+                    {alreadyUsed && !isSelected && <p className="text-[11px] text-slate-400 leading-tight">Já vinculado a outro produto</p>}
                   </div>
-                  {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-orange-500 shrink-0 mt-0.5" />}
+                  {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-blue-500 shrink-0 mt-0.5" />}
                 </button>
               );
             })}
@@ -514,8 +515,8 @@ export interface RecipeIngredientDraft {
 const RECIPE_UNIT_OPTIONS = ["g", "kg", "ml", "l", "un", "dz", "cm", "m"];
 
 const PICKER_ACCENT = {
-  orange: { ring: "focus:ring-orange-400", border: "border-orange-200" },
-  amber: { ring: "focus:ring-amber-400", border: "border-amber-200" },
+  orange: { ring: "focus:ring-blue-400", border: "border-blue-200" },
+  amber: { ring: "focus:ring-blue-400", border: "border-blue-200" },
 } as const;
 
 // Modal de busca de item do estoque, compartilhado por qualquer campo que precise
@@ -540,7 +541,6 @@ export function InventoryItemPickerModal({
 }) {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
-  const colors = PICKER_ACCENT[accent];
   const categoryById = new Map(inventoryCategories.map((cat: any) => [cat.id, cat]));
 
   const filtered = inventoryItems.filter((item: any) =>
@@ -574,31 +574,31 @@ export function InventoryItemPickerModal({
     >
       <div className="space-y-2 p-1">
         <div className="flex gap-2">
-          <input
+          <Input
             autoFocus
+            wrapperClassName="flex-1"
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Buscar item..."
-            className={`flex-1 min-w-0 bg-zinc-50 border ${colors.border} rounded-lg px-2.5 py-1.5 text-[13px] font-semibold focus:outline-none focus:ring-2 ${colors.ring}`}
           />
           {inventoryCategories.length > 0 && (
-            <select
+            <Select
+              wrapperClassName="w-36 shrink-0"
               value={categoryFilter}
               onChange={e => setCategoryFilter(e.target.value)}
-              className={`w-32 shrink-0 bg-zinc-50 border ${colors.border} rounded-lg px-2 py-1.5 text-[12px] font-semibold focus:outline-none focus:ring-2 ${colors.ring}`}
             >
               <option value="all">Categorias</option>
               {inventoryCategories.map((cat: any) => (
                 <option key={cat.id} value={cat.id}>{cat.name}</option>
               ))}
-            </select>
+            </Select>
           )}
         </div>
         <div className="max-h-[55vh] overflow-y-auto rounded-lg border border-zinc-100 divide-y divide-zinc-100">
           {groupedFiltered.map(group => (
             <div key={group.label}>
               {categoryFilter === "all" && (
-                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 bg-slate-50/80 px-2.5 py-1 sticky top-0">{group.label}</p>
+                <p className="text-[11px] font-medium text-slate-500 bg-slate-50/80 px-2.5 py-1 sticky top-0">{group.label}</p>
               )}
               {group.items.map((item: any) => (
                 <button
@@ -608,7 +608,7 @@ export function InventoryItemPickerModal({
                   className="w-full flex items-center gap-2 px-2.5 py-2 text-left hover:bg-slate-50 transition-colors"
                 >
                   <p className="flex-1 min-w-0 text-[13px] font-semibold text-slate-800 truncate leading-tight">{item.name}</p>
-                  <span className={`text-[10px] font-bold uppercase shrink-0 ${item.quantity <= 0 ? "text-red-500" : item.quantity < 5 ? "text-amber-500" : "text-green-600"}`}>
+                  <span className={`text-[11px] font-semibold  shrink-0 ${item.quantity <= 0 ? "text-red-500" : item.quantity < 5 ? "text-amber-500" : "text-green-600"}`}>
                     {item.quantity <= 0 ? "Esgotado" : `${item.quantity} ${item.unit || 'un'}`}
                   </span>
                 </button>
@@ -662,11 +662,11 @@ export function RecipeIngredientsField({
   };
 
   return (
-    <div className="space-y-2.5 rounded-2xl border border-amber-100 bg-amber-50/40 p-3.5">
+    <div className="space-y-2.5 rounded-lg border border-blue-100 bg-blue-50/40 p-3.5">
       <div className="flex items-center gap-2">
-        <Package className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-        <label className="text-[11px] font-black uppercase tracking-widest text-amber-700">Insumos usados</label>
-        <span className="text-[9px] font-bold text-slate-400 uppercase">(Opcional)</span>
+        <Package className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+        <label className="text-[11px] font-medium text-blue-700">Insumos usados</label>
+        <span className="text-[11px] text-slate-400">(Opcional)</span>
       </div>
       <p className="text-[11px] text-slate-500 -mt-1">Ao vender este produto, as quantidades abaixo são descontadas do estoque automaticamente.</p>
 
@@ -674,49 +674,46 @@ export function RecipeIngredientsField({
         {value.map(ing => {
           const item = itemById.get(ing.inventoryItemId);
           return (
-            <div key={ing._key} className="flex items-center gap-2 bg-white border border-amber-200 rounded-xl px-2.5 py-2 shadow-sm">
+            <div key={ing._key} className="flex items-center gap-2 bg-white border border-blue-200 rounded-lg px-2.5 py-2">
               <button
                 type="button"
                 onClick={() => setPickerOpenFor(ing._key)}
-                className="flex-1 min-w-0 text-left text-sm font-bold text-slate-800 truncate hover:text-amber-700"
+                className="flex-1 min-w-0 text-left text-sm font-semibold text-slate-800 truncate hover:text-blue-700"
               >
                 {item ? item.name : <span className="text-slate-400 font-semibold">Escolher item do estoque...</span>}
               </button>
-              <input
+              <Input
                 type="number"
                 inputMode="decimal"
                 placeholder="Qtd"
+                wrapperClassName="w-20"
+                className="text-center"
                 value={ing.quantity}
                 onChange={e => updateIngredient(ing._key, { quantity: e.target.value })}
-                className="w-16 bg-zinc-50 border border-zinc-200 rounded-lg px-2 py-1.5 text-sm font-bold text-center focus:outline-none focus:ring-2 focus:ring-amber-400"
               />
-              <select
+              <Select
+                wrapperClassName="w-20"
                 value={ing.unit}
                 onChange={e => updateIngredient(ing._key, { unit: e.target.value })}
-                className="bg-zinc-50 border border-zinc-200 rounded-lg px-1.5 py-1.5 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-amber-400"
               >
                 {RECIPE_UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
-              </select>
-              <button
-                type="button"
+              </Select>
+              <IconButton
+                size="sm"
+                aria-label="Remover insumo"
                 onClick={() => removeIngredient(ing._key)}
-                className="p-1.5 text-slate-400 hover:text-red-500 shrink-0"
                 title="Remover insumo"
               >
-                <Trash2 className="w-4 h-4" />
-              </button>
+                <Trash2 size={14} />
+              </IconButton>
             </div>
           );
         })}
       </div>
 
-      <button
-        type="button"
-        onClick={addIngredient}
-        className="w-full flex items-center justify-center gap-1.5 border-2 border-dashed border-amber-300 rounded-xl px-3 py-2 text-xs font-black uppercase tracking-wide text-amber-700 hover:bg-amber-100/50 transition-colors"
-      >
-        <Plus className="w-3.5 h-3.5" /> Adicionar insumo
-      </button>
+      <Button type="button" size="sm" variant="outline" fullWidth iconLeft={<Plus size={14} />} onClick={addIngredient}>
+        Adicionar insumo
+      </Button>
 
       {inventoryItems.length === 0 && (
         <p className="text-[11px] text-slate-400 italic">Nenhum item cadastrado no estoque ainda.</p>
@@ -775,43 +772,41 @@ export function StockLinksField({
         {value.map(link => {
           const item = itemById.get(link.inventoryItemId);
           return (
-            <div key={link.id} className="flex items-center gap-1.5 bg-white border border-amber-200 rounded-lg px-2 py-1.5">
-              <span className="text-[11px] font-bold text-slate-500 shrink-0">Consome</span>
-              <input
+            <div key={link.id} className="flex items-center gap-1.5 bg-white border border-blue-200 rounded-lg px-2 py-1.5">
+              <span className="text-[11px] font-semibold text-slate-500 shrink-0">Consome</span>
+              <Input
                 type="number"
                 inputMode="decimal"
                 placeholder="Qtd"
+                size="sm"
+                wrapperClassName="w-20"
+                className="text-center"
                 value={link.quantity}
                 onChange={e => updateLink(link.id, { quantity: parseFloat(e.target.value) || 0 })}
-                className="w-14 bg-zinc-50 border border-amber-200 rounded-lg px-1.5 py-1 text-xs font-bold text-center focus:outline-none focus:ring-2 focus:ring-amber-400"
               />
               <button
                 type="button"
                 onClick={() => setPickerOpenFor(link.id)}
-                className="flex-1 min-w-0 text-left text-xs font-bold text-slate-800 truncate hover:text-amber-700"
+                className="flex-1 min-w-0 text-left text-xs font-semibold text-slate-800 truncate hover:text-blue-700"
               >
                 {item ? `${link.unit || item.stockUnit || item.unit || "un"} de ${item.name}` : <span className="text-slate-400 font-semibold">Escolher item do estoque...</span>}
               </button>
-              <button
-                type="button"
+              <IconButton
+                size="xs"
+                aria-label="Remover vínculo"
                 onClick={() => removeLink(link.id)}
-                className="p-1 text-slate-400 hover:text-red-500 shrink-0"
                 title="Remover vínculo"
               >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+                <Trash2 size={14} />
+              </IconButton>
             </div>
           );
         })}
       </div>
 
-      <button
-        type="button"
-        onClick={addLink}
-        className="w-full flex items-center justify-center gap-1.5 border-2 border-dashed border-amber-200 rounded-lg px-2.5 py-1.5 text-[11px] font-black uppercase tracking-wide text-amber-600 hover:bg-amber-50 transition-colors"
-      >
-        <Plus className="w-3 h-3" /> {value.length > 0 ? "Vincular outro item do estoque" : "Vincular a um item do estoque"}
-      </button>
+      <Button type="button" size="xs" variant="outline" fullWidth iconLeft={<Plus size={12} />} onClick={addLink}>
+        {value.length > 0 ? "Vincular outro item do estoque" : "Vincular a um item do estoque"}
+      </Button>
 
       <InventoryItemPickerModal
         isOpen={!!pickerOpenFor}
@@ -872,13 +867,13 @@ export function TimeInput({ value, onChange, label, accent = false }: {
 
   return (
     <div className="flex flex-col gap-1">
-      {label && <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">{label}</span>}
+      {label && <span className="text-[11px] font-semibold text-zinc-400">{label}</span>}
       <div className={`
         group relative flex items-center overflow-hidden transition-all duration-200
-        rounded-[10px] border shadow-sm
+        rounded-lg border
         ${accent
-          ? "bg-amber-50 border-amber-200 focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-400/20"
-          : "bg-zinc-50 border-zinc-200 focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-500/10 focus-within:bg-white"
+          ? "bg-blue-50 border-blue-200 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-400/20"
+          : "bg-zinc-50 border-zinc-200 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-500/10 focus-within:bg-white"
         }
       `}>
         <input
@@ -890,9 +885,9 @@ export function TimeInput({ value, onChange, label, accent = false }: {
           onBlur={handleBlur}
           placeholder="00:00"
           className={`
-            bg-transparent px-3 py-2 text-xs font-black tracking-widest
+            bg-transparent px-3 py-2 text-xs font-semibold 
             focus:outline-none w-[68px] text-center
-            ${accent ? "text-amber-700 placeholder:text-amber-300" : "text-zinc-800 placeholder:text-zinc-300"}
+            ${accent ? "text-blue-700 placeholder:text-blue-300" : "text-zinc-800 placeholder:text-zinc-300"}
           `}
         />
       </div>
@@ -1035,16 +1030,16 @@ export function CondominiumsCard({ tenant }: { tenant: Tenant | null }) {
   if (condos.length === 0) return null;
 
   return (
-    <ContentCard padding="lg">
+    <ContentCard padding="md">
       <div className="flex items-center gap-3 mb-4">
-        <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
-          <Building2 className="w-4 h-4 text-amber-600" />
+        <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+          <Building2 className="w-4 h-4 text-blue-600" />
         </div>
         <div>
-          <p className="text-sm font-black text-slate-900">Condomínios vinculados</p>
+          <p className="text-sm font-medium text-slate-900">Condomínios vinculados</p>
           <p className="text-xs text-slate-500">Configure seu endereço local e horários em cada condomínio.</p>
         </div>
-        {saved && <span className="ml-auto flex items-center gap-1 text-xs text-green-600 font-bold"><CheckCircle className="w-3.5 h-3.5" /> Salvo!</span>}
+        {saved && <span className="ml-auto flex items-center gap-1 text-xs text-green-600 font-semibold"><CheckCircle className="w-3.5 h-3.5" /> Salvo!</span>}
       </div>
 
       <div className="space-y-3">
@@ -1060,24 +1055,23 @@ export function CondominiumsCard({ tenant }: { tenant: Tenant | null }) {
           }
 
           return (
-            <div key={condo.id} className="border border-slate-200 rounded-2xl overflow-hidden">
+            <div key={condo.id} className="border border-slate-200 rounded-lg overflow-hidden">
               {/* Header do condo */}
               <div className="flex items-center gap-3 px-4 py-3 bg-slate-50">
                 {condo.logoUrl
-                  ? <img src={condo.logoUrl} alt="" className="w-8 h-8 rounded-xl object-cover flex-shrink-0" />
-                  : <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0"><Building2 className="w-4 h-4 text-amber-500" /></div>}
+                  ? <img src={condo.logoUrl} alt="" className="w-8 h-8 rounded-lg object-cover flex-shrink-0" />
+                  : <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0"><Building2 className="w-4 h-4 text-blue-500" /></div>}
                 <div className="flex-1 min-w-0">
-                  <p className="font-black text-slate-900 text-sm truncate">{condo.name}</p>
+                  <p className="font-semibold text-slate-900 text-sm truncate">{condo.name}</p>
                   <a href={`/cond/${condo.slug}`} target="_blank" rel="noreferrer"
-                    className="text-[10px] text-amber-600 hover:underline font-mono flex items-center gap-1">
+                    className="text-[11px] text-blue-600 hover:underline font-mono flex items-center gap-1">
                     /cond/{condo.slug} <ExternalLink className="w-2.5 h-2.5" />
                   </a>
                 </div>
-                <button type="button" onClick={() => isEditing ? setEditingId(null) : startEdit(condo)}
-                  className={`p-2 rounded-xl transition-colors text-xs font-bold flex items-center gap-1.5 ${isEditing ? "bg-slate-200 text-slate-600" : "bg-amber-100 text-amber-700 hover:bg-amber-200"}`}>
-                  <Edit3 className="w-3.5 h-3.5" />
+                <Button type="button" size="xs" variant={isEditing ? "ghost" : "outline"} iconLeft={<Edit3 size={14} />}
+                  onClick={() => isEditing ? setEditingId(null) : startEdit(condo)}>
                   {isEditing ? "Cancelar" : "Editar"}
-                </button>
+                </Button>
               </div>
 
               {/* Info resumida (quando não editando) */}
@@ -1099,21 +1093,18 @@ export function CondominiumsCard({ tenant }: { tenant: Tenant | null }) {
                 <div className="px-4 py-4 space-y-4">
                   {/* Endereço local */}
                   <div>
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 block">
-                      Endereço neste local
-                    </label>
-                    <input
+                    <Input
+                      label="Endereço neste local"
                       value={localAddr}
                       onChange={e => setLocalAddr(e.target.value)}
                       placeholder="Ex: Bloco A, Loja 12 — Rua das Flores, 100"
-                      className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-300 focus:border-amber-300 transition-all"
+                      hint="Este endereço será exibido para clientes neste condomínio."
                     />
-                    <p className="text-[10px] text-slate-400 mt-1">Este endereço será exibido para clientes neste condomínio.</p>
                   </div>
 
                   {/* Horários por dia */}
                   <div>
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">
+                    <label className="ds-label mb-2 block">
                       Horários neste local
                     </label>
                     <div className="space-y-2">
@@ -1121,20 +1112,15 @@ export function CondominiumsCard({ tenant }: { tenant: Tenant | null }) {
                         const day = localHours[d] ?? { enabled: false, open: "08:00", close: "22:00" };
                         return (
                           <div key={d} className="flex items-center gap-3">
-                            <button type="button" onClick={() => setLocalHours(h => ({ ...h, [d]: { ...day, enabled: !day.enabled } }))}
-                              className={`w-10 h-6 rounded-full transition-colors flex-shrink-0 ${day.enabled ? "bg-amber-400" : "bg-slate-200"}`}>
-                              <div className={`w-5 h-5 bg-white rounded-full shadow-sm mx-auto transition-transform ${day.enabled ? "translate-x-2" : "-translate-x-2"}`} />
-                            </button>
-                            <span className={`text-xs font-black w-8 flex-shrink-0 ${day.enabled ? "text-slate-900" : "text-slate-400"}`}>{DAY_LABELS_COND[d]}</span>
+                            <Switch checked={!!day.enabled} onCheckedChange={() => setLocalHours(h => ({ ...h, [d]: { ...day, enabled: !day.enabled } }))} />
+                            <span className={`text-xs font-semibold w-8 flex-shrink-0 ${day.enabled ? "text-slate-900" : "text-slate-400"}`}>{DAY_LABELS_COND[d]}</span>
                             {day.enabled ? (
                               <div className="flex items-center gap-2 flex-1">
-                                <input type="time" value={day.open}
-                                  onChange={e => setLocalHours(h => ({ ...h, [d]: { ...day, open: e.target.value } }))}
-                                  className="flex-1 px-2 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-amber-300" />
+                                <Input type="time" size="sm" wrapperClassName="flex-1" value={day.open}
+                                  onChange={e => setLocalHours(h => ({ ...h, [d]: { ...day, open: e.target.value } }))} />
                                 <span className="text-xs text-slate-400">até</span>
-                                <input type="time" value={day.close}
-                                  onChange={e => setLocalHours(h => ({ ...h, [d]: { ...day, close: e.target.value } }))}
-                                  className="flex-1 px-2 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-amber-300" />
+                                <Input type="time" size="sm" wrapperClassName="flex-1" value={day.close}
+                                  onChange={e => setLocalHours(h => ({ ...h, [d]: { ...day, close: e.target.value } }))} />
                               </div>
                             ) : (
                               <span className="text-xs text-slate-400 italic">Fechado</span>
@@ -1145,10 +1131,9 @@ export function CondominiumsCard({ tenant }: { tenant: Tenant | null }) {
                     </div>
                   </div>
 
-                  <button type="button" onClick={() => handleSave(condo.id)} disabled={saving}
-                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-black text-sm text-white bg-amber-500 hover:bg-amber-600 disabled:opacity-60 transition-colors shadow-sm">
-                    {saving ? <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Salvando...</> : <><Save className="w-4 h-4" /> Salvar configurações</>}
-                  </button>
+                  <Button type="button" fullWidth loading={saving} iconLeft={<Save size={14} />} onClick={() => handleSave(condo.id)}>
+                    Salvar configurações
+                  </Button>
                 </div>
               )}
             </div>
@@ -1194,41 +1179,23 @@ export function KitchenPasswordCard({ tenantId }: { tenantId: string }) {
   };
 
   return (
-    <ContentCard padding="lg">
+    <ContentCard padding="md">
       <div className="flex items-center gap-3 mb-1">
         <ChefHat className="w-4 h-4 text-slate-400" />
-        <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Painel de Cozinha</p>
+        <p className="text-sm font-medium text-slate-800">Painel de Cozinha</p>
         {hasPassword !== null && (
-          <span className={`ml-auto text-[9px] font-black uppercase px-2 py-1 rounded-full ${hasPassword ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"}`}>
+          <span className={`ml-auto text-[10px] font-semibold  px-2 py-1 rounded-full ${hasPassword ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"}`}>
             {hasPassword ? "Configurado" : "Não configurado"}
           </span>
         )}
       </div>
-      <p className="text-[10px] text-slate-400 mb-6">
+      <p className="text-[11px] text-slate-500 mb-4">
         Defina uma senha para abrir a tela <strong>/cozinha/{"{sua-loja}"}</strong> em um tablet ou TV fixo na cozinha —
         não precisa de conta de funcionário, só dessa senha. Fica conectado indefinidamente até alguém sair manualmente.
       </p>
       <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
-        <div className="flex-1 space-y-1.5">
-          <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">
-            {hasPassword ? "Nova senha (deixe em branco para manter a atual)" : "Senha da cozinha"}
-          </label>
-          <input
-            type="text"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Mínimo 4 caracteres"
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm font-bold focus:border-[#C9A227] outline-none transition-all"
-          />
-        </div>
-        <button
-          type="button"
-          disabled={saving || !password}
-          onClick={handleSave}
-          className="bg-[#0D1B3E] hover:bg-slate-800 disabled:opacity-40 text-white px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all shrink-0"
-        >
-          {saving ? "Salvando..." : "Salvar"}
-        </button>
+        <Input wrapperClassName="flex-1" label={hasPassword ? "Nova senha (deixe em branco para manter a atual)" : "Senha da cozinha"} type="text" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mínimo 4 caracteres" />
+        <Button disabled={saving || !password} loading={saving} onClick={handleSave}>Salvar</Button>
       </div>
     </ContentCard>
   );
@@ -1296,45 +1263,43 @@ export function KitchenAccessRequestsCard({ tenantId, onApproved }: { tenantId: 
   if (requests.length === 0) return null;
 
   return (
-    <ContentCard padding="lg">
+    <ContentCard padding="md">
       <div className="flex items-center gap-3 mb-1">
         <Bell className="w-4 h-4 text-amber-500" />
-        <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Solicitações de Acesso</p>
-        <span className="ml-auto text-[9px] font-black uppercase px-2 py-1 rounded-full bg-amber-100 text-amber-700">
+        <p className="text-sm font-medium text-slate-800">Solicitações de Acesso</p>
+        <span className="ml-auto text-[10px] font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-700">
           {requests.length} pendente{requests.length > 1 ? "s" : ""}
         </span>
       </div>
-      <p className="text-[10px] text-slate-400 mb-6">
+      <p className="text-[11px] text-slate-500 mb-4">
         Pedidos de acesso feitos por funcionários direto em cozinha.boxsys.com.br. Aprove definindo uma senha,
         ou rejeite se não reconhecer a pessoa.
       </p>
       <div className="space-y-2">
         {requests.map((r) => (
-          <div key={r.id} className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-3">
+          <div key={r.id} className="bg-slate-50 border border-slate-100 rounded-lg px-4 py-3">
             <div className="flex items-center gap-3">
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-slate-700">{r.name} <span className="text-slate-400 font-normal">@{r.username}</span></p>
-                {r.contact && <p className="text-[10px] text-slate-400">Contato: {r.contact}</p>}
+                <p className="text-sm font-semibold text-slate-700">{r.name} <span className="text-slate-400 font-normal">@{r.username}</span></p>
+                {r.contact && <p className="text-[11px] text-slate-400">Contato: {r.contact}</p>}
               </div>
               {approvingId !== r.id && (
                 <div className="flex items-center gap-3 shrink-0">
-                  <button onClick={() => { setApprovingId(r.id); setApprovePassword(""); }} className="text-[10px] font-black uppercase text-green-600 hover:text-green-700">Aprovar</button>
-                  <button onClick={() => handleReject(r.id)} className="text-[10px] font-black uppercase text-red-500 hover:text-red-600">Rejeitar</button>
+                  <Button size="xs" variant="success" onClick={() => { setApprovingId(r.id); setApprovePassword(""); }}>Aprovar</Button>
+                  <Button size="xs" variant="danger" onClick={() => handleReject(r.id)}>Rejeitar</Button>
                 </div>
               )}
             </div>
             {approvingId === r.id && (
               <div className="flex items-center gap-2 mt-3">
-                <input
+                <Input size="sm" wrapperClassName="flex-1"
                   type="text"
                   value={approvePassword}
                   onChange={(e) => setApprovePassword(e.target.value)}
                   placeholder="Defina a senha (mín. 4 caracteres)"
-                  autoFocus
-                  className="flex-1 bg-white border border-slate-200 rounded-lg py-1.5 px-3 text-xs font-bold outline-none focus:border-[#C9A227]"
-                />
-                <button onClick={() => handleApprove(r.id)} className="text-[10px] font-black uppercase text-green-600 hover:text-green-700 shrink-0">Confirmar</button>
-                <button onClick={() => { setApprovingId(null); setApprovePassword(""); }} className="text-[10px] font-black uppercase text-slate-400 hover:text-slate-600 shrink-0">Cancelar</button>
+                  autoFocus />
+                <Button size="xs" variant="success" onClick={() => handleApprove(r.id)}>Confirmar</Button>
+                <Button size="xs" variant="outline" onClick={() => { setApprovingId(null); setApprovePassword(""); }}>Cancelar</Button>
               </div>
             )}
           </div>
@@ -1432,56 +1397,22 @@ export function KitchenStaffCard({ tenantId }: { tenantId: string }) {
   };
 
   return (
-    <ContentCard padding="lg">
+    <ContentCard padding="md">
       <div className="flex items-center gap-3 mb-1">
         <Users className="w-4 h-4 text-slate-400" />
-        <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Equipe da Cozinha</p>
+        <p className="text-sm font-medium text-slate-800">Equipe da Cozinha</p>
       </div>
-      <p className="text-[10px] text-slate-400 mb-6">
+      <p className="text-[11px] text-slate-500 mb-4">
         Cadastre cada pessoa que trabalha na cozinha com nome, usuário e senha próprios — assim o app mostra
         quem está com o pedido em mãos, e a pessoa consegue logar direto em <strong>cozinha.boxsys.com.br</strong> com
         esse usuário (não precisa mais digitar o nome da loja). Continua funcionando junto com a senha única acima.
       </p>
 
-      <div className="flex flex-col sm:flex-row gap-3 sm:items-end mb-6">
-        <div className="flex-1 space-y-1.5">
-          <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Nome</label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Ex: João"
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm font-bold focus:border-[#C9A227] outline-none transition-all"
-          />
-        </div>
-        <div className="flex-1 space-y-1.5">
-          <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Usuário</label>
-          <input
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="Ex: joao.pizzaria"
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm font-bold focus:border-[#C9A227] outline-none transition-all"
-          />
-        </div>
-        <div className="flex-1 space-y-1.5">
-          <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Senha</label>
-          <input
-            type="text"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Mínimo 4 caracteres"
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm font-bold focus:border-[#C9A227] outline-none transition-all"
-          />
-        </div>
-        <button
-          type="button"
-          disabled={saving || !name.trim() || !username.trim() || !password}
-          onClick={handleCreate}
-          className="bg-[#0D1B3E] hover:bg-slate-800 disabled:opacity-40 text-white px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all shrink-0"
-        >
-          {saving ? "Salvando..." : "Adicionar"}
-        </button>
+      <div className="flex flex-col sm:flex-row gap-3 sm:items-end mb-4">
+        <Input wrapperClassName="flex-1" label="Nome" type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: João" />
+        <Input wrapperClassName="flex-1" label="Usuário" type="text" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Ex: joao.pizzaria" />
+        <Input wrapperClassName="flex-1" label="Senha" type="text" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mínimo 4 caracteres" />
+        <Button disabled={saving || !name.trim() || !username.trim() || !password} loading={saving} onClick={handleCreate}>Adicionar</Button>
       </div>
 
       {!loading && staff.length === 0 && (
@@ -1491,33 +1422,31 @@ export function KitchenStaffCard({ tenantId }: { tenantId: string }) {
       {staff.length > 0 && (
         <div className="space-y-2">
           {staff.map((member) => (
-            <div key={member.id} className="flex items-center gap-3 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3">
+            <div key={member.id} className="flex items-center gap-3 bg-slate-50 border border-slate-100 rounded-lg px-4 py-3">
               <div className={`w-2 h-2 rounded-full shrink-0 ${member.active ? "bg-green-500" : "bg-slate-300"}`} />
               <div className="flex-1 min-w-0">
-                <span className="text-sm font-bold text-slate-700 truncate block">{member.name}</span>
-                <span className="text-[10px] text-slate-400">@{member.username}</span>
+                <span className="text-sm font-semibold text-slate-700 truncate block">{member.name}</span>
+                <span className="text-[11px] text-slate-400">@{member.username}</span>
               </div>
 
               {editingId === member.id ? (
                 <div className="flex items-center gap-2">
-                  <input
+                  <Input size="sm" wrapperClassName="w-36"
                     type="text"
                     value={editPassword}
                     onChange={(e) => setEditPassword(e.target.value)}
                     placeholder="Nova senha"
-                    autoFocus
-                    className="bg-white border border-slate-200 rounded-lg py-1.5 px-3 text-xs font-bold w-32 outline-none focus:border-[#C9A227]"
-                  />
-                  <button onClick={() => handleResetPassword(member.id)} className="text-[10px] font-black uppercase text-green-600 hover:text-green-700">Salvar</button>
-                  <button onClick={() => { setEditingId(null); setEditPassword(""); }} className="text-[10px] font-black uppercase text-slate-400 hover:text-slate-600">Cancelar</button>
+                    autoFocus />
+                  <Button size="xs" variant="success" onClick={() => handleResetPassword(member.id)}>Salvar</Button>
+                  <Button size="xs" variant="outline" onClick={() => { setEditingId(null); setEditPassword(""); }}>Cancelar</Button>
                 </div>
               ) : (
                 <div className="flex items-center gap-3 shrink-0">
-                  <button onClick={() => { setEditingId(member.id); setEditPassword(""); }} className="text-[10px] font-black uppercase text-slate-400 hover:text-slate-600">Trocar senha</button>
-                  <button onClick={() => handleToggleActive(member)} className={`text-[10px] font-black uppercase ${member.active ? "text-amber-600 hover:text-amber-700" : "text-green-600 hover:text-green-700"}`}>
+                  <Button size="xs" variant="outline" onClick={() => { setEditingId(member.id); setEditPassword(""); }}>Trocar senha</Button>
+                  <Button size="xs" variant={member.active ? "outline" : "success"} onClick={() => handleToggleActive(member)}>
                     {member.active ? "Desativar" : "Ativar"}
-                  </button>
-                  <button onClick={() => setDeleteConfirm(member)} className="text-[10px] font-black uppercase text-red-500 hover:text-red-600">Remover</button>
+                  </Button>
+                  <Button size="xs" variant="danger" onClick={() => setDeleteConfirm(member)}>Remover</Button>
                 </div>
               )}
             </div>
@@ -1621,48 +1550,21 @@ export function TvDevicesCard({ slug }: { slug: string }) {
   };
 
   return (
-    <ContentCard padding="lg">
+    <ContentCard padding="md">
       <div className="flex items-center gap-3 mb-1">
         <Monitor className="w-4 h-4 text-slate-400" />
-        <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">TVs (Android TV / Fire Stick)</p>
+        <p className="text-sm font-medium text-slate-800">TVs (Android TV / Fire Stick)</p>
       </div>
-      <p className="text-[10px] text-slate-400 mb-6">
+      <p className="text-[11px] text-slate-500 mb-4">
         Instale o app do Painel de Pedidos na TV ou Fire Stick — ele vai mostrar um código de 6 dígitos na tela.
         Digite esse código abaixo pra vincular o aparelho a este estabelecimento. Uma vez vinculado, fica sempre
         conectado automaticamente (mesmo desligando e ligando de novo) até você desvincular por aqui.
       </p>
 
-      <div className="flex flex-col sm:flex-row gap-3 sm:items-end mb-6">
-        <div className="flex-1 space-y-1.5">
-          <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Código exibido na TV</label>
-          <input
-            type="text"
-            inputMode="numeric"
-            maxLength={6}
-            value={pairingCode}
-            onChange={(e) => setPairingCode(e.target.value.replace(/\D/g, ""))}
-            placeholder="000000"
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-lg font-black tracking-[0.3em] text-center focus:border-[#C9A227] outline-none transition-all"
-          />
-        </div>
-        <div className="flex-1 space-y-1.5">
-          <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Nome (opcional)</label>
-          <input
-            type="text"
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            placeholder="Ex: TV do Balcão"
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm font-bold focus:border-[#C9A227] outline-none transition-all"
-          />
-        </div>
-        <button
-          type="button"
-          disabled={pairing || pairingCode.length !== 6}
-          onClick={handlePair}
-          className="bg-[#0D1B3E] hover:bg-slate-800 disabled:opacity-40 text-white px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all shrink-0"
-        >
-          {pairing ? "Vinculando..." : "Vincular"}
-        </button>
+      <div className="flex flex-col sm:flex-row gap-3 sm:items-end mb-4">
+        <Input wrapperClassName="flex-1" label="Código exibido na TV" type="text" inputMode="numeric" maxLength={6} value={pairingCode} onChange={(e) => setPairingCode(e.target.value.replace(/\D/g, ""))} placeholder="000000" className="text-center text-base" />
+        <Input wrapperClassName="flex-1" label="Nome (opcional)" type="text" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Ex: TV do Balcão" />
+        <Button disabled={pairing || pairingCode.length !== 6} loading={pairing} onClick={handlePair}>Vincular</Button>
       </div>
 
       {!loading && devices.length === 0 && (
@@ -1672,32 +1574,30 @@ export function TvDevicesCard({ slug }: { slug: string }) {
       {devices.length > 0 && (
         <div className="space-y-2">
           {devices.map((device) => (
-            <div key={device.id} className="flex items-center gap-3 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3">
+            <div key={device.id} className="flex items-center gap-3 bg-slate-50 border border-slate-100 rounded-lg px-4 py-3">
               <div className="w-2 h-2 rounded-full shrink-0 bg-green-500" />
               <div className="flex-1 min-w-0">
-                <span className="text-sm font-bold text-slate-700 truncate block">{device.label || "TV sem nome"}</span>
-                <span className="text-[10px] text-slate-400">
+                <span className="text-sm font-semibold text-slate-700 truncate block">{device.label || "TV sem nome"}</span>
+                <span className="text-[11px] text-slate-400">
                   {device.lastSeenAt ? `Visto por último em ${new Date(device.lastSeenAt).toLocaleString("pt-BR")}` : "Ainda sem atividade"}
                 </span>
               </div>
 
               {editingId === device.id ? (
                 <div className="flex items-center gap-2">
-                  <input
+                  <Input size="sm" wrapperClassName="w-36"
                     type="text"
                     value={editingLabel}
                     onChange={(e) => setEditingLabel(e.target.value)}
                     placeholder="Nome da TV"
-                    autoFocus
-                    className="bg-white border border-slate-200 rounded-lg py-1.5 px-3 text-xs font-bold w-32 outline-none focus:border-[#C9A227]"
-                  />
-                  <button onClick={() => handleRename(device.id)} className="text-[10px] font-black uppercase text-green-600 hover:text-green-700">Salvar</button>
-                  <button onClick={() => setEditingId(null)} className="text-[10px] font-black uppercase text-slate-400 hover:text-slate-600">Cancelar</button>
+                    autoFocus />
+                  <Button size="xs" variant="success" onClick={() => handleRename(device.id)}>Salvar</Button>
+                  <Button size="xs" variant="outline" onClick={() => setEditingId(null)}>Cancelar</Button>
                 </div>
               ) : (
                 <div className="flex items-center gap-3 shrink-0">
-                  <button onClick={() => { setEditingId(device.id); setEditingLabel(device.label || ""); }} className="text-[10px] font-black uppercase text-slate-400 hover:text-slate-600">Renomear</button>
-                  <button onClick={() => setUnpairConfirm(device)} className="text-[10px] font-black uppercase text-red-500 hover:text-red-600">Desvincular</button>
+                  <Button size="xs" variant="outline" onClick={() => { setEditingId(device.id); setEditingLabel(device.label || ""); }}>Renomear</Button>
+                  <Button size="xs" variant="danger" onClick={() => setUnpairConfirm(device)}>Desvincular</Button>
                 </div>
               )}
             </div>
@@ -1732,32 +1632,32 @@ export function KmRangeAdder({ onAdd }: { onAdd: (range: KmRange) => void }) {
   };
 
   return (
-    <div className="border border-dashed border-slate-300 rounded-xl p-3 space-y-3 bg-slate-50/50">
-      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Adicionar faixa de distância</p>
+    <div className="border border-dashed border-slate-300 rounded-lg p-3 space-y-3 bg-slate-50/50">
+      <p className="text-[11px] font-medium text-slate-600">Adicionar faixa de distância</p>
       <div className="flex gap-2 flex-wrap">
         <div className="flex items-center gap-2 flex-1 min-w-[140px]">
-          <span className="text-xs font-bold text-slate-400 shrink-0">Até</span>
-          <input
+          <span className="text-xs font-semibold text-slate-400 shrink-0">Até</span>
+          <Input
             type="number"
             min="0.1"
             step="0.5"
+            wrapperClassName="flex-1"
             value={upToKm}
             onChange={e => setUpToKm(e.target.value)}
             placeholder="5"
-            className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-amber-400"
           />
-          <span className="text-xs font-bold text-slate-400 shrink-0">km</span>
+          <span className="text-xs font-semibold text-slate-400 shrink-0">km</span>
         </div>
         <div className="flex items-center gap-2 flex-1 min-w-[140px]">
-          <span className="text-xs font-bold text-slate-400 shrink-0">Taxa R$</span>
-          <input
+          <span className="text-xs font-semibold text-slate-400 shrink-0">Taxa R$</span>
+          <Input
             type="number"
             min="0"
             step="0.50"
+            wrapperClassName="flex-1"
             value={fee}
             onChange={e => setFee(e.target.value)}
             placeholder="0,00"
-            className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-amber-400"
           />
         </div>
       </div>
@@ -1818,12 +1718,13 @@ export function ZoneAdder({ onAdd }: { onAdd: (zone: DeliveryZone) => void }) {
   };
 
   return (
-    <div className="border border-dashed border-slate-300 rounded-xl p-3 space-y-3 bg-slate-50/50">
-      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Adicionar zona por CEP</p>
+    <div className="border border-dashed border-slate-300 rounded-lg p-3 space-y-3 bg-slate-50/50">
+      <p className="text-[11px] font-medium text-slate-600">Adicionar zona por CEP</p>
 
       <div className="flex gap-2">
         <div className="relative flex-1">
-          <input
+          <Input
+            wrapperClassName="w-full"
             value={cepInput}
             onChange={e => {
               setCepInput(fmtCep(e.target.value));
@@ -1833,19 +1734,14 @@ export function ZoneAdder({ onAdd }: { onAdd: (zone: DeliveryZone) => void }) {
             onBlur={e => searchCep(e.target.value)}
             placeholder="00000-000"
             inputMode="numeric"
-            className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-amber-400 pr-8"
           />
           {loading && (
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => searchCep(cepInput)}
-          className="px-3 py-2 bg-slate-100 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-200 transition-colors whitespace-nowrap"
-        >
+        <Button type="button" variant="outline" onClick={() => searchCep(cepInput)}>
           Buscar
-        </button>
+        </Button>
       </div>
 
       {error && <p className="text-xs text-red-500 font-medium">{error}</p>}
@@ -1853,22 +1749,22 @@ export function ZoneAdder({ onAdd }: { onAdd: (zone: DeliveryZone) => void }) {
       {cepInfo && (
         <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
-          <span className="text-xs font-bold text-green-800 flex-1">
+          <span className="text-xs font-semibold text-green-800 flex-1">
             {cepInput} - {cepInfo.label}
           </span>
         </div>
       )}
 
       <div className="flex items-center gap-2">
-        <span className="text-xs font-bold text-slate-400 shrink-0">Taxa R$</span>
-        <input
+        <span className="text-xs font-semibold text-slate-400 shrink-0">Taxa R$</span>
+        <Input
           type="number"
           min="0"
           step="0.50"
+          wrapperClassName="flex-1"
           value={fee}
           onChange={e => setFee(e.target.value)}
           placeholder="0,00"
-          className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-amber-400"
         />
         <span className="text-xs text-slate-400">(0 = grátis)</span>
       </div>

@@ -69,7 +69,7 @@ export const DASHBOARD_NAVIGATION: DashboardNavigationGroup[] = [
     id: "clientes",
     label: "Clientes & Marketing",
     items: [
-      { id: "customers",   label: "Clientes — CRM",  tab: "customers",    icon: Users },
+      { id: "customers",   label: "Clientes",  tab: "customers",    icon: Users },
       { id: "loyalty",    label: "Fidelidade",        tab: "loyalty",      icon: Heart },
       { id: "promotions", label: "Promoções",         tab: "promotions",   icon: Star },
       { id: "bundles",    label: "Combos",             tab: "bundles",      icon: Layers },

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Bot, Link as LinkIcon, LogOut, Plus, Store } from "lucide-react";
-import { Button, Input } from "../../components";
+import { Badge, Button, Input, PageWrapper, PanelCard, SectionTitle } from "../../components";
 import { apiJson } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import type { Tenant, TenantMembership } from "../../types";
@@ -52,116 +52,98 @@ export default function OwnerPortalPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] p-4 md:p-8">
-      <div className="max-w-6xl mx-auto space-y-8">
-        <header className="bg-white border border-slate-200 rounded-[28px] p-6 md:p-8 shadow-sm flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-          <div>
-            <div className="text-[11px] font-black uppercase tracking-[0.25em] text-slate-400 mb-3">
-              Portal do Dono
-            </div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tight">{account?.name}</h1>
-            <p className="text-sm text-slate-500 mt-2">
-              Gerencie seus estabelecimentos, dashboards e a conexão de bot por QR Code.
-            </p>
-          </div>
-          <Button variant="outline" iconLeft={<LogOut className="w-4 h-4" />} onClick={() => logout()}>
-            Sair
-          </Button>
-        </header>
+    <div className="min-h-screen bg-zinc-50">
+      <PageWrapper>
+        <div className="space-y-4">
+          <SectionTitle
+            title={account?.name || "Portal do Dono"}
+            description="Portal do Dono — gerencie seus estabelecimentos, dashboards e a conexão de bot por QR Code."
+            icon={Store}
+            action={
+              <Button variant="outline" size="sm" iconLeft={<LogOut className="w-3.5 h-3.5" />} onClick={() => logout()}>
+                Sair
+              </Button>
+            }
+          />
 
-        <section className="grid xl:grid-cols-[1.4fr,0.9fr] gap-6">
-          <div className="bg-white border border-slate-200 rounded-[28px] p-6 md:p-8 shadow-sm">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-xl font-black text-slate-900">Seus Estabelecimentos</h2>
-                <p className="text-sm text-slate-500 mt-1">Cada estabelecimento possui painel e bot próprios.</p>
-              </div>
-              <div className="text-xs font-black uppercase text-slate-400 tracking-[0.2em]">
-                {tenants.length} ativo(s)
-              </div>
-            </div>
-
-            <div className="grid gap-4">
-              {tenants.map((membership: TenantMembership) => (
-                <div
-                  key={membership.membershipId}
-                  className="rounded-[24px] border border-slate-200 bg-slate-50 p-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <Store className="w-4 h-4 text-[#C9A227]" />
-                      <h3 className="text-lg font-black text-slate-900">{membership.tenant.name}</h3>
+          <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1.4fr,0.9fr]">
+            <PanelCard
+              title="Seus Estabelecimentos"
+              description="Cada estabelecimento possui painel e bot próprios."
+              icon={Store}
+              action={<Badge color="primary">{tenants.length} ativo(s)</Badge>}
+            >
+              <div className="grid gap-3">
+                {tenants.map((membership: TenantMembership) => (
+                  <div
+                    key={membership.membershipId}
+                    className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-3 md:flex-row md:items-center md:justify-between"
+                  >
+                    <div className="min-w-0 space-y-1">
+                      <h3 className="truncate text-sm font-medium text-slate-900">{membership.tenant.name}</h3>
+                      <div className="text-xs text-slate-500">/{membership.tenant.slug}</div>
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <Badge>{membership.role}</Badge>
+                        <Badge color="info">Bot: {membership.tenant.wppInstance?.status || "not_configured"}</Badge>
+                      </div>
                     </div>
-                    <div className="text-sm text-slate-500">/{membership.tenant.slug}</div>
-                    <div className="flex items-center gap-3 pt-1">
-                      <span className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">
-                        {membership.role}
-                      </span>
-                      <span className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">
-                        Bot: {membership.tenant.wppInstance?.status || "not_configured"}
-                      </span>
+
+                    <div className="flex flex-wrap gap-2">
+                      <Link to={`/dashboard/${membership.tenant.slug}`}>
+                        <Button size="sm" iconLeft={<Bot className="w-3.5 h-3.5" />}>Abrir Painel</Button>
+                      </Link>
                     </div>
                   </div>
+                ))}
+              </div>
+            </PanelCard>
 
-                  <div className="flex flex-wrap gap-3">
-                    <Link to={`/dashboard/${membership.tenant.slug}`}>
-                      <Button iconLeft={<Bot className="w-4 h-4" />}>Abrir Painel</Button>
-                    </Link>
-                  </div>
-                </div>
-              ))}
+            <div className="space-y-4">
+              <form onSubmit={handleCreate}>
+                <PanelCard title="Novo Estabelecimento" description="Crie outro cardápio com bot separado." icon={Plus} contentClassName="space-y-3">
+                  <Input
+                    label="Nome"
+                    value={createForm.name}
+                    onChange={(event) => setCreateForm((current) => ({ ...current, name: event.target.value }))}
+                    placeholder="Nome do estabelecimento"
+                  />
+                  <Input
+                    label="Slug"
+                    value={createForm.slug}
+                    onChange={(event) => setCreateForm((current) => ({ ...current, slug: event.target.value }))}
+                    placeholder="slug-do-estabelecimento"
+                    hint="Será usado no link do cardápio."
+                  />
+                  <Button
+                    type="submit"
+                    fullWidth
+                    loading={busy === "create"}
+                    iconLeft={<Plus className="w-4 h-4" />}
+                  >
+                    Criar estabelecimento
+                  </Button>
+                </PanelCard>
+              </form>
+
+              <form onSubmit={handleClaim}>
+                <PanelCard title="Vincular Existente" description="Assuma um estabelecimento antigo ainda sem dono." icon={LinkIcon} contentClassName="space-y-3">
+                  <Input
+                    label="Slug existente"
+                    value={claimSlug}
+                    onChange={(event) => setClaimSlug(event.target.value)}
+                    placeholder="slug-do-estabelecimento"
+                    iconLeft={<LinkIcon className="w-4 h-4" />}
+                    error={error || undefined}
+                  />
+                  <Button type="submit" fullWidth loading={busy === "claim"} variant="outline">
+                    Vincular estabelecimento
+                  </Button>
+                </PanelCard>
+              </form>
             </div>
-          </div>
-
-          <div className="space-y-6">
-            <form onSubmit={handleCreate} className="bg-white border border-slate-200 rounded-[28px] p-6 shadow-sm space-y-4">
-              <div>
-                <h2 className="text-lg font-black text-slate-900">Novo Estabelecimento</h2>
-                <p className="text-sm text-slate-500 mt-1">Crie outro cardápio com bot separado.</p>
-              </div>
-              <Input
-                label="Nome"
-                value={createForm.name}
-                onChange={(event) => setCreateForm((current) => ({ ...current, name: event.target.value }))}
-                placeholder="Nome do estabelecimento"
-              />
-              <Input
-                label="Slug"
-                value={createForm.slug}
-                onChange={(event) => setCreateForm((current) => ({ ...current, slug: event.target.value }))}
-                placeholder="slug-do-estabelecimento"
-                hint="Será usado no link do cardápio."
-              />
-              <Button
-                type="submit"
-                fullWidth
-                loading={busy === "create"}
-                iconLeft={<Plus className="w-4 h-4" />}
-              >
-                Criar estabelecimento
-              </Button>
-            </form>
-
-            <form onSubmit={handleClaim} className="bg-white border border-slate-200 rounded-[28px] p-6 shadow-sm space-y-4">
-              <div>
-                <h2 className="text-lg font-black text-slate-900">Vincular Existente</h2>
-                <p className="text-sm text-slate-500 mt-1">Assuma um estabelecimento antigo ainda sem dono.</p>
-              </div>
-              <Input
-                label="Slug existente"
-                value={claimSlug}
-                onChange={(event) => setClaimSlug(event.target.value)}
-                placeholder="slug-do-estabelecimento"
-                iconLeft={<LinkIcon className="w-4 h-4" />}
-                error={error || undefined}
-              />
-              <Button type="submit" fullWidth loading={busy === "claim"} variant="outline">
-                Vincular estabelecimento
-              </Button>
-            </form>
-          </div>
-        </section>
-      </div>
+          </section>
+        </div>
+      </PageWrapper>
     </div>
   );
 }

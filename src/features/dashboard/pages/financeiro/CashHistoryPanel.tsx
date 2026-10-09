@@ -1,13 +1,17 @@
 import React, { useEffect, useMemo, useState } from "react";
 import ExcelJS from "exceljs";
 import {
-  Search, Wallet, CheckCircle2, Clock, X, Loader2, User, Calendar, ChevronRight, Printer,
+  Wallet, CheckCircle2, Clock, Loader2, User, Calendar, ChevronRight, ChevronLeft, Printer, AlertTriangle,
   Download, FileSpreadsheet, FileText, PieChart as PieChartIcon, ListOrdered, BarChart3, DollarSign,
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
-import { Button, Modal, ModalFooter } from "../../../../components";
+import {
+  Button, IconButton, Modal, ModalFooter, StatGrid, StatCard, Tabs, PanelCard, ContentCard, Badge, EmptyState,
+  GridTable, usePagination, FilterLine, FilterLineSection, FilterLineItem, FilterLineSearch,
+  FilterLineSegmented, FilterLineDateRange, type Column,
+} from "../../../../components";
 import { apiFetch } from "../../../../lib/api";
 import { cn } from "../../../../lib/utils";
 import type { CashRegister, CashMovement, Tenant } from "../../../../types";
@@ -70,6 +74,11 @@ const money = (v: number | null | undefined) =>
   Number(v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 type Session = CashRegister & { movements?: CashMovement[] };
+
+const HISTORY_TABS = [
+  { id: "sessions", label: "Sessões", icon: Wallet },
+  { id: "report", label: "Relatório", icon: BarChart3 },
+] as const;
 
 export default function CashHistoryPanel({ tenant }: { tenant: Tenant }) {
   const slug = tenant.slug;
@@ -529,7 +538,7 @@ export default function CashHistoryPanel({ tenant }: { tenant: Tenant }) {
       ];
       wsSessions.getRow(1).getCell(1).value = "Sessões de Caixa";
       wsSessions.getRow(1).getCell(1).font = font({ bold: true, size: 14, color: "1E3A5F" });
-      wsSessions.getRow(2).getCell(1).value = `Período: ${periodLabel}  ·  ${filtered.length} sessão(ões)`;
+      wsSessions.getRow(2).getCell(1).value = `Período: ${periodLabel} · ${filtered.length} sessão(ões)`;
       wsSessions.getRow(2).getCell(1).font = font({ size: 9, italic: true, color: "94A3B8" });
       wsSessions.getRow(3).height = 4;
 
@@ -573,7 +582,7 @@ export default function CashHistoryPanel({ tenant }: { tenant: Tenant }) {
       ];
       wsItems.getRow(1).getCell(1).value = "Itens Vendidos";
       wsItems.getRow(1).getCell(1).font = font({ bold: true, size: 14, color: "1E3A5F" });
-      wsItems.getRow(2).getCell(1).value = `Período: ${periodLabel}  ·  ${soldItems.length} item(ns)`;
+      wsItems.getRow(2).getCell(1).value = `Período: ${periodLabel} · ${soldItems.length} item(ns)`;
       wsItems.getRow(2).getCell(1).font = font({ size: 9, italic: true, color: "94A3B8" });
       wsItems.getRow(3).height = 4;
 
@@ -673,15 +682,15 @@ export default function CashHistoryPanel({ tenant }: { tenant: Tenant }) {
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Segoe UI', Arial, sans-serif; color: #1e293b; padding: 32px; font-size: 12px; }
   .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; border-bottom: 3px solid #1e3a5f; padding-bottom: 16px; }
-  .header h1 { font-size: 20px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; }
+  .header h1 { font-size: 20px; font-weight: 900; text-transform: ; letter-spacing: 0.1em; }
   .meta { text-align: right; font-size: 10px; color: #64748b; }
-  .summary-title { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; margin: 20px 0 10px; color: #1e3a5f; }
+  .summary-title { font-size: 13px; font-weight: 800; text-transform: ; letter-spacing: 0.08em; margin: 20px 0 10px; color: #1e3a5f; }
   .fin-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
   .fin-card { padding: 12px 14px; border-radius: 10px; border: 1px solid #e2e8f0; }
-  .fin-card label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; display: block; margin-bottom: 4px; color: #94a3b8; }
+  .fin-card label { font-size: 9px; font-weight: 700; text-transform: ; letter-spacing: 0.1em; display: block; margin-bottom: 4px; color: #94a3b8; }
   .fin-card .val { font-size: 16px; font-weight: 900; font-family: monospace; }
   table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-  th { background: #f8fafc; border-bottom: 2px solid #e2e8f0; padding: 10px 12px; text-align: left; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #94a3b8; }
+  th { background: #f8fafc; border-bottom: 2px solid #e2e8f0; padding: 10px 12px; text-align: left; font-size: 9px; font-weight: 700; text-transform: ; letter-spacing: 0.1em; color: #94a3b8; }
   td { padding: 9px 12px; border-bottom: 1px solid #f1f5f9; font-size: 11px; }
   .total-row td { font-weight: 900; background: #f1f5f9; border-top: 2px solid #1e3a5f; }
   @media print { body { padding: 16px; } table { page-break-inside: auto; } tr { page-break-inside: avoid; } }
@@ -730,401 +739,262 @@ export default function CashHistoryPanel({ tenant }: { tenant: Tenant }) {
     setShowExportModal(false);
   }
 
+  const sessionPag = usePagination(filtered, 15);
+  const itemsPag = usePagination(filteredSoldItems, 15);
+
+  const sessionColumns: Column<Session>[] = [
+    { header: "Abertura", render: (s) => <span className="text-xs text-slate-600 whitespace-nowrap">{new Date(s.openedAt).toLocaleString("pt-BR")}</span> },
+    {
+      header: "Aberto por",
+      render: (s) => (
+        <span className="flex items-center gap-1.5 text-xs font-medium text-slate-700">
+          <User size={12} className="text-slate-400 shrink-0" /> {s.openedByName || s.operatorName || "—"}
+        </span>
+      ),
+    },
+    { header: "Fechado por", render: (s) => <span className="text-xs text-slate-500">{s.closedByName ?? "—"}</span> },
+    {
+      header: "Status",
+      render: (s) => s.status === "OPEN"
+        ? <Badge color="info" size="sm" icon={<Clock size={12} />}>Aberto</Badge>
+        : <Badge color="success" size="sm" icon={<CheckCircle2 size={12} />}>Fechado</Badge>,
+    },
+    { header: "Valor inicial", render: (s) => <span className="text-xs tabular-nums text-slate-600 whitespace-nowrap">{money(s.openingBalance)}</span> },
+    { header: "Contado", render: (s) => <span className="text-xs tabular-nums text-slate-600 whitespace-nowrap">{s.closingBalance != null ? money(s.closingBalance) : "—"}</span> },
+    {
+      header: "Diferença",
+      render: (s) => {
+        const diff = s.closingBalance != null && s.expectedBalance != null ? s.closingBalance - s.expectedBalance : null;
+        return diff !== null ? (
+          <span className={cn("text-xs font-semibold tabular-nums whitespace-nowrap", Math.abs(diff) < 0.01 ? "text-slate-400" : diff > 0 ? "text-emerald-700" : "text-red-600")}>
+            {diff > 0 ? "+" : ""}{money(diff)}
+          </span>
+        ) : <span className="text-xs text-slate-400">—</span>;
+      },
+    },
+    { header: "", render: () => <ChevronRight size={14} className="text-slate-300" /> },
+  ];
+
+  const itemColumns: Column<ReturnType<typeof computeSoldItems>[number]>[] = [
+    { header: "Pedido", render: (it) => <span className="text-xs font-mono text-slate-500 whitespace-nowrap">#{it.orderId.slice(-6).toUpperCase()}</span> },
+    { header: "Produto", render: (it) => <span className="text-xs font-medium text-slate-700">{it.productName}</span> },
+    { header: "Qtd", render: (it) => <span className="text-xs text-slate-600">{it.quantity}</span> },
+    { header: "Total", render: (it) => <span className="text-xs font-semibold tabular-nums text-slate-800 whitespace-nowrap">{money(it.total)}</span> },
+    { header: "Data", render: (it) => <span className="text-xs text-slate-500 whitespace-nowrap">{new Date(it.createdAt).toLocaleString("pt-BR")}</span> },
+    { header: "Operador", render: (it) => <span className="text-xs text-slate-500 whitespace-nowrap">{it.sellerName}</span> },
+    { header: "Pagamento", render: (it) => <span className="text-xs text-slate-500 whitespace-nowrap">{it.paymentLabel}</span> },
+  ];
+
+  const periodOptions = [
+    { value: "today", label: "Hoje" },
+    { value: "week", label: "Semana" },
+    { value: "month", label: "Mês" },
+    { value: "year", label: "Ano" },
+    { value: "all", label: "Tudo" },
+    { value: "custom", label: "Livre", icon: <Calendar size={12} /> },
+  ];
+
+  const sessionDiff = detail ? (detail.closingBalance ?? 0) - (detail.expectedBalance ?? 0) : 0;
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h2 className="text-xl font-black text-slate-800">Histórico de Caixa</h2>
-          <p className="text-xs text-slate-400 mt-0.5">Todas as aberturas e fechamentos — quem abriu, quem fechou e a diferença apurada</p>
-        </div>
-        <Button variant="outline" iconLeft={<Download className="w-4 h-4" />} onClick={openExportModal}>
-          Exportar
-        </Button>
-      </div>
+    <div className="space-y-4">
+      <StatGrid cols={4}>
+        <StatCard title="Total de sessões" value={counts.total} icon={Wallet} color="default" />
+        <StatCard title="Caixas abertos" value={counts.open} icon={Clock} color="info" />
+        <StatCard title="Caixas fechados" value={counts.closed} icon={CheckCircle2} color="success" />
+        <StatCard title="Com diferença" value={counts.withDifference} icon={AlertTriangle} color="danger" />
+      </StatGrid>
 
-      {/* Abas principais */}
-      <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit">
-        {([
-          { value: "sessions", label: "Sessões", icon: Wallet },
-          { value: "report", label: "Relatório", icon: BarChart3 },
-        ] as { value: "sessions" | "report"; label: string; icon: React.FC<{ size?: number; className?: string }> }[]).map((t) => (
-          <button
-            key={t.value}
-            onClick={() => setMainTab(t.value)}
-            className={cn(
-              "flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-bold transition-all",
-              mainTab === t.value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
-            )}
-          >
-            <t.icon className="w-3.5 h-3.5" /> {t.label}
-          </button>
-        ))}
-      </div>
+      <Tabs<"sessions" | "report"> items={HISTORY_TABS} value={mainTab} onChange={setMainTab} label="Histórico de caixa">
+        {mainTab === "sessions" && (
+          <div className="space-y-3">
+            <FilterLine>
+              <FilterLineSection grow>
+                <FilterLineItem grow minWidth={180}>
+                  <FilterLineSearch value={searchTerm} onChange={setSearchTerm} placeholder="Buscar por operador..." aria-label="Buscar por operador" className="max-w-[280px]" />
+                </FilterLineItem>
+                <FilterLineItem fullOnMobile={false}>
+                  <FilterLineSegmented
+                    value={statusFilter}
+                    onChange={(v) => setStatusFilter(v as "all" | "open" | "closed")}
+                    options={[
+                      { value: "all", label: "Todos" },
+                      { value: "open", label: "Abertos" },
+                      { value: "closed", label: "Fechados" },
+                    ]}
+                  />
+                </FilterLineItem>
+                <span className="text-xs text-slate-500">{filtered.length} sess{filtered.length === 1 ? "ão" : "ões"}</span>
+              </FilterLineSection>
+              <FilterLineSection align="right">
+                <FilterLineItem fullOnMobile={false}>
+                  <Button variant="outline" size="sm" iconLeft={<Download size={14} />} onClick={openExportModal}>Exportar</Button>
+                </FilterLineItem>
+              </FilterLineSection>
+            </FilterLine>
 
-      {mainTab === "sessions" && (
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm">
-        <div className="grid grid-cols-2 sm:grid-cols-4 border-b border-slate-100 divide-x divide-y sm:divide-y-0 divide-slate-100">
-          {[
-            { label: "Total",           value: counts.total,          color: "text-slate-900" },
-            { label: "Caixas Abertos",   value: counts.open,           color: "text-blue-500" },
-            { label: "Caixas Fechados",  value: counts.closed,         color: "text-emerald-500" },
-            { label: "Com Diferença",    value: counts.withDifference, color: "text-rose-500" },
-          ].map((k) => (
-            <div key={k.label} className="px-4 sm:px-5 py-3.5 sm:py-4 flex flex-col gap-0.5">
-              <span className={cn("text-xl sm:text-2xl font-black tracking-tight tabular-nums leading-none", k.color)}>{k.value}</span>
-              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{k.label}</span>
-            </div>
-          ))}
-        </div>
-
-        <div className="flex items-center gap-2 px-4 py-3 flex-wrap">
-          <div className="relative flex-1 min-w-[180px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={13} />
-            <input
-              type="text"
-              placeholder="Buscar por operador..."
-              className="w-full pl-8 pr-3 h-9 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-400/20 focus:border-amber-400 text-[11px] font-medium placeholder:text-slate-300 transition-all"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+            <ContentCard padding="none">
+              <GridTable
+                noDesktopCard
+                data={sessionPag.paginatedData}
+                columns={sessionColumns}
+                keyExtractor={(s) => s.id}
+                isLoading={loading}
+                onRowClick={(s) => setDetail(s)}
+                emptyMessage={<EmptyState icon={Wallet} title="Nenhuma sessão de caixa encontrada" description="Ajuste a busca ou o status para ver outras sessões." />}
+                pagination={{
+                  total: filtered.length,
+                  page: sessionPag.page,
+                  pageSize: sessionPag.pageSize,
+                  onPageChange: sessionPag.setPage,
+                  onPageSizeChange: sessionPag.setPageSize,
+                }}
+              />
+            </ContentCard>
           </div>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as "all" | "open" | "closed")}
-            className="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-bold outline-none focus:border-amber-400 transition-all"
-          >
-            <option value="all">Todos os status</option>
-            <option value="open">Aberto</option>
-            <option value="closed">Fechado</option>
-          </select>
-        </div>
+        )}
 
-        {/* Desktop: tabela */}
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-t border-slate-100 bg-slate-50/60">
-                {["Abertura", "Aberto por", "Fechado por", "Status", "Valor Inicial", "Contado", "Diferença", ""].map((h) => (
-                  <th key={h} className="px-4 py-2.5 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {loading && (
-                <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400 text-xs">Carregando...</td></tr>
-              )}
-              {!loading && filtered.length === 0 && (
-                <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400 text-xs">Nenhuma sessão de caixa encontrada</td></tr>
-              )}
-              {!loading && filtered.map((s) => {
-                const diff = s.closingBalance != null && s.expectedBalance != null ? s.closingBalance - s.expectedBalance : null;
-                return (
-                  <tr key={s.id} onClick={() => setDetail(s)}
-                    className="border-t border-slate-100 hover:bg-slate-50/60 transition-colors cursor-pointer">
-                    <td className="px-4 py-2.5 text-xs text-slate-500 whitespace-nowrap">
-                      {new Date(s.openedAt).toLocaleString("pt-BR")}
-                    </td>
-                    <td className="px-4 py-2.5 text-xs font-bold text-slate-700">
-                      <span className="flex items-center gap-1.5"><User size={12} className="text-slate-400" /> {s.openedByName || s.operatorName || "—"}</span>
-                    </td>
-                    <td className="px-4 py-2.5 text-xs text-slate-500">{s.closedByName ?? "—"}</td>
-                    <td className="px-4 py-2.5">
-                      {s.status === "OPEN" ? (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide bg-blue-50 text-blue-600">
-                          <Clock size={12} /> Aberto
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide bg-emerald-50 text-emerald-600">
-                          <CheckCircle2 size={12} /> Fechado
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5 text-xs font-mono text-slate-600">{money(s.openingBalance)}</td>
-                    <td className="px-4 py-2.5 text-xs font-mono text-slate-600">{s.closingBalance != null ? money(s.closingBalance) : "—"}</td>
-                    <td className="px-4 py-2.5 text-xs font-mono font-bold">
-                      {diff !== null ? (
-                        <span className={Math.abs(diff) < 0.01 ? "text-slate-400" : diff > 0 ? "text-emerald-600" : "text-rose-600"}>
-                          {diff > 0 ? "+" : ""}{money(diff)}
-                        </span>
-                      ) : "—"}
-                    </td>
-                    <td className="px-4 py-2.5 text-right">
-                      <ChevronRight size={14} className="text-slate-300" />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Mobile: cards empilhados — a tabela de 8 colunas não cabe numa tela de celular */}
-        <div className="md:hidden divide-y divide-slate-100">
-          {loading && <p className="px-4 py-10 text-center text-slate-400 text-xs">Carregando...</p>}
-          {!loading && filtered.length === 0 && (
-            <p className="px-4 py-10 text-center text-slate-400 text-xs">Nenhuma sessão de caixa encontrada</p>
-          )}
-          {!loading && filtered.map((s) => {
-            const diff = s.closingBalance != null && s.expectedBalance != null ? s.closingBalance - s.expectedBalance : null;
-            return (
-              <button key={s.id} onClick={() => setDetail(s)} className="w-full text-left px-4 py-3.5 flex flex-col gap-1.5 active:bg-slate-50">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-1.5 text-xs font-bold text-slate-700 min-w-0">
-                    <User size={12} className="text-slate-400 shrink-0" />
-                    <span className="truncate">{s.openedByName || s.operatorName || "—"}</span>
-                  </span>
-                  {s.status === "OPEN" ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wide bg-blue-50 text-blue-600 shrink-0">
-                      <Clock size={10} /> Aberto
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wide bg-emerald-50 text-emerald-600 shrink-0">
-                      <CheckCircle2 size={10} /> Fechado
-                    </span>
-                  )}
-                </div>
-                <p className="text-[10px] text-slate-400">{new Date(s.openedAt).toLocaleString("pt-BR")}</p>
-                <div className="flex items-center justify-between text-xs font-mono mt-0.5">
-                  <span className="text-slate-500">Inicial {money(s.openingBalance)}</span>
-                  <span className="text-slate-500">Contado {s.closingBalance != null ? money(s.closingBalance) : "—"}</span>
-                  {diff !== null && (
-                    <span className={cn("font-bold", Math.abs(diff) < 0.01 ? "text-slate-400" : diff > 0 ? "text-emerald-600" : "text-rose-600")}>
-                      {diff > 0 ? "+" : ""}{money(diff)}
-                    </span>
-                  )}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-      )}
-
-      {mainTab === "report" && (
-        <div className="space-y-4">
-          {/* Filtro de período */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-3 space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-              <div className="grid grid-cols-3 sm:flex sm:items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl p-1 w-full sm:w-auto">
-                {([["today", "Hoje"], ["week", "Semana"], ["month", "Mês"], ["year", "Ano"], ["all", "Tudo"]] as const).map(([k, l]) => (
-                  <button
-                    key={k}
-                    onClick={() => applyPeriodPreset(k)}
-                    className={cn(
-                      "h-8 px-3 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap",
-                      periodPreset === k ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-700"
-                    )}
-                  >{l}</button>
-                ))}
-                <button
-                  onClick={() => setPeriodPreset("custom")}
-                  className={cn(
-                    "h-8 px-3 rounded-lg flex items-center justify-center gap-1.5 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap col-span-3 sm:col-span-1",
-                    periodPreset === "custom" ? "bg-amber-500 text-white shadow-sm" : "text-slate-500 hover:text-slate-700"
-                  )}
-                >
-                  <Calendar size={12} /> Livre
-                </button>
-              </div>
-
-              {(periodPreset === "month" || periodPreset === "year") && (
-                <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl p-1 w-full sm:w-auto">
-                  <button onClick={() => navigatePeriod(-1)} className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center text-slate-500 hover:bg-white hover:text-slate-900 transition-all">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-                  </button>
-                  <span className="flex-1 sm:flex-none px-3 h-8 flex items-center justify-center rounded-lg text-[11px] font-black uppercase tracking-widest bg-slate-900 text-white sm:min-w-[140px]">
-                    {periodPreset === "year" ? navYear : `${MONTHS[navMonth]} ${navYear}`}
-                  </span>
-                  <button onClick={() => navigatePeriod(1)} className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center text-slate-500 hover:bg-white hover:text-slate-900 transition-all">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-                  </button>
-                </div>
-              )}
-
-              {loading && <Loader2 size={16} className="animate-spin text-slate-400 shrink-0 mx-auto sm:mx-0" />}
-            </div>
-
-            {periodPreset === "custom" && (
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-1 border-t border-slate-100">
-                <div className="flex items-center gap-2 flex-1">
-                  <span className="text-[10px] font-black text-slate-400 uppercase shrink-0">De</span>
-                  <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
-                    className="flex-1 sm:w-[160px] px-3 h-9 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-bold focus:outline-none focus:border-amber-400 transition-all" />
-                </div>
-                <div className="flex items-center gap-2 flex-1">
-                  <span className="text-[10px] font-black text-slate-400 uppercase shrink-0">Até</span>
-                  <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
-                    className="flex-1 sm:w-[160px] px-3 h-9 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-bold focus:outline-none focus:border-amber-400 transition-all" />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {sessionsForReport.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm py-16 text-center text-slate-400 text-sm">
-              Nenhuma sessão de caixa nesse período
-            </div>
-          ) : (
-            <>
-              {/* Cards por forma de pagamento */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                {paymentByMethod.map((seg) => (
-                  <div key={seg.method} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
-                    <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center mb-2.5", PM_ICON_BG[seg.method] ?? "bg-slate-100 text-slate-500")}>
-                      <Wallet size={16} />
+        {mainTab === "report" && (
+          <div className="space-y-3">
+            {/* Filtro de período */}
+            <FilterLine>
+              <FilterLineSection grow>
+                <FilterLineItem fullOnMobile={false}>
+                  <FilterLineSegmented
+                    value={periodPreset}
+                    onChange={(v) => (v === "custom" ? setPeriodPreset("custom") : applyPeriodPreset(v as PeriodPreset))}
+                    options={periodOptions}
+                  />
+                </FilterLineItem>
+                {(periodPreset === "month" || periodPreset === "year") && (
+                  <FilterLineItem fullOnMobile={false}>
+                    <div className="flex items-center gap-1">
+                      <IconButton variant="outline" size="sm" aria-label="Período anterior" onClick={() => navigatePeriod(-1)}><ChevronLeft size={14} /></IconButton>
+                      <span className="min-w-[130px] text-center text-xs font-medium text-slate-700">
+                        {periodPreset === "year" ? navYear : `${MONTHS[navMonth]} ${navYear}`}
+                      </span>
+                      <IconButton variant="outline" size="sm" aria-label="Próximo período" onClick={() => navigatePeriod(1)}><ChevronRight size={14} /></IconButton>
                     </div>
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{methodLabel(seg.method)}</p>
-                    <p className="text-xl font-black text-slate-800 mt-0.5 font-mono">{money(seg.amount)}</p>
-                  </div>
-                ))}
-                <div className="bg-slate-900 rounded-2xl p-4">
-                  <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center mb-2.5">
-                    <DollarSign size={16} className="text-white" />
-                  </div>
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total do Período</p>
-                  <p className="text-xl font-black text-white mt-0.5 font-mono">{money(grandTotal)}</p>
-                </div>
-              </div>
+                  </FilterLineItem>
+                )}
+                {periodPreset === "custom" && (
+                  <FilterLineItem minWidth={260}>
+                    <FilterLineDateRange from={dateFrom || null} to={dateTo || null} onFromChange={(v) => setDateFrom(v ?? "")} onToChange={(v) => setDateTo(v ?? "")} />
+                  </FilterLineItem>
+                )}
+                {loading && <Loader2 size={16} className="animate-spin text-slate-400 shrink-0" />}
+              </FilterLineSection>
+              <FilterLineSection align="right">
+                <FilterLineItem fullOnMobile={false}>
+                  <Button variant="outline" size="sm" iconLeft={<Download size={14} />} onClick={openExportModal}>Exportar</Button>
+                </FilterLineItem>
+              </FilterLineSection>
+            </FilterLine>
 
-              {/* Gráficos */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-                  <div className="flex items-center gap-2 mb-4">
-                    <PieChartIcon size={14} className="text-slate-400" />
-                    <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-700">Por Forma de Pagamento</h3>
-                  </div>
-                  {paymentByMethod.length > 0 ? (
-                    <div className="h-64">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={paymentByMethod.map((s) => ({ name: methodLabel(s.method), value: s.amount, method: s.method }))}
-                            dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={2}
-                          >
-                            {paymentByMethod.map((s, i) => (
-                              <Cell key={i} fill={PM_COLOR[s.method] ?? "#64748B"} />
-                            ))}
-                          </Pie>
-                          <Tooltip formatter={(v: number) => money(v)} contentStyle={{ borderRadius: 10, border: "1px solid #f1f5f9", fontSize: 11, fontWeight: 700 }} />
-                          <Legend iconType="circle" iconSize={7} formatter={(v) => <span style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase" }}>{v}</span>} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
-                  ) : (
-                    <p className="text-center text-sm text-slate-400 py-16">Sem vendas no período</p>
-                  )}
-                </div>
-
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-                  <div className="flex items-center gap-2 mb-4">
-                    <BarChart3 size={14} className="text-slate-400" />
-                    <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-700">Evolução Diária</h3>
-                  </div>
-                  {salesByDay.length > 0 ? (
-                    <div className="h-64">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={salesByDay}>
-                          <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#f1f5f9" />
-                          <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: "#94a3b8", fontWeight: 700 }} dy={8}
-                            tickFormatter={(v: string) => new Date(v + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} />
-                          <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: "#94a3b8", fontWeight: 700 }} width={48} />
-                          <Tooltip
-                            formatter={(v: number) => money(v)}
-                            labelFormatter={(v: string) => new Date(v + "T00:00:00").toLocaleDateString("pt-BR")}
-                            contentStyle={{ borderRadius: 10, border: "1px solid #f1f5f9", fontSize: 11, fontWeight: 700 }}
-                          />
-                          <Bar dataKey="total" radius={[6, 6, 0, 0]} fill="#C9A227" />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  ) : (
-                    <p className="text-center text-sm text-slate-400 py-16">Sem vendas no período</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Tabela de itens vendidos */}
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4 border-b border-slate-100">
-                  <div className="flex items-center gap-2">
-                    <ListOrdered size={14} className="text-slate-400" />
-                    <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-700">Itens Vendidos ({filteredSoldItems.length})</h3>
-                  </div>
-                  {availablePaymentMethods.length > 0 && (
-                    <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl p-1 flex-wrap">
-                      <button
-                        onClick={() => setItemsPaymentFilter("all")}
-                        className={cn(
-                          "h-7 px-3 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all",
-                          itemsPaymentFilter === "all" ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-700"
-                        )}
-                      >Todos</button>
-                      {availablePaymentMethods.map((m) => (
-                        <button
-                          key={m}
-                          onClick={() => setItemsPaymentFilter(m)}
-                          className={cn(
-                            "h-7 px-3 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all",
-                            itemsPaymentFilter === m ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-700"
-                          )}
-                        >{PM_LABEL[m] ?? m}</button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                {/* Desktop: tabela */}
-                <div className="hidden md:block overflow-x-auto max-h-[420px] overflow-y-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead className="sticky top-0 z-10">
-                      <tr className="bg-slate-50">
-                        {["Pedido", "Produto", "Qtd", "Total", "Data", "Operador", "Pagamento"].map((h) => (
-                          <th key={h} className="px-4 py-2.5 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap bg-slate-50 border-b border-slate-200">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredSoldItems.length === 0 && (
-                        <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400 text-xs">Nenhum item vendido no período</td></tr>
-                      )}
-                      {filteredSoldItems.map((it, i) => (
-                        <tr key={i} className="border-t border-slate-100">
-                          <td className="px-4 py-2 text-xs font-mono text-slate-400 whitespace-nowrap">#{it.orderId.slice(-6).toUpperCase()}</td>
-                          <td className="px-4 py-2 text-xs font-semibold text-slate-700">{it.productName}</td>
-                          <td className="px-4 py-2 text-xs text-slate-500 text-center">{it.quantity}</td>
-                          <td className="px-4 py-2 text-xs font-mono font-bold text-slate-800 whitespace-nowrap">{money(it.total)}</td>
-                          <td className="px-4 py-2 text-xs text-slate-400 whitespace-nowrap">{new Date(it.createdAt).toLocaleString("pt-BR")}</td>
-                          <td className="px-4 py-2 text-xs text-slate-500 whitespace-nowrap">{it.sellerName}</td>
-                          <td className="px-4 py-2 text-xs text-slate-500 whitespace-nowrap">{it.paymentLabel}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Mobile: cards empilhados */}
-                <div className="md:hidden max-h-[420px] overflow-y-auto divide-y divide-slate-100">
-                  {filteredSoldItems.length === 0 && (
-                    <p className="px-4 py-8 text-center text-slate-400 text-xs">Nenhum item vendido no período</p>
-                  )}
-                  {filteredSoldItems.map((it, i) => (
-                    <div key={i} className="px-4 py-3 flex flex-col gap-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-semibold text-slate-700 truncate">{it.quantity}x {it.productName}</span>
-                        <span className="text-xs font-mono font-bold text-slate-800 shrink-0">{money(it.total)}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-2 text-[10px] text-slate-400">
-                        <span className="truncate">#{it.orderId.slice(-6).toUpperCase()} · {it.sellerName}</span>
-                        <span className="shrink-0">{new Date(it.createdAt).toLocaleDateString("pt-BR")}</span>
-                      </div>
-                      <span className="text-[10px] text-slate-500">{it.paymentLabel}</span>
-                    </div>
+            {sessionsForReport.length === 0 ? (
+              <ContentCard>
+                <EmptyState icon={Wallet} title="Nenhuma sessão de caixa nesse período" description="Escolha outro período para ver o balanço." />
+              </ContentCard>
+            ) : (
+              <>
+                {/* Cards por forma de pagamento */}
+                <StatGrid cols={4}>
+                  {paymentByMethod.map((seg) => (
+                    <StatCard key={seg.method} title={methodLabel(seg.method)} value={money(seg.amount)} icon={Wallet} color="default" />
                   ))}
+                  <StatCard title="Total do período" value={money(grandTotal)} icon={DollarSign} color="info" />
+                </StatGrid>
+
+                {/* Gráficos */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  <PanelCard title="Por forma de pagamento" icon={PieChartIcon}>
+                    <div className="p-3">
+                      {paymentByMethod.length > 0 ? (
+                        <div className="h-64 min-w-0">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={paymentByMethod.map((s) => ({ name: methodLabel(s.method), value: s.amount, method: s.method }))}
+                                dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={2}
+                              >
+                                {paymentByMethod.map((s, i) => (
+                                  <Cell key={i} fill={PM_COLOR[s.method] ?? "#64748B"} />
+                                ))}
+                              </Pie>
+                              <Tooltip formatter={(v: number) => money(v)} contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 11 }} />
+                              <Legend iconType="circle" iconSize={7} formatter={(v) => <span style={{ fontSize: 11 }}>{v}</span>} />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
+                      ) : (
+                        <p className="text-center text-xs text-slate-500 py-16">Sem vendas no período</p>
+                      )}
+                    </div>
+                  </PanelCard>
+
+                  <PanelCard title="Evolução diária" icon={BarChart3}>
+                    <div className="p-3">
+                      {salesByDay.length > 0 ? (
+                        <div className="h-64 min-w-0">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={salesByDay} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                              <CartesianGrid vertical={false} stroke="#e2e8f0" />
+                              <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#64748b" }} interval="preserveStartEnd"
+                                tickFormatter={(v: string) => new Date(v + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} />
+                              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#64748b" }} width={48} />
+                              <Tooltip
+                                cursor={{ fill: "#f1f5f9" }}
+                                formatter={(v: number) => money(v)}
+                                labelFormatter={(v: string) => new Date(v + "T00:00:00").toLocaleDateString("pt-BR")}
+                                contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 11 }}
+                              />
+                              <Bar dataKey="total" radius={[3, 3, 0, 0]} fill="#2563eb" />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      ) : (
+                        <p className="text-center text-xs text-slate-500 py-16">Sem vendas no período</p>
+                      )}
+                    </div>
+                  </PanelCard>
                 </div>
-              </div>
-            </>
-          )}
-        </div>
-      )}
+
+                {/* Tabela de itens vendidos */}
+                <PanelCard
+                  title={`Itens vendidos (${filteredSoldItems.length})`}
+                  icon={ListOrdered}
+                  action={availablePaymentMethods.length > 0 ? (
+                    <FilterLineSegmented
+                      size="sm"
+                      value={itemsPaymentFilter}
+                      onChange={(v) => setItemsPaymentFilter(String(v))}
+                      options={[
+                        { value: "all", label: "Todos" },
+                        ...availablePaymentMethods.map((m) => ({ value: m, label: PM_LABEL[m] ?? m })),
+                      ]}
+                    />
+                  ) : undefined}
+                >
+                  <GridTable
+                    noDesktopCard
+                    data={itemsPag.paginatedData}
+                    columns={itemColumns}
+                    keyExtractor={(it) => `${it.orderId}-${it.productName}-${it.createdAt}-${it.total}`}
+                    emptyMessage={<EmptyState icon={ListOrdered} title="Nenhum item vendido no período" />}
+                    pagination={{
+                      total: filteredSoldItems.length,
+                      page: itemsPag.page,
+                      pageSize: itemsPag.pageSize,
+                      onPageChange: itemsPag.setPage,
+                      onPageSizeChange: itemsPag.setPageSize,
+                    }}
+                  />
+                </PanelCard>
+              </>
+            )}
+          </div>
+        )}
+      </Tabs>
 
       {/* Modal de exportação */}
       <Modal
@@ -1137,7 +1007,7 @@ export default function CashHistoryPanel({ tenant }: { tenant: Tenant }) {
             <Button
               variant="outline"
               loading={exporting}
-              iconLeft={<FileSpreadsheet className="w-4 h-4 text-emerald-600" />}
+              iconLeft={<FileSpreadsheet size={14} className="text-emerald-600" />}
               onClick={exportSessionsToExcel}
               disabled={exporting}
             >
@@ -1146,7 +1016,7 @@ export default function CashHistoryPanel({ tenant }: { tenant: Tenant }) {
             <Button
               variant="outline"
               loading={exporting}
-              iconLeft={<FileText className="w-4 h-4 text-rose-600" />}
+              iconLeft={<FileText size={14} className="text-red-600" />}
               onClick={exportSessionsToPDF}
               disabled={exporting}
             >
@@ -1158,129 +1028,106 @@ export default function CashHistoryPanel({ tenant }: { tenant: Tenant }) {
         <div className="space-y-4 p-1">
           <p className="text-[11px] text-slate-500">Escolha o período que deseja exportar.</p>
 
+          <FilterLineSegmented
+            value={exportPreset === "custom" ? "custom" : exportPreset}
+            onChange={(v) => applyExportPreset(v as PeriodPreset)}
+            options={[
+              { value: "all", label: "Tudo" },
+              { value: "month", label: "Mês" },
+              { value: "year", label: "Ano" },
+              { value: "custom", label: "Livre", icon: <Calendar size={12} /> },
+            ]}
+          />
+
           {(exportPreset === "month" || exportPreset === "year") && (
-            <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl p-1 w-fit">
-              <button onClick={() => navigateExportPeriod(-1)} className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-500 hover:bg-white hover:text-slate-900 transition-all">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-              </button>
-              <span className="px-3 h-7 flex items-center rounded-lg text-[11px] font-black uppercase tracking-widest bg-slate-900 text-white min-w-[140px] justify-center">
+            <div className="flex items-center gap-1">
+              <IconButton variant="outline" size="sm" aria-label="Período anterior" onClick={() => navigateExportPeriod(-1)}><ChevronLeft size={14} /></IconButton>
+              <span className="min-w-[140px] text-center text-xs font-medium text-slate-700">
                 {exportPreset === "year" ? exportNavYear : `${MONTHS[exportNavMonth]} ${exportNavYear}`}
               </span>
-              <button onClick={() => navigateExportPeriod(1)} className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-500 hover:bg-white hover:text-slate-900 transition-all">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-              </button>
+              <IconButton variant="outline" size="sm" aria-label="Próximo período" onClick={() => navigateExportPeriod(1)}><ChevronRight size={14} /></IconButton>
             </div>
           )}
 
-          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl p-1 w-fit">
-            {([["all", "Tudo"], ["month", "Mês"], ["year", "Ano"]] as const).map(([k, l]) => (
-              <button
-                key={k}
-                onClick={() => applyExportPreset(k)}
-                className={cn(
-                  "h-7 px-3 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all",
-                  exportPreset === k ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-700"
-                )}
-              >{l}</button>
-            ))}
-          </div>
-
-          <button
-            onClick={() => applyExportPreset(exportPreset === "custom" ? "month" : "custom")}
-            className={cn(
-              "h-9 px-3 rounded-xl flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest border transition-all w-fit",
-              exportPreset === "custom" ? "bg-amber-500 text-white border-amber-500" : "bg-white text-slate-400 border-slate-200 hover:border-slate-400"
-            )}
-          >
-            <Calendar size={12} /> Dia específico / Período Livre
-          </button>
           {exportPreset === "custom" && (
-            <div className="flex items-center gap-2">
-              <input type="date" value={exportFrom} onChange={(e) => { setExportFrom(e.target.value); setExportTo((prev) => prev || e.target.value); }}
-                className="pl-3 pr-3 h-9 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-bold focus:outline-none focus:border-amber-400 transition-all w-[148px]" />
-              <span className="text-[10px] font-black text-slate-300 uppercase">até</span>
-              <input type="date" value={exportTo} onChange={(e) => setExportTo(e.target.value)}
-                className="pl-3 pr-3 h-9 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-bold focus:outline-none focus:border-amber-400 transition-all w-[148px]" />
-            </div>
+            <FilterLineDateRange
+              from={exportFrom || null}
+              to={exportTo || null}
+              onFromChange={(v) => { setExportFrom(v ?? ""); setExportTo((prev) => prev || (v ?? "")); }}
+              onToChange={(v) => setExportTo(v ?? "")}
+            />
           )}
         </div>
       </Modal>
 
-      {/* Painel de detalhe */}
-      {detail && (
-        <>
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[500]" onClick={() => setDetail(null)} />
-          <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white z-[510] shadow-2xl flex flex-col">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 shrink-0">
-              <div className="flex items-center gap-2">
-                <Wallet size={16} className="text-amber-600" />
-                <h2 className="font-black text-slate-900 text-[15px]">Sessão de Caixa</h2>
+      {/* Detalhe da sessão */}
+      <Modal
+        isOpen={!!detail}
+        onClose={() => setDetail(null)}
+        title="Sessão de Caixa"
+        size="md"
+        footer={detail ? (
+          <ModalFooter>
+            {detail.status === "CLOSED" && (
+              <Button variant="outline" onClick={() => printSessionReceipt(detail)} iconLeft={<Printer size={14} />} title="Imprimir via térmica">Imprimir</Button>
+            )}
+            <Button variant="primary" onClick={() => goToReportForSession(detail)} iconRight={<ChevronRight size={14} />}>Ver relatório de vendas</Button>
+          </ModalFooter>
+        ) : undefined}
+      >
+        {detail && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="bg-slate-50 rounded-lg p-3 border border-slate-100">
+                <p className="text-[11px] text-slate-500 mb-1">Aberto por</p>
+                <p className="text-xs font-medium text-slate-800">{detail.openedByName || detail.operatorName || "—"}</p>
+                <p className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1"><Calendar size={10} /> {new Date(detail.openedAt).toLocaleString("pt-BR")}</p>
               </div>
-              <div className="flex items-center gap-1">
-                {detail.status === "CLOSED" && (
-                  <button onClick={() => printSessionReceipt(detail)}
-                    className="p-2 hover:bg-slate-100 rounded-lg text-slate-500" title="Imprimir via térmica">
-                    <Printer size={16} />
-                  </button>
+              <div className="bg-slate-50 rounded-lg p-3 border border-slate-100">
+                <p className="text-[11px] text-slate-500 mb-1">Fechado por</p>
+                <p className="text-xs font-medium text-slate-800">{detail.closedByName ?? "Ainda aberto"}</p>
+                {detail.closedAt && (
+                  <p className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1"><Calendar size={10} /> {new Date(detail.closedAt).toLocaleString("pt-BR")}</p>
                 )}
-                <button onClick={() => setDetail(null)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-500"><X size={18} /></button>
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-5 space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Aberto por</p>
-                  <p className="text-[12px] font-bold text-slate-800">{detail.openedByName || detail.operatorName || "—"}</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1"><Calendar size={9} /> {new Date(detail.openedAt).toLocaleString("pt-BR")}</p>
-                </div>
-                <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Fechado por</p>
-                  <p className="text-[12px] font-bold text-slate-800">{detail.closedByName ?? "Ainda aberto"}</p>
-                  {detail.closedAt && (
-                    <p className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1"><Calendar size={9} /> {new Date(detail.closedAt).toLocaleString("pt-BR")}</p>
-                  )}
-                </div>
+            <div className="bg-slate-50 rounded-lg border border-slate-200 p-3 space-y-1.5">
+              <div className="flex justify-between text-xs text-slate-500">
+                <span>Valor inicial</span>
+                <span className="tabular-nums font-medium text-slate-800">{money(detail.openingBalance)}</span>
               </div>
+              {detail.status === "CLOSED" && (
+                <>
+                  <div className="flex justify-between text-xs text-slate-500">
+                    <span>Vendas em dinheiro</span>
+                    <span className="tabular-nums font-medium text-slate-800">
+                      {money(Math.round(((detail.expectedBalance ?? 0) - detail.openingBalance) * 100) / 100)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs text-slate-500 pt-1.5 border-t border-slate-200">
+                    <span>Esperado</span>
+                    <span className="tabular-nums font-medium text-slate-800">{money(detail.expectedBalance)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs text-slate-500">
+                    <span>Contado</span>
+                    <span className="tabular-nums font-medium text-slate-800">{money(detail.closingBalance)}</span>
+                  </div>
+                  <div className="flex justify-between text-[13px] font-medium pt-1.5 border-t border-slate-200">
+                    <span className="text-slate-800">Diferença</span>
+                    <span className={cn("tabular-nums", Math.abs(sessionDiff) < 0.01 ? "text-slate-500" : sessionDiff > 0 ? "text-emerald-700" : "text-red-600")}>
+                      {sessionDiff > 0 ? "+" : ""}{money(sessionDiff)}
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
 
-              <div className="bg-slate-900 rounded-2xl p-4 space-y-1.5">
-                <div className="flex justify-between text-[11px] font-bold text-slate-400">
-                  <span>Valor inicial</span>
-                  <span className="font-mono text-white">{money(detail.openingBalance)}</span>
-                </div>
-                {detail.status === "CLOSED" && (
-                  <>
-                    <div className="flex justify-between text-[11px] font-bold text-slate-400">
-                      <span>Vendas em dinheiro</span>
-                      <span className="font-mono text-white">
-                        {money(Math.round(((detail.expectedBalance ?? 0) - detail.openingBalance) * 100) / 100)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-[11px] font-bold text-slate-400 pt-1 border-t border-slate-800">
-                      <span>Esperado</span>
-                      <span className="font-mono text-white">{money(detail.expectedBalance)}</span>
-                    </div>
-                    <div className="flex justify-between text-[11px] font-bold text-slate-400">
-                      <span>Contado</span>
-                      <span className="font-mono text-white">{money(detail.closingBalance)}</span>
-                    </div>
-                    <div className="flex justify-between text-[13px] font-black pt-1.5 border-t border-slate-700">
-                      <span className="text-white uppercase">Diferença</span>
-                      <span className={cn("font-mono", Math.abs((detail.closingBalance ?? 0) - (detail.expectedBalance ?? 0)) < 0.01 ? "text-slate-300" : (detail.closingBalance ?? 0) - (detail.expectedBalance ?? 0) > 0 ? "text-emerald-400" : "text-rose-400")}>
-                        {(detail.closingBalance ?? 0) - (detail.expectedBalance ?? 0) > 0 ? "+" : ""}{money((detail.closingBalance ?? 0) - (detail.expectedBalance ?? 0))}
-                      </span>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {detail.status === "CLOSED" && detail.paymentBreakdown && (
-                <div className="rounded-xl border border-slate-200 overflow-hidden">
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-3 py-2 bg-slate-50 border-b border-slate-100">
-                    Por forma de pagamento
-                  </p>
+            {detail.status === "CLOSED" && detail.paymentBreakdown && (
+              <PanelCard title="Por forma de pagamento">
+                <div className="overflow-x-auto">
                   <table className="w-full text-[11px]">
-                    <thead className="bg-slate-50 text-slate-400 uppercase tracking-widest text-[9px] font-bold">
+                    <thead className="bg-zinc-50 text-slate-500 text-[11px] font-medium">
                       <tr>
                         <td className="px-3 py-2">Forma</td>
                         <td className="px-3 py-2 text-right">Esperado</td>
@@ -1291,15 +1138,15 @@ export default function CashHistoryPanel({ tenant }: { tenant: Tenant }) {
                     <tbody>
                       {Object.entries(detail.paymentBreakdown).map(([method, entry]) => (
                         <tr key={method} className="border-t border-slate-100">
-                          <td className="px-3 py-2 font-bold text-slate-700">{PM_LABEL[method] ?? method}</td>
-                          <td className="px-3 py-2 text-right font-mono text-slate-600">{money(entry.expected)}</td>
-                          <td className="px-3 py-2 text-right font-mono text-slate-600">
+                          <td className="px-3 py-2 font-medium text-slate-700">{PM_LABEL[method] ?? method}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-slate-600">{money(entry.expected)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-slate-600">
                             {entry.counted !== undefined ? money(entry.counted) : "—"}
                           </td>
                           <td className={cn(
-                            "px-3 py-2 text-right font-mono font-bold",
+                            "px-3 py-2 text-right tabular-nums font-semibold",
                             entry.difference === undefined ? "text-slate-300" :
-                            Math.abs(entry.difference) < 0.01 ? "text-slate-500" : entry.difference > 0 ? "text-blue-600" : "text-rose-500",
+                            Math.abs(entry.difference) < 0.01 ? "text-slate-500" : entry.difference > 0 ? "text-blue-600" : "text-red-600",
                           )}>
                             {entry.difference !== undefined ? money(entry.difference) : "—"}
                           </td>
@@ -1308,30 +1155,22 @@ export default function CashHistoryPanel({ tenant }: { tenant: Tenant }) {
                     </tbody>
                   </table>
                 </div>
-              )}
+              </PanelCard>
+            )}
 
-              {detail.notes && (
-                <div className="text-[11px] text-slate-500"><span className="font-bold text-slate-700">Observações:</span> {detail.notes}</div>
-              )}
+            {detail.notes && (
+              <div className="text-[11px] text-slate-500"><span className="font-medium text-slate-700">Observações:</span> {detail.notes}</div>
+            )}
 
-              <div className="bg-slate-50 rounded-xl border border-slate-100 p-3.5 flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Vendas nesta sessão</p>
-                  <p className="text-[15px] font-black text-slate-800">
-                    {new Set((detail.movements || []).filter((m) => m.type.startsWith("PAYMENT_")).map((m) => m.orderId)).size}
-                  </p>
-                </div>
-                <button
-                  onClick={() => goToReportForSession(detail)}
-                  className="flex items-center gap-1.5 h-9 px-3 bg-amber-500 text-white rounded-xl text-[11px] font-bold hover:bg-amber-600 active:scale-95 transition-all shrink-0"
-                >
-                  Ver Relatório de Vendas <ChevronRight size={14} />
-                </button>
-              </div>
+            <div className="bg-slate-50 rounded-lg border border-slate-100 p-3">
+              <p className="text-[11px] text-slate-500 mb-1">Vendas nesta sessão</p>
+              <p className="text-sm font-semibold text-slate-800">
+                {new Set((detail.movements || []).filter((m) => m.type.startsWith("PAYMENT_")).map((m) => m.orderId)).size}
+              </p>
             </div>
           </div>
-        </>
-      )}
+        )}
+      </Modal>
     </div>
   );
 }

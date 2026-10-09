@@ -13,6 +13,12 @@ function getAudioContext(): AudioContext | null {
 // gesto do usuário (clique/toque) — comum no Painel de TV, que fica numa aba/tela aberta
 // sem ninguém interagir. Chame isso dentro de um handler de clique/toque real pra "destravar"
 // o AudioContext pro resto da sessão daquela aba.
+// true quando o navegador já permite áudio sem gesto (TV/kiosk com autoplay liberado).
+export function isAudioContextRunning(): boolean {
+  const ctx = getAudioContext();
+  return !!ctx && ctx.state === "running";
+}
+
 export function primeAudioContext() {
   const ctx = getAudioContext();
   if (!ctx) return;

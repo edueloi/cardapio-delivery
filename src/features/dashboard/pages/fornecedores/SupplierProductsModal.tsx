@@ -4,8 +4,9 @@
  * Tem lista pré-definida por categoria + busca + criação manual.
  */
 import { useState, useMemo } from "react";
-import { Check, Plus, Search, X, Tag } from "lucide-react";
+import { Check, Package, Plus, Search, Tag } from "lucide-react";
 import { apiJson } from "../../../../lib/api";
+import { Button, EmptyState, Input, Modal, ModalFooter, Select, Tabs } from "../../../../components";
 import type { SupplierCatalogItem } from "../../../../types";
 
 // ─── Preset catalog ──────────────────────────────────────────────────────────
@@ -348,6 +349,12 @@ export const PRESET_CATALOG: PresetCategory[] = [
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
+const PRODUCT_TABS = [
+  { id: "catalogo", label: "Catálogo", icon: Package },
+  { id: "personalizados", label: "Personalizados", icon: Tag },
+] as const;
+type ProductTabId = (typeof PRODUCT_TABS)[number]["id"];
+
 interface Props {
   supplierId: string | null;
   supplierName: string;
@@ -362,11 +369,11 @@ interface Props {
 export default function SupplierProductsModal({ supplierId, supplierName, slug, existingItems, onClose, onSaved, onPendingSelected }: Props) {
   const [search, setSearch] = useState("");
   const [activeCat, setActiveCat] = useState<string>("todas");
+  const [tab, setTab] = useState<ProductTabId>("catalogo");
   const [selected, setSelected] = useState<Set<string>>(() => new Set(existingItems.map(i => i.name)));
   const [customName, setCustomName] = useState("");
   const [customUnit, setCustomUnit] = useState("");
   const [saving, setSaving] = useState(false);
-  const [showCustomForm, setShowCustomForm] = useState(false);
 
   // Todos os itens do preset flat
   const allPresetItems = useMemo(() =>
@@ -384,6 +391,16 @@ export default function SupplierProductsModal({ supplierId, supplierName, slug, 
     });
   }, [allPresetItems, search, activeCat]);
 
+  const customSelected = useMemo(
+    () => [...selected].filter(name => !allPresetItems.find(p => p.name === name)),
+    [selected, allPresetItems]
+  );
+
+  const categoryOptions = useMemo(
+    () => [{ value: "todas", label: "Todas as categorias" }, ...PRESET_CATALOG.map(cat => ({ value: cat.label, label: `${cat.emoji} ${cat.label}` }))],
+    []
+  );
+
   function toggle(name: string) {
     setSelected(prev => {
       const next = new Set(prev);
@@ -398,7 +415,6 @@ export default function SupplierProductsModal({ supplierId, supplierName, slug, 
     setSelected(prev => new Set([...prev, customName.trim()]));
     setCustomName("");
     setCustomUnit("");
-    setShowCustomForm(false);
   }
 
   async function handleSave() {
@@ -443,185 +459,134 @@ export default function SupplierProductsModal({ supplierId, supplierName, slug, 
   }
 
   const selectedCount = selected.size;
+  const tabItems = PRODUCT_TABS.map(t => t.id === "personalizados" ? { ...t, badge: customSelected.length || undefined } : t);
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-
-      <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
-
-        {/* Header */}
-        <div className="bg-[#0A1628] px-6 py-4 shrink-0">
-          <div className="flex items-center justify-between mb-1">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-[#C9A227]/70">Produtos do fornecedor</p>
-              <h2 className="text-base font-black text-white">{supplierName}</h2>
+    <Modal
+      isOpen
+      onClose={onClose}
+      title={`Produtos do fornecedor — ${supplierName}`}
+      subtitle={`${selectedCount} produto${selectedCount !== 1 ? "s" : ""} selecionado${selectedCount !== 1 ? "s" : ""}`}
+      size="lg"
+      footer={
+        <ModalFooter align="between">
+          <p className="text-xs text-slate-500">
+            {selectedCount} produto{selectedCount !== 1 ? "s" : ""} selecionado{selectedCount !== 1 ? "s" : ""}
+          </p>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onClose}>Cancelar</Button>
+            <Button onClick={handleSave} loading={saving} iconLeft={<Check size={14} />}>Salvar produtos</Button>
+          </div>
+        </ModalFooter>
+      }
+    >
+      <Tabs<ProductTabId> items={tabItems} value={tab} onChange={setTab} label="Produtos do fornecedor">
+        {tab === "catalogo" && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <Input
+                autoFocus
+                iconLeft={<Search size={14} />}
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Buscar produto (ex: Coca-Cola, farinha, muçarela...)"
+              />
+              <Select
+                aria-label="Categoria"
+                value={activeCat}
+                onChange={e => { setActiveCat(e.target.value); setSearch(""); }}
+                options={categoryOptions}
+              />
             </div>
-            <button onClick={onClose} className="p-2 rounded-xl hover:bg-white/10 text-white/60 transition-colors">
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-          {selectedCount > 0 && (
-            <div className="flex items-center gap-2 mt-2">
-              <div className="flex items-center gap-1.5 bg-[#C9A227]/20 border border-[#C9A227]/30 rounded-xl px-3 py-1.5">
-                <Check className="w-3.5 h-3.5 text-[#C9A227]" />
-                <span className="text-xs font-black text-[#C9A227]">{selectedCount} produto{selectedCount !== 1 ? "s" : ""} selecionado{selectedCount !== 1 ? "s" : ""}</span>
-              </div>
+
+            <div className="space-y-1.5">
+              {filtered.length === 0 && (
+                <EmptyState
+                  icon={Search}
+                  title="Nenhum produto encontrado"
+                  description="Tente outro termo ou adicione manualmente na aba Personalizados."
+                />
+              )}
+              {filtered.map(item => {
+                const isSelected = selected.has(item.name);
+                return (
+                  <label
+                    key={item.name}
+                    className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 transition-all ${
+                      isSelected
+                        ? "border-blue-200 bg-blue-50/50"
+                        : "border-slate-100 hover:border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div
+                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 transition-all ${isSelected ? "border-blue-600 bg-blue-600" : "border-slate-300"}`}
+                    >
+                      {isSelected && <Check className="h-3 w-3 text-white" />}
+                    </div>
+                    <input type="checkbox" className="hidden" checked={isSelected} onChange={() => toggle(item.name)} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[13px] font-medium text-slate-800">{item.name}</p>
+                      <p className="mt-0.5 text-[11px] text-slate-500">{item.emoji} {item.category.split(" — ")[1] ?? item.category}</p>
+                    </div>
+                    <span className="shrink-0 text-xs text-slate-500">{item.unit}</span>
+                  </label>
+                );
+              })}
             </div>
-          )}
-        </div>
-
-        {/* Search */}
-        <div className="px-5 py-3 border-b border-slate-100 shrink-0">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              autoFocus
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar produto (ex: Coca-Cola, farinha, muçarela...)"
-              className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A227]/30 focus:border-[#C9A227]"
-            />
           </div>
-        </div>
+        )}
 
-        {/* Category tabs */}
-        <div className="px-5 py-2 border-b border-slate-100 overflow-x-auto shrink-0">
-          <div className="flex gap-1.5 min-w-max">
-            <button
-              onClick={() => setActiveCat("todas")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all whitespace-nowrap ${activeCat === "todas" ? "bg-[#0A1628] text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}
-            >
-              Todas
-            </button>
-            {PRESET_CATALOG.map(cat => (
-              <button
-                key={cat.label}
-                onClick={() => { setActiveCat(cat.label); setSearch(""); }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all whitespace-nowrap ${activeCat === cat.label ? "bg-[#0A1628] text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}
-              >
-                <span>{cat.emoji}</span>
-                {cat.label.split(" — ")[1] ?? cat.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Product list */}
-        <div className="flex-1 overflow-y-auto px-5 py-3 space-y-1">
-          {/* Custom form */}
-          {showCustomForm ? (
-            <div className="bg-[#C9A227]/5 border border-[#C9A227]/20 rounded-2xl p-4 mb-3 space-y-3">
-              <p className="text-xs font-black uppercase tracking-widest text-[#C9A227]">Adicionar produto personalizado</p>
-              <div className="flex gap-2">
-                <input
-                  autoFocus
+        {tab === "personalizados" && (
+          <div className="space-y-3">
+            <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-xs font-medium text-slate-700">Adicionar produto personalizado</p>
+              <p className="text-[11px] text-slate-500">Não encontrou na lista? Cadastre aqui.</p>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Input
+                  wrapperClassName="flex-1"
                   value={customName}
                   onChange={e => setCustomName(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && addCustom()}
                   placeholder="Nome do produto *"
-                  className="flex-1 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A227]/30 focus:border-[#C9A227] bg-white"
                 />
-                <input
+                <Input
+                  wrapperClassName="sm:w-28"
                   value={customUnit}
                   onChange={e => setCustomUnit(e.target.value)}
                   placeholder="Unidade"
-                  className="w-24 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A227]/30 focus:border-[#C9A227] bg-white"
                 />
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => setShowCustomForm(false)} className="flex-1 py-2 rounded-xl border border-slate-200 text-sm text-slate-500 hover:bg-slate-50 transition-colors">Cancelar</button>
-                <button onClick={addCustom} disabled={!customName.trim()} className="flex-1 py-2 rounded-xl bg-[#C9A227] text-white text-sm font-black disabled:opacity-50 transition-colors">Adicionar</button>
+                <Button onClick={addCustom} disabled={!customName.trim()} iconLeft={<Plus size={14} />}>Adicionar</Button>
               </div>
             </div>
-          ) : (
-            <button
-              onClick={() => setShowCustomForm(true)}
-              className="w-full flex items-center gap-3 px-4 py-3 bg-slate-50 border border-dashed border-slate-300 rounded-xl hover:border-[#C9A227] hover:bg-[#C9A227]/5 transition-all group mb-2"
-            >
-              <div className="w-8 h-8 rounded-xl bg-white border border-slate-200 group-hover:border-[#C9A227]/30 flex items-center justify-center shrink-0 transition-colors">
-                <Plus className="w-4 h-4 text-slate-400 group-hover:text-[#C9A227] transition-colors" />
-              </div>
-              <div className="text-left">
-                <p className="text-sm font-bold text-slate-500 group-hover:text-slate-700 transition-colors">Adicionar produto personalizado</p>
-                <p className="text-xs text-slate-400">Não encontrou na lista? Cadastre aqui</p>
-              </div>
-            </button>
-          )}
 
-          {/* Custom selected items not in preset */}
-          {[...selected].filter(name => !allPresetItems.find(p => p.name === name)).map(name => (
-            <label key={name} className="flex items-center gap-3 px-4 py-3 rounded-xl border border-[#C9A227]/30 bg-[#C9A227]/5 cursor-pointer transition-all">
-              <div className="w-5 h-5 rounded-md border-2 border-[#C9A227] flex items-center justify-center shrink-0" style={{ background: "#C9A227" }}>
-                <Check className="w-3 h-3 text-white" />
+            {customSelected.length === 0 ? (
+              <EmptyState
+                icon={Tag}
+                title="Nenhum produto personalizado"
+                description="Os produtos que você adicionar manualmente aparecem aqui."
+              />
+            ) : (
+              <div className="space-y-1.5">
+                {customSelected.map(name => (
+                  <label key={name} className="flex cursor-pointer items-center gap-3 rounded-lg border border-blue-200 bg-blue-50/50 px-3 py-2.5 transition-all">
+                    <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 border-blue-600 bg-blue-600">
+                      <Check className="h-3 w-3 text-white" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[13px] font-medium text-slate-800">{name}</p>
+                      <div className="mt-0.5 flex items-center gap-1.5">
+                        <Tag className="h-3 w-3 text-blue-600" />
+                        <span className="text-[11px] text-blue-700">personalizado</span>
+                      </div>
+                    </div>
+                    <input type="checkbox" className="hidden" checked onChange={() => toggle(name)} />
+                  </label>
+                ))}
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-slate-800 truncate">{name}</p>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <Tag className="w-3 h-3 text-[#C9A227]" />
-                  <span className="text-[10px] font-black text-[#C9A227] uppercase tracking-wider">personalizado</span>
-                </div>
-              </div>
-              <input type="checkbox" className="hidden" checked onChange={() => toggle(name)} />
-            </label>
-          ))}
-
-          {/* Preset items */}
-          {filtered.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <Search className="w-8 h-8 text-slate-300 mb-2" />
-              <p className="text-sm font-bold text-slate-400">Nenhum produto encontrado</p>
-              <p className="text-xs text-slate-300 mt-1">Tente outro termo ou adicione manualmente</p>
-            </div>
-          )}
-          {filtered.map(item => {
-            const isSelected = selected.has(item.name);
-            return (
-              <label
-                key={item.name}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all ${
-                  isSelected
-                    ? "border-[#C9A227]/40 bg-[#C9A227]/5"
-                    : "border-slate-100 hover:border-slate-200 hover:bg-slate-50"
-                }`}
-              >
-                <div
-                  className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all ${isSelected ? "border-[#C9A227]" : "border-slate-300"}`}
-                  style={isSelected ? { background: "#C9A227" } : {}}
-                >
-                  {isSelected && <Check className="w-3 h-3 text-white" />}
-                </div>
-                <input type="checkbox" className="hidden" checked={isSelected} onChange={() => toggle(item.name)} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-slate-800 truncate">{item.name}</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">{item.emoji} {item.category.split(" — ")[1] ?? item.category}</p>
-                </div>
-                <span className="text-xs font-bold text-slate-400 shrink-0">{item.unit}</span>
-              </label>
-            );
-          })}
-        </div>
-
-        {/* Footer */}
-        <div className="px-5 py-4 border-t border-slate-100 shrink-0 flex items-center justify-between gap-3">
-          <p className="text-xs text-slate-400">
-            {selectedCount} produto{selectedCount !== 1 ? "s" : ""} selecionado{selectedCount !== 1 ? "s" : ""}
-          </p>
-          <div className="flex gap-2">
-            <button onClick={onClose} className="px-5 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
-              Cancelar
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#C9A227] hover:bg-[#b8911f] text-white text-sm font-black transition-colors disabled:opacity-60"
-            >
-              {saving ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Check className="w-4 h-4" />}
-              Salvar produtos
-            </button>
+            )}
           </div>
-        </div>
-      </div>
-    </div>
+        )}
+      </Tabs>
+    </Modal>
   );
 }

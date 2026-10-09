@@ -1,32 +1,55 @@
-﻿import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { AnimatePresence } from "motion/react";
 import {
   AlertTriangle,
   ArrowRightLeft,
   CalendarClock,
   CircleDollarSign,
-  Info,
+  Ban,
+  Boxes,
   Package,
   Plus,
+  ShoppingBag,
   Settings,
   Trash2,
 } from "lucide-react";
 import {
+  Alert,
   Badge,
   Button,
   ConfirmModal,
   CurrencyInput,
+  FilterLine,
+  FilterLineItem,
+  FilterLineSearch,
+  FilterLineSection,
   FilterLineSegmented,
   GridTable,
   IconButton,
   Input,
   Modal,
   ModalFooter,
+  PageWrapper,
+  SectionTitle,
   Select,
   StatCard,
+  StatGrid,
+  Tabs,
 } from "../../../../components";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { apiFetch } from "../../../../lib/api";
+import { InventoryItemForm } from "./InventoryItemForm";
 import { Tenant } from "../../../../types";
+
+const STOCK_VIEWS = [
+  { id: "all", label: "Todos", icon: Package },
+  { id: "low", label: "Críticos", icon: AlertTriangle },
+  { id: "expiring", label: "A Vencer", icon: CalendarClock },
+  { id: "expired", label: "Vencidos", icon: Ban },
+  { id: "sale", label: "Para Venda", icon: ShoppingBag },
+  { id: "internal", label: "Consumo", icon: Boxes },
+] as const;
+type StockView = (typeof STOCK_VIEWS)[number]["id"];
 
 function QuickAdjustModal({ isOpen, onClose, item, tenantId, onSave }: any) {
   const [type, setType] = useState<"IN" | "OUT">("IN");
@@ -87,22 +110,14 @@ function QuickAdjustModal({ isOpen, onClose, item, tenantId, onSave }: any) {
   return (
     <Modal title={`Ajustar ${item.name}`} isOpen={isOpen} onClose={onClose} size="sm">
       <form onSubmit={handleSubmit} className="p-6 space-y-4">
-        <div className="grid grid-cols-2 gap-3 p-1 bg-slate-100 rounded-xl">
-          <button
-            type="button"
-            onClick={() => setType("IN")}
-            className={`py-2 text-xs font-black uppercase rounded-lg transition-colors ${type === "IN" ? "bg-white text-emerald-600 shadow-sm" : "text-slate-400 hover:text-slate-600"}`}
-          >
-            Entrada (Adicionar)
-          </button>
-          <button
-            type="button"
-            onClick={() => setType("OUT")}
-            className={`py-2 text-xs font-black uppercase rounded-lg transition-colors ${type === "OUT" ? "bg-white text-red-600 shadow-sm" : "text-slate-400 hover:text-slate-600"}`}
-          >
-            Saída (Baixa/Perda)
-          </button>
-        </div>
+        <FilterLineSegmented
+          value={type}
+          onChange={(v) => setType(v as "IN" | "OUT")}
+          options={[
+            { value: "IN", label: "Entrada (Adicionar)" },
+            { value: "OUT", label: "Saída (Baixa/Perda)" },
+          ]}
+        />
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Input
@@ -123,15 +138,15 @@ function QuickAdjustModal({ isOpen, onClose, item, tenantId, onSave }: any) {
         </div>
 
         {type === "IN" && (
-          <div className="border border-slate-200 rounded-xl p-4 bg-slate-50 space-y-3">
+          <div className="border border-slate-200 rounded-lg p-4 bg-slate-50 space-y-3">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
                 checked={isNewBatch}
                 onChange={(e) => setIsNewBatch(e.target.checked)}
-                className="w-4 h-4 rounded text-amber-500 focus:ring-amber-500 border-slate-300"
+                className="h-4 w-4 rounded accent-blue-600"
               />
-              <span className="text-sm font-bold text-slate-700">Registrar como novo lote / validade</span>
+              <span className="text-xs font-medium text-slate-700">Registrar como novo lote / validade</span>
             </label>
 
             {isNewBatch && (
@@ -154,7 +169,7 @@ function QuickAdjustModal({ isOpen, onClose, item, tenantId, onSave }: any) {
 
         <div className="pt-4 flex justify-end gap-3">
           <Button type="button" variant="ghost" onClick={onClose}>Cancelar</Button>
-          <Button type="submit" loading={loading} className={type === "IN" ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-red-600 hover:bg-red-700 text-white"}>
+          <Button type="submit" loading={loading} variant={type === "IN" ? "success" : "danger"}>
             Confirmar {type === "IN" ? "Entrada" : "Saída"}
           </Button>
         </div>
@@ -170,7 +185,7 @@ export function InventoryPanel({ tenant }: { tenant: Tenant | null }) {
   const [showItemForm, setShowItemForm] = useState(false);
   const [editingItem, setEditingItem] = useState<any | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterType, setFilterType] = useState<"all" | "low" | "expiring" | "expired" | "internal" | "sale">("all");
+  const [filterType, setFilterType] = useState<StockView>("all");
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [deletingItem, setDeletingItem] = useState<any | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -192,11 +207,35 @@ export function InventoryPanel({ tenant }: { tenant: Tenant | null }) {
     return item.batches?.[0] ?? item;
   };
 
+  // O item abre em tela cheia; o histórico do navegador (?item=) faz o botão
+  // "voltar" fechar o formulário em vez de sair do painel.
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const itemParam = searchParams.get("item");
+  const historySeen = useRef(false);
+
+  const openItemForm = (target: any | null) => {
+    setEditingItem(target);
+    setShowItemForm(true);
+    const next = new URLSearchParams(window.location.search);
+    next.set("item", target?.id ?? "novo");
+    historySeen.current = true;
+    navigate({ search: next.toString() });
+  };
+
+  const leaveItemForm = () => {
+    setShowItemForm(false);
+    setEditingItem(null);
+    if (searchParams.get("item")) {
+      historySeen.current = false;
+      navigate(-1);
+    }
+  };
+
   const openItemEditor = (item: any) => {
     const baseItem = resolveBaseInventoryItem(item);
     if (!baseItem) return;
-    setEditingItem(baseItem);
-    setShowItemForm(true);
+    openItemForm(baseItem);
   };
 
   const openQuickAdjust = (item: any) => {
@@ -224,6 +263,25 @@ export function InventoryPanel({ tenant }: { tenant: Tenant | null }) {
   useEffect(() => {
     fetchData();
   }, [tenant]);
+
+  useEffect(() => {
+    if (itemParam) {
+      historySeen.current = true;
+      if (!showItemForm) {
+        if (itemParam === "novo") { setEditingItem(null); setShowItemForm(true); }
+        else {
+          const found = items.find(i => i.id === itemParam);
+          if (found) { setEditingItem(found); setShowItemForm(true); }
+        }
+      }
+      return;
+    }
+    if (historySeen.current) {
+      historySeen.current = false;
+      setShowItemForm(false);
+      setEditingItem(null);
+    }
+  }, [itemParam, items]);
 
   const filteredItems = items.filter(item => {
     const nameStr = item.name || "";
@@ -286,26 +344,64 @@ export function InventoryPanel({ tenant }: { tenant: Tenant | null }) {
     }, 0)
   };
 
-  if (loading) return <div className="p-20 text-center text-slate-400 font-bold uppercase tracking-widest animate-pulse">Carregando Inventário...</div>;
+  if (showItemForm) {
+    return (
+      <PageWrapper>
+        <InventoryItemForm
+          tenant={tenant}
+          item={editingItem}
+          categories={categories}
+          onClose={leaveItemForm}
+          onSave={() => { leaveItemForm(); fetchData(); }}
+          refreshCategories={fetchData}
+        />
+      </PageWrapper>
+    );
+  }
+
+  if (loading) return <div className="p-20 text-center text-xs text-slate-500 animate-pulse">Carregando Inventário...</div>;
+
+  const tabItems = STOCK_VIEWS.map((v) =>
+    v.id === "low" ? { ...v, badge: stats.lowStock || undefined }
+    : v.id === "expiring" ? { ...v, badge: stats.nearExpiry || undefined }
+    : v.id === "expired" ? { ...v, badge: stats.expired || undefined }
+    : v
+  );
 
   return (
-    <div className="space-y-6">
+    <PageWrapper>
+    <div className="space-y-4">
+      <SectionTitle
+        title="Estoque"
+        description="Controle insumos, lotes, validades e movimentações."
+        icon={Package}
+        action={
+          <Button
+            onClick={() => openItemForm(null)}
+            size="sm"
+            iconLeft={<Plus size={14} />}
+          >
+            Novo Item
+          </Button>
+        }
+      />
+
       {/* Stats Summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard 
-          title="Total em Estoque" 
-          value={stats.totalItems} 
-          icon={Package} 
+      <StatGrid cols={4}>
+        <StatCard
+          title="Total em Estoque"
+          value={stats.totalItems}
+          icon={Package}
           color="info"
         />
-        <StatCard 
-          title="Itens Críticos" 
-          value={stats.lowStock} 
-          icon={AlertTriangle} 
+        <StatCard
+          title="Itens Críticos"
+          value={stats.lowStock}
+          icon={AlertTriangle}
           color="warning"
         />
         <div
-          className={`cursor-pointer transition-transform hover:scale-[1.02] ${stats.nearExpiry > 0 ? "ring-2 ring-amber-400 ring-offset-2 rounded-2xl" : ""}`}
+          className={`cursor-pointer ${stats.nearExpiry > 0 ? "rounded-lg ring-2 ring-amber-400 ring-offset-2" : ""}`}
           onClick={() => stats.nearExpiry > 0 && setFilterType("expiring")}
           title={stats.nearExpiry > 0 ? "Ver itens a vencer em até 5 dias" : ""}
         >
@@ -316,61 +412,30 @@ export function InventoryPanel({ tenant }: { tenant: Tenant | null }) {
             color={stats.nearExpiry > 0 ? "warning" : "info"}
           />
         </div>
-        <StatCard 
-          title="Valor em Insumos" 
-          value={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(stats.totalValue)} 
-          icon={ArrowRightLeft} 
+        <StatCard
+          title="Valor em Insumos"
+          value={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(stats.totalValue)}
+          icon={ArrowRightLeft}
           color="success"
         />
-      </div>
+      </StatGrid>
 
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden min-h-[500px]">
-        <div className="p-4 border-b border-slate-100 flex flex-col gap-3 bg-slate-50/30">
-          {/* Row 1: tabs de tipo */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <FilterLineSegmented
-              options={[
-                { value: 'all', label: 'Todos' },
-                { value: 'low', label: 'Críticos' },
-                { value: 'expiring', label: stats.nearExpiry > 0 ? `⚠ A Vencer (${stats.nearExpiry})` : 'A Vencer' },
-                { value: 'expired', label: 'Vencidos' },
-                { value: 'sale', label: 'Para Venda' },
-                { value: 'internal', label: 'Consumo' },
-              ]}
-              value={filterType}
-              onChange={val => setFilterType(val as any)}
-            />
-            <Button
-              onClick={() => { setEditingItem(null); setShowItemForm(true); }}
-              size="sm"
-              iconLeft={<Plus className="w-4 h-4" />}
-            >
-              Novo Item
-            </Button>
-          </div>
-
-          {/* Row 2: busca + filtro categoria */}
-          <div className="flex flex-col sm:flex-row items-stretch gap-2">
-            <div className="relative flex-1">
-              <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
-              </svg>
-              <input
-                type="text"
+      <Tabs<StockView> items={tabItems} value={filterType} onChange={setFilterType} label="Visões do estoque">
+        <FilterLine>
+          <FilterLineSection grow>
+            <FilterLineItem grow minWidth={180} className="sm:max-w-[280px]">
+              <FilterLineSearch
+                aria-label="Buscar item de estoque"
                 placeholder="Buscar por nome ou código..."
                 value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                className="w-full pl-8 pr-3 py-2 text-xs font-semibold border border-zinc-200 rounded-lg bg-white outline-none focus:border-amber-400 transition-colors placeholder:text-slate-400"
+                onChange={setSearchTerm}
               />
-            </div>
-            <div className="relative">
-              <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4h18M6 8h12M9 12h6" />
-              </svg>
-              <select
+            </FilterLineItem>
+            <FilterLineItem minWidth={180}>
+              <Select
+                aria-label="Filtrar por categoria"
                 value={filterCategory}
                 onChange={e => setFilterCategory(e.target.value)}
-                className="pl-8 pr-8 py-2 text-xs font-semibold border border-zinc-200 rounded-lg bg-white outline-none focus:border-amber-400 transition-colors appearance-none cursor-pointer text-slate-700 min-w-[160px]"
               >
                 <option value="all">Todas as categorias</option>
                 {categories.map(cat => (
@@ -378,45 +443,27 @@ export function InventoryPanel({ tenant }: { tenant: Tenant | null }) {
                     {cat.name} ({items.filter(i => i.categoryId === cat.id).length})
                   </option>
                 ))}
-              </select>
-              <svg className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
-              </svg>
-              {filterCategory !== "all" && (
-                <button
-                  onClick={() => setFilterCategory("all")}
-                  className="absolute right-6 top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors"
-                  title="Limpar filtro"
-                >
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              )}
-            </div>
-            <button
+              </Select>
+            </FilterLineItem>
+            {filterCategory !== "all" && (
+              <Button variant="ghost" size="sm" onClick={() => setFilterCategory("all")} title="Limpar filtro">
+                Limpar filtro ({filteredItems.length} item(s))
+              </Button>
+            )}
+          </FilterLineSection>
+          <FilterLineSection align="right">
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
+              iconLeft={<Settings size={14} />}
               onClick={() => setShowManageCategories(true)}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border border-zinc-200 rounded-lg bg-white text-slate-600 hover:bg-zinc-50 transition-colors shrink-0"
               title="Editar ou excluir categorias de estoque"
             >
-              <Settings className="w-3.5 h-3.5" />
               Categorias
-            </button>
-          </div>
-
-          {/* Badge de filtro ativo */}
-          {filterCategory !== "all" && (
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Filtrando por:</span>
-              <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-700 text-[11px] font-black px-2 py-0.5 rounded-full">
-                {categories.find(c => c.id === filterCategory)?.name}
-                <button onClick={() => setFilterCategory("all")} className="hover:text-red-500 transition-colors">×</button>
-              </span>
-              <span className="text-[10px] text-slate-400">{filteredItems.length} item(s)</span>
-            </div>
-          )}
-        </div>
+            </Button>
+          </FilterLineSection>
+        </FilterLine>
 
         <GridTable 
           data={groupedItems}
@@ -426,42 +473,42 @@ export function InventoryPanel({ tenant }: { tenant: Tenant | null }) {
           renderDesktopExpandedContent={(item) => {
             if (!item.isGroup) return null;
             return (
-              <div className="px-6 py-4 bg-slate-50/50 rounded-b-xl border-t border-slate-100 shadow-inner">
+              <div className="px-6 py-4 bg-slate-50/50 rounded-b-lg border-t border-slate-100">
                 <div className="flex items-center gap-2 mb-3">
-                  <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Lotes ({item.batches.length})</h4>
+                  <h4 className="text-[11px] font-semibold text-slate-400">Lotes ({item.batches.length})</h4>
                   <div className="h-px bg-slate-200 flex-1" />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {item.batches.map((batch: any) => {
                     const bIsExpired = batch.expirationDate && new Date(batch.expirationDate) < new Date();
                     return (
-                      <div key={batch.id} className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm hover:border-slate-300 transition-colors flex flex-col gap-2">
+                      <div key={batch.id} className="bg-white p-3 rounded-lg border border-slate-200 hover:border-slate-300 transition-colors flex flex-col gap-2">
                         <div className="flex justify-between items-start">
                           <div>
-                            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Lote / SKU</p>
-                            <p className="text-sm font-black text-slate-700">{batch.code || "S/COD"}</p>
+                            <p className="text-[10px] text-slate-400 font-semibold">Lote / SKU</p>
+                            <p className="text-sm font-semibold text-slate-700">{batch.code || "S/COD"}</p>
                           </div>
                           <div className="text-right">
-                            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Qtd</p>
-                            <p className="text-sm font-black text-slate-800">{batch.quantity} <span className="text-slate-400 font-medium text-xs">{batch.unit}</span></p>
+                            <p className="text-[10px] text-slate-400 font-semibold">Qtd</p>
+                            <p className="text-sm font-semibold text-slate-800">{batch.quantity} <span className="text-slate-400 font-medium text-xs">{batch.unit}</span></p>
                           </div>
                         </div>
                         <div className="flex justify-between items-end mt-1 pt-2 border-t border-slate-100">
                           <div>
-                            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Validade</p>
+                            <p className="text-[10px] text-slate-400 font-semibold mb-0.5">Validade</p>
                             {batch.expirationDate ? (
-                              <p className={`text-xs font-bold ${bIsExpired ? "text-red-500" : "text-emerald-600"}`}>
+                              <p className={`text-xs font-semibold ${bIsExpired ? "text-red-500" : "text-emerald-600"}`}>
                                 {new Date(batch.expirationDate).toLocaleDateString("pt-BR")}
                               </p>
                             ) : (
-                              <p className="text-[10px] font-bold text-slate-400 italic">Sem validade</p>
+                              <p className="text-[11px] font-semibold text-slate-400 italic">Sem validade</p>
                             )}
                           </div>
                           <div className="flex gap-0.5">
-                            <IconButton variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setEditingItem(batch); setShowItemForm(true); }}>
+                            <IconButton aria-label="Editar lote" variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); openItemForm(batch); }}>
                               <Settings className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600" />
                             </IconButton>
-                            <IconButton variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setDeletingItem(batch); }}>
+                            <IconButton aria-label="Remover lote" variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setDeletingItem(batch); }}>
                               <Trash2 className="w-3.5 h-3.5 text-red-400 hover:text-red-600" />
                             </IconButton>
                           </div>
@@ -479,21 +526,21 @@ export function InventoryPanel({ tenant }: { tenant: Tenant | null }) {
               header: "Produto",
               render: item => (
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-white group-hover:shadow-sm transition-all border border-slate-200/50 relative">
-                    <Package className="w-5 h-5" />
+                  <div className="h-8 w-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 transition-all border border-slate-200/50 relative">
+                    <Package className="h-4 w-4" />
                     {item.isGroup && (
-                      <span className="absolute -top-1.5 -right-1.5 bg-amber-100 text-amber-700 text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center border border-amber-200 shadow-sm">{item.batches.length}</span>
+                      <span className="absolute -top-1.5 -right-1.5 bg-blue-100 text-blue-700 text-[10px] font-semibold w-4 h-4 rounded-full flex items-center justify-center border border-blue-200">{item.batches.length}</span>
                     )}
                   </div>
                   <div>
-                    <p className="text-sm font-black text-slate-800 leading-tight flex items-center gap-2">
+                    <p className="text-[13px] font-medium text-slate-800 leading-tight flex items-center gap-2">
                       {item.name}
                       {item.isGroup && (
-                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Múltiplos Lotes</span>
+                        <span className="text-[11px] text-slate-400 font-semibold">Múltiplos Lotes</span>
                       )}
                     </p>
-                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
-                      {item.isGroup ? `${item.brand || 'Marca n/d'} • Várias Validades` : `#${item.code || 'S/COD'} • ${item.brand || 'Marca n/d'}`}
+                    <p className="text-[10px] text-slate-400 font-semibold mt-0.5">
+                      {item.isGroup ? `${item.brand || 'Marca n/d'} • Várias Validades`:`#${item.code || 'S/COD'} • ${item.brand || 'Marca n/d'}`}
                     </p>
                   </div>
                 </div>
@@ -516,15 +563,15 @@ export function InventoryPanel({ tenant }: { tenant: Tenant | null }) {
                 const granularTotal = hasConversion ? item.quantity * item.purchaseQty : null;
                 return (
                   <div className="flex flex-col items-center gap-0.5">
-                    <span className={`text-sm font-black ${isLow ? 'text-orange-600' : 'text-slate-800'}`}>
+                    <span className={`text-sm font-semibold ${isLow ? 'text-orange-600' : 'text-slate-800'}`}>
                       {item.quantity} {item.unit || item.purchaseUnit || 'un'}
                     </span>
                     {hasConversion && granularTotal !== null && (
-                      <span className="text-[10px] text-amber-600 font-bold bg-amber-50 px-1.5 py-0.5 rounded-md">
+                      <span className="text-[11px] text-blue-700 font-medium bg-blue-50 px-1.5 py-0.5 rounded-md">
                         ≈ {granularTotal.toLocaleString("pt-BR")} {item.stockUnit}
                       </span>
                     )}
-                    {item.weight && <p className="text-[9px] text-slate-400 italic">({item.weight})</p>}
+                    {item.weight && <p className="text-[10px] text-slate-400 italic">({item.weight})</p>}
                   </div>
                 );
               }
@@ -533,9 +580,9 @@ export function InventoryPanel({ tenant }: { tenant: Tenant | null }) {
               header: "Custos",
               render: item => (
                 <div className="space-y-0.5">
-                  <p className="text-[10px] font-bold text-slate-400">Compra: <span className="text-slate-800 font-black">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.purchasePrice || 0)}</span></p>
+                  <p className="text-[11px] font-semibold text-slate-400">Compra: <span className="text-slate-800 font-semibold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.purchasePrice || 0)}</span></p>
                   {item.sellingPrice && (
-                    <p className="text-[10px] font-bold text-slate-400">Venda: <span className="text-emerald-600 font-black">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.sellingPrice)}</span></p>
+                    <p className="text-[11px] font-semibold text-slate-400">Venda: <span className="text-emerald-600 font-semibold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.sellingPrice)}</span></p>
                   )}
                 </div>
               )
@@ -574,13 +621,13 @@ export function InventoryPanel({ tenant }: { tenant: Tenant | null }) {
                             : `Vence em: ${new Date(item.expirationDate).toLocaleDateString("pt-BR")}`}
                         </Badge>
                         {isNearExpiry && !isExpired && (
-                          <p className="text-[10px] font-black text-amber-600 animate-pulse">
+                          <p className="text-[11px] font-semibold text-amber-600 animate-pulse">
                             ⚠ {daysLeft === 0 ? "Vence hoje!" : `${daysLeft} dia${daysLeft === 1 ? "" : "s"} restante${daysLeft === 1 ? "" : "s"}`}
                           </p>
                         )}
                       </div>
                     ) : (
-                      <span className="text-[11px] text-slate-300 font-bold italic">Sem validade</span>
+                      <span className="text-[11px] text-slate-300 font-semibold italic">Sem validade</span>
                     )}
                   </div>
                 );
@@ -592,9 +639,9 @@ export function InventoryPanel({ tenant }: { tenant: Tenant | null }) {
               render: item => (
                 <div className="flex items-center justify-end gap-1">
                   <Button 
-                    variant="ghost" 
+                    variant="outline"
                     size="sm"
-                    className="text-amber-600 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 hidden sm:flex"
+                    className="hidden sm:flex"
                     onClick={(e) => { e.stopPropagation(); openQuickAdjust(item); }}
                   >
                     Movimentar
@@ -603,6 +650,7 @@ export function InventoryPanel({ tenant }: { tenant: Tenant | null }) {
                     variant="ghost" 
                     size="sm"
                     onClick={(e) => { e.stopPropagation(); openItemEditor(item); }}
+                    aria-label="Editar item"
                     title={item.isGroup ? "Editar lote mais antigo" : "Editar"}
                   >
                     <Settings className="w-4 h-4" />
@@ -612,6 +660,7 @@ export function InventoryPanel({ tenant }: { tenant: Tenant | null }) {
                       variant="ghost"
                       size="sm"
                       className="text-red-400 hover:text-red-600"
+                      aria-label="Remover item"
                       onClick={(e) => { e.stopPropagation(); setDeletingItem(item); }}
                     >
                       <Trash2 className="w-4 h-4" />
@@ -622,19 +671,10 @@ export function InventoryPanel({ tenant }: { tenant: Tenant | null }) {
             }
           ]}
         />
-      </div>
+      </Tabs>
+    </div>
 
       <AnimatePresence>
-        {showItemForm && (
-          <InventoryItemModal
-            tenant={tenant}
-            item={editingItem}
-            categories={categories}
-            onClose={() => setShowItemForm(false)}
-            onSave={() => { setShowItemForm(false); fetchData(); }}
-            refreshCategories={fetchData}
-          />
-        )}
         <QuickAdjustModal
           isOpen={!!adjustingItem}
           onClose={() => setAdjustingItem(null)}
@@ -664,7 +704,7 @@ export function InventoryPanel({ tenant }: { tenant: Tenant | null }) {
           <span>
             Tem certeza que deseja remover <strong>{deletingItem?.name}</strong> do estoque?
             {deletingItem?.quantity > 0 && (
-              <span className="block mt-2 text-amber-600 text-xs font-semibold">
+              <span className="block mt-2 text-amber-600 text-xs font-medium">
                 Ainda há {deletingItem.quantity} {deletingItem.unit || "un"} em estoque.
               </span>
             )}
@@ -689,7 +729,7 @@ export function InventoryPanel({ tenant }: { tenant: Tenant | null }) {
           onChange={fetchData}
         />
       </Modal>
-    </div>
+    </PageWrapper>
   );
 }
 
@@ -773,66 +813,52 @@ function ManageInventoryCategoriesList({ tenant, categories, items, onChange }: 
           const count = items.filter(i => i.categoryId === cat.id).length;
           const isEditing = editingId === cat.id;
           return (
-            <div key={cat.id} className="flex items-center gap-2 border border-zinc-100 rounded-xl px-3 py-2 bg-white">
+            <div key={cat.id} className="flex items-center gap-2 border border-zinc-100 rounded-lg px-3 py-2 bg-white">
               {isEditing ? (
                 <>
-                  <input
+                  <Input
                     autoFocus
+                    size="sm"
+                    wrapperClassName="flex-1 min-w-0"
                     value={editingName}
                     onChange={e => setEditingName(e.target.value)}
                     onKeyDown={e => { if (e.key === "Enter") saveEdit(cat.id); if (e.key === "Escape") setEditingId(null); }}
-                    className="flex-1 min-w-0 text-sm font-semibold border border-zinc-200 rounded-lg px-2 py-1.5 outline-none focus:border-amber-400"
                   />
-                  <button
-                    onClick={() => saveEdit(cat.id)}
-                    disabled={savingId === cat.id}
-                    className="text-xs font-bold text-amber-600 hover:text-amber-700 px-2 py-1 disabled:opacity-50"
-                  >
+                  <Button size="xs" onClick={() => saveEdit(cat.id)} disabled={savingId === cat.id}>
                     Salvar
-                  </button>
-                  <button
-                    onClick={() => setEditingId(null)}
-                    className="text-xs font-semibold text-slate-400 hover:text-slate-600 px-1"
-                  >
+                  </Button>
+                  <Button size="xs" variant="ghost" onClick={() => setEditingId(null)}>
                     Cancelar
-                  </button>
+                  </Button>
                 </>
               ) : (
                 <>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-slate-700 truncate">{cat.name}</p>
-                    <p className="text-[10px] text-slate-400 font-semibold">{count} item(ns)</p>
+                    <p className="text-[13px] font-medium text-slate-700 truncate">{cat.name}</p>
+                    <p className="text-[11px] text-slate-400 font-semibold">{count} item(ns)</p>
                   </div>
-                  <button
-                    onClick={() => startEdit(cat)}
-                    className="p-1.5 text-slate-400 hover:text-amber-600 transition-colors"
-                    title="Editar nome"
-                  >
-                    <Settings className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => askDelete(cat)}
-                    className="p-1.5 text-slate-400 hover:text-red-500 transition-colors"
-                    title="Excluir categoria"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  <IconButton size="sm" aria-label="Editar nome" title="Editar nome" onClick={() => startEdit(cat)}>
+                    <Settings size={14} />
+                  </IconButton>
+                  <IconButton size="sm" aria-label="Excluir categoria" title="Excluir categoria" className="text-slate-400 hover:text-red-500" onClick={() => askDelete(cat)}>
+                    <Trash2 size={14} />
+                  </IconButton>
                 </>
               )}
             </div>
           );
         })}
         {categories.length === 0 && (
-          <p className="text-center text-sm text-slate-400 py-6">Nenhuma categoria cadastrada ainda.</p>
+          <p className="text-center text-xs text-slate-500 py-6">Nenhuma categoria cadastrada ainda.</p>
         )}
       </div>
 
       <form onSubmit={handleAdd} className="flex items-center gap-2 pt-2 border-t border-zinc-100">
-        <input
+        <Input
+          wrapperClassName="flex-1 min-w-0"
           value={addingName}
           onChange={e => setAddingName(e.target.value)}
           placeholder="Nova categoria..."
-          className="flex-1 min-w-0 text-sm font-semibold border border-zinc-200 rounded-lg px-3 py-2 outline-none focus:border-amber-400"
         />
         <Button type="submit" size="sm" disabled={!addingName.trim() || addingLoading}>
           Adicionar
@@ -848,7 +874,7 @@ function ManageInventoryCategoriesList({ tenant, categories, items, onChange }: 
           <span>
             Tem certeza que deseja excluir <strong>{deleteTarget?.name}</strong>?
             {!!deleteItemCount && (
-              <span className="block mt-2 text-amber-600 text-xs font-semibold">
+              <span className="block mt-2 text-amber-600 text-xs font-medium">
                 Esta categoria tem {deleteItemCount} item(ns) de estoque. Eles ficarão sem categoria, mas não serão apagados.
               </span>
             )}
@@ -861,409 +887,3 @@ function ManageInventoryCategoriesList({ tenant, categories, items, onChange }: 
     </div>
   );
 }
-
-const UNIT_GROUPS = [
-  {
-    label: "Massa",
-    units: [
-      { value: "g",  label: "g — Grama" },
-      { value: "kg", label: "kg — Quilograma" },
-      { value: "mg", label: "mg — Miligrama" },
-    ],
-  },
-  {
-    label: "Volume",
-    units: [
-      { value: "ml", label: "ml — Mililitro" },
-      { value: "l",  label: "l — Litro" },
-    ],
-  },
-  {
-    label: "Contagem",
-    units: [
-      { value: "un",   label: "un — Unidade" },
-      { value: "dz",   label: "dz — Dúzia" },
-      { value: "cx",   label: "cx — Caixa" },
-      { value: "pct",  label: "pct — Pacote" },
-      { value: "fd",   label: "fd — Fardo" },
-      { value: "saco", label: "saco — Saco" },
-    ],
-  },
-  {
-    label: "Comprimento",
-    units: [
-      { value: "cm", label: "cm — Centímetro" },
-      { value: "m",  label: "m — Metro" },
-    ],
-  },
-];
-
-function UnitSelectInput({
-  label,
-  value,
-  onChange,
-  hint,
-  size = "sm",
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  hint?: string;
-  size?: "sm" | "md";
-}) {
-  const [open, setOpen] = useState(false);
-  const [openUp, setOpenUp] = useState(false);
-  const ref = React.useRef<HTMLDivElement>(null);
-
-  React.useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
-
-  const handleToggle = () => {
-    if (!open && ref.current) {
-      const rect = ref.current.getBoundingClientRect();
-      setOpenUp(rect.bottom + 210 > window.innerHeight);
-    }
-    setOpen((o) => !o);
-  };
-
-  const allUnits = UNIT_GROUPS.flatMap((g) => g.units);
-  const _matched = allUnits.find((u) => u.value === value.trim().toLowerCase());
-
-  return (
-    <div ref={ref} className="relative">
-      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">
-        {label}
-      </label>
-      <div
-        className="flex items-center gap-1 border border-zinc-200 rounded-lg bg-white cursor-pointer hover:border-amber-400 focus-within:border-amber-400 transition-colors px-2"
-        style={{ height: size === "sm" ? "34px" : "40px" }}
-        onClick={handleToggle}
-      >
-        <input
-          className="flex-1 text-xs font-bold bg-transparent outline-none text-slate-800 placeholder:text-slate-400 min-w-0"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onClick={(e) => e.stopPropagation()}
-          placeholder="un, kg, ml…"
-          autoComplete="off"
-        />
-        <svg className={`w-3 h-3 text-slate-400 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
-        </svg>
-      </div>
-      {hint && <p className="text-[9px] text-amber-600 mt-0.5">{hint}</p>}
-      {open && (
-        <div className={`absolute z-50 w-44 bg-white border border-zinc-200 rounded-xl shadow-xl overflow-y-auto max-h-48 ${openUp ? "bottom-full mb-1" : "top-full mt-1"} left-0`}>
-          {UNIT_GROUPS.map((group) => (
-            <div key={group.label}>
-              <div className="px-2 py-1 text-[9px] font-black uppercase tracking-widest text-slate-400 bg-zinc-50 border-b border-zinc-100 sticky top-0">
-                {group.label}
-              </div>
-              {group.units.map((u) => (
-                <button
-                  key={u.value}
-                  type="button"
-                  onClick={() => { onChange(u.value); setOpen(false); }}
-                  className={`w-full text-left px-2 py-1.5 text-[11px] flex items-center gap-2 hover:bg-amber-50 transition-colors ${
-                    value === u.value ? "bg-amber-50 text-amber-700 font-black" : "text-slate-700 font-semibold"
-                  }`}
-                >
-                  <span className="font-black text-slate-900 w-6 shrink-0">{u.value}</span>
-                  <span className="text-slate-500 text-[10px] flex-1 truncate">{u.label.split(" — ")[1]}</span>
-                  {value === u.value && (
-                    <svg className="w-3 h-3 text-amber-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                  )}
-                </button>
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function InventoryItemModal({ tenant, item, categories, onClose, onSave, refreshCategories }: {
-  tenant: Tenant | null,
-  item: any | null,
-  categories: any[],
-  onClose: () => void,
-  onSave: () => void,
-  refreshCategories: () => void
-}) {
-  const [form, setForm] = useState({
-    name: item?.name || "",
-    code: item?.code || "",
-    brand: item?.brand || "",
-    purchasePrice: item?.purchasePrice || "",
-    sellingPrice: item?.sellingPrice || "",
-    quantity: item?.quantity || "",
-    minStock: item?.minStock || "",
-    unit: item?.unit || "un",
-    weight: item?.weight || "",
-    usage: item?.usage || "SALE",
-    categoryId: item?.categoryId || "",
-    expirationDate: item?.expirationDate ? new Date(item.expirationDate).toISOString().split('T')[0] : "",
-    purchaseDate: item?.purchaseDate ? new Date(item.purchaseDate).toISOString().split('T')[0] : "",
-    // Conversão inteligente
-    purchaseUnit: item?.purchaseUnit || "",
-    purchaseQty: item?.purchaseQty || "",
-    stockUnit: item?.stockUnit || "",
-  });
-
-  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-
-  const set = (key: string, value: string) => setForm(f => ({ ...f, [key]: value }));
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    const url = item ? `/api/inventory/items/${item.id}` : `/api/inventory/items`;
-    const method = item ? 'PATCH' : 'POST';
-    await apiFetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...form,
-        tenantId: tenant?.id,
-        purchasePrice: parseFloat(form.purchasePrice.toString()) || 0,
-        sellingPrice: form.sellingPrice ? parseFloat(form.sellingPrice.toString()) : null,
-        quantity: parseFloat(form.quantity.toString()) || 0,
-        minStock: form.minStock ? parseFloat(form.minStock.toString()) : null,
-        purchaseUnit: form.purchaseUnit || null,
-        purchaseQty: form.purchaseQty ? parseFloat(form.purchaseQty.toString()) : null,
-        stockUnit: form.stockUnit || null,
-      })
-    });
-    setLoading(false);
-    onSave();
-  };
-
-  const SectionHeader = ({ icon: Icon, label, color }: { icon: React.ElementType; label: string; color: string }) => (
-    <div className="flex items-center gap-2.5 mb-4">
-      <div className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 ${color}`}>
-        <Icon size={14} className="text-white" />
-      </div>
-      <span className="text-[11px] font-black uppercase tracking-widest text-zinc-500">{label}</span>
-    </div>
-  );
-
-  return (
-    <>
-      <Modal
-        isOpen
-        onClose={onClose}
-        title={item ? "Editar Item" : "Novo Item de Estoque"}
-        size="xl"
-        mobileStyle="bottom-sheet"
-        footer={
-          <ModalFooter>
-            <Button variant="ghost" onClick={onClose} disabled={loading}>Cancelar</Button>
-            <Button variant="primary" onClick={() => {}} disabled={loading}
-              className="sm:min-w-[160px]"
-              type="submit"
-              form="inventory-form"
-            >
-              {loading ? "Salvando..." : item ? "Salvar Alterações" : "Cadastrar Item"}
-            </Button>
-          </ModalFooter>
-        }
-      >
-        <form id="inventory-form" onSubmit={handleSubmit} className="space-y-3">
-
-          {/* Identificação */}
-          <div className="rounded-xl border border-zinc-100 bg-zinc-50 p-3 space-y-3">
-            <SectionHeader icon={Info} label="Identificação" color="bg-blue-500" />
-            <Input
-              label="Nome"
-              required
-              size="sm"
-              placeholder="Ex: Coca-Cola 350ml"
-              value={form.name}
-              onChange={e => set("name", e.target.value)}
-            />
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <Input label="SKU" size="sm" placeholder="78900..." value={form.code} onChange={e => set("code", e.target.value)} />
-              <Input label="Marca" size="sm" placeholder="Ambev" value={form.brand} onChange={e => set("brand", e.target.value)} />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="ds-label">Categoria</label>
-              <div className="flex gap-1.5">
-                <Select
-                  size="sm"
-                  value={form.categoryId}
-                  onChange={e => set("categoryId", e.target.value)}
-                  wrapperClassName="flex-1 min-w-0"
-                >
-                  <option value="">Selecione...</option>
-                  {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </Select>
-                <button
-                  type="button"
-                  onClick={() => setIsCategoryModalOpen(true)}
-                  className="w-8 h-8 shrink-0 rounded-lg border border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-100 flex items-center justify-center font-bold transition-colors"
-                >
-                  +
-                </button>
-              </div>
-            </div>
-            <Select label="Uso" size="sm" value={form.usage} onChange={e => set("usage", e.target.value)}>
-              <option value="SALE">Venda direta</option>
-              <option value="INTERNAL">Insumo interno</option>
-            </Select>
-          </div>
-
-          {/* Estoque */}
-          <div className="rounded-xl border border-zinc-100 bg-zinc-50 p-3 space-y-3">
-            <SectionHeader icon={Package} label="Estoque" color="bg-orange-500" />
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <Input label="Quantidade" required size="sm" type="number" step="0.001" placeholder="0" value={form.quantity} onChange={e => set("quantity", e.target.value)} />
-              <Input label="Mín. alerta" size="sm" type="number" step="0.01" placeholder="0" value={form.minStock} onChange={e => set("minStock", e.target.value)} />
-            </div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <UnitSelectInput label="Unidade de armazenamento" value={form.unit} onChange={v => set("unit", v)} />
-              <Input label="Peso/Volume" size="sm" placeholder="500g, 1.5L" value={form.weight} onChange={e => set("weight", e.target.value)} />
-            </div>
-          </div>
-
-          {/* Conversão de Unidades */}
-          <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-3 space-y-3">
-            <SectionHeader icon={ArrowRightLeft} label="Conversão de Unidades (opcional)" color="bg-amber-500" />
-            <p className="text-[11px] text-amber-700 leading-relaxed -mt-1">
-              Use quando compra em uma unidade mas consome em outra. Ex: compra <b>1 garrafa (un)</b> de óleo que contém <b>1000 ml</b> — na produção desconta em <b>ml</b>.
-            </p>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              <div>
-                <UnitSelectInput
-                  label="Unidade de compra"
-                  value={form.purchaseUnit}
-                  onChange={v => set("purchaseUnit", v)}
-                  hint="como você compra"
-                />
-              </div>
-              <div>
-                <Input
-                  label="Conteúdo por unidade"
-                  size="sm"
-                  type="number"
-                  step="0.001"
-                  placeholder="1000"
-                  value={form.purchaseQty}
-                  onChange={e => set("purchaseQty", e.target.value)}
-                />
-                <p className="text-[9px] text-amber-600 mt-0.5">quantidade contida</p>
-              </div>
-              <div>
-                <UnitSelectInput
-                  label="Unidade granular"
-                  value={form.stockUnit}
-                  onChange={v => set("stockUnit", v)}
-                  hint="usada na produção"
-                />
-              </div>
-            </div>
-            {/* Preview da conversão */}
-            {form.purchaseUnit && form.purchaseQty && form.stockUnit && (
-              <div className="bg-white border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-2">
-                <span className="text-base">🔄</span>
-                <p className="text-[12px] text-amber-800 font-bold">
-                  1 <span className="text-amber-600">{form.purchaseUnit}</span>
-                  {" = "}
-                  <span className="text-amber-600">{form.purchaseQty} {form.stockUnit}</span>
-                  {form.quantity ? (
-                    <span className="text-slate-500 font-normal ml-1">
-                      → estoque total:{" "}
-                      <b className="text-amber-700">
-                        {(parseFloat(form.quantity.toString()) * parseFloat(form.purchaseQty.toString())).toLocaleString("pt-BR")} {form.stockUnit}
-                      </b>
-                    </span>
-                  ) : null}
-                </p>
-              </div>
-            )}
-            {(form.purchaseUnit || form.purchaseQty || form.stockUnit) &&
-             !(form.purchaseUnit && form.purchaseQty && form.stockUnit) && (
-              <p className="text-[10px] text-amber-500 italic">Preencha os 3 campos para ativar a conversão automática.</p>
-            )}
-          </div>
-
-          {/* Financeiro */}
-          <div className="rounded-xl border border-zinc-100 bg-zinc-50 p-3 space-y-3">
-            <SectionHeader icon={CircleDollarSign} label="Financeiro" color="bg-emerald-500" />
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <CurrencyInput label="Custo (R$)" size="sm" value={form.purchasePrice} onChange={v => set("purchasePrice", v)} />
-              <CurrencyInput label="Venda (R$)" size="sm" value={form.sellingPrice} onChange={v => set("sellingPrice", v)} />
-            </div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <Input label="Compra" size="sm" type="date" value={form.purchaseDate} onChange={e => set("purchaseDate", e.target.value)} />
-              <Input label="Validade" size="sm" type="date" value={form.expirationDate} onChange={e => set("expirationDate", e.target.value)} />
-            </div>
-          </div>
-
-        </form>
-      </Modal>
-
-      <Modal
-        isOpen={isCategoryModalOpen}
-        onClose={() => setIsCategoryModalOpen(false)}
-        title="Nova Categoria"
-        size="sm"
-        mobileStyle="center"
-      >
-        <CategoryForm
-          tenantId={tenant?.id || ""}
-          onSuccess={() => { refreshCategories(); setIsCategoryModalOpen(false); }}
-          onClose={() => setIsCategoryModalOpen(false)}
-          isInventory
-        />
-      </Modal>
-    </>
-  );
-}
-
-function CategoryForm({ tenantId, onSuccess, onClose, isInventory = false }: { tenantId: string, onSuccess: () => void, onClose: () => void, isInventory?: boolean }) {
-  const [name, setName] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    const url = isInventory ? "/api/inventory/categories" : "/api/categories";
-    await apiFetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, tenantId })
-    });
-    onSuccess();
-    setLoading(false);
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-5">
-      <Input
-        label="Nome da categoria"
-        required
-        autoFocus
-        placeholder="Ex: Embalagens, Frios..."
-        value={name}
-        onChange={e => setName(e.target.value)}
-      />
-      <ModalFooter>
-        <Button variant="ghost" type="button" onClick={onClose} disabled={loading}>Voltar</Button>
-        <Button variant="primary" type="submit" disabled={loading}>
-          {loading ? "Salvando..." : "Criar Categoria"}
-        </Button>
-      </ModalFooter>
-    </form>
-  );
-}
-

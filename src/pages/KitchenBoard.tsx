@@ -10,12 +10,13 @@ import { playNotificationSound } from "../lib/notificationSound";
 import type { Order, Tenant } from "../types";
 import { ChefHat, Timer, Bell, CheckCircle2, LogOut, Utensils, User } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { Button } from "../components";
 
 export type OrderStatus = "PENDING" | "PREPARING" | "SHIPPED";
 
 const COLUMNS: { status: OrderStatus; label: string; dot: string; empty: string }[] = [
-  { status: "PENDING", label: "Recebido", dot: "bg-yellow-400", empty: "Nenhum pedido novo" },
-  { status: "PREPARING", label: "Em Preparo", dot: "bg-orange-400", empty: "Nada em preparo" },
+  { status: "PENDING", label: "Recebido", dot: "bg-amber-400", empty: "Nenhum pedido novo" },
+  { status: "PREPARING", label: "Em Preparo", dot: "bg-blue-400", empty: "Nada em preparo" },
   { status: "SHIPPED", label: "Pronto", dot: "bg-emerald-400", empty: "Nada pronto ainda" },
 ];
 
@@ -55,12 +56,12 @@ function KitchenTicket({ order, onAdvance, isOverlay }: { order: Order; onAdvanc
   const elapsedLabel = elapsed < 0 ? "agora" : `${elapsed} min`;
 
   const urgency = order.status === "SHIPPED"
-    ? "border-emerald-500/40 bg-emerald-500/5"
+    ? "border-emerald-500/40 bg-emerald-500/10"
     : elapsed > 20
     ? "border-red-500/60 bg-red-500/10"
     : elapsed > 10
     ? "border-amber-400/60 bg-amber-400/10"
-    : "border-white/10 bg-white/5";
+    : "border-slate-700 bg-slate-800";
 
   return (
     <motion.div
@@ -72,13 +73,13 @@ function KitchenTicket({ order, onAdvance, isOverlay }: { order: Order; onAdvanc
       animate={{ opacity: isDragging && !isOverlay ? 0.4 : 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.96 }}
       style={{ transform: transform && !isOverlay ? CSS.Translate.toString(transform) : undefined }}
-      className={`rounded-2xl border-2 p-3.5 flex flex-col gap-2.5 touch-none select-none ${urgency} ${isOverlay ? "cursor-grabbing shadow-2xl scale-[1.02] border-[#C9A227] bg-[#0E1A3D]" : "cursor-grab active:cursor-grabbing"}`}
+      className={`rounded-lg border-2 p-3.5 flex flex-col gap-2.5 touch-none select-none ${urgency} ${isOverlay ? "cursor-grabbing shadow-lg scale-[1.02] border-blue-500 bg-slate-800" : "cursor-grab active:cursor-grabbing"}`}
     >
       <div className="flex flex-col gap-1.5">
         <div className="flex items-start justify-between gap-2">
-          <span className="text-base font-black text-white tracking-tight leading-tight whitespace-nowrap min-w-0">{orderShortCode(order)}</span>
+          <span className="text-base font-semibold text-white leading-tight whitespace-nowrap min-w-0">{orderShortCode(order)}</span>
           <div
-            className={`flex items-center gap-1 text-[11px] font-black px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap ${
+            className={`flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap ${
               order.status !== "SHIPPED" && elapsed > 15 ? "text-red-300 bg-red-500/20 animate-pulse" : "text-white/60 bg-white/10"
             }`}
           >
@@ -87,25 +88,25 @@ function KitchenTicket({ order, onAdvance, isOverlay }: { order: Order; onAdvanc
           </div>
         </div>
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full bg-white/10 text-white/70 whitespace-nowrap shrink-0">
+          <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-white/10 text-white/70 whitespace-nowrap shrink-0">
             {orderTypeLabel(order)}
           </span>
           {order.customerName && (
-            <p className="text-xs font-bold text-white/50 truncate min-w-0">{order.customerName}</p>
+            <p className="text-xs text-white/60 truncate min-w-0">{order.customerName}</p>
           )}
         </div>
       </div>
 
       <div className="flex-1 space-y-1.5">
         {kitchenItems.map((item, idx) => (
-          <div key={idx} className="flex items-start gap-2 p-2 bg-black/30 rounded-xl border border-white/5">
-            <span className="text-sm font-black text-[#C9A227] min-w-[20px]">{item.quantity}x</span>
+          <div key={idx} className="flex items-start gap-2 p-2 bg-slate-900/60 rounded-lg border border-slate-700">
+            <span className="text-sm font-semibold text-blue-400 min-w-[20px]">{item.quantity}x</span>
             <div className="flex-1 min-w-0">
-              <p className="text-[13px] font-bold text-white leading-tight">{item.product?.name}</p>
+              <p className="text-[13px] font-medium text-white leading-tight">{item.product?.name}</p>
               {item.notes && (
                 <div className="mt-1 flex items-start gap-1.5 bg-amber-400/15 border border-amber-400/30 rounded-lg px-2 py-1">
                   <Bell className="w-3 h-3 shrink-0 mt-0.5 text-amber-300" />
-                  <span className="text-[11px] font-bold text-amber-200 leading-snug">{item.notes}</span>
+                  <span className="text-[11px] font-medium text-amber-200 leading-snug">{item.notes}</span>
                 </div>
               )}
             </div>
@@ -117,16 +118,18 @@ function KitchenTicket({ order, onAdvance, isOverlay }: { order: Order; onAdvanc
       </div>
 
       {nextLabel ? (
-        <button
+        <Button
+          variant="primary"
+          size="sm"
+          fullWidth
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => { e.stopPropagation(); onAdvance(); }}
-          className="w-full py-2 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 bg-white/10 hover:bg-white/15 text-white"
+          iconLeft={<CheckCircle2 size={14} />}
         >
-          <CheckCircle2 className="w-3.5 h-3.5" />
           {nextLabel}
-        </button>
+        </Button>
       ) : (
-        <div className="flex items-center justify-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-emerald-300/60">
+        <div className="flex items-center justify-center gap-1.5 text-[11px] font-medium text-emerald-300/80">
           <CheckCircle2 className="w-3 h-3" />
           Pronto — aguardando saída
         </div>
@@ -146,18 +149,18 @@ function KitchenColumn({
     <div className="flex flex-col min-h-0">
       <div className="px-6 py-4 flex items-center gap-2 shrink-0">
         <span className={`w-2.5 h-2.5 rounded-full animate-pulse ${dot}`} />
-        <p className="text-xs font-black uppercase tracking-[0.2em] text-white/80">
+        <p className="text-xs font-medium text-white/80">
           {label} ({orders.length})
         </p>
       </div>
       <div
         ref={setNodeRef}
-        className={`flex-1 overflow-y-auto px-6 pb-6 custom-scrollbar rounded-2xl transition-colors ${isOver ? "bg-white/[0.03]" : ""}`}
+        className={`flex-1 overflow-y-auto px-6 pb-6 custom-scrollbar rounded-lg transition-colors ${isOver ? "bg-white/[0.03]" : ""}`}
       >
         {orders.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center opacity-30 gap-3">
             <Utensils className="w-12 h-12 text-white" />
-            <p className="text-sm font-black uppercase tracking-widest text-white">{empty}</p>
+            <p className="text-sm font-medium text-white">{empty}</p>
           </div>
         ) : (
           <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}>
@@ -361,54 +364,50 @@ export default function KitchenBoard({
 
   if (loading) {
     return (
-      <div className="fixed inset-0 bg-[#0D1B3E] flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-[#C9A227] border-t-transparent rounded-full animate-spin" />
+      <div className="fixed inset-0 bg-slate-900 flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   if (!tenant) {
     return (
-      <div className="fixed inset-0 bg-[#0D1B3E] flex items-center justify-center">
+      <div className="fixed inset-0 bg-slate-900 flex items-center justify-center">
         <div className="text-center space-y-4">
-          <p className="text-lg font-bold text-white">Painel de cozinha não encontrado</p>
-          <button onClick={onLogout} className="text-[#C9A227] underline text-sm">Voltar ao login</button>
+          <p className="text-base font-medium text-white">Painel de cozinha não encontrado</p>
+          <Button variant="outline" size="sm" onClick={onLogout} className="border-white/20 bg-transparent text-white hover:bg-white/10">Voltar ao login</Button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-[#0D1B3E] overflow-hidden">
+    <div className="fixed inset-0 flex flex-col bg-slate-900 overflow-hidden">
       {/* Topbar */}
       <div className="bg-black/20 text-white px-6 py-4 flex items-center justify-between shrink-0 border-b border-white/5">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-[#C9A227] rounded-2xl flex items-center justify-center">
-            <ChefHat className="w-5 h-5 text-black" />
+          <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+            <ChefHat className="w-5 h-5 text-white" />
           </div>
           <div>
-            <p className="text-sm font-black">{tenant.name}</p>
-            <p className="text-[10px] text-white/40 uppercase tracking-widest font-bold">Painel de Cozinha</p>
+            <p className="text-sm font-medium">{tenant.name}</p>
+            <p className="text-[11px] text-white/50">Painel de Cozinha</p>
           </div>
         </div>
         <div className="flex items-center gap-4">
           {staffName && (
-            <span className="flex items-center gap-1.5 text-[11px] text-white font-black uppercase bg-white/10 px-3 py-1.5 rounded-xl">
-              <User className="w-3.5 h-3.5 text-[#C9A227]" />
+            <span className="flex items-center gap-1.5 text-[11px] text-white font-medium bg-white/10 px-3 py-1.5 rounded-lg">
+              <User className="w-3.5 h-3.5 text-blue-400" />
               {staffName}
             </span>
           )}
-          <span className="flex items-center gap-1.5 text-[10px] text-white/40 font-bold uppercase">
+          <span className="flex items-center gap-1.5 text-[11px] text-white/50">
             <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
             Ao vivo
           </span>
-          <button
-            onClick={onLogout}
-            className="flex items-center gap-1.5 text-[10px] font-black uppercase text-white/40 hover:text-white transition-colors bg-white/5 px-3 py-2 rounded-xl"
-          >
-            <LogOut className="w-3.5 h-3.5" />
+          <Button variant="outline" size="sm" onClick={onLogout} iconLeft={<LogOut size={14} />} className="border-white/15 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white">
             Sair
-          </button>
+          </Button>
         </div>
       </div>
 

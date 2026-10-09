@@ -12,11 +12,28 @@ import { motion, AnimatePresence } from "motion/react";
 import type { Tenant, Product, ProductExtra, Order, PaymentConfig, PaymentMethodConfig, StoneConfig, CieloConfig, Customer, PrintingConfig } from "../../../../types";
 import { dineInOrderLabel, DEFAULT_PRINTING_CONFIG } from "../../../../types";
 import { apiJson } from "../../../../lib/api";
-import { useToast } from "../../../../components";
+import { useToast, Button, IconButton, Input, Select, Tabs, Badge, Alert, EmptyState, Switch, Modal, ModalFooter, Textarea } from "../../../../components";
 import { downloadReceiptPdf, printReceiptPdf, printCashClosingReportPdf, downloadDanfePdf, printDanfePdf } from "../../../../lib/receipt";
 import type { DanfeData } from "../../../../types";
 import socket from "../../../../lib/socket";
 import SelectionGroupPicker, { parseSelectionGroups, getSelectionGroupOptions, formatSelectionGroupsNote, selectionGroupsComplete } from "../../../menu-view/SelectionGroupPicker";
+
+const PDV_TABS = [
+  { id: "products", label: "Produtos", icon: Package },
+  { id: "tables", label: "Mesas", icon: Utensils },
+  { id: "comandas", label: "Comandas", icon: Hash },
+  { id: "delivery", label: "Delivery", icon: Truck },
+] as const;
+
+const SPLIT_MODE_TABS = [
+  { id: "equal", label: "Valor igual" },
+  { id: "item", label: "Por item" },
+] as const;
+
+const CASH_OPEN_TABS = [
+  { id: "simple", label: "Digitar valor", icon: Banknote },
+  { id: "count", label: "Contar cédulas", icon: Hash },
+] as const;
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
@@ -511,6 +528,7 @@ export default function PDVPanel({
 
   // Success flash
   const [showSuccess, setShowSuccess] = useState(false);
+  const [successPaused, setSuccessPaused] = useState(false);
   const [nfceStatus, setNfceStatus] = useState<"idle" | "loading" | "authorized" | "rejected">("idle");
   const [nfceMessage, setNfceMessage] = useState("");
 
@@ -543,6 +561,13 @@ export default function PDVPanel({
   }, [tenant.fiscalConfig]);
 
   const fiscalEnabled = fiscalConfig?.enabled === true;
+  // O aviso de venda realizada fica 12 s (tempo de baixar/imprimir) e pausa com o mouse em cima.
+  // Com NFC-e habilitada ele só fecha no X, para não sumir no meio da emissão.
+  useEffect(() => {
+    if (!showSuccess || fiscalEnabled || successPaused) return;
+    const timer = window.setTimeout(() => setShowSuccess(false), 12000);
+    return () => window.clearTimeout(timer);
+  }, [showSuccess, fiscalEnabled, successPaused]);
   const autoEmitNfce = fiscalConfig?.autoEmitNfce === true;
   const autoPrintDanfe = autoEmitNfce && fiscalConfig?.autoPrintDanfe === true;
   const shouldEmitNfce = fiscalEnabled && (requestNfce || autoEmitNfce);
@@ -1657,8 +1682,7 @@ export default function PDVPanel({
         setShowSuccess(true);
         // Com fiscal habilitado, deixa o aviso aberto até fechar manualmente — 3s não dá
         // tempo de digitar/conferir o CPF-CNPJ e emitir a NFC-e antes de sumir sozinho.
-        if (!fiscalEnabled) setTimeout(() => setShowSuccess(false), 3000);
-        if (shouldEmitNfce) void handleEmitNfce();
+          if (shouldEmitNfce) void handleEmitNfce();
         onOrderCreated?.();
       } catch (err: any) {
         console.error(err);
@@ -1740,7 +1764,6 @@ export default function PDVPanel({
       clearCart();
       setShowCheckout(false);
       setShowSuccess(true);
-      if (!fiscalEnabled) setTimeout(() => setShowSuccess(false), 3000);
       if (shouldEmitNfce) void handleEmitNfce();
       onOrderCreated?.();
     } catch (err) {
@@ -1844,8 +1867,7 @@ export default function PDVPanel({
               clearCart();
               setShowCheckout(false);
               setShowSuccess(true);
-              if (!fiscalEnabled) setTimeout(() => setShowSuccess(false), 3000);
-              if (shouldEmitNfce) void handleEmitNfce();
+                      if (shouldEmitNfce) void handleEmitNfce();
               onOrderCreated?.();
             }, 1500);
           } else if (poll.status === "failed" || poll.status === "canceled" || attempts > 36) {
@@ -1889,8 +1911,7 @@ export default function PDVPanel({
               clearCart();
               setShowCheckout(false);
               setShowSuccess(true);
-              if (!fiscalEnabled) setTimeout(() => setShowSuccess(false), 3000);
-              if (shouldEmitNfce) void handleEmitNfce();
+                      if (shouldEmitNfce) void handleEmitNfce();
               onOrderCreated?.();
             }, 1500);
           } else if (poll.status === "CANCELLED" || poll.status === "CANCELED" || attempts > 36) {
@@ -2050,61 +2071,50 @@ export default function PDVPanel({
   if (!isWaiterMode && !cashLoading && cashRequired && !currentCash) {
     return (
       <div className="h-full w-full flex items-center justify-center bg-slate-100 overflow-y-auto py-6 px-4">
-        <div className={`w-full bg-[#0D1B3E] rounded-[1.75rem] sm:rounded-[2rem] p-5 sm:p-8 space-y-5 sm:space-y-6 shadow-2xl border border-white/5 my-auto transition-all ${
+        <div className={`w-full bg-white rounded-lg p-5 sm:p-8 space-y-5 sm:space-y-6 shadow-sm border border-slate-200 my-auto transition-all ${
           cashOpenMode === "count" ? "max-w-4xl" : "max-w-sm"
         }`}>
           <div className="text-center space-y-2">
-            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center mx-auto">
               <Banknote className="w-6 h-6 sm:w-7 sm:h-7" />
             </div>
-            <h3 className="text-base sm:text-lg font-black text-white uppercase tracking-widest">Caixa Fechado</h3>
-            <p className="text-xs text-white/40">Abra o caixa informando o fundo de troco para começar a vender.</p>
+            <h3 className="text-base sm:text-lg font-semibold text-slate-900">Caixa Fechado</h3>
+            <p className="text-xs text-slate-500">Abra o caixa informando o fundo de troco para começar a vender.</p>
           </div>
 
-          <div className="flex bg-white/5 border border-white/10 rounded-xl p-1 gap-1 max-w-sm mx-auto">
-            <button
-              onClick={() => setCashOpenMode("simple")}
-              className={`flex-1 h-8 rounded-lg text-[10px] font-black uppercase tracking-wide transition-all ${
-                cashOpenMode === "simple" ? "bg-white text-[#0D1B3E]" : "text-white/40"
-              }`}
-            >
-              Digitar valor
-            </button>
-            <button
-              onClick={() => setCashOpenMode("count")}
-              className={`flex-1 h-8 rounded-lg text-[10px] font-black uppercase tracking-wide transition-all ${
-                cashOpenMode === "count" ? "bg-white text-[#0D1B3E]" : "text-white/40"
-              }`}
-            >
-              Contar cédulas
-            </button>
-          </div>
+          <Tabs
+            label="Modo de abertura do caixa"
+            items={CASH_OPEN_TABS}
+            value={cashOpenMode}
+            onChange={(v) => setCashOpenMode(v as typeof cashOpenMode)}
+            className="!space-y-0"
+          >
+            {null}
+          </Tabs>
 
           {cashError && (
-            <div className="bg-red-500/10 border border-red-500/20 text-red-300 text-xs font-bold rounded-xl px-4 py-2.5 text-center">
+            <Alert variant="error">
               {cashError}
-            </div>
+            </Alert>
           )}
 
           {cashOpenMode === "simple" ? (
             <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase tracking-widest text-white/40">Fundo de Caixa</label>
-              <div className="relative">
-                <span className="absolute left-4 sm:left-5 top-1/2 -translate-y-1/2 text-lg sm:text-2xl font-black text-white/30">R$</span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  autoFocus
-                  value={formatCurrencyDigits(openingBalanceInput)}
-                  onChange={(e) => setOpeningBalanceInput(maskCurrencyDigits(e.target.value))}
-                  placeholder="0,00"
-                  className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 sm:py-4 pl-11 sm:pl-14 pr-4 sm:pr-5 text-xl sm:text-2xl font-black text-white text-center focus:border-emerald-400 outline-none [appearance:textfield]"
-                />
-              </div>
+              <Input
+                label="Fundo de Caixa"
+                type="text"
+                inputMode="numeric"
+                autoFocus
+                value={formatCurrencyDigits(openingBalanceInput)}
+                onChange={(e) => setOpeningBalanceInput(maskCurrencyDigits(e.target.value))}
+                placeholder="0,00"
+                addonLeft="R$"
+                className="text-center text-base font-semibold"
+              />
             </div>
           ) : (
             <div className="space-y-3">
-              <label className="text-[10px] font-black uppercase tracking-widest text-white/40 block">
+              <label className="text-[11px] font-semibold text-slate-500 block">
                 Quantidade de cada cédula/moeda
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-[50vh] sm:max-h-80 overflow-y-auto pr-0.5">
@@ -2112,42 +2122,43 @@ export default function PDVPanel({
                   const qty = Number(cashCounts[d.value]) || 0;
                   const subtotal = qty * d.value;
                   return (
-                    <div key={d.value} className={`flex items-center gap-2 px-3 py-2 rounded-xl border transition-colors ${
-                      qty > 0 ? "border-emerald-400/40 bg-emerald-500/5" : "border-white/10 bg-white/5"
+                    <div key={d.value} className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
+                      qty > 0 ? "border-emerald-400/40 bg-emerald-500/5" : "border-slate-200 bg-slate-50"
                     }`}>
-                      <span className={`text-[9px] font-black uppercase tracking-wide px-1.5 py-1 rounded shrink-0 ${
-                        d.kind === "bill" ? "bg-emerald-500/15 text-emerald-300" : "bg-amber-500/15 text-amber-300"
-                      }`}>
+                      <Badge color={d.kind === "bill" ? "success" : "warning"}>
                         {d.kind === "bill" ? "Nota" : "Moeda"}
-                      </span>
-                      <span className="text-[12px] font-bold text-white/80 flex-1 min-w-0 truncate">{d.label}</span>
-                      <input
+                      </Badge>
+                      <span className="text-[12px] font-semibold text-slate-600 flex-1 min-w-0 truncate">{d.label}</span>
+                      <Input
                         type="text" inputMode="numeric" placeholder="0"
                         value={cashCounts[d.value] ?? ""}
                         onChange={(e) => setCashCounts((prev) => ({ ...prev, [d.value]: e.target.value.replace(/\D/g, "") }))}
-                        className="w-14 h-9 px-2 rounded-lg bg-white/5 border border-white/10 text-[13px] font-mono font-bold text-center text-white shrink-0 focus:outline-none focus:border-emerald-400"
+                        wrapperClassName="w-16 shrink-0"
+                        className="text-center font-semibold"
                       />
-                      <span className="text-[10px] font-mono font-bold text-white/40 w-16 text-right shrink-0">
+                      <span className="text-[11px] font-mono font-semibold text-slate-500 w-16 text-right shrink-0">
                         {subtotal > 0 ? fmt(subtotal) : "—"}
                       </span>
                     </div>
                   );
                 })}
               </div>
-              <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-                <span className="text-[10px] font-black uppercase tracking-widest text-emerald-300">Total contado</span>
-                <span className="text-[18px] font-mono font-black text-emerald-300">{fmt(cashCountedTotal)}</span>
+              <div className="flex items-center justify-between px-4 py-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                <span className="text-[11px] font-semibold text-emerald-700">Total contado</span>
+                <span className="text-[18px] font-mono font-semibold text-emerald-700">{fmt(cashCountedTotal)}</span>
               </div>
             </div>
           )}
 
-          <button
-            disabled={cashActionLoading}
+          <Button
+            size="lg"
+            fullWidth
+            className="!h-11"
+            loading={cashActionLoading}
             onClick={handleOpenCash}
-            className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-black py-3.5 rounded-2xl text-[10px] uppercase tracking-widest transition-all"
           >
-            {cashActionLoading ? "Abrindo..." : `Abrir Caixa · ${fmt(cashOpeningAmount)}`}
-          </button>
+            {`Abrir Caixa · ${fmt(cashOpeningAmount)}`}
+          </Button>
         </div>
       </div>
     );
@@ -2163,80 +2174,44 @@ export default function PDVPanel({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -40 }}
             className="fixed top-6 left-1/2 -translate-x-1/2 z-[200] flex flex-col items-center gap-2 px-4 w-full max-w-sm"
+            onMouseEnter={() => setSuccessPaused(true)}
+            onMouseLeave={() => setSuccessPaused(false)}
           >
-            <div className="bg-green-500 text-white px-5 py-3 rounded-2xl shadow-2xl flex flex-wrap items-center justify-center gap-2.5 font-black text-xs sm:text-sm w-full">
+            <div className="bg-green-500 text-white px-5 py-3 rounded-lg shadow-sm flex flex-wrap items-center justify-center gap-2.5 font-semibold text-xs sm:text-sm w-full">
               <span className="flex items-center gap-2">
                 <CheckCircle2 className="w-5 h-5 shrink-0" />
                 Venda realizada!
               </span>
               <div className="flex items-center gap-1.5">
-                <button
-                  onClick={handleDownloadReceipt}
-                  className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition-colors"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Baixar PDF
-                </button>
-                <button
-                  onClick={handlePrintReceipt}
-                  className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition-colors"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  Imprimir
-                </button>
-                {fiscalEnabled && (
-                  <button
-                    onClick={() => setShowSuccess(false)}
-                    title="Fechar"
-                    className="flex items-center justify-center w-7 h-7 bg-white/15 hover:bg-white/25 rounded-lg transition-colors"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
+                <Button variant="secondary" size="sm" onClick={handleDownloadReceipt} iconLeft={<Download size={14} />}>Baixar PDF</Button>
+                <Button variant="secondary" size="sm" onClick={handlePrintReceipt} iconLeft={<Printer size={14} />}>Imprimir</Button>
+                <IconButton variant="secondary" size="sm" aria-label="Fechar" onClick={() => setShowSuccess(false)} title="Fechar"><X size={14} /></IconButton>
               </div>
             </div>
             {/* Botão NFC-e — aparece apenas se fiscal estiver habilitado */}
             {fiscalEnabled && nfceStatus === "idle" && (
-              <button
-                onClick={handleEmitNfce}
-                className="bg-[#C9A227] text-white px-5 py-2.5 rounded-xl shadow-xl flex items-center gap-2 text-xs font-black hover:bg-[#b8911f] transition-colors"
-              >
-                <Receipt className="w-4 h-4" />
-                Emitir NFC-e
-              </button>
+              <Button size="lg" onClick={handleEmitNfce} iconLeft={<Receipt size={14} />}>Emitir NFC-e</Button>
             )}
             {fiscalEnabled && nfceStatus === "loading" && (
-              <div className="bg-slate-800 text-white px-5 py-2.5 rounded-xl shadow-xl flex items-center gap-2 text-xs font-black">
+              <div className="bg-slate-800 text-white px-5 py-2.5 rounded-lg shadow-sm flex items-center gap-2 text-xs font-semibold">
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 Enviando para SEFAZ...
               </div>
             )}
             {fiscalEnabled && nfceStatus === "authorized" && (
-              <div className="bg-green-600 text-white px-5 py-2.5 rounded-xl shadow-xl flex flex-wrap items-center justify-center gap-2 text-xs font-black">
+              <div className="bg-green-600 text-white px-5 py-2.5 rounded-lg shadow-sm flex flex-wrap items-center justify-center gap-2 text-xs font-semibold">
                 <span className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4" />
                   {nfceMessage}
                 </span>
                 <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={handleDownloadDanfe}
-                    className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition-colors"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    Baixar DANFE
-                  </button>
-                  <button
-                    onClick={handlePrintDanfe}
-                    className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition-colors"
-                  >
-                    <Printer className="w-3.5 h-3.5" />
-                    Imprimir DANFE
-                  </button>
+                  <Button variant="secondary" size="sm" onClick={handleDownloadDanfe} iconLeft={<Download size={14} />}>Baixar DANFE</Button>
+                  <Button variant="secondary" size="sm" onClick={handlePrintDanfe} iconLeft={<Printer size={14} />}>Imprimir DANFE</Button>
                 </div>
               </div>
             )}
             {fiscalEnabled && nfceStatus === "rejected" && (
-              <div className="bg-red-500 text-white px-5 py-2.5 rounded-xl shadow-xl flex items-center gap-2 text-xs font-black max-w-xs text-center">
+              <div className="bg-red-500 text-white px-5 py-2.5 rounded-lg shadow-sm flex items-center gap-2 text-xs font-semibold max-w-xs text-center">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 {nfceMessage}
               </div>
@@ -2246,7 +2221,7 @@ export default function PDVPanel({
       </AnimatePresence>
 
       {/* ── Left: Product Selection ── */}
-      <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
         {/* Atalhos de tela — abrir em nova janela (só no dashboard) e fullscreen do navegador (sempre) */}
 
         {/* Cash register status bar — só chega aqui com caixa aberto (o bloqueio de tela
@@ -2255,49 +2230,32 @@ export default function PDVPanel({
           <div className="flex items-center justify-between gap-3 px-3 py-1.5 border-b shrink-0 bg-emerald-50/60 border-emerald-100">
             <div className="flex items-center gap-2 min-w-0">
               <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-emerald-500 animate-pulse" />
-              <p className="text-[10px] font-black uppercase tracking-wide text-emerald-700 truncate">
-                Caixa aberto <span className="font-bold normal-case text-emerald-600/80">· Fundo {fmt(currentCash.openingBalance)} · Esperado {fmt(currentCash.expectedBalance)}</span>
+              <p className="text-[11px] font-semibold text-emerald-700 truncate">
+                Caixa aberto <span className="font-semibold normal-case text-emerald-600/80">· Fundo {fmt(currentCash.openingBalance)} · Esperado {fmt(currentCash.expectedBalance)}</span>
               </p>
             </div>
-            <button
-              onClick={() => setShowCloseCashModal(true)}
-              className="shrink-0 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest transition-colors bg-white text-red-600 border border-red-200 hover:bg-red-50"
-            >
-              Fechar Caixa
-            </button>
+            <Button variant="outline" size="sm" className="shrink-0 !text-red-600 !border-red-200 hover:!bg-red-50" onClick={() => setShowCloseCashModal(true)}>Fechar Caixa</Button>
           </div>
         )}
 
         {/* Tabs */}
-        <div className="flex bg-white border-b border-slate-100 px-2 gap-1 pt-1">
-          {(isWaiterMode ? (["products", "tables", "comandas"] as const) : (["products", "tables", "comandas", "delivery"] as const)).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`flex-1 pb-1.5 pt-1 text-[10px] font-black uppercase tracking-widest transition-all border-b-2 relative rounded-t-lg ${
-                activeTab === tab
-                  ? "border-[#C9A227] text-[#0D1B3E]"
-                  : "border-transparent text-slate-400 hover:text-slate-600 hover:border-slate-200"
-              }`}
-            >
-              {tab === "products" ? "Produtos" : tab === "tables" ? "Mesas" : tab === "comandas" ? "Comandas" : "Delivery"}
-              {tab === "tables" && checkoutRequests.length > 0 && (
-                <span className="absolute -top-1 right-1/4 w-4 h-4 bg-red-500 text-white text-[9px] flex items-center justify-center rounded-full">
-                  {checkoutRequests.length}
-                </span>
-              )}
-              {tab === "comandas" && activeComandas.length > 0 && (
-                <span className="absolute -top-1 right-1/4 w-4 h-4 bg-[#C9A227] text-black text-[9px] font-black flex items-center justify-center rounded-full">
-                  {activeComandas.length}
-                </span>
-              )}
-              {tab === "delivery" && pendingDeliveryOrders.length > 0 && (
-                <span className="absolute -top-1 right-1/4 w-4 h-4 bg-red-500 text-white text-[9px] font-black flex items-center justify-center rounded-full">
-                  {pendingDeliveryOrders.length}
-                </span>
-              )}
-            </button>
-          ))}
+        <div className="bg-white border-b border-slate-100 px-2">
+          <Tabs
+            label="Modo do PDV"
+            items={(isWaiterMode ? PDV_TABS.filter((t) => t.id !== "delivery") : PDV_TABS).map((t) => ({
+              ...t,
+              badge:
+                t.id === "tables" && checkoutRequests.length > 0 ? checkoutRequests.length
+                : t.id === "comandas" && activeComandas.length > 0 ? activeComandas.length
+                : t.id === "delivery" && pendingDeliveryOrders.length > 0 ? pendingDeliveryOrders.length
+                : undefined,
+            }))}
+            value={activeTab}
+            onChange={(v) => setActiveTab(v as typeof activeTab)}
+            className="!space-y-0"
+          >
+            {null}
+          </Tabs>
         </div>
 
         {/* Products Tab */}
@@ -2306,26 +2264,25 @@ export default function PDVPanel({
             {/* Search + categories */}
             <div className="p-2 border-b border-slate-100 bg-white flex flex-col sm:flex-row gap-2">
               <div className="relative flex-1 min-w-0">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                <input
+                <Input
                   type="text"
                   placeholder="Buscar produto..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 pl-9 pr-4 text-sm font-medium text-slate-700 placeholder:text-slate-400 focus:border-[#C9A227] focus:bg-white outline-none transition-all"
+                  iconLeft={<Search size={14} />}
+                  className="pl-9"
                 />
                 {searchTerm && (
-                  <button onClick={() => setSearchTerm("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                    <X className="w-4 h-4" />
-                  </button>
+                  <IconButton variant="ghost" size="sm" aria-label="Limpar busca" onClick={() => setSearchTerm("")} className="absolute right-1 top-1/2 -translate-y-1/2">
+                    <X size={14} />
+                  </IconButton>
                 )}
               </div>
               {!isExternalFullscreen && (
                 <div className="relative sm:w-56 shrink-0">
-                  <select
+                  <Select
                     value={selectedCategoryId ?? "all"}
                     onChange={(e) => setSelectedCategoryId(e.target.value === "all" ? null : e.target.value)}
-                    className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-xl py-2 pl-4 pr-9 text-sm font-bold text-slate-700 focus:border-[#C9A227] focus:bg-white outline-none transition-all cursor-pointer"
                   >
                     <option value="all">Todos ({tenant.categories?.reduce((s, c) => s + c.products.filter((p) => p.available !== false).length, 0) ?? 0})</option>
                     {tenant.categories?.map((cat) => (
@@ -2333,22 +2290,21 @@ export default function PDVPanel({
                         {cat.name} ({cat.products.filter((p) => p.available !== false).length})
                       </option>
                     ))}
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                  </Select>
                 </div>
               )}
             </div>
 
             {currentContextLabel && (
-              <div className="mx-3 mt-3 rounded-2xl border border-[#C9A227]/30 bg-amber-50 px-4 py-3 flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="mx-3 mt-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-amber-700">Editando no PDV</p>
-                  <p className="text-sm font-black text-slate-800">{currentContextLabel}</p>
+                  <p className="text-[11px] font-semibold text-amber-700">Editando no PDV</p>
+                  <p className="text-sm font-semibold text-slate-800">{currentContextLabel}</p>
                   <p className="text-[11px] text-slate-500">
                     {contextLoadMessage || "Itens já lançados ficam separados dos novos itens para não duplicar a comanda."}
                   </p>
                 </div>
-                <div className="flex items-center gap-2 text-[11px] font-bold text-slate-600">
+                <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-600">
                   <span className="rounded-full bg-white px-3 py-1 border border-amber-200">
                     Já lançado: {existingContextItemCount} {existingContextItemCount === 1 ? "item" : "itens"}
                   </span>
@@ -2365,8 +2321,8 @@ export default function PDVPanel({
                 <div className="w-32 shrink-0 border-r border-slate-100 bg-slate-50/60 overflow-y-auto custom-scrollbar p-1.5 space-y-0.5">
                   <button
                     onClick={() => setSelectedCategoryId(null)}
-                    className={`w-full text-left px-2.5 py-2 rounded-lg text-[10px] font-black uppercase tracking-wide transition-colors ${
-                      selectedCategoryId === null ? "bg-[#0D1B3E] text-white" : "text-slate-500 hover:bg-white"
+                    className={`w-full min-h-[36px] text-left px-2.5 py-2 rounded-lg text-xs font-medium transition-colors ${
+                      selectedCategoryId === null ? "bg-blue-600 text-white" : "text-slate-500 hover:bg-white"
                     }`}
                   >
                     Todas ({tenant.categories?.reduce((s, c) => s + c.products.filter((p) => p.available !== false).length, 0) ?? 0})
@@ -2375,8 +2331,8 @@ export default function PDVPanel({
                     <button
                       key={cat.id}
                       onClick={() => setSelectedCategoryId(cat.id)}
-                      className={`w-full text-left px-2.5 py-2 rounded-lg text-[10px] font-black uppercase tracking-wide transition-colors truncate ${
-                        selectedCategoryId === cat.id ? "bg-[#0D1B3E] text-white" : "text-slate-500 hover:bg-white"
+                      className={`w-full min-h-[36px] text-left px-2.5 py-2 rounded-lg text-xs font-medium transition-colors truncate ${
+                        selectedCategoryId === cat.id ? "bg-blue-600 text-white" : "text-slate-500 hover:bg-white"
                       }`}
                     >
                       {cat.name} ({cat.products.filter((p) => p.available !== false).length})
@@ -2391,80 +2347,77 @@ export default function PDVPanel({
               style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom, 0px) + 72px)" }}
             >
               {filteredProducts.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full py-20 opacity-30">
-                  <Package className="w-12 h-12 text-slate-400 mb-3" />
-                  <p className="text-sm font-black uppercase tracking-widest text-slate-500">Nenhum produto encontrado</p>
-                </div>
+                <EmptyState icon={Package} title="Nenhum produto encontrado" className="h-full py-20" />
               ) : (
                 <div
-                  className="flex flex-col gap-1.5 lg:grid lg:gap-2.5"
-                  style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" } as React.CSSProperties}
+                  className="grid gap-3"
+                  style={{ gridTemplateColumns: "repeat(auto-fill, minmax(168px, 1fr))" } as React.CSSProperties}
                 >
                   {filteredProducts.map((product) => {
                     const inCart = cart.find((i) => i.product.id === product.id);
+                    const stockQty = product.inventoryItem ? Number(product.inventoryItem.quantity) : null;
+                    const lowStock = stockQty !== null && stockQty <= 5;
+                    const customizable = hasProductCustomizations(product);
                     return (
                       <div
                         key={product.id}
-                        className={`group rounded-xl overflow-hidden transition-all duration-200 relative flex items-center gap-3 p-2 ${
-                          inCart
-                            ? "ring-2 ring-[#C9A227] shadow-md shadow-[#C9A227]/15 bg-white"
-                            : "ring-1 ring-slate-200 bg-white hover:ring-[#C9A227]/50 hover:shadow-md"
+                        className={`group relative flex flex-col overflow-hidden rounded-lg border bg-white transition-all duration-150 ${
+                          inCart ? "border-blue-500 ring-1 ring-blue-500" : "border-slate-200 hover:border-blue-300 hover:shadow-sm"
                         }`}
                       >
                         <button
-                          className="absolute inset-0 w-full h-full cursor-pointer text-left focus:outline-none"
+                          type="button"
+                          aria-label={`Adicionar ${product.name}`}
+                          className="absolute inset-0 z-0 h-full w-full cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-300"
                           onClick={() => {
-                            if (hasProductCustomizations(product)) {
-                              openProductOptions(product);
-                            } else {
-                              addToCart(product);
-                            }
+                            if (customizable) openProductOptions(product);
+                            else addToCart(product);
                           }}
                         />
 
-                        {/* Image */}
-                        <div className="w-14 h-14 bg-gradient-to-br from-slate-100 to-slate-200 rounded-lg overflow-hidden relative flex items-center justify-center shrink-0 pointer-events-none">
+                        {/* Imagem */}
+                        <div className="pointer-events-none relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden bg-slate-100">
                           {product.imageUrl ? (
-                            <img
-                              src={product.imageUrl}
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                              alt={product.name}
-                            />
+                            <img src={product.imageUrl} alt="" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
                           ) : (
-                            <Utensils className="w-6 h-6 text-slate-300" />
+                            <Utensils className="h-8 w-8 text-slate-300" />
                           )}
-                          {/* Cart qty badge */}
                           {inCart && (
-                            <div className="absolute top-1 left-1 min-w-[16px] h-[16px] px-1 bg-[#C9A227] text-black text-[9px] font-black rounded-full flex items-center justify-center shadow">
+                            <span className="absolute left-2 top-2 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-blue-600 px-1.5 text-[11px] font-semibold text-white shadow">
                               {inCart.quantity}
-                            </div>
+                            </span>
                           )}
-                          {/* Stock badge */}
-                          {product.inventoryItem && (
-                            <div className="absolute bottom-1 left-1 bg-black/50 backdrop-blur-sm text-white text-[7px] font-bold rounded px-1 py-0.5 uppercase tracking-wide">
-                              {product.inventoryItem.quantity} un
-                            </div>
+                          {stockQty !== null && (
+                            <span className={`absolute bottom-2 left-2 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-white ${lowStock ? "bg-amber-600/90" : "bg-slate-900/60"}`}>
+                              {stockQty} un
+                            </span>
                           )}
                         </div>
 
-                        {/* Info */}
-                        <div className="flex-1 min-w-0 flex flex-col justify-center pointer-events-none">
-                          <h4 className="text-[13px] font-bold text-slate-800 line-clamp-2 leading-snug">{product.name}</h4>
-                          <span className="text-[14px] font-black text-[#0D1B3E] leading-none mt-1">{fmt(product.price)}</span>
-                        </div>
+                        {/* Opções / observações */}
+                        <IconButton
+                          variant="outline"
+                          size="sm"
+                          aria-label="Opções e observações"
+                          title="Opções e observações"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openProductOptions(product);
+                          }}
+                          className="absolute right-2 top-2 z-10 border-white/0 bg-white/90 shadow-sm backdrop-blur hover:bg-white"
+                        >
+                          <MessageSquarePlus size={14} />
+                        </IconButton>
 
-                        {/* Right Actions */}
-                        <div className="flex flex-col items-center gap-1 shrink-0 relative z-10 px-1">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openProductOptions(product);
-                            }}
-                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-50 border border-slate-200 text-slate-500 hover:bg-[#0D1B3E] hover:text-white hover:border-[#0D1B3E] transition-colors"
-                            title="Opções e Observações"
-                          >
-                            <MessageSquarePlus className="w-4 h-4" />
-                          </button>
+                        {/* Nome e preço */}
+                        <div className="pointer-events-none flex flex-1 flex-col justify-between gap-1.5 p-2.5">
+                          <h4 className="line-clamp-2 min-h-[2.4em] text-[13px] font-medium leading-snug text-slate-800">{product.name}</h4>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-sm font-semibold tabular-nums text-blue-700">{fmt(product.price)}</span>
+                            <span className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-600 text-white transition-colors group-hover:bg-blue-700">
+                              <Plus size={14} />
+                            </span>
+                          </div>
                         </div>
                       </div>
                     );
@@ -2517,15 +2470,15 @@ export default function PDVPanel({
             <div className="flex-1 overflow-y-auto p-6 custom-scrollbar bg-slate-50 space-y-6">
               {availableTables.length > 0 && (
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Mesas Disponíveis</p>
+                  <p className="text-[11px] font-semibold text-slate-400 mb-3">Mesas Disponíveis</p>
                   <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
                     {availableTables.map((t) => (
                       <button
                         key={t.id}
                         onClick={() => handleLoadTable(t.label)}
-                        className="bg-white border border-slate-200 hover:border-[#C9A227] rounded-2xl py-3 text-center transition-all"
+                        className="bg-white border border-slate-200 hover:border-blue-600 rounded-lg py-3 text-center transition-all"
                       >
-                        <span className="text-sm font-black text-slate-700">{t.label}</span>
+                        <span className="text-sm font-semibold text-slate-700">{t.label}</span>
                       </button>
                     ))}
                   </div>
@@ -2533,17 +2486,10 @@ export default function PDVPanel({
               )}
 
               {activeTables.length === 0 && availableTables.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center space-y-4 opacity-30">
-                  <div className="w-20 h-20 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center">
-                    <Utensils className="w-8 h-8 text-slate-400" />
-                  </div>
-                  <p className="text-sm font-black uppercase tracking-widest text-slate-500">
-                    Nenhuma mesa cadastrada
-                  </p>
-                </div>
+                <EmptyState icon={Utensils} title="Nenhuma mesa cadastrada" className="h-full" />
               ) : activeTables.length === 0 ? null : (
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Mesas Ocupadas</p>
+                  <p className="text-[11px] font-semibold text-slate-400 mb-3">Mesas Ocupadas</p>
                   <div
                     className="grid gap-3"
                     style={{ gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))" }}
@@ -2552,24 +2498,24 @@ export default function PDVPanel({
                     <button
                       key={tbl.tableId}
                       onClick={() => setOrderDetailsView({ type: "table", tableId: tbl.tableId })}
-                      className={`relative bg-white p-4 rounded-2xl border-2 hover:shadow-md transition-all text-left flex items-center gap-3 group ${tbl.wantsCheckout ? 'border-red-300 hover:border-red-500' : 'border-slate-100 hover:border-[#C9A227]'}`}
+                      className={`relative bg-white p-4 rounded-lg border-2 hover:shadow-sm transition-all text-left flex items-center gap-3 group ${tbl.wantsCheckout ? 'border-red-300 hover:border-red-500' : 'border-slate-100 hover:border-blue-600'}`}
                     >
                       {tbl.wantsCheckout && (
-                        <span className="absolute -top-2 -right-2 flex items-center gap-1 bg-red-500 text-white text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full shadow-sm animate-pulse">
+                        <span className="absolute -top-2 -right-2 flex items-center gap-1 bg-red-500 text-white text-[10px] font-semibold px-2 py-1 rounded-full shadow-sm animate-pulse">
                           Pediu Conta
                         </span>
                       )}
-                      <div className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center shrink-0 transition-colors leading-none ${tbl.wantsCheckout ? 'bg-red-50 text-red-500 group-hover:bg-red-500 group-hover:text-white' : 'bg-amber-50 text-amber-600 group-hover:bg-[#C9A227] group-hover:text-white'}`}>
+                      <div className={`w-12 h-12 rounded-lg flex flex-col items-center justify-center shrink-0 transition-colors leading-none ${tbl.wantsCheckout ? 'bg-red-50 text-red-500 group-hover:bg-red-500 group-hover:text-white' : 'bg-amber-50 text-amber-600 group-hover:bg-blue-600 group-hover:text-white'}`}>
                         <Utensils className="w-4 h-4 mb-0.5" />
-                        <span className="text-[9px] font-black">{tbl.tableId}</span>
+                        <span className="text-[10px] font-semibold">{tbl.tableId}</span>
                       </div>
                       <div className="min-w-0 flex-1">
-                        <h4 className="text-sm font-black text-slate-800 truncate">Mesa {tbl.tableId}</h4>
-                        <p className="text-[10px] font-bold text-slate-400 truncate">{tbl.customerName || `${tbl.orderCount} ${tbl.orderCount === 1 ? "pedido" : "pedidos"}`}</p>
+                        <h4 className="text-sm font-semibold text-slate-800 truncate">Mesa {tbl.tableId}</h4>
+                        <p className="text-[11px] font-semibold text-slate-400 truncate">{tbl.customerName || `${tbl.orderCount} ${tbl.orderCount === 1 ? "pedido" : "pedidos"}`}</p>
                         {tbl.hasDiscount && (
-                          <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Com desconto</p>
+                          <p className="text-[10px] font-semibold text-emerald-600">Com desconto</p>
                         )}
-                        <p className="text-sm font-black text-[#C9A227] mt-0.5">{fmt(tbl.total)}</p>
+                        <p className="text-sm font-semibold text-blue-600 mt-0.5">{fmt(tbl.total)}</p>
                       </div>
                     </button>
                   ))}
@@ -2584,14 +2530,14 @@ export default function PDVPanel({
         {activeTab === "comandas" && (
           <div className="flex-1 overflow-y-auto p-6 custom-scrollbar bg-slate-50">
             <div className="flex items-center justify-between mb-4">
-              <h4 className="text-xs font-black uppercase tracking-widest text-slate-400">Comandas Ativas</h4>
-              <button
+              <h4 className="text-xs font-semibold text-slate-400">Comandas Ativas</h4>
+              <Button
+                size="lg"
                 onClick={() => { setComandaNumber(""); setConsumptionType("EAT_IN"); setShowComandaModal(true); }}
-                className="bg-[#0D1B3E] text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
+                iconLeft={<Plus size={14} />}
               >
-                <Plus className="w-3 h-3" />
                 Nova Comanda
-              </button>
+              </Button>
             </div>
             <div
               className="grid gap-3"
@@ -2601,36 +2547,34 @@ export default function PDVPanel({
                   <button
                     key={comanda.id}
                     onClick={() => setOrderDetailsView({ type: "comanda", comanda })}
-                    className="bg-white p-4 rounded-2xl border-2 border-slate-100 hover:border-[#C9A227] hover:shadow-md transition-all text-left flex items-center gap-3 group"
+                    className="bg-white p-4 rounded-lg border border-slate-200 hover:border-blue-600 hover:shadow-sm transition-all text-left flex items-center gap-3 group"
                   >
-                    <div className="w-12 h-12 rounded-xl bg-[#C9A227]/10 text-[#C9A227] group-hover:bg-[#C9A227] group-hover:text-white flex flex-col items-center justify-center shrink-0 leading-none transition-colors">
+                    <div className="w-12 h-12 rounded-lg bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white flex flex-col items-center justify-center shrink-0 leading-none transition-colors">
                       {comanda.counterTicketNumber != null ? (
                         <>
-                          <span className="text-[8px] font-black uppercase tracking-widest opacity-70">Senha</span>
-                          <span className="text-base font-black tabular-nums">{String(comanda.counterTicketNumber).padStart(2, "0")}</span>
+                          <span className="text-[10px] font-semibold opacity-70">Senha</span>
+                          <span className="text-base font-semibold tabular-nums">{String(comanda.counterTicketNumber).padStart(2, "0")}</span>
                         </>
                       ) : (
                         <CreditCard className="w-4 h-4" />
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <h4 className="text-sm font-black text-slate-800 truncate">
+                      <h4 className="text-sm font-semibold text-slate-800 truncate">
                         {comanda.customerName || dineInOrderLabel(comanda)}
                       </h4>
-                      <p className="text-[10px] font-bold text-slate-400">
+                      <p className="text-[11px] font-semibold text-slate-400">
                         {comanda.items.length} {comanda.items.length === 1 ? "item" : "itens"}
                       </p>
                       {!!comanda.discount && (
-                        <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Com desconto</p>
+                        <p className="text-[10px] font-semibold text-emerald-600">Com desconto</p>
                       )}
-                      <p className="text-sm font-black text-[#C9A227] mt-0.5">{fmt(comanda.total)}</p>
+                      <p className="text-sm font-semibold text-blue-600 mt-0.5">{fmt(comanda.total)}</p>
                     </div>
                   </button>
                 ))}
               {activeComandas.length === 0 && (
-                <div className="col-span-full py-20 text-center opacity-30">
-                  <p className="text-sm font-black uppercase tracking-widest">Nenhuma comanda aberta</p>
-                </div>
+                <EmptyState icon={Hash} title="Nenhuma comanda aberta" className="col-span-full py-20" />
               )}
             </div>
           </div>
@@ -2640,7 +2584,7 @@ export default function PDVPanel({
         {activeTab === "delivery" && (
           <div className="flex-1 overflow-y-auto p-6 custom-scrollbar bg-slate-50">
             <div className="flex items-center justify-between mb-4">
-              <h4 className="text-xs font-black uppercase tracking-widest text-slate-400">Delivery Aguardando Faturar</h4>
+              <h4 className="text-xs font-semibold text-slate-400">Delivery Aguardando Faturar</h4>
             </div>
             <div
               className="grid gap-3"
@@ -2662,24 +2606,22 @@ export default function PDVPanel({
                       : "CASH"
                     );
                   }}
-                  className="bg-white p-4 rounded-2xl border-2 border-slate-100 hover:border-[#C9A227] hover:shadow-md transition-all text-left flex items-center gap-3 group"
+                  className="bg-white p-4 rounded-lg border border-slate-200 hover:border-blue-600 hover:shadow-sm transition-all text-left flex items-center gap-3 group"
                 >
-                  <div className="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-600 group-hover:bg-blue-500 group-hover:text-white flex items-center justify-center shrink-0 transition-colors">
+                  <div className="w-12 h-12 rounded-lg bg-blue-500/10 text-blue-600 group-hover:bg-blue-500 group-hover:text-white flex items-center justify-center shrink-0 transition-colors">
                     <Truck className="w-5 h-5" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h4 className="text-sm font-black text-slate-800 truncate">{order.customerName}</h4>
-                    <p className="text-[10px] font-bold text-slate-400">
+                    <h4 className="text-sm font-semibold text-slate-800 truncate">{order.customerName}</h4>
+                    <p className="text-[11px] font-semibold text-slate-400">
                       {order.items.length} {order.items.length === 1 ? "item" : "itens"} · Entregue
                     </p>
-                    <p className="text-sm font-black text-[#C9A227] mt-0.5">{fmt(order.total)}</p>
+                    <p className="text-sm font-semibold text-blue-600 mt-0.5">{fmt(order.total)}</p>
                   </div>
                 </button>
               ))}
               {pendingDeliveryOrders.length === 0 && (
-                <div className="col-span-full py-20 text-center opacity-30">
-                  <p className="text-sm font-black uppercase tracking-widest">Nenhum delivery aguardando faturar</p>
-                </div>
+                <EmptyState icon={Truck} title="Nenhum delivery aguardando faturar" className="col-span-full py-20" />
               )}
             </div>
           </div>
@@ -2690,33 +2632,20 @@ export default function PDVPanel({
           <div className="hidden lg:flex items-center gap-1.5 px-3 py-2 border-t border-slate-100 bg-slate-50/60 shrink-0">
             <span className="flex items-center gap-1.5 pr-2 text-slate-400">
               <Zap className="w-3.5 h-3.5" />
-              <span className="text-[9px] font-black uppercase tracking-widest">Atalhos</span>
+              <span className="text-[10px] font-semibold">Atalhos</span>
             </span>
-            <button
-              onClick={() => discountInputRef.current?.focus()}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-bold text-slate-500 hover:bg-white hover:text-[#0D1B3E] hover:shadow-sm transition-all"
-            >
-              Desconto <kbd className="text-[8px] font-black bg-slate-200 text-slate-500 rounded px-1 py-0.5">F4</kbd>
-            </button>
-            <button
-              onClick={handleUndoLastItem}
-              disabled={cart.length === 0}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-bold text-slate-500 hover:bg-white hover:text-[#0D1B3E] hover:shadow-sm transition-all disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:shadow-none"
-            >
-              Cancelar Item <kbd className="text-[8px] font-black bg-slate-200 text-slate-500 rounded px-1 py-0.5">F6</kbd>
-            </button>
-            <button
-              onClick={() => setShowPriceCheckModal(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-bold text-slate-500 hover:bg-white hover:text-[#0D1B3E] hover:shadow-sm transition-all"
-            >
-              Consultar Preço <kbd className="text-[8px] font-black bg-slate-200 text-slate-500 rounded px-1 py-0.5">F7</kbd>
-            </button>
-            <button
-              onClick={() => setShowMoreOptionsMenu((v) => !v)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-bold text-slate-500 hover:bg-white hover:text-[#0D1B3E] hover:shadow-sm transition-all"
-            >
-              Mais Opções <kbd className="text-[8px] font-black bg-slate-200 text-slate-500 rounded px-1 py-0.5">F8</kbd>
-            </button>
+            <Button variant="ghost" size="sm" onClick={() => discountInputRef.current?.focus()}>
+              Desconto <kbd className="text-[10px] font-medium bg-slate-200 text-slate-500 rounded px-1 py-0.5">F4</kbd>
+            </Button>
+            <Button variant="ghost" size="sm" onClick={handleUndoLastItem} disabled={cart.length === 0}>
+              Cancelar Item <kbd className="text-[10px] font-medium bg-slate-200 text-slate-500 rounded px-1 py-0.5">F6</kbd>
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setShowPriceCheckModal(true)}>
+              Consultar Preço <kbd className="text-[10px] font-medium bg-slate-200 text-slate-500 rounded px-1 py-0.5">F7</kbd>
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setShowMoreOptionsMenu((v) => !v)}>
+              Mais Opções <kbd className="text-[10px] font-medium bg-slate-200 text-slate-500 rounded px-1 py-0.5">F8</kbd>
+            </Button>
           </div>
         )}
       </div>
@@ -2725,11 +2654,11 @@ export default function PDVPanel({
       {!showCartDrawer && (
         <button
           onClick={() => setShowCartDrawer(true)}
-          className="lg:hidden fixed bottom-5 right-5 z-40 w-16 h-16 rounded-full bg-[#C9A227] text-black shadow-2xl shadow-black/30 flex items-center justify-center active:scale-95 transition-transform"
+          className="lg:hidden fixed bottom-5 right-5 z-40 w-16 h-16 rounded-full bg-blue-600 text-white flex items-center justify-center active:scale-95 transition-transform"
         >
           <ShoppingCart className="w-6 h-6" />
           {cartItemCount > 0 && (
-            <span className="absolute -top-1 -right-1 min-w-[24px] h-6 px-1.5 bg-[#0D1B3E] text-white text-xs font-black rounded-full flex items-center justify-center border-2 border-[#F4F6FA]">
+            <span className="absolute -top-1 -right-1 min-w-[24px] h-6 px-1.5 bg-red-500 text-white text-xs font-semibold rounded-full flex items-center justify-center border-2 border-white">
               {cartItemCount}
             </span>
           )}
@@ -2749,26 +2678,22 @@ export default function PDVPanel({
         showCartDrawer
           ? "fixed flex inset-x-0 bottom-0 top-4 sm:inset-x-6 sm:inset-y-6 lg:static lg:inset-auto z-40 lg:z-auto"
           : "hidden lg:flex"
-      } w-full sm:w-auto lg:w-[380px] xl:w-[420px] flex-col bg-[#0D1B3E] rounded-t-[2rem] sm:rounded-[2rem] lg:rounded-[2rem] text-white overflow-hidden shadow-2xl relative shrink-0`}>
+      } w-full sm:w-auto lg:w-[380px] xl:w-[420px] flex-col bg-white rounded-t-lg sm:rounded-lg text-slate-900 overflow-hidden border border-slate-200 relative shrink-0`}>
         {/* Header */}
-        <div className="p-3.5 border-b border-white/5 bg-white/[0.02]">
+        <div className="p-3.5 border-b border-slate-200 bg-slate-50">
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowCartDrawer(false)}
-                className="lg:hidden w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white flex items-center justify-center shrink-0 transition-colors -ml-1"
-                title="Voltar para os produtos"
-              >
-                <ArrowLeft className="w-4 h-4" />
-              </button>
-              <div className="hidden lg:flex w-7 h-7 rounded-lg bg-[#C9A227]/15 text-[#C9A227] items-center justify-center shrink-0">
+              <IconButton variant="outline" size="md" aria-label="Voltar para os produtos" onClick={() => setShowCartDrawer(false)} title="Voltar para os produtos" className="lg:hidden shrink-0">
+                <ArrowLeft size={16} />
+              </IconButton>
+              <div className="hidden lg:flex w-7 h-7 rounded-lg bg-blue-600/15 text-blue-600 items-center justify-center shrink-0">
                 <ShoppingCart className="w-3.5 h-3.5" />
               </div>
               <div>
-                <h3 className="text-sm font-black uppercase tracking-widest leading-none">
+                <h3 className="text-sm font-semibold leading-none">
                   {currentContextLabel || "Novo Pedido"}
                 </h3>
-                <p className="text-white/40 text-[9px] font-bold uppercase tracking-widest mt-0.5">
+                <p className="text-slate-500 text-[10px] font-semibold mt-0.5">
                   {selectedTableId
                     ? "Mesa aberta em edição"
                     : selectedComandaId
@@ -2779,145 +2704,133 @@ export default function PDVPanel({
             </div>
             <div className="flex items-center gap-1.5">
               {cartItemCount > 0 && (
-                <span className="bg-[#C9A227] text-black text-[10px] font-black rounded-full min-w-[20px] h-[20px] px-1.5 flex items-center justify-center">
+                <span className="bg-blue-600 text-white text-[11px] font-semibold rounded-full min-w-[20px] h-[20px] px-1.5 flex items-center justify-center">
                   {cartItemCount}
                 </span>
               )}
               {(selectedTableId || selectedComandaId || cart.length > 0) && (
-                <button
-                  onClick={clearCart}
-                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-white/40 hover:text-red-400 hover:bg-red-400/10 transition-colors"
-                >
-                  <X className="w-3 h-3 shrink-0" />
-                  <span className="text-[9px] font-black uppercase tracking-wide whitespace-nowrap">Limpar</span>
-                </button>
+                <Button variant="ghost" size="sm" onClick={clearCart} iconLeft={<X size={14} />} className="!text-slate-500 hover:!text-red-600 hover:!bg-red-50">
+                  Limpar
+                </Button>
               )}
             </div>
           </div>
         </div>
 
         {/* Customer info (compact) */}
-        <div className="px-3.5 py-2 border-b border-white/5 relative">
+        <div className="px-3.5 py-2 border-b border-slate-200 relative">
           {linkedCustomer ? (
-            <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-2.5 py-2">
-              <div className="w-7 h-7 rounded-full bg-[#C9A227]/20 text-[#C9A227] flex items-center justify-center shrink-0 text-[11px] font-black uppercase">
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2">
+              <div className="w-7 h-7 rounded-full bg-blue-600/20 text-blue-600 flex items-center justify-center shrink-0 text-[11px] font-semibold">
                 {linkedCustomer.name.charAt(0)}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[11px] font-bold text-white truncate">{linkedCustomer.name}</p>
-                <p className="text-[9px] text-white/40 truncate">
+                <p className="text-[11px] font-semibold text-slate-900 truncate">{linkedCustomer.name}</p>
+                <p className="text-[10px] text-slate-500 truncate">
                   {linkedCustomer.phone}
                   {tenant.loyaltyConfig?.enabled && (
-                    <span className="text-[#C9A227]"> · {linkedCustomer.loyaltyPoints} pts</span>
+                    <span className="text-blue-600"> · {linkedCustomer.loyaltyPoints} pts</span>
                   )}
                 </p>
               </div>
-              <button
-                onClick={handleClearLinkedCustomer}
-                className="shrink-0 w-6 h-6 rounded-md flex items-center justify-center text-white/30 hover:text-white hover:bg-white/10 transition-colors"
-                title="Remover cliente"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
+              <IconButton variant="ghost" size="sm" aria-label="Remover cliente" onClick={handleClearLinkedCustomer} title="Remover cliente" className="shrink-0">
+                <X size={14} />
+              </IconButton>
             </div>
           ) : (
             <button
               onClick={() => setCustomerSearchOpen(true)}
-              className="w-full flex items-center gap-2 bg-white/5 border border-white/10 hover:border-[#C9A227]/50 rounded-lg px-2.5 py-2 transition-colors text-left"
+              className="w-full flex items-center gap-2 bg-slate-50 border border-slate-200 hover:border-blue-600/50 rounded-lg px-2.5 py-2 transition-colors text-left"
             >
-              <User className="w-3.5 h-3.5 text-white/40 shrink-0" />
-              <span className="text-[11px] font-bold text-white/50 flex-1">Cliente (opcional)</span>
-              <ChevronRight className="w-3.5 h-3.5 text-white/30" />
+              <User className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+              <span className="text-[11px] font-semibold text-slate-500 flex-1">Cliente (opcional)</span>
+              <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
             </button>
           )}
 
           {fiscalEnabled && (
             <div className="relative mt-1.5">
-              <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-white/30" />
-              <input
+              <Input
                 type="text"
                 placeholder="CPF ou CNPJ na nota (opcional)"
                 value={customerCpf}
                 maxLength={18}
+                showCount={false}
+                iconLeft={<Hash size={13} />}
+                className="pl-8"
                 onChange={(e) => setCustomerCpf(maskCpfCnpj(e.target.value))}
-                className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-8 pr-3 text-xs text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
               />
             </div>
           )}
 
           {/* Popover de busca/cadastro de cliente */}
           {customerSearchOpen && (
-            <div className="absolute left-3.5 right-3.5 top-full mt-1 z-30 bg-[#111d3d] border border-white/10 rounded-xl shadow-2xl overflow-hidden">
-              <div className="p-2.5 border-b border-white/5">
+            <div className="absolute left-3.5 right-3.5 top-full mt-1 z-30 bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+              <div className="p-2.5 border-b border-slate-200">
                 <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30" />
-                  <input
+                  <Input
                     autoFocus
                     type="text"
                     placeholder="Buscar por nome, telefone ou CPF..."
                     value={customerSearchTerm}
                     onChange={(e) => setCustomerSearchTerm(e.target.value)}
-                    className="w-full bg-white/5 border border-white/10 rounded-lg py-2 pl-8 pr-3 text-xs text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
+                    iconLeft={<Search size={13} />}
+                    className="pl-8"
                   />
                 </div>
               </div>
               <div className="max-h-52 overflow-y-auto custom-scrollbar">
                 {customerSearchLoading && (
-                  <p className="px-3 py-3 text-[10px] text-white/30 text-center">Buscando...</p>
+                  <p className="px-3 py-3 text-[11px] text-slate-400 text-center">Buscando...</p>
                 )}
                 {!customerSearchLoading && customerSearchTerm.trim().length >= 2 && customerSearchResults.length === 0 && (
-                  <p className="px-3 py-3 text-[10px] text-white/30 text-center">Nenhum cliente encontrado — pode cadastrar digitando nome e telefone abaixo.</p>
+                  <p className="px-3 py-3 text-[11px] text-slate-400 text-center">Nenhum cliente encontrado — pode cadastrar digitando nome e telefone abaixo.</p>
                 )}
                 {customerSearchResults.map((c) => (
                   <button
                     key={c.id}
                     onClick={() => handleSelectCustomer(c)}
-                    className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/5 transition-colors text-left"
+                    className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-50 transition-colors text-left"
                   >
-                    <div className="w-6 h-6 rounded-full bg-[#C9A227]/20 text-[#C9A227] flex items-center justify-center shrink-0 text-[10px] font-black uppercase">
+                    <div className="w-6 h-6 rounded-full bg-blue-600/20 text-blue-600 flex items-center justify-center shrink-0 text-[11px] font-semibold">
                       {c.name.charAt(0)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[11px] font-bold text-white truncate">{c.name}</p>
-                      <p className="text-[9px] text-white/40 truncate">{c.phone}</p>
+                      <p className="text-[11px] font-semibold text-slate-900 truncate">{c.name}</p>
+                      <p className="text-[10px] text-slate-500 truncate">{c.phone}</p>
                     </div>
                     {tenant.loyaltyConfig?.enabled && (
-                      <span className="text-[9px] font-black text-[#C9A227] shrink-0">{c.loyaltyPoints} pts</span>
+                      <span className="text-[10px] font-semibold text-blue-600 shrink-0">{c.loyaltyPoints} pts</span>
                     )}
                   </button>
                 ))}
               </div>
-              <div className="p-2 border-t border-white/5 grid grid-cols-2 gap-1.5">
-                <input
+              <div className="p-2 border-t border-slate-200 grid grid-cols-2 gap-1.5">
+                <Input
                   type="text"
                   placeholder="Nome"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
-                  className="bg-white/5 border border-white/10 rounded-lg py-1.5 px-2.5 text-[11px] text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
                 />
                 <div className="relative">
-                  <input
+                  <Input
                     type="tel"
                     placeholder="(00) 00000-0000"
                     value={customerPhone}
                     onChange={(e) => setCustomerPhone(maskPhone(e.target.value))}
-                    className={`w-full bg-white/5 border rounded-lg py-1.5 px-2.5 text-[11px] text-white placeholder-white/20 focus:outline-none transition-colors ${
-                      customerPhone && !isPhoneComplete(customerPhone)
-                        ? "border-red-500/50 focus:border-red-500"
-                        : "border-white/10 focus:border-[#C9A227]"
-                    }`}
+                    status={customerPhone && !isPhoneComplete(customerPhone) ? "error" : "default"}
                   />
                   {customerPhone && !isPhoneComplete(customerPhone) && (
-                    <p className="text-[9px] text-red-400 mt-0.5 ml-1">Telefone incompleto</p>
+                    <p className="text-[10px] text-red-600 mt-0.5 ml-1">Telefone incompleto</p>
                   )}
                 </div>
-                <button
+                <Button
                   onClick={() => setCustomerSearchOpen(false)}
                   disabled={!!customerPhone && !isPhoneComplete(customerPhone)}
-                  className="col-span-2 mt-0.5 bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-40 disabled:cursor-not-allowed text-black text-[10px] font-black uppercase tracking-widest py-2 rounded-lg transition-colors"
+                  className="col-span-2 mt-0.5"
                 >
                   {customerName || customerPhone ? "Usar estes dados" : "Fechar"}
-                </button>
+                </Button>
               </div>
             </div>
           )}
@@ -2926,28 +2839,23 @@ export default function PDVPanel({
         {/* Cart items */}
         <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-2 custom-scrollbar">
           {existingContextItems.length === 0 && cart.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-center space-y-4 opacity-20">
-              <div className="w-16 h-16 rounded-full border-2 border-dashed border-white flex items-center justify-center">
-                <ShoppingCart className="w-6 h-6" />
-              </div>
-              <p className="text-sm font-bold uppercase tracking-widest">Carrinho Vazio</p>
-            </div>
+            <EmptyState icon={ShoppingCart} title="Carrinho Vazio" className="h-full" />
           ) : (
             <>
               {existingContextItems.length > 0 && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-white/30">Já lançado na conta</p>
-                    <span className="text-[10px] font-black text-[#C9A227]">{fmt(existingContextSubtotal)}</span>
+                    <p className="text-[11px] font-semibold text-slate-400">Já lançado na conta</p>
+                    <span className="text-[11px] font-semibold text-blue-600">{fmt(existingContextSubtotal)}</span>
                   </div>
                   {existingContextItems.map((item) => (
-                    <div key={item.id} className="bg-white/[0.04] border border-white/5 rounded-xl p-2.5 flex items-start gap-3">
+                    <div key={item.id} className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 flex items-start gap-3">
                       <div className="flex-1 min-w-0">
-                        <h4 className="text-xs font-bold truncate">{item.product?.name}</h4>
-                        <p className="text-[10px] font-bold text-white/40">{item.quantity}x {fmt(item.price)} un.</p>
-                        {item.notes && <p className="text-[10px] text-white/30 mt-0.5">{item.notes}</p>}
+                        <h4 className="text-xs font-semibold truncate">{item.product?.name}</h4>
+                        <p className="text-[11px] font-semibold text-slate-500">{item.quantity}x {fmt(item.price)} un.</p>
+                        {item.notes && <p className="text-[11px] text-slate-400 mt-0.5">{item.notes}</p>}
                       </div>
-                      <span className="text-xs font-black tabular-nums text-white/70 w-16 text-right shrink-0">
+                      <span className="text-xs font-semibold tabular-nums text-slate-600 w-16 text-right shrink-0">
                         {fmt(item.price * item.quantity)}
                       </span>
                     </div>
@@ -2958,54 +2866,81 @@ export default function PDVPanel({
               {cart.length > 0 && (
                 <div className="space-y-2 pt-1">
                   <div className="flex items-center justify-between">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-white/30">Novos itens desta edição</p>
-                    <span className="text-[10px] font-black text-emerald-400">{fmt(cart.reduce((acc, item) => acc + item.price * item.quantity, 0))}</span>
+                    <p className="text-[11px] font-semibold text-slate-400">Novos itens desta edição</p>
+                    <span className="text-[11px] font-semibold text-emerald-600">{fmt(cart.reduce((acc, item) => acc + item.price * item.quantity, 0))}</span>
                   </div>
                   {cart.map((item, itemIndex) => (
-                    <div key={`${item.product.id}-${itemIndex}`} className="bg-white/[0.04] border border-white/5 rounded-xl p-2.5 flex items-center gap-3 hover:border-white/10 transition-colors">
-                      <div className="flex-1 min-w-0">
-                        <h4 className="text-xs font-bold truncate">
-                          {item.product.name}
-                          {item.productVariantId && item.product.variants ? (() => {
-                            const v = item.product.variants.find(v => v.id === item.productVariantId);
-                            return v ? ` (${v.name})` : "";
-                          })() : ""}
-                        </h4>
-                        <p className="text-[10px] font-bold text-white/40">{fmt(item.price)} un.</p>
-                        {item.notes && <p className="text-[10px] text-white/30 truncate mt-0.5">{item.notes}</p>}
+                    <div key={`${item.product.id}-${itemIndex}`} className="bg-white border border-slate-200 rounded-lg p-2.5 space-y-2 hover:border-blue-200 transition-colors">
+                      <div className="flex items-start gap-2.5">
+                        {item.product.imageUrl ? (
+                          <img src={item.product.imageUrl} alt={item.product.name} className="w-9 h-9 rounded-lg object-cover shrink-0 border border-slate-200 bg-slate-50" />
+                        ) : (
+                          <div className="w-9 h-9 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
+                            <Utensils size={14} className="text-slate-400" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-xs font-semibold text-slate-700 leading-snug line-clamp-2 break-words">
+                            {item.product.name}
+                            {item.productVariantId && item.product.variants ? (() => {
+                              const v = item.product.variants.find(v => v.id === item.productVariantId);
+                              return v ? ` (${v.name})` : "";
+                            })() : ""}
+                          </h4>
+                          {item.notes && <p className="text-[11px] text-slate-500 line-clamp-2 mt-0.5">{item.notes}</p>}
+                        </div>
+                        <div className="flex items-center shrink-0 -mt-1 -mr-1">
+                          <IconButton
+                            variant="ghost"
+                            size="sm"
+                            aria-label="Editar observações e variações"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openProductOptions(item.product, itemIndex);
+                            }}
+                            title="Editar Observações/Variações"
+                            className="border-transparent text-slate-400 hover:text-blue-600"
+                          >
+                            <Pencil size={14} />
+                          </IconButton>
+                          <IconButton
+                            variant="ghost"
+                            size="sm"
+                            aria-label="Remover item"
+                            title="Remover item"
+                            onClick={() => removeFromCart(itemIndex)}
+                            className="border-transparent text-slate-400 hover:bg-red-50 hover:text-red-600"
+                          >
+                            <Trash2 size={14} />
+                          </IconButton>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1 bg-black/20 rounded-lg px-0.5 py-0.5 shrink-0">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); updateQuantity(itemIndex, -1); }}
-                          className="w-8 h-8 sm:w-5 sm:h-5 flex items-center justify-center rounded-md hover:bg-white/10 active:bg-white/20 hover:text-[#C9A227] transition-colors touch-manipulation"
-                        >
-                          <Minus className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
-                        </button>
-                        <span className="text-xs font-black w-5 text-center tabular-nums">{item.quantity}</span>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); updateQuantity(itemIndex, 1); }}
-                          className="w-8 h-8 sm:w-5 sm:h-5 flex items-center justify-center rounded-md hover:bg-white/10 active:bg-white/20 hover:text-[#C9A227] transition-colors touch-manipulation"
-                        >
-                          <Plus className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
-                        </button>
-                      </div>
-                      <span className="text-xs font-black tabular-nums text-[#C9A227] w-16 text-right shrink-0">
-                        {fmt(item.price * item.quantity)}
-                      </span>
-                      <div className="flex items-center gap-0.5 shrink-0">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openProductOptions(item.product, itemIndex);
-                          }}
-                          className="p-1 text-white/20 hover:text-[#C9A227] transition-colors"
-                          title="Editar Observações/Variações"
-                        >
-                          <Pencil className="w-3 h-3" />
-                        </button>
-                        <button onClick={() => removeFromCart(itemIndex)} className="p-1 text-white/20 hover:text-red-400 transition-colors">
-                          <Trash2 className="w-3 h-3" />
-                        </button>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg shrink-0">
+                          <IconButton
+                            variant="ghost"
+                            size="sm"
+                            aria-label="Diminuir quantidade"
+                            onClick={(e) => { e.stopPropagation(); updateQuantity(itemIndex, -1); }}
+                            className="border-transparent touch-manipulation"
+                          >
+                            <Minus size={12} />
+                          </IconButton>
+                          <span className="text-xs font-semibold w-7 text-center tabular-nums text-slate-700">{item.quantity}</span>
+                          <IconButton
+                            variant="ghost"
+                            size="sm"
+                            aria-label="Aumentar quantidade"
+                            onClick={(e) => { e.stopPropagation(); updateQuantity(itemIndex, 1); }}
+                            className="border-transparent touch-manipulation"
+                          >
+                            <Plus size={12} />
+                          </IconButton>
+                        </div>
+                        <div className="flex flex-col items-end leading-tight min-w-0">
+                          <span className="text-[10px] text-slate-400 whitespace-nowrap tabular-nums">{fmt(item.price)} × {item.quantity}</span>
+                          <span className="text-sm font-semibold tabular-nums text-slate-800 whitespace-nowrap">{fmt(item.price * item.quantity)}</span>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -3016,27 +2951,30 @@ export default function PDVPanel({
         </div>
 
         {/* Footer */}
-        <div className="p-4 bg-black/20 border-t border-white/5 space-y-3 shrink-0">
+        <div className="p-4 bg-slate-50 border-t border-slate-200 space-y-3 shrink-0">
           {/* Discount row */}
           <div className="flex items-center gap-2">
-            <div className="flex bg-white/5 rounded-xl overflow-hidden border border-white/10">
-              <button
+            <div className="flex bg-slate-50 rounded-lg overflow-hidden border border-slate-200">
+              <Button
+                variant={discountType === "FIXED" ? "primary" : "ghost"}
+                size="lg"
+                className="!min-w-[40px] !rounded-none"
                 onClick={() => { setDiscountType("FIXED"); setDiscountValue(""); }}
-                className={`px-3 py-2 text-[10px] font-black transition-all ${discountType === "FIXED" ? "bg-[#C9A227] text-black" : "text-white/40"}`}
               >
                 R$
-              </button>
-              <button
+              </Button>
+              <Button
+                variant={discountType === "PERCENT" ? "primary" : "ghost"}
+                size="lg"
+                className="!min-w-[40px] !rounded-none"
                 onClick={() => { setDiscountType("PERCENT"); setDiscountValue(""); }}
-                className={`px-3 py-2 text-[10px] font-black transition-all ${discountType === "PERCENT" ? "bg-[#C9A227] text-black" : "text-white/40"}`}
               >
                 %
-              </button>
+              </Button>
             </div>
             <div className="relative flex-1">
-              <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-white/30" />
               {discountType === "FIXED" ? (
-                <input
+                <Input
                   ref={discountInputRef}
                   type="text"
                   inputMode="numeric"
@@ -3044,220 +2982,175 @@ export default function PDVPanel({
                   value={formatCurrencyDigits(discountValue)}
                   onChange={(e) => setDiscountValue(maskCurrencyDigits(e.target.value))}
                   title="Atalho: F4"
-                  className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-8 pr-8 text-xs text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
+                  iconLeft={<Tag size={13} />}
+                  className="pl-8 pr-8"
                 />
               ) : (
-                <input
+                <Input
                   ref={discountInputRef}
                   type="number"
                   placeholder="Desconto %"
                   value={discountValue}
                   onChange={(e) => setDiscountValue(e.target.value)}
                   title="Atalho: F4"
-                  className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-8 pr-8 text-xs text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
+                  iconLeft={<Tag size={13} />}
+                  className="pl-8 pr-8"
                 />
               )}
-              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[8px] font-bold text-white/20">F4</span>
+              <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-slate-400">F4</span>
             </div>
             {discountAmount > 0 && (
-              <span className="text-xs font-black text-green-400 whitespace-nowrap">-{fmt(discountAmount)}</span>
+              <span className="text-xs font-semibold text-emerald-600 whitespace-nowrap">-{fmt(discountAmount)}</span>
             )}
           </div>
 
           {/* Totals */}
           <div className="space-y-1.5">
-            <div className="flex justify-between text-[10px] font-black uppercase text-white/30">
+            <div className="flex justify-between text-[11px] font-semibold text-slate-400">
               <span>Subtotal</span>
               <span className="tabular-nums">{fmt(subtotal)}</span>
             </div>
             {discountAmount > 0 && (
-              <div className="flex justify-between text-[10px] font-black uppercase text-green-400">
+              <div className="flex justify-between text-[11px] font-semibold text-emerald-600">
                 <span>Desconto</span>
                 <span className="tabular-nums">-{fmt(discountAmount)}</span>
               </div>
             )}
-            <div className="flex justify-between items-end pt-2 mt-1 border-t border-white/10">
-              <span className="text-xs font-black uppercase tracking-widest text-[#C9A227]">Total</span>
-              <span className="text-3xl font-black tracking-tighter tabular-nums">{fmt(total)}</span>
+            <div className="flex justify-between items-end pt-2 mt-1 border-t border-slate-200">
+              <span className="text-xs font-semibold text-blue-600">Total</span>
+              <span className="text-2xl font-semibold tabular-nums text-slate-900">{fmt(total)}</span>
             </div>
           </div>
 
           {/* Actions */}
           <div className={isWaiterMode || isClosingAccount ? "grid grid-cols-1" : "grid grid-cols-2 gap-3"}>
             {!isClosingAccount && (
-              <button
-                disabled={cart.length === 0 || isProcessing}
+              <Button
+                variant={isWaiterMode ? "primary" : "outline"}
+                size="lg"
+                className="!h-11"
+                disabled={cart.length === 0}
+                loading={isProcessing}
                 onClick={() => {
                   if (selectedTableId || selectedComandaId) void handleLaunchOrder();
                   else { setConsumptionType("EAT_IN"); setShowComandaModal(true); }
                 }}
-                className={`${isWaiterMode ? "bg-[#C9A227] hover:bg-[#E8B93A] text-black shadow-xl shadow-[#C9A227]/20" : "bg-white/5 hover:bg-white/10 text-white"} disabled:opacity-30 font-black py-3 rounded-2xl transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-[10px]`}
+                iconRight={<Package size={14} />}
               >
-                {isProcessing ? (
-                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <>
-                    {selectedTableId || selectedComandaId ? "Adicionar Itens" : "Lançar Pedido"}
-                    <Package className="w-4 h-4" />
-                  </>
-                )}
-              </button>
+                {selectedTableId || selectedComandaId ? "Adicionar Itens" : "Lançar Pedido"}
+              </Button>
             )}
             {!isWaiterMode && (
-              <button
+              <Button
+                size="lg"
+                className="relative !h-11"
                 disabled={checkoutItems.length === 0 || (cashRequired && !currentCash)}
                 title={cashRequired && !currentCash ? "Abra o caixa para receber pagamentos" : "Atalho: F2"}
                 onClick={() => { setShowCheckout(true); setShowCartDrawer(false); }}
-                className="relative bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-3 rounded-2xl transition-all shadow-xl shadow-[#C9A227]/20 flex items-center justify-center gap-2 uppercase tracking-widest text-[10px]"
+                iconRight={<ChevronRight size={14} />}
               >
                 Pagar
-                <ChevronRight className="w-4 h-4" />
-                <span className="absolute top-1 right-1.5 text-[8px] font-bold opacity-40">F2</span>
-              </button>
+                <span className="ml-1 text-[10px] font-medium opacity-60">F2</span>
+              </Button>
             )}
           </div>
         </div>
       </div>
 
       {/* ── Modal de Consulta de Preço (F7) — só consulta, não adiciona ao carrinho ── */}
-      <AnimatePresence>
-        {showPriceCheckModal && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
-            onClick={() => { setShowPriceCheckModal(false); setPriceCheckTerm(""); }}
-          >
-            <motion.div
-              initial={{ scale: 0.95, y: 20, opacity: 0 }}
-              animate={{ scale: 1, y: 0, opacity: 1 }}
-              exit={{ scale: 0.95, y: 20, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[70vh]"
-            >
-              <div className="p-6 border-b border-slate-100 flex items-center justify-between shrink-0">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-[#C9A227]/10 text-[#C9A227] flex items-center justify-center shrink-0">
-                    <Search className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-0.5">Atalho F7</p>
-                    <h3 className="text-lg font-black text-slate-800 leading-none">Consultar Preço</h3>
-                  </div>
+      <Modal
+        open={showPriceCheckModal}
+        onClose={() => { setShowPriceCheckModal(false); setPriceCheckTerm(""); }}
+        title="Consultar Preço"
+        subtitle="Atalho F7"
+        size="sm"
+      >
+        <div className="space-y-3">
+          <Input
+            autoFocus
+            type="text"
+            value={priceCheckTerm}
+            onChange={(e) => setPriceCheckTerm(e.target.value)}
+            placeholder="Nome do produto..."
+            iconLeft={<Search size={14} />}
+            className="pl-9"
+          />
+          <div className="space-y-1">
+            {priceCheckTerm.trim() === "" ? (
+              <EmptyState icon={Search} title="Digite o nome do produto para consultar o preço." />
+            ) : priceCheckResults.length === 0 ? (
+              <EmptyState icon={Package} title="Nenhum produto encontrado." />
+            ) : (
+              priceCheckResults.map((p) => (
+                <div key={p.id} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors">
+                  <span className="text-[13px] font-medium text-slate-700 truncate">{p.name}</span>
+                  <span className="text-[13px] font-semibold text-slate-900 tabular-nums shrink-0">{fmt(p.price)}</span>
                 </div>
-                <button
-                  onClick={() => { setShowPriceCheckModal(false); setPriceCheckTerm(""); }}
-                  className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors shrink-0"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="p-4 border-b border-slate-100 shrink-0">
-                <div className="relative">
-                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input
-                    autoFocus
-                    type="text"
-                    value={priceCheckTerm}
-                    onChange={(e) => setPriceCheckTerm(e.target.value)}
-                    placeholder="Nome do produto..."
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-sm font-medium text-slate-700 placeholder:text-slate-400 focus:border-[#C9A227] focus:bg-white outline-none transition-all"
-                  />
-                </div>
-              </div>
-              <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-1.5">
-                {priceCheckTerm.trim() === "" ? (
-                  <p className="text-center text-xs text-slate-400 py-10">Digite o nome do produto para consultar o preço.</p>
-                ) : priceCheckResults.length === 0 ? (
-                  <p className="text-center text-xs text-slate-400 py-10">Nenhum produto encontrado.</p>
-                ) : (
-                  priceCheckResults.map((p) => (
-                    <div key={p.id} className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-50 transition-colors">
-                      <span className="text-sm font-bold text-slate-700 truncate">{p.name}</span>
-                      <span className="text-sm font-black text-[#0D1B3E] tabular-nums shrink-0">{fmt(p.price)}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </motion.div>
-            </motion.div>
-          )}
-      </AnimatePresence>
+              ))
+            )}
+          </div>
+        </div>
+      </Modal>
 
       {/* ── Menu de Mais Opções (F8) ── */}
-      <AnimatePresence>
-        {showMoreOptionsMenu && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
-            onClick={() => setShowMoreOptionsMenu(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, y: 20, opacity: 0 }}
-              animate={{ scale: 1, y: 0, opacity: 1 }}
-              exit={{ scale: 0.95, y: 20, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-[2rem] w-full max-w-xs shadow-2xl overflow-hidden"
+      <Modal
+        open={showMoreOptionsMenu}
+        onClose={() => setShowMoreOptionsMenu(false)}
+        title="Mais Opções"
+        subtitle="Atalho F8"
+        size="xs"
+      >
+        <div className="space-y-1">
+          {cashRequired && currentCash && (
+            <Button
+              variant="ghost"
+              size="lg"
+              fullWidth
+              className="!justify-start !h-10"
+              onClick={() => { setShowMoreOptionsMenu(false); setShowCloseCashModal(true); }}
+              iconLeft={<DoorClosed size={14} className="text-red-500" />}
             >
-              <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-[#C9A227]/10 text-[#C9A227] flex items-center justify-center shrink-0">
-                    <MoreHorizontal className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-0.5">Atalho F8</p>
-                    <h3 className="text-lg font-black text-slate-800 leading-none">Mais Opções</h3>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowMoreOptionsMenu(false)}
-                  className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors shrink-0"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="p-3 space-y-1">
-                {cashRequired && currentCash && (
-                  <button
-                    onClick={() => { setShowMoreOptionsMenu(false); setShowCloseCashModal(true); }}
-                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 transition-colors text-left"
-                  >
-                    <DoorClosed className="w-4 h-4 text-red-500 shrink-0" />
-                    <span className="text-sm font-bold text-slate-700">Fechar Caixa</span>
-                  </button>
-                )}
-                {(selectedTableId || selectedComandaId || cart.length > 0) && (
-                  <button
-                    onClick={() => { setShowMoreOptionsMenu(false); clearCart(); }}
-                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 transition-colors text-left"
-                  >
-                    <Trash2 className="w-4 h-4 text-red-500 shrink-0" />
-                    <span className="text-sm font-bold text-slate-700">Limpar Pedido Atual</span>
-                  </button>
-                )}
-                {onOpenFullscreen && (
-                  <button
-                    onClick={() => { setShowMoreOptionsMenu(false); onOpenFullscreen(); }}
-                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 transition-colors text-left"
-                  >
-                    <ExternalLink className="w-4 h-4 text-slate-500 shrink-0" />
-                    <span className="text-sm font-bold text-slate-700">Nova Janela</span>
-                  </button>
-                )}
-                <button
-                  onClick={() => { setShowMoreOptionsMenu(false); toggleBrowserFullscreen(); }}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 transition-colors text-left"
-                >
-                  {isBrowserFullscreen ? <Minimize2 className="w-4 h-4 text-slate-500 shrink-0" /> : <Maximize2 className="w-4 h-4 text-slate-500 shrink-0" />}
-                  <span className="text-sm font-bold text-slate-700">{isBrowserFullscreen ? "Sair da Tela Cheia" : "Tela Cheia"}</span>
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              Fechar Caixa
+            </Button>
+          )}
+          {(selectedTableId || selectedComandaId || cart.length > 0) && (
+            <Button
+              variant="ghost"
+              size="lg"
+              fullWidth
+              className="!justify-start !h-10"
+              onClick={() => { setShowMoreOptionsMenu(false); clearCart(); }}
+              iconLeft={<Trash2 size={14} className="text-red-500" />}
+            >
+              Limpar Pedido Atual
+            </Button>
+          )}
+          {onOpenFullscreen && (
+            <Button
+              variant="ghost"
+              size="lg"
+              fullWidth
+              className="!justify-start !h-10"
+              onClick={() => { setShowMoreOptionsMenu(false); onOpenFullscreen(); }}
+              iconLeft={<ExternalLink size={14} />}
+            >
+              Nova Janela
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="lg"
+            fullWidth
+            className="!justify-start !h-10"
+            onClick={() => { setShowMoreOptionsMenu(false); toggleBrowserFullscreen(); }}
+            iconLeft={isBrowserFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+          >
+            {isBrowserFullscreen ? "Sair da Tela Cheia" : "Tela Cheia"}
+          </Button>
+        </div>
+      </Modal>
 
       {/* ── Modal de Detalhes da Mesa/Comanda ── */}
-      <AnimatePresence>
       {orderDetailsView && (() => {
           const isTable = orderDetailsView.type === "table";
           const title = isTable ? `Mesa ${orderDetailsView.tableId}` : dineInOrderLabel(orderDetailsView.comanda);
@@ -3288,406 +3181,315 @@ export default function PDVPanel({
           const detailSubtotal = relatedOrders.reduce((acc, order) => acc + order.total, 0);
 
           return (
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
-            >
-              <motion.div
-                initial={{ scale: 0.95, y: 20, opacity: 0 }}
-                animate={{ scale: 1, y: 0, opacity: 1 }}
-                exit={{ scale: 0.95, y: 20, opacity: 0 }}
-                className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col max-h-[80vh]"
-              >
-                <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
-                  <div className="min-w-0">
-                    <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Detalhes</p>
-                    <h3 className="text-base font-black text-slate-800 truncate">{title}</h3>
+            <Modal
+              open
+              onClose={() => setOrderDetailsView(null)}
+              title={title}
+              subtitle={`${relatedOrders.length} pedido${relatedOrders.length !== 1 ? "s" : ""} em aberto`}
+              size="md"
+              footer={
+                <div className="w-full space-y-3">
+                  <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                    <span className="text-xs font-medium text-slate-500">Total da conta</span>
+                    <span className="text-lg font-semibold tabular-nums text-slate-900">{fmt(detailSubtotal)}</span>
                   </div>
-                  <button
-                    onClick={() => setOrderDetailsView(null)}
-                    className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors shrink-0"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
+                  <ModalFooter>
+                    <Button
+                      variant="outline"
+                      onClick={() => isTable ? handleLoadTable(orderDetailsView.tableId) : handleLoadComanda(orderDetailsView.comanda)}
+                      iconLeft={<Plus size={14} />}
+                    >
+                      Abrir no PDV
+                    </Button>
+                    {!isWaiterMode && (
+                      <Button
+                        disabled={relatedOrders.length === 0}
+                        onClick={() => handleGoToCheckoutFromDetails(orderDetailsView)}
+                        iconRight={<ChevronRight size={14} />}
+                      >
+                        Fechar Conta
+                      </Button>
+                    )}
+                  </ModalFooter>
                 </div>
-
-                <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-2.5">
+              }
+            >
+                <div className="space-y-3">
                   {relatedOrders.length === 0 ? (
-                    <p className="text-center text-xs text-slate-400 py-10">Nenhum item lançado ainda.</p>
+                    <EmptyState icon={Utensils} title="Nenhum item lançado ainda" description="Abra no PDV para lançar os primeiros itens." />
                   ) : (
                     relatedOrders.map((order, idx) => (
-                      <div key={order.id} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-                            Pedido {idx + 1} · #{order.id.slice(-6).toUpperCase()}
-                          </p>
-                          <button
+                      <div key={order.id} className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                        <div className="flex items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-3 py-2">
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium text-slate-800">Pedido {idx + 1}</p>
+                            <p className="text-[11px] text-slate-500">#{order.id.slice(-6).toUpperCase()} · {fmt(order.total)}</p>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="xs"
+                            iconLeft={<Trash2 size={12} />}
+                            className="shrink-0 !text-red-600 hover:!bg-red-50"
                             onClick={() => setPendingLossConfirm({ kind: "order", orderId: order.id })}
                             disabled={detailActionId === `cancel-${order.id}`}
-                            className="shrink-0 rounded-lg border border-red-200 bg-white px-2 py-1 text-[9px] font-black uppercase tracking-widest text-red-500 transition-colors hover:bg-red-50 disabled:opacity-50"
                           >
-                            {detailActionId === `cancel-${order.id}` ? "Cancelando..." : "Cancelar"}
-                          </button>
+                            {detailActionId === `cancel-${order.id}` ? "Cancelando..." : "Cancelar pedido"}
+                          </Button>
                         </div>
 
-                        <div className="space-y-1.5">
+                        <ul className="divide-y divide-slate-100">
                           {order.items.filter((item) => item.product).map((item) => (
-                            <div key={item.id} className="rounded-lg bg-white px-2.5 py-2 border border-slate-200">
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="pr-2 min-w-0">
-                                  <span className="text-xs font-bold text-slate-700">
-                                    {item.quantity}x {item.product?.name}
-                                    {item.productVariant?.name ? ` (${item.productVariant.name})` : ""}
-                                  </span>
-                                  {item.notes && <p className="text-[10px] italic text-slate-400 mt-0.5">{item.notes}</p>}
-                                </div>
-                                <span className="text-xs font-black text-slate-800 whitespace-nowrap">{fmt(item.price * item.quantity)}</span>
+                            <li key={item.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-[13px] font-medium text-slate-800">
+                                  <span className="mr-1 tabular-nums text-slate-500">{item.quantity}x</span>
+                                  {item.product?.name}
+                                  {item.productVariant?.name ? ` (${item.productVariant.name})` : ""}
+                                </p>
+                                {item.notes && <p className="mt-0.5 text-[11px] italic text-slate-500">{item.notes}</p>}
                               </div>
-
-                              <div className="mt-1.5 flex items-center justify-end gap-1.5">
+                              <span className="whitespace-nowrap text-[13px] font-semibold tabular-nums text-slate-800">{fmt(item.price * item.quantity)}</span>
+                              <div className="flex shrink-0 items-center gap-1">
                                 {item.quantity > 1 && (
-                                  <button
+                                  <IconButton
+                                    variant="outline"
+                                    size="sm"
+                                    aria-label="Remover uma unidade"
+                                    title="Remover 1 unidade"
                                     onClick={() => setPendingLossConfirm({ kind: "item", orderId: order.id, itemId: item.id, nextQuantity: item.quantity - 1, label: `${item.product?.name}` })}
                                     disabled={detailActionId === item.id}
-                                    className="rounded-md border border-slate-200 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50"
                                   >
-                                    -1
-                                  </button>
+                                    <Minus size={13} />
+                                  </IconButton>
                                 )}
-                                <button
+                                <IconButton
+                                  variant="outline"
+                                  size="sm"
+                                  aria-label="Cancelar item"
+                                  title="Cancelar item"
+                                  className="!text-red-600 hover:!border-red-200 hover:!bg-red-50"
                                   onClick={() => setPendingLossConfirm({ kind: "item", orderId: order.id, itemId: item.id, nextQuantity: 0, label: `${item.quantity}x ${item.product?.name}` })}
-                                  disabled={detailActionId === item.id}
-                                  className="rounded-md border border-red-200 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-red-500 transition-colors hover:bg-red-50 disabled:opacity-50"
+                                  loading={detailActionId === item.id}
                                 >
-                                  {detailActionId === item.id ? "Salvando..." : "Cancelar"}
-                                </button>
+                                  <Trash2 size={13} />
+                                </IconButton>
                               </div>
-                            </div>
+                            </li>
                           ))}
-                        </div>
+                        </ul>
                       </div>
                     ))
                   )}
                 </div>
-
-                <div className="p-4 pt-3 border-t border-slate-100 bg-slate-50 space-y-3 shrink-0">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total</span>
-                    <span className="text-xl font-black text-slate-800">{fmt(detailSubtotal)}</span>
-                  </div>
-                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                    <button
-                      onClick={() => isTable ? handleLoadTable(orderDetailsView.tableId) : handleLoadComanda(orderDetailsView.comanda)}
-                      className="bg-white border border-slate-200 hover:border-[#C9A227] text-slate-700 font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Abrir no PDV
-                    </button>
-                    {!isWaiterMode && (
-                      <button
-                        disabled={relatedOrders.length === 0}
-                        onClick={() => handleGoToCheckoutFromDetails(orderDetailsView)}
-                        className="bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5"
-                      >
-                        Fechar Conta
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </motion.div>
-            </motion.div>
+            </Modal>
           );
         })()}
-      </AnimatePresence>
 
       {/* ── Confirmação de perda ao cancelar item/pedido lançado ── */}
-      <AnimatePresence>
-        {pendingLossConfirm && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[400] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
-            onClick={() => setPendingLossConfirm(null)}
-          >
-            <motion.div
-              initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.96, y: 12, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-3xl p-6 w-full max-w-sm space-y-5 shadow-2xl"
-            >
-              <div className="space-y-1.5 text-center">
-                <h3 className="text-base font-black text-slate-800">
-                  {pendingLossConfirm.kind === "item" ? `Cancelar "${pendingLossConfirm.label}"?` : "Cancelar este pedido?"}
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Houve gasto/perda no preparo (item já feito, não pode ser reaproveitado)?
-                </p>
-              </div>
-              <div className="space-y-2">
-                <button
-                  onClick={() => resolveLossConfirm(true)}
-                  className="w-full rounded-xl border border-red-200 bg-red-50 text-red-600 font-black py-3 text-xs uppercase tracking-widest hover:bg-red-100 transition-colors"
-                >
-                  Sim, houve perda — descontar do estoque
-                </button>
-                <button
-                  onClick={() => resolveLossConfirm(false)}
-                  className="w-full rounded-xl border border-slate-200 bg-white text-slate-600 font-black py-3 text-xs uppercase tracking-widest hover:bg-slate-50 transition-colors"
-                >
-                  Não, devolver ao estoque
-                </button>
-                <button
-                  onClick={() => setPendingLossConfirm(null)}
-                  className="w-full text-slate-400 font-bold py-2 text-[11px] uppercase tracking-widest hover:text-slate-600 transition-colors"
-                >
-                  Voltar
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <Modal
+        open={!!pendingLossConfirm}
+        onClose={() => setPendingLossConfirm(null)}
+        title={pendingLossConfirm?.kind === "item" ? `Cancelar "${pendingLossConfirm.label}"?` : "Cancelar este pedido?"}
+        size="sm"
+        zIndex={400}
+        footer={
+          <ModalFooter align="between">
+            <Button variant="ghost" onClick={() => setPendingLossConfirm(null)}>Voltar</Button>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button variant="outline" onClick={() => resolveLossConfirm(false)}>Não, devolver ao estoque</Button>
+              <Button variant="danger" onClick={() => resolveLossConfirm(true)}>Sim, houve perda</Button>
+            </div>
+          </ModalFooter>
+        }
+      >
+        <p className="text-[13px] text-slate-600">
+          Houve gasto/perda no preparo (item já feito, não pode ser reaproveitado)? Se sim, o item será descontado do estoque.
+        </p>
+      </Modal>
 
       {/* ── Comanda Modal ── */}
-      <AnimatePresence>
-        {showComandaModal && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[300] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
-            onClick={() => { setShowComandaModal(false); setComandaNumber(""); setConsumptionType("EAT_IN"); setComandaDiscountValue(""); setComandaDiscountType("FIXED"); }}
-          >
-            <motion.div
-              initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.96, y: 12, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-3xl p-6 w-full max-w-[22rem] max-h-[90vh] overflow-y-auto space-y-4 shadow-2xl"
+      <Modal
+        open={showComandaModal}
+        onClose={() => { setShowComandaModal(false); setComandaNumber(""); setConsumptionType("EAT_IN"); setComandaDiscountValue(""); setComandaDiscountType("FIXED"); }}
+        title="Abrir Comanda"
+        subtitle="Identifique o cliente ou o cartão"
+        size="sm"
+        zIndex={300}
+        footer={
+          <ModalFooter>
+            <Button variant="outline" onClick={() => { setShowComandaModal(false); setComandaNumber(""); setConsumptionType("EAT_IN"); setComandaDiscountValue(""); setComandaDiscountType("FIXED"); }}>Cancelar</Button>
+            <Button
+              disabled={(tenant.counterTicketMode !== "NAME" && nextTicketLoading) || !consumptionType}
+              loading={isProcessing}
+              onClick={() => void handleCreateComanda()}
             >
-              <div className="text-center space-y-1">
-                <div className="w-11 h-11 rounded-xl bg-[#C9A227]/10 text-[#C9A227] flex items-center justify-center mx-auto mb-2">
-                  <Hash className="w-5 h-5" />
-                </div>
-                <h3 className="text-base font-black text-slate-800 uppercase tracking-widest">Abrir Comanda</h3>
-                <p className="text-[11px] text-slate-400 font-bold uppercase">Identifique o cliente ou o cartão</p>
-              </div>
-              <div className="space-y-3">
-                {/* Comer no local ou viagem — obrigatório pra toda comanda de balcão (sem mesa) */}
-                <div>
-                  <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-1">
-                    Comer no local ou viagem?
-                  </label>
-                  <div className="grid grid-cols-2 gap-2 mt-1">
-                    <button
-                      type="button"
-                      onClick={() => setConsumptionType("EAT_IN")}
-                      className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-colors ${
-                        consumptionType === "EAT_IN"
-                          ? "bg-[#C9A227] border-[#C9A227] text-black"
-                          : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
-                      }`}
-                    >
-                      <Utensils className="w-3.5 h-3.5" />
-                      Comer no local
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setConsumptionType("TAKEOUT")}
-                      className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-colors ${
-                        consumptionType === "TAKEOUT"
-                          ? "bg-[#C9A227] border-[#C9A227] text-black"
-                          : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
-                      }`}
-                    >
-                      <Package className="w-3.5 h-3.5" />
-                      Viagem
-                    </button>
-                  </div>
-                </div>
+              Abrir / Lançar
+            </Button>
+          </ModalFooter>
+        }
+      >
+        <div className="space-y-3">
+          {/* Comer no local ou viagem — obrigatório pra toda comanda de balcão (sem mesa) */}
+          <div className="space-y-1">
+            <label className="ds-label">Comer no local ou viagem?</label>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant={consumptionType === "EAT_IN" ? "primary" : "outline"}
+                size="lg"
+                onClick={() => setConsumptionType("EAT_IN")}
+                iconLeft={<Utensils size={14} />}
+              >
+                Comer no local
+              </Button>
+              <Button
+                variant={consumptionType === "TAKEOUT" ? "primary" : "outline"}
+                size="lg"
+                onClick={() => setConsumptionType("TAKEOUT")}
+                iconLeft={<Package size={14} />}
+              >
+                Viagem
+              </Button>
+            </div>
+          </div>
 
-                {/* Próxima senha — some se a loja desativou a senha sequencial do Balcão
-                    em Configurações (Senha do Balcão: Nome do cliente). Mostrada como uma
-                    linha compacta em vez de um card grande — é só um número de apoio. */}
-                {tenant.counterTicketMode !== "NAME" && (
-                  <div className="flex items-center justify-between gap-3 bg-[#C9A227]/5 border border-[#C9A227]/20 rounded-xl px-4 py-2">
-                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Próxima senha</p>
-                    {nextTicketLoading ? (
-                      <div className="w-4 h-4 border-2 border-[#C9A227] border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <span className="text-2xl font-black text-[#C9A227] tracking-tighter tabular-nums">
-                        Nº {nextTicket ?? "—"}
-                      </span>
-                    )}
-                  </div>
-                )}
+          {/* Próxima senha — some se a loja desativou a senha sequencial do Balcão
+              em Configurações (Senha do Balcão: Nome do cliente). Mostrada como uma
+              linha compacta em vez de um card grande — é só um número de apoio. */}
+          {tenant.counterTicketMode !== "NAME" && (
+            <div className="flex items-center justify-between gap-3 bg-blue-50 border border-blue-100 rounded-lg px-4 py-2">
+              <p className="text-[11px] font-medium text-slate-500">Próxima senha</p>
+              {nextTicketLoading ? (
+                <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <span className="text-xl font-semibold text-blue-600 tabular-nums">
+                  Nº {nextTicket ?? "—"}
+                </span>
+              )}
+            </div>
+          )}
 
-                {/* Identificação opcional */}
-                <div>
-                  <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-1">
-                    Nome / Identificação <span className="normal-case font-normal">(opcional)</span>
-                  </label>
-                  <input
-                    type="text"
-                    autoFocus
-                    value={comandaNumber}
-                    onChange={(e) => setComandaNumber(e.target.value)}
-                    placeholder="Ex: João ou Mesa VIP"
-                    className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-4 text-sm font-bold text-slate-800 focus:border-[#C9A227] outline-none text-center"
-                  />
-                  <p className="text-[9px] text-slate-400 mt-1 text-center">
-                    {tenant.counterTicketMode === "NAME" ? "Deixe em branco se não quiser identificar o pedido" : "Deixe em branco para usar só a senha numérica"}
-                  </p>
-                </div>
+          {/* Identificação opcional */}
+          <Input
+            label="Nome / Identificação (opcional)"
+            type="text"
+            autoFocus
+            value={comandaNumber}
+            onChange={(e) => setComandaNumber(e.target.value)}
+            placeholder="Ex: João ou Mesa VIP"
+            hint={tenant.counterTicketMode === "NAME" ? "Deixe em branco se não quiser identificar o pedido" : "Deixe em branco para usar só a senha numérica"}
+          />
 
-                {/* Desconto na abertura (opcional) — vale sobre o total da comanda inteira,
-                    incluindo itens lançados depois, até o fechamento. */}
-                <div>
-                  <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-1">
-                    Desconto na comanda <span className="normal-case font-normal">(opcional)</span>
-                  </label>
-                  <div className="mt-1 flex items-center gap-2">
-                    <div className="flex bg-slate-50 rounded-xl overflow-hidden border border-slate-200 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => { setComandaDiscountType("FIXED"); setComandaDiscountValue(""); }}
-                        className={`px-3 py-2.5 text-[10px] font-black transition-all ${comandaDiscountType === "FIXED" ? "bg-[#C9A227] text-black" : "text-slate-400"}`}
-                      >
-                        R$
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setComandaDiscountType("PERCENT"); setComandaDiscountValue(""); }}
-                        className={`px-3 py-2.5 text-[10px] font-black transition-all ${comandaDiscountType === "PERCENT" ? "bg-[#C9A227] text-black" : "text-slate-400"}`}
-                      >
-                        %
-                      </button>
-                    </div>
-                    {comandaDiscountType === "FIXED" ? (
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        placeholder="0,00"
-                        value={formatCurrencyDigits(comandaDiscountValue)}
-                        onChange={(e) => setComandaDiscountValue(maskCurrencyDigits(e.target.value))}
-                        className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-4 text-sm font-bold text-slate-800 focus:border-[#C9A227] outline-none text-center"
-                      />
-                    ) : (
-                      <input
-                        type="number"
-                        placeholder="Desconto %"
-                        value={comandaDiscountValue}
-                        onChange={(e) => setComandaDiscountValue(e.target.value)}
-                        className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-4 text-sm font-bold text-slate-800 focus:border-[#C9A227] outline-none text-center"
-                      />
-                    )}
-                  </div>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2.5">
-                <button
-                  onClick={() => { setShowComandaModal(false); setComandaNumber(""); setConsumptionType("EAT_IN"); setComandaDiscountValue(""); setComandaDiscountType("FIXED"); }}
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-500 font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all"
+          {/* Desconto na abertura (opcional) — vale sobre o total da comanda inteira,
+              incluindo itens lançados depois, até o fechamento. */}
+          <div className="space-y-1">
+            <label className="ds-label">Desconto na comanda (opcional)</label>
+            <div className="flex items-center gap-2">
+              <div className="flex bg-slate-50 rounded-lg overflow-hidden border border-slate-200 shrink-0">
+                <Button
+                  variant={comandaDiscountType === "FIXED" ? "primary" : "ghost"}
+                  size="lg"
+                  className="!min-w-[40px] !rounded-none"
+                  onClick={() => { setComandaDiscountType("FIXED"); setComandaDiscountValue(""); }}
                 >
-                  Cancelar
-                </button>
-                <button
-                  disabled={isProcessing || (tenant.counterTicketMode !== "NAME" && nextTicketLoading) || !consumptionType}
-                  onClick={() => void handleCreateComanda()}
-                  className="bg-[#0D1B3E] hover:bg-slate-800 text-white font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all disabled:opacity-50"
+                  R$
+                </Button>
+                <Button
+                  variant={comandaDiscountType === "PERCENT" ? "primary" : "ghost"}
+                  size="lg"
+                  className="!min-w-[40px] !rounded-none"
+                  onClick={() => { setComandaDiscountType("PERCENT"); setComandaDiscountValue(""); }}
                 >
-                  {isProcessing ? (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto" />
-                  ) : "Abrir / Lançar"}
-                </button>
+                  %
+                </Button>
               </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              {comandaDiscountType === "FIXED" ? (
+                <Input
+                  wrapperClassName="flex-1 min-w-0"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="0,00"
+                  value={formatCurrencyDigits(comandaDiscountValue)}
+                  onChange={(e) => setComandaDiscountValue(maskCurrencyDigits(e.target.value))}
+                />
+              ) : (
+                <Input
+                  wrapperClassName="flex-1 min-w-0"
+                  type="number"
+                  placeholder="Desconto %"
+                  value={comandaDiscountValue}
+                  onChange={(e) => setComandaDiscountValue(e.target.value)}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      </Modal>
 
       {/* ── Faturar Delivery Modal ── */}
-      <AnimatePresence>
-        {billingOrder && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
-          >
-            <motion.div
-              initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }}
-              className="bg-white rounded-[2.5rem] p-8 w-full max-w-sm space-y-6 shadow-2xl"
+      <Modal
+        open={!!billingOrder}
+        onClose={() => setBillingOrder(null)}
+        title="Faturar Delivery"
+        subtitle={billingOrder ? `${billingOrder.customerName} · ${fmt(billingOrder.total)}` : undefined}
+        size="sm"
+        footer={
+          <ModalFooter>
+            <Button variant="outline" onClick={() => setBillingOrder(null)}>Cancelar</Button>
+            <Button
+              loading={isBilling}
+              onClick={async () => {
+                if (!billingOrder) return;
+                setIsBilling(true);
+                try {
+                  await apiJson(`/api/tenants/${tenant.slug}/pdv/bill-order/${billingOrder.id}`, {
+                    method: "POST",
+                    body: JSON.stringify({ paymentMethod: billingPaymentMethod, operatorName: operatorName || undefined }),
+                  });
+                  setBillingOrder(null);
+                  onOrderCreated?.();
+                } catch (err) {
+                  console.error(err);
+                } finally {
+                  setIsBilling(false);
+                }
+              }}
             >
-              <div className="text-center space-y-2">
-                <div className="w-16 h-16 rounded-2xl bg-blue-500/10 text-blue-600 flex items-center justify-center mx-auto mb-4">
-                  <Truck className="w-8 h-8" />
+              Confirmar e Faturar
+            </Button>
+          </ModalFooter>
+        }
+      >
+        {billingOrder && (
+          <div className="space-y-3">
+            <label className="ds-label">Como foi pago?</label>
+            <div className="max-h-32 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 space-y-1">
+              {billingOrder.items.filter((item) => item.product).map((item) => (
+                <div key={item.id} className="flex items-center justify-between text-xs gap-3">
+                  <span className="font-medium text-slate-600 truncate">{item.quantity}x {item.product?.name}</span>
+                  <span className="font-semibold text-slate-700 whitespace-nowrap">{fmt(item.price * item.quantity)}</span>
                 </div>
-                <h3 className="text-xl font-black text-slate-800 uppercase tracking-widest">Faturar Delivery</h3>
-                <p className="text-xs text-slate-400 font-bold uppercase">{billingOrder.customerName} · {fmt(billingOrder.total)}</p>
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-1">
-                  Como foi pago?
-                </label>
-                <div className="max-h-32 overflow-y-auto rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2 space-y-1">
-                  {billingOrder.items.filter((item) => item.product).map((item) => (
-                    <div key={item.id} className="flex items-center justify-between text-xs gap-3">
-                      <span className="font-bold text-slate-600 truncate">{item.quantity}x {item.product?.name}</span>
-                      <span className="font-black text-slate-700 whitespace-nowrap">{fmt(item.price * item.quantity)}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {([
-                    { id: "CASH", label: "Dinheiro" },
-                    { id: "CREDIT", label: "Crédito" },
-                    { id: "DEBIT", label: "Débito" },
-                    { id: "PIX", label: "Pix" },
-                  ] as const).map((opt) => (
-                    <button
-                      key={opt.id}
-                      onClick={() => setBillingPaymentMethod(opt.id)}
-                      className={`py-3 rounded-xl text-xs font-black uppercase tracking-widest border-2 transition-all ${
-                        billingPaymentMethod === opt.id
-                          ? "border-[#C9A227] bg-[#C9A227]/10 text-[#0D1B3E]"
-                          : "border-slate-100 bg-slate-50 text-slate-400"
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={() => setBillingOrder(null)}
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-500 font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest transition-all"
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                { id: "CASH", label: "Dinheiro" },
+                { id: "CREDIT", label: "Crédito" },
+                { id: "DEBIT", label: "Débito" },
+                { id: "PIX", label: "Pix" },
+              ] as const).map((opt) => (
+                <Button
+                  key={opt.id}
+                  variant={billingPaymentMethod === opt.id ? "primary" : "outline"}
+                  size="lg"
+                  onClick={() => setBillingPaymentMethod(opt.id)}
                 >
-                  Cancelar
-                </button>
-                <button
-                  disabled={isBilling}
-                  onClick={async () => {
-                    if (!billingOrder) return;
-                    setIsBilling(true);
-                    try {
-                      await apiJson(`/api/tenants/${tenant.slug}/pdv/bill-order/${billingOrder.id}`, {
-                        method: "POST",
-                        body: JSON.stringify({ paymentMethod: billingPaymentMethod, operatorName: operatorName || undefined }),
-                      });
-                      setBillingOrder(null);
-                      onOrderCreated?.();
-                    } catch (err) {
-                      console.error(err);
-                    } finally {
-                      setIsBilling(false);
-                    }
-                  }}
-                  className="bg-[#0D1B3E] hover:bg-slate-800 text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest transition-all disabled:opacity-50"
-                >
-                  {isBilling ? (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto" />
-                  ) : "Confirmar e Faturar"}
-                </button>
-              </div>
-            </motion.div>
-            </motion.div>
-          )}
-      </AnimatePresence>
+                  {opt.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* ── Tela de Pagamento — tela cheia, não modal flutuante, pra ter espaço de sobra
           pros controles (Cancelar, Finalizar, Voltar, Adicionar mais itens) ── */}
@@ -3695,18 +3497,22 @@ export default function PDVPanel({
         {showCheckout && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-[#0D1B3E] flex flex-col"
+            className="fixed inset-0 z-[100] bg-white flex flex-col"
           >
               {/* Header — título e botão cancelar sempre visíveis, fora da área de conteúdo,
                   pra nunca competir por espaço com "Dividir Pagamento" ou outros controles. */}
-              <div className="flex items-center justify-between px-5 py-3 border-b border-white/5 shrink-0">
-                <span className="text-[10px] font-black uppercase text-white/30 tracking-[0.2em]">Pagamento</span>
+              <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 shrink-0">
+                <span className="text-[11px] font-semibold text-slate-400">Pagamento</span>
               </div>
 
               <div className="flex-1 flex flex-col md:flex-row min-h-0">
               {/* Left: Summary */}
-              <div className="w-full md:w-80 lg:w-96 bg-black/20 p-4 flex flex-col border-r border-white/5 overflow-y-auto custom-scrollbar shrink-0">
-                <button
+              <div className="w-full md:w-80 lg:w-96 bg-slate-50 p-4 flex flex-col border-r border-slate-200 overflow-y-auto custom-scrollbar shrink-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="mb-3 self-start"
+                  iconLeft={<ArrowLeft size={14} />}
                   onClick={() => {
                     // isClosingAccount fica true quando o pagamento foi aberto direto do
                     // "Fechar Conta" numa comanda (handleGoToCheckoutFromDetails) e nunca era
@@ -3716,57 +3522,47 @@ export default function PDVPanel({
                     setShowCheckout(false);
                     setShowCartDrawer(true);
                   }}
-                  className="flex items-center gap-2 text-white/40 hover:text-white transition-colors mb-3 group"
                 >
-                  <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">Voltar ao Carrinho</span>
-                </button>
+                  Voltar ao Carrinho
+                </Button>
 
-                <button
+                <Button
+                  variant={showAddItemsPanel ? "primary" : "outline"}
+                  size="lg"
+                  className="mb-3"
                   onClick={() => setShowAddItemsPanel((v) => !v)}
-                  className={`flex items-center justify-center gap-1.5 py-1.5 sm:py-2 rounded-xl border text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-colors mb-3 ${
-                    showAddItemsPanel
-                      ? "bg-[#C9A227] border-[#C9A227] text-black"
-                      : "bg-white/5 border-white/10 text-white/60 hover:bg-white/10"
-                  }`}
+                  iconLeft={<Plus size={14} />}
                 >
-                  <Plus className="w-3.5 h-3.5" />
                   {showAddItemsPanel ? "Fechar produtos" : "Adicionar mais itens"}
-                </button>
+                </Button>
 
-                <p className="text-[10px] font-black uppercase text-white/40 tracking-[0.2em] mb-1">Resumo</p>
-                <h3 className="text-base font-black text-white mb-3 truncate">
+                <p className="text-[11px] font-semibold text-slate-500 mb-1">Resumo</p>
+                <h3 className="text-base font-semibold text-slate-900 mb-3 truncate">
                   {currentContextLabel || customerName || "Venda Balcão"}
                 </h3>
 
                 {isCounterSale && (
                   <div className="mb-3">
-                    <p className="text-[10px] font-black uppercase text-white/40 tracking-[0.2em] mb-1.5">
+                    <p className="text-[11px] font-semibold text-slate-500 mb-1.5">
                       Comer no local ou viagem?
                     </p>
                     <div className="grid grid-cols-2 gap-1.5">
-                      <button
+                      <Button
+                        variant={consumptionType === "EAT_IN" ? "primary" : "outline"}
+                        size="lg"
                         onClick={() => setConsumptionType("EAT_IN")}
-                        className={`flex items-center justify-center gap-1.5 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-colors ${
-                          consumptionType === "EAT_IN"
-                            ? "bg-[#C9A227] border-[#C9A227] text-black"
-                            : "bg-white/5 border-white/10 text-white/60 hover:bg-white/10"
-                        }`}
+                        iconLeft={<Utensils size={14} />}
                       >
-                        <Utensils className="w-3.5 h-3.5" />
                         Comer no local
-                      </button>
-                      <button
+                      </Button>
+                      <Button
+                        variant={consumptionType === "TAKEOUT" ? "primary" : "outline"}
+                        size="lg"
                         onClick={() => setConsumptionType("TAKEOUT")}
-                        className={`flex items-center justify-center gap-1.5 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-colors ${
-                          consumptionType === "TAKEOUT"
-                            ? "bg-[#C9A227] border-[#C9A227] text-black"
-                            : "bg-white/5 border-white/10 text-white/60 hover:bg-white/10"
-                        }`}
+                        iconLeft={<Package size={14} />}
                       >
-                        <Package className="w-3.5 h-3.5" />
                         Viagem
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -3776,137 +3572,129 @@ export default function PDVPanel({
                     corrigir o documento antes de finalizar e emitir a NF. */}
                 <div className="relative mb-3 space-y-1.5">
                   {linkedCustomer ? (
-                    <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-2.5 py-2">
-                      <div className="w-6 h-6 rounded-full bg-[#C9A227]/20 text-[#C9A227] flex items-center justify-center shrink-0 text-[10px] font-black uppercase">
+                    <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2">
+                      <div className="w-6 h-6 rounded-full bg-blue-600/20 text-blue-600 flex items-center justify-center shrink-0 text-[11px] font-semibold">
                         {linkedCustomer.name.charAt(0)}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-[11px] font-bold text-white truncate">{linkedCustomer.name}</p>
-                        <p className="text-[9px] text-white/40 truncate">{linkedCustomer.phone}</p>
+                        <p className="text-[11px] font-semibold text-slate-900 truncate">{linkedCustomer.name}</p>
+                        <p className="text-[10px] text-slate-500 truncate">{linkedCustomer.phone}</p>
                       </div>
-                      <button
-                        onClick={handleClearLinkedCustomer}
-                        className="shrink-0 w-5 h-5 rounded-md flex items-center justify-center text-white/30 hover:text-white hover:bg-white/10 transition-colors"
-                        title="Remover cliente"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
+                      <IconButton variant="ghost" size="sm" aria-label="Remover cliente" onClick={handleClearLinkedCustomer} title="Remover cliente" className="shrink-0">
+                        <X size={14} />
+                      </IconButton>
                     </div>
                   ) : (
                     <button
                       onClick={() => setCustomerSearchOpen(true)}
-                      className="w-full flex items-center gap-2 bg-white/5 border border-white/10 hover:border-[#C9A227]/50 rounded-lg px-2.5 py-2 transition-colors text-left"
+                      className="w-full flex items-center gap-2 bg-slate-50 border border-slate-200 hover:border-blue-600/50 rounded-lg px-2.5 py-2 transition-colors text-left"
                     >
-                      <User className="w-3 h-3 text-white/40 shrink-0" />
-                      <span className="text-[11px] font-bold text-white/50 flex-1">Cliente (opcional)</span>
-                      <ChevronRight className="w-3 h-3 text-white/30" />
+                      <User className="w-3 h-3 text-slate-500 shrink-0" />
+                      <span className="text-[11px] font-semibold text-slate-500 flex-1">Cliente (opcional)</span>
+                      <ChevronRight className="w-3 h-3 text-slate-400" />
                     </button>
                   )}
                   {fiscalEnabled && (
                     <div className="relative">
-                      <Hash className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-white/30" />
-                      <input
+                      <Input
                         type="text"
                         placeholder="CPF ou CNPJ na nota (opcional)"
                         value={customerCpf}
                         maxLength={18}
+                        showCount={false}
+                        iconLeft={<Hash size={13} />}
+                        className="pl-8"
                         onChange={(e) => setCustomerCpf(maskCpfCnpj(e.target.value))}
-                        className="w-full bg-white/5 border border-white/10 rounded-lg py-1.5 pl-7 pr-2.5 text-[11px] text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
                       />
                     </div>
                   )}
                   {!autoEmitNfce && fiscalEnabled && (
-                    <label className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-2.5 py-2 cursor-pointer hover:border-[#C9A227]/50 transition-colors">
+                    <label className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2 cursor-pointer hover:border-blue-600/50 transition-colors">
                       <input
                         type="checkbox"
                         checked={requestNfce}
                         onChange={(e) => setRequestNfce(e.target.checked)}
-                        className="w-3.5 h-3.5 rounded accent-[#C9A227] shrink-0"
+                        className="w-3.5 h-3.5 rounded accent-blue-600 shrink-0"
                       />
-                      <span className="text-[11px] font-bold text-white/70">Cliente pediu Nota Fiscal (NFC-e)</span>
+                      <span className="text-[11px] font-semibold text-slate-600">Cliente pediu Nota Fiscal (NFC-e)</span>
                     </label>
                   )}
                   {autoEmitNfce && fiscalEnabled && (
-                    <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-400/20 rounded-lg px-2.5 py-2">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
-                      <span className="text-[11px] font-bold text-emerald-100">NFC-e automática ativada</span>
+                    <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                      <span className="text-[11px] font-semibold text-emerald-700">NFC-e automática ativada</span>
                     </div>
                   )}
 
                   {/* Popover de busca/cadastro de cliente — cópia do que já existe no
                       carrinho, pois aquele fica escondido atrás desta tela em tela cheia. */}
                   {customerSearchOpen && (
-                    <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-[#111d3d] border border-white/10 rounded-xl shadow-2xl overflow-hidden">
-                      <div className="p-2.5 border-b border-white/5">
+                    <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+                      <div className="p-2.5 border-b border-slate-200">
                         <div className="relative">
-                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30" />
-                          <input
+                          <Input
                             autoFocus
                             type="text"
                             placeholder="Buscar por nome, telefone ou CPF..."
                             value={customerSearchTerm}
                             onChange={(e) => setCustomerSearchTerm(e.target.value)}
-                            className="w-full bg-white/5 border border-white/10 rounded-lg py-2 pl-8 pr-3 text-xs text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
+                            iconLeft={<Search size={13} />}
+                            className="pl-8"
                           />
                         </div>
                       </div>
                       <div className="max-h-52 overflow-y-auto custom-scrollbar">
                         {customerSearchLoading && (
-                          <p className="px-3 py-3 text-[10px] text-white/30 text-center">Buscando...</p>
+                          <p className="px-3 py-3 text-[11px] text-slate-400 text-center">Buscando...</p>
                         )}
                         {!customerSearchLoading && customerSearchTerm.trim().length >= 2 && customerSearchResults.length === 0 && (
-                          <p className="px-3 py-3 text-[10px] text-white/30 text-center">Nenhum cliente encontrado — pode cadastrar digitando nome e telefone abaixo.</p>
+                          <p className="px-3 py-3 text-[11px] text-slate-400 text-center">Nenhum cliente encontrado — pode cadastrar digitando nome e telefone abaixo.</p>
                         )}
                         {customerSearchResults.map((c) => (
                           <button
                             key={c.id}
                             onClick={() => handleSelectCustomer(c)}
-                            className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/5 transition-colors text-left"
+                            className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-50 transition-colors text-left"
                           >
-                            <div className="w-6 h-6 rounded-full bg-[#C9A227]/20 text-[#C9A227] flex items-center justify-center shrink-0 text-[10px] font-black uppercase">
+                            <div className="w-6 h-6 rounded-full bg-blue-600/20 text-blue-600 flex items-center justify-center shrink-0 text-[11px] font-semibold">
                               {c.name.charAt(0)}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-[11px] font-bold text-white truncate">{c.name}</p>
-                              <p className="text-[9px] text-white/40 truncate">{c.phone}</p>
+                              <p className="text-[11px] font-semibold text-slate-900 truncate">{c.name}</p>
+                              <p className="text-[10px] text-slate-500 truncate">{c.phone}</p>
                             </div>
                             {tenant.loyaltyConfig?.enabled && (
-                              <span className="text-[9px] font-black text-[#C9A227] shrink-0">{c.loyaltyPoints} pts</span>
+                              <span className="text-[10px] font-semibold text-blue-600 shrink-0">{c.loyaltyPoints} pts</span>
                             )}
                           </button>
                         ))}
                       </div>
-                      <div className="p-2 border-t border-white/5 grid grid-cols-2 gap-1.5">
-                        <input
+                      <div className="p-2 border-t border-slate-200 grid grid-cols-2 gap-1.5">
+                        <Input
                           type="text"
                           placeholder="Nome"
                           value={customerName}
                           onChange={(e) => setCustomerName(e.target.value)}
-                          className="bg-white/5 border border-white/10 rounded-lg py-1.5 px-2.5 text-[11px] text-white placeholder-white/20 focus:border-[#C9A227] outline-none"
                         />
                         <div className="relative">
-                          <input
+                          <Input
                             type="tel"
                             placeholder="(00) 00000-0000"
                             value={customerPhone}
                             onChange={(e) => setCustomerPhone(maskPhone(e.target.value))}
-                            className={`w-full bg-white/5 border rounded-lg py-1.5 px-2.5 text-[11px] text-white placeholder-white/20 focus:outline-none transition-colors ${
-                              customerPhone && !isPhoneComplete(customerPhone)
-                                ? "border-red-500/50 focus:border-red-500"
-                                : "border-white/10 focus:border-[#C9A227]"
-                            }`}
+                            status={customerPhone && !isPhoneComplete(customerPhone) ? "error" : "default"}
                           />
                           {customerPhone && !isPhoneComplete(customerPhone) && (
-                            <p className="text-[9px] text-red-400 mt-0.5 ml-1">Telefone incompleto</p>
+                            <p className="text-[10px] text-red-600 mt-0.5 ml-1">Telefone incompleto</p>
                           )}
                         </div>
-                        <button
+                        <Button
                           onClick={() => setCustomerSearchOpen(false)}
                           disabled={!!customerPhone && !isPhoneComplete(customerPhone)}
-                          className="col-span-2 mt-0.5 bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-40 disabled:cursor-not-allowed text-black text-[10px] font-black uppercase tracking-widest py-2 rounded-lg transition-colors"
+                          className="col-span-2 mt-0.5"
                         >
                           {customerName || customerPhone ? "Usar estes dados" : "Fechar"}
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   )}
@@ -3914,13 +3702,13 @@ export default function PDVPanel({
 
                 <div className="space-y-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
                   {billableLines.map((line) => (
-                    <div key={line.lineKey} className="border-b border-white/5 pb-2">
+                    <div key={line.lineKey} className="border-b border-slate-200 pb-2">
                       <div className="flex justify-between text-xs">
-                        <span className="text-white/70 truncate mr-2">
+                        <span className="text-slate-600 truncate mr-2">
                           {line.quantity}x {line.name}
-                          {line.notes && <span className="text-[10px] italic text-white/30 block">{line.notes}</span>}
+                          {line.notes && <span className="text-[11px] italic text-slate-400 block">{line.notes}</span>}
                         </span>
-                        <span className="font-black text-white whitespace-nowrap">{fmt(line.total)}</span>
+                        <span className="font-semibold text-slate-900 whitespace-nowrap">{fmt(line.total)}</span>
                       </div>
                       {isSplitMode && splitByItem && (
                         <div className="flex flex-wrap gap-1 mt-1.5">
@@ -3931,10 +3719,10 @@ export default function PDVPanel({
                                 key={personIdx}
                                 type="button"
                                 onClick={() => handleAssignItemToPerson(line.lineKey, personIdx)}
-                                className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full border transition-colors ${
+                                className={`text-[11px] font-medium min-h-[28px] px-2.5 py-1 rounded-full border transition-colors ${
                                   active
-                                    ? "bg-[#C9A227] border-[#C9A227] text-black"
-                                    : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
+                                    ? "bg-blue-600 border-blue-600 text-white"
+                                    : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
                                 }`}
                               >
                                 {label}
@@ -3947,67 +3735,68 @@ export default function PDVPanel({
                   ))}
                 </div>
 
-                <div className="mt-4 pt-4 border-t border-white/10 space-y-1.5">
-                  <div className="flex justify-between text-xs text-white/40">
+                <div className="mt-4 pt-4 border-t border-slate-200 space-y-1.5">
+                  <div className="flex justify-between text-xs text-slate-500">
                     <span>Subtotal</span><span className="tabular-nums">{fmt(subtotal)}</span>
                   </div>
                   {discountAmount > 0 && (
-                    <div className="flex justify-between text-xs text-green-400">
+                    <div className="flex justify-between text-xs text-emerald-600">
                       <span>Desconto</span><span className="tabular-nums">-{fmt(discountAmount)}</span>
                     </div>
                   )}
                   {feeInfo.amount > 0 && (
-                    <div className="flex justify-between text-xs text-amber-400">
+                    <div className="flex justify-between text-xs text-amber-600">
                       <span>Taxa maquininha ({feeInfo.percent.toFixed(2).replace(".", ",")}%){feeInfo.passToCustomer ? "" : " — absorvida"}</span>
                       <span className="tabular-nums">{feeInfo.passToCustomer ? "+" : ""}{fmt(feeInfo.amount)}</span>
                     </div>
                   )}
                   {!!serviceChargeConfig?.enabled && (
-                    <label className="flex items-center justify-between text-xs text-[#C9A227] cursor-pointer gap-2">
+                    <label className="flex items-center justify-between text-xs text-blue-600 cursor-pointer gap-2">
                       <span className="flex items-center gap-1.5">
                         <input
                           type="checkbox"
                           checked={serviceChargeChecked}
                           onChange={(e) => setServiceChargeChecked(e.target.checked)}
-                          className="w-3.5 h-3.5 rounded accent-[#C9A227]"
+                          className="w-3.5 h-3.5 rounded accent-blue-600"
                         />
                         Taxa de serviço ({(serviceChargeConfig.percent || 0).toFixed(0)}%)
                       </span>
                       <span className="tabular-nums">{serviceChargeAmount > 0 ? `+${fmt(serviceChargeAmount)}` : fmt(0)}</span>
                     </label>
                   )}
-                  <div className="flex justify-between pt-2 mt-1 border-t border-white/10">
-                    <span className="text-[10px] font-black uppercase text-[#C9A227] tracking-widest self-end">Total</span>
-                    <span className="text-2xl font-black text-white tabular-nums">{fmt(finalTotal)}</span>
+                  <div className="flex justify-between pt-2 mt-1 border-t border-slate-200">
+                    <span className="text-[11px] font-semibold text-blue-600 self-end">Total</span>
+                    <span className="text-2xl font-semibold text-slate-900 tabular-nums">{fmt(finalTotal)}</span>
                   </div>
                 </div>
 
-                <button
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="mt-3"
                   onClick={handlePrintPreCheckout}
-                  className="mt-3 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/50 hover:text-white transition-colors text-[10px] font-black uppercase tracking-wide"
+                  iconLeft={<Printer size={14} />}
                 >
-                  <Printer className="w-3.5 h-3.5" />
                   Imprimir Pedido
-                </button>
+                </Button>
               </div>
 
               {/* Middle: Adicionar mais itens — mesma grade de produtos do PDV, embutida
                   aqui pra não precisar sair da tela de pagamento (e perder a divisão por
                   pessoa já montada) só pra lançar um item esquecido. */}
               {showAddItemsPanel && (
-                <div className="w-full md:w-72 lg:w-80 bg-[#0A1425] border-r border-white/5 flex flex-col shrink-0 min-h-0">
-                  <div className="p-3 border-b border-white/5 shrink-0">
-                    <input
+                <div className="w-full md:w-72 lg:w-80 bg-white border-r border-slate-200 flex flex-col shrink-0 min-h-0">
+                  <div className="p-3 border-b border-slate-200 shrink-0">
+                    <Input
                       type="text"
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       placeholder="Buscar produto..."
-                      className="w-full bg-black/20 border border-white/10 rounded-lg py-2 px-3 text-[12px] text-white placeholder:text-white/30 outline-none focus:border-[#C9A227]"
                     />
                   </div>
                   <div className="flex-1 overflow-y-auto custom-scrollbar p-2.5 space-y-1.5">
                     {filteredProducts.length === 0 ? (
-                      <p className="text-center text-[11px] text-white/30 py-8">Nenhum produto encontrado</p>
+                      <p className="text-center text-[11px] text-slate-400 py-8">Nenhum produto encontrado</p>
                     ) : (
                       filteredProducts.map((product) => {
                         const inCart = cart.find((i) => i.product.id === product.id);
@@ -4022,25 +3811,25 @@ export default function PDVPanel({
                                 addToCart(product);
                               }
                             }}
-                            className={`w-full flex items-center gap-3 px-2.5 py-2.5 rounded-xl border text-left transition-colors ${
-                              inCart ? "bg-[#C9A227]/10 border-[#C9A227]/40" : "bg-white/5 border-white/10 hover:bg-white/10"
+                            className={`w-full flex items-center gap-3 px-2.5 py-2.5 rounded-lg border text-left transition-colors ${
+                              inCart ? "bg-blue-600/10 border-blue-600/40" : "bg-slate-50 border-slate-200 hover:bg-slate-100"
                             }`}
                           >
-                            <div className="w-11 h-11 bg-white/5 rounded-lg overflow-hidden relative flex items-center justify-center shrink-0">
+                            <div className="w-11 h-11 bg-slate-50 rounded-lg overflow-hidden relative flex items-center justify-center shrink-0">
                               {product.imageUrl ? (
                                 <img src={product.imageUrl} className="w-full h-full object-cover" alt={product.name} />
                               ) : (
-                                <Utensils className="w-5 h-5 text-white/20" />
+                                <Utensils className="w-5 h-5 text-slate-400" />
                               )}
                               {inCart && (
-                                <div className="absolute top-0.5 left-0.5 min-w-[15px] h-[15px] px-1 bg-[#C9A227] text-black text-[9px] font-black rounded-full flex items-center justify-center shadow">
+                                <div className="absolute top-0.5 left-0.5 min-w-[15px] h-[15px] px-1 bg-blue-600 text-white text-[10px] font-semibold rounded-full flex items-center justify-center shadow">
                                   {inCart.quantity}
                                 </div>
                               )}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className="text-[12px] font-bold text-white truncate">{product.name}</p>
-                              <p className="text-[10px] text-white/40">{fmt(product.price)}</p>
+                              <p className="text-[12px] font-semibold text-slate-900 truncate">{product.name}</p>
+                              <p className="text-[11px] text-slate-500">{fmt(product.price)}</p>
                             </div>
                           </button>
                         );
@@ -4057,9 +3846,11 @@ export default function PDVPanel({
                   {/* Payment methods — faixa horizontal compacta no topo */}
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Forma de Pagamento</p>
+                      <p className="text-[11px] font-semibold text-slate-500">Forma de Pagamento</p>
                       {paymentMethod !== "STONE" && paymentMethod !== "CIELO" && (
-                        <button
+                        <Button
+                          variant={isSplitMode ? "primary" : "outline"}
+                          size="sm"
                           onClick={() => {
                             setIsSplitMode((v) => !v);
                             if (isSplitMode) {
@@ -4067,105 +3858,85 @@ export default function PDVPanel({
                               setItemPersonAssignment({});
                             }
                           }}
-                          className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wide transition-colors ${
-                            isSplitMode ? "bg-[#C9A227] text-black" : "bg-white/5 text-white/40 hover:bg-white/10"
-                          }`}
+                          iconLeft={<Split size={14} />}
                         >
-                          <Split className="w-3 h-3" />
                           Dividir Pagamento
-                        </button>
+                        </Button>
                       )}
                     </div>
 
                     {isSplitMode && (
-                      <div className="space-y-1.5 bg-white/[0.03] border border-white/10 rounded-xl p-2.5">
-                        <div className="grid grid-cols-2 gap-1.5 p-0.5 bg-black/20 rounded-lg">
-                          <button
-                            type="button"
-                            onClick={() => setSplitByItem(false)}
-                            className={`py-1.5 rounded-md text-[9px] font-black uppercase tracking-wide transition-colors ${!splitByItem ? "bg-[#C9A227] text-black" : "text-white/40 hover:text-white"}`}
-                          >
-                            Valor igual
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setSplitByItem(true)}
-                            className={`py-1.5 rounded-md text-[9px] font-black uppercase tracking-wide transition-colors ${splitByItem ? "bg-[#C9A227] text-black" : "text-white/40 hover:text-white"}`}
-                          >
-                            Por item
-                          </button>
-                        </div>
+                      <div className="space-y-1.5 bg-slate-50 border border-slate-200 rounded-lg p-2.5">
+                        <Tabs
+                          label="Modo de divisão"
+                          items={SPLIT_MODE_TABS}
+                          value={splitByItem ? "item" : "equal"}
+                          onChange={(v) => setSplitByItem(v === "item")}
+                          className="!space-y-0"
+                        >
+                          {null}
+                        </Tabs>
 
                         {!splitByItem ? (
                           <>
                         <div className="grid grid-cols-[1fr_auto] gap-2 items-end">
                           <div>
-                            <p className="text-[9px] font-black uppercase text-white/30 mb-1">Divisão por grupo</p>
-                            <input
+                            <p className="text-[10px] font-semibold text-slate-400 mb-1">Divisão por grupo</p>
+                            <Input
                               type="number"
                               min={2}
                               value={groupSplitCount}
                               onChange={(e) => setGroupSplitCount(e.target.value.replace(/\D/g, ""))}
                               placeholder="2"
-                              className="w-full bg-black/20 border border-white/10 rounded-lg py-2 px-3 text-[11px] font-black text-white outline-none focus:border-[#C9A227]"
                             />
                           </div>
-                          <button
-                            onClick={handleGenerateGroupSplit}
-                            className="h-[38px] px-3 rounded-lg bg-[#C9A227] text-black text-[10px] font-black uppercase tracking-wide hover:bg-[#E8B93A] transition-colors"
-                          >
+                          <Button size="lg" onClick={handleGenerateGroupSplit}>
                             Gerar
-                          </button>
+                          </Button>
                         </div>
-                        <p className="text-[9px] text-white/35">
+                        <p className="text-[10px] text-slate-500">
                           Se sobrar centavos, o ajuste fica na primeira pessoa.
                         </p>
                           </>
                         ) : (
                           <>
                         <div className="space-y-1.5">
-                          <p className="text-[9px] font-black uppercase text-white/30">Pessoas</p>
+                          <p className="text-[10px] font-semibold text-slate-400">Pessoas</p>
                           <div className="flex flex-wrap gap-1.5">
                             {splitPersonLabels.map((label, idx) => (
-                              <span key={idx} className="flex items-center gap-1 bg-black/20 border border-white/10 rounded-full pl-2.5 pr-1 py-1">
-                                <span className="text-[10px] font-black text-white">{label}</span>
+                              <span key={idx} className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-full pl-2.5 pr-1 py-1">
+                                <span className="text-[11px] font-semibold text-slate-900">{label}</span>
                                 {splitPersonLabels.length > 2 && (
-                                  <button onClick={() => handleRemoveSplitPerson(idx)} className="text-white/30 hover:text-red-400 transition-colors">
-                                    <X className="w-3 h-3" />
-                                  </button>
+                                  <IconButton variant="ghost" size="xs" aria-label="Remover pessoa" onClick={() => handleRemoveSplitPerson(idx)} className="border-transparent text-slate-400 hover:text-red-600">
+                                    <X size={12} />
+                                  </IconButton>
                                 )}
                               </span>
                             ))}
-                            <button
-                              onClick={handleAddSplitPerson}
-                              className="flex items-center gap-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full px-2.5 py-1 text-[10px] font-black text-white/60 hover:text-white transition-colors"
-                            >
-                              <Plus className="w-3 h-3" /> Pessoa
-                            </button>
+                            <Button variant="outline" size="sm" onClick={handleAddSplitPerson} iconLeft={<Plus size={14} />}>
+                              Pessoa
+                            </Button>
                           </div>
-                          <p className="text-[9px] text-white/35">
+                          <p className="text-[10px] text-slate-500">
                             Toque nas pessoas ao lado de cada item no Resumo pra marcar de quem é. Itens sem marcação são divididos igualmente entre todos.
                           </p>
-                          <button
-                            onClick={handleGenerateItemSplit}
-                            className="w-full h-[38px] rounded-lg bg-[#C9A227] text-black text-[10px] font-black uppercase tracking-wide hover:bg-[#E8B93A] transition-colors"
-                          >
+                          <Button size="lg" fullWidth onClick={handleGenerateItemSplit}>
                             Gerar divisão por item
-                          </button>
+                          </Button>
                         </div>
                           </>
                         )}
                         {paymentSplits.length === 0 ? (
-                          <p className="text-[10px] text-white/30 text-center py-2">Gere a divisão por grupo ou escolha a forma abaixo e clique em "Adicionar Forma".</p>
+                          <p className="text-[11px] text-slate-400 text-center py-2">Gere a divisão por grupo ou escolha a forma abaixo e clique em "Adicionar Forma".</p>
                         ) : (
                           normalizedPaymentSplits.map((split) => {
                             return (
-              <div key={split.id} className="flex items-start gap-2 bg-white/5 rounded-lg px-2.5 py-2">
+              <div key={split.id} className="flex items-start gap-2 bg-slate-50 rounded-lg px-2.5 py-2">
                                 <div className="flex-1 min-w-0 space-y-1.5">
                                   {split.personLabel && (
                                     <div className="flex items-baseline gap-1.5">
-                                      <span className="text-[10px] font-black text-[#C9A227] uppercase shrink-0">{split.personLabel}:</span>
-                                      <span className="text-[10px] text-white/50 truncate">{split.personItems || "sem itens marcados"}</span>
+                                      <span className="text-[11px] font-semibold text-blue-600 shrink-0">{split.personLabel}:</span>
+                                      <span className="text-[11px] text-slate-500 truncate">{split.personItems || "sem itens marcados"}</span>
                                     </div>
                                   )}
                                   <div className="grid grid-cols-4 gap-1">
@@ -4180,77 +3951,73 @@ export default function PDVPanel({
                                           title={method.label}
                                           className={`flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-md border transition-all ${
                                             active
-                                              ? "bg-[#C9A227] border-[#C9A227]"
-                                              : "bg-black/20 border-white/10 hover:bg-white/10"
+                                              ? "bg-blue-600 border-blue-600"
+                                              : "bg-slate-50 border-slate-200 hover:bg-slate-100"
                                           }`}
                                         >
-                                          <Icon className={`w-3 h-3 ${active ? "text-black" : "text-white/60"}`} />
-                                          <span className={`text-[7px] font-black uppercase leading-none ${active ? "text-black" : "text-white/60"}`}>{method.label}</span>
+                                          <Icon className={`w-3 h-3 ${active ? "text-white" : "text-slate-600"}`} />
+                                          <span className={`text-[10px] font-semibold  leading-none ${active ? "text-white" : "text-slate-600"}`}>{method.label}</span>
                                         </button>
                                       );
                                     })}
                                   </div>
                                   {getBrandsForPaymentMethod(split.method).length > 0 && (
-                                    <select
+                                    <Select
                                       value={split.cardBrand || ""}
                                       onChange={(e) => handleUpdateSplitCardBrand(split.id, e.target.value)}
-                                      style={{ colorScheme: "dark" }}
-                                      className="w-full bg-black/20 border border-white/10 rounded-md py-1 px-2 text-[10px] font-black text-white outline-none focus:border-[#C9A227]"
                                     >
                                       <option value="">Selecione a bandeira</option>
                                       {getBrandsForPaymentMethod(split.method).map((brand) => (
                                         <option key={brand} value={brand}>{brand}</option>
                                       ))}
-                                    </select>
+                                    </Select>
                                   )}
                                   {split.method === "CREDIT" && (
-                                    <select
+                                    <Select
                                       value={split.installments || 1}
                                       onChange={(e) => handleUpdateSplitInstallments(split.id, Number(e.target.value))}
-                                      style={{ colorScheme: "dark" }}
-                                      className="w-full bg-black/20 border border-white/10 rounded-md py-1 px-2 text-[10px] font-black text-white outline-none focus:border-[#C9A227]"
                                     >
                                       {getInstallmentOptionsForMethod(split.method, split.cardBrand).map((option) => (
                                         <option key={option} value={option}>
                                           {option}x {option === 1 ? "\u00E0 vista" : fmt(split.amount / option)}
                                         </option>
                                       ))}
-                                    </select>
+                                    </Select>
                                   )}
                                 </div>
                                 <div className="relative w-24">
-                                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] text-white/30">R$</span>
-                                  <input
+                                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">R$</span>
+                                  <Input
                                     type="text"
                                     inputMode="numeric"
                                     value={formatCurrencyDigits(numberToDigits(split.amount))}
                                     onChange={(e) => handleUpdateSplitAmount(split.id, digitsToNumber(maskCurrencyDigits(e.target.value.replace(/\D/g, ""))))}
-                                    className="w-full bg-black/20 border border-white/10 rounded-md py-1 pl-6 pr-1.5 text-[10px] font-black text-white text-right outline-none focus:border-[#C9A227]"
+                                    className="pl-6 pr-1.5 text-right"
                                   />
                                 </div>
-                                <button onClick={() => handleRemovePaymentSplit(split.id)} className="text-white/20 hover:text-red-400 transition-colors shrink-0">
-                                  <X className="w-3.5 h-3.5" />
-                                </button>
+                                <IconButton variant="ghost" size="sm" aria-label="Remover forma de pagamento" onClick={() => handleRemovePaymentSplit(split.id)} className="shrink-0 border-transparent text-slate-400 hover:text-red-600">
+                                  <X size={14} />
+                                </IconButton>
                               </div>
                             );
                           })
                         )}
-                        <div className="flex items-center justify-between pt-1.5 border-t border-white/10">
-                          <span className="text-[9px] font-black uppercase text-white/40">
+                        <div className="flex items-center justify-between pt-1.5 border-t border-slate-200">
+                          <span className="text-[10px] font-semibold text-slate-500">
                             {splitOverpaidAmount > 0 ? "Excedente" : "Falta pagar"}
                           </span>
-                          <span className={`text-xs font-black tabular-nums ${splitOverpaidAmount > 0 ? "text-red-400" : splitRemaining > 0 ? "text-[#C9A227]" : "text-emerald-400"}`}>
+                          <span className={`text-xs font-semibold tabular-nums ${splitOverpaidAmount > 0 ? "text-red-600" : splitRemaining > 0 ? "text-blue-600" : "text-emerald-600"}`}>
                             {fmt(splitOverpaidAmount > 0 ? splitOverpaidAmount : splitRemaining)}
                           </span>
                         </div>
                         {splitOverpaidAmount > 0 && (
-                          <p className="text-[9px] text-red-300">
+                          <p className="text-[10px] text-red-600">
                             Ajuste os valores das divis\u00F5es para fechar a conta sem excedente.
                           </p>
                         )}
                         {splitRemaining > 0 && (
                           <>
-                            <p className="text-[9px] font-black uppercase text-white/30 pt-1">Escolha a forma pra adicionar</p>
+                            <p className="text-[10px] font-semibold text-slate-400 pt-1">Escolha a forma pra adicionar</p>
                             <div className="grid grid-cols-4 gap-1.5">
                               {PAYMENT_METHODS.filter((m) => m.id !== "STONE" && m.id !== "CIELO").map((method) => {
                                 const Icon = method.icon;
@@ -4261,49 +4028,41 @@ export default function PDVPanel({
                                     onClick={() => setPaymentMethod(method.id as any)}
                                     className={`flex flex-col items-center gap-0.5 py-2 rounded-lg border transition-all ${
                                       active
-                                        ? "bg-[#C9A227] border-[#C9A227]"
-                                        : "bg-white/5 border-white/10 hover:bg-white/10"
+                                        ? "bg-blue-600 border-blue-600"
+                                        : "bg-slate-50 border-slate-200 hover:bg-slate-100"
                                     }`}
                                   >
-                                    <Icon className={`w-3.5 h-3.5 ${active ? "text-black" : "text-white/60"}`} />
-                                    <span className={`text-[8px] font-black uppercase ${active ? "text-black" : "text-white/60"}`}>{method.label}</span>
+                                    <Icon className={`w-3.5 h-3.5 ${active ? "text-white" : "text-slate-600"}`} />
+                                    <span className={`text-[10px] font-semibold  ${active ? "text-white" : "text-slate-600"}`}>{method.label}</span>
                                   </button>
                                 );
                               })}
                             </div>
                             {paymentMethod !== "STONE" && paymentMethod !== "CIELO" && getBrandsForPaymentMethod(paymentMethod as SplitPaymentMethod).length > 0 && (
-                              <select
+                              <Select
                                 value={normalizedCardBrand || ""}
                                 onChange={(e) => setCardBrand(e.target.value)}
-                                style={{ colorScheme: "dark" }}
-                                className="w-full bg-black/20 border border-white/10 rounded-md py-2 px-2.5 text-[10px] font-black text-white outline-none focus:border-[#C9A227]"
                               >
                                 {getBrandsForPaymentMethod(paymentMethod as SplitPaymentMethod).map((brand) => (
                                   <option key={brand} value={brand}>{brand}</option>
                                 ))}
-                              </select>
+                              </Select>
                             )}
                             {paymentMethod === "CREDIT" && (
-                              <select
+                              <Select
                                 value={installments}
                                 onChange={(e) => setInstallments(Number(e.target.value))}
-                                style={{ colorScheme: "dark" }}
-                                className="w-full bg-black/20 border border-white/10 rounded-md py-2 px-2.5 text-[10px] font-black text-white outline-none focus:border-[#C9A227]"
                               >
                                 {creditInstallmentOptions.map((option) => (
                                   <option key={option} value={option}>
                                     {option}x {option === 1 ? "\u00E0 vista" : fmt(splitRemaining / option)}
                                   </option>
                                 ))}
-                              </select>
+                              </Select>
                             )}
-                            <button
-                              onClick={handleAddPaymentSplit}
-                              className="w-full flex items-center justify-center gap-1.5 bg-white/10 hover:bg-white/15 text-white py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition-colors"
-                            >
-                              <Plus className="w-3 h-3" />
+                            <Button variant="outline" size="lg" fullWidth onClick={handleAddPaymentSplit} iconLeft={<Plus size={14} />}>
                               Adicionar {PAYMENT_METHODS.find((m) => m.id === paymentMethod)?.label} ({fmt(splitRemaining)})
-                            </button>
+                            </Button>
                           </>
                         )}
                       </div>
@@ -4322,14 +4081,14 @@ export default function PDVPanel({
                                 if (method.id !== "CASH") setAmountReceived("");
                                 if (method.id === "CASH") setCardBrand("");
                               }}
-                              className={`flex flex-col items-center justify-center gap-0.5 sm:gap-1 py-2 sm:py-2.5 rounded-xl border transition-all ${
+                              className={`flex flex-col items-center justify-center gap-0.5 sm:gap-1 py-2 sm:py-2.5 rounded-lg border transition-all ${
                                 active
-                                  ? "bg-[#C9A227] border-[#C9A227] shadow-lg shadow-[#C9A227]/20"
-                                  : "bg-white/5 border-white/10 hover:bg-white/10"
+                                  ? "bg-blue-600 border-blue-600 "
+                                  : "bg-slate-50 border-slate-200 hover:bg-slate-100"
                               }`}
                             >
-                              <Icon className={`w-4 h-4 ${active ? "text-black" : "text-white/70"}`} />
-                              <span className={`text-[9px] font-black uppercase tracking-wide leading-none ${active ? "text-black" : "text-white/70"}`}>
+                              <Icon className={`w-4 h-4 ${active ? "text-white" : "text-slate-600"}`} />
+                              <span className={`text-[10px] font-semibold   leading-none ${active ? "text-white" : "text-slate-600"}`}>
                                 {method.label}
                               </span>
                             </button>
@@ -4344,37 +4103,36 @@ export default function PDVPanel({
                   {!isSplitMode && (
                   <div className="space-y-1.5">
                     {paymentMethod === "CASH" && (
-                      <div className="bg-white/5 rounded-2xl p-3 border border-white/10 space-y-2.5">
+                      <div className="bg-slate-50 rounded-lg p-3 border border-slate-200 space-y-2.5">
                         <div className="space-y-1">
-                          <label className="text-[10px] font-black uppercase text-[#C9A227] tracking-widest ml-1">Valor Recebido</label>
-                          <div className="relative">
-                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-black text-white/30">R$</span>
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              autoFocus
-                              value={formatCurrencyDigits(amountReceived)}
-                              onChange={(e) => setAmountReceived(maskCurrencyDigits(e.target.value))}
-                              placeholder="0,00"
-                              className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-10 pr-4 text-base font-black text-white focus:border-[#C9A227] outline-none text-center [appearance:textfield]"
-                            />
-                          </div>
+                          <label className="text-[11px] font-semibold text-blue-600 ml-1">Valor Recebido</label>
+                          <Input
+                            type="text"
+                            inputMode="numeric"
+                            autoFocus
+                            value={formatCurrencyDigits(amountReceived)}
+                            onChange={(e) => setAmountReceived(maskCurrencyDigits(e.target.value))}
+                            placeholder="0,00"
+                            addonLeft="R$"
+                            className="text-center text-base font-semibold"
+                          />
                         </div>
                         <div className="flex gap-1.5">
                           {[finalTotal, Math.ceil(finalTotal / 10) * 10, Math.ceil(finalTotal / 50) * 50].filter((v, i, arr) => arr.indexOf(v) === i).slice(0, 3).map((v) => (
-                            <button
+                            <Button
                               key={v}
-                              type="button"
+                              variant="outline"
+                              size="lg"
+                              className="flex-1"
                               onClick={() => setAmountReceived(numberToDigits(v))}
-                              className="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg py-1.5 text-[10px] font-black text-white/70 transition-colors"
                             >
                               {fmt(v)}
-                            </button>
+                            </Button>
                           ))}
                         </div>
-                        <div className="flex items-center justify-between pt-2 border-t border-white/10">
-                          <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Troco</p>
-                          <p className={`text-xl font-black tabular-nums ${change > 0 ? "text-green-400" : "text-white/20"}`}>
+                        <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+                          <p className="text-[11px] font-semibold text-slate-500">Troco</p>
+                          <p className={`text-xl font-semibold tabular-nums ${change > 0 ? "text-emerald-600" : "text-slate-400"}`}>
                             {fmt(change)}
                           </p>
                         </div>
@@ -4382,37 +4140,26 @@ export default function PDVPanel({
                     )}
 
                     {paymentMethod === "CREDIT" && (
-                      <div className="bg-white/5 rounded-2xl p-3 border border-white/10 space-y-2.5">
-                        <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Parcelamento</p>
+                      <div className="bg-slate-50 rounded-lg p-3 border border-slate-200 space-y-2.5">
+                        <p className="text-[11px] font-semibold text-slate-500">Parcelamento</p>
                         <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
                           {creditInstallmentOptions.map((n) => (
-                            <button
+                            <Button
                               key={n}
+                              variant={installments === n ? "primary" : "outline"}
+                              size="lg"
                               onClick={() => setInstallments(n)}
-                              className={`py-2 rounded-xl text-[11px] font-black transition-all ${
-                                installments === n ? "bg-[#C9A227] text-black" : "bg-white/5 border border-white/10 text-white/60 hover:bg-white/10"
-                              }`}
                             >
                               {n}x {n === 1 ? "à vista" : fmt(finalTotal / n)}
-                            </button>
+                            </Button>
                           ))}
                         </div>
                         {CARD_BRANDS.length > 0 && (
                           <>
-                            <p className="text-[10px] font-black uppercase text-white/40 tracking-widest pt-1">Bandeira</p>
+                            <p className="text-[11px] font-semibold text-slate-500 pt-1">Bandeira</p>
                             <div className="grid grid-cols-2 gap-1.5">
                               {CARD_BRANDS.map((brand) => (
-                                <button
-                                  key={brand}
-                                  onClick={() => setCardBrand(brand)}
-                                  className={`p-2 rounded-xl border text-[10px] font-black uppercase transition-all ${
-                                    cardBrand === brand
-                                      ? "bg-white text-[#0D1B3E] border-white"
-                                      : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
-                                  }`}
-                                >
-                                  {brand}
-                                </button>
+                                <Button key={brand} variant={cardBrand === brand ? "primary" : "outline"} size="lg" onClick={() => setCardBrand(brand)}>{brand}</Button>
                               ))}
                             </div>
                           </>
@@ -4421,55 +4168,35 @@ export default function PDVPanel({
                     )}
 
                     {paymentMethod === "DEBIT" && CARD_BRANDS.length > 0 && (
-                      <div className="bg-white/5 rounded-2xl p-3 border border-white/10 space-y-2.5">
-                        <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Bandeira</p>
+                      <div className="bg-slate-50 rounded-lg p-3 border border-slate-200 space-y-2.5">
+                        <p className="text-[11px] font-semibold text-slate-500">Bandeira</p>
                         <div className="grid grid-cols-2 gap-1.5">
                           {CARD_BRANDS.map((brand) => (
-                            <button
-                              key={brand}
-                              onClick={() => setCardBrand(brand)}
-                              className={`p-2 rounded-xl border text-[10px] font-black uppercase transition-all ${
-                                cardBrand === brand
-                                  ? "bg-white text-[#0D1B3E] border-white"
-                                  : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
-                              }`}
-                            >
-                              {brand}
-                            </button>
+                            <Button key={brand} variant={cardBrand === brand ? "primary" : "outline"} size="lg" onClick={() => setCardBrand(brand)}>{brand}</Button>
                           ))}
                         </div>
                       </div>
                     )}
 
                     {paymentMethod === "VR" && CARD_BRANDS.length > 0 && (
-                      <div className="bg-white/5 rounded-2xl p-3 border border-white/10 space-y-2.5">
-                        <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Bandeira VR</p>
+                      <div className="bg-slate-50 rounded-lg p-3 border border-slate-200 space-y-2.5">
+                        <p className="text-[11px] font-semibold text-slate-500">Bandeira VR</p>
                         <div className="grid grid-cols-2 gap-1.5">
                           {CARD_BRANDS.map((brand) => (
-                            <button
-                              key={brand}
-                              onClick={() => setCardBrand(brand)}
-                              className={`p-2 rounded-xl border text-[10px] font-black uppercase transition-all ${
-                                cardBrand === brand
-                                  ? "bg-white text-[#0D1B3E] border-white"
-                                  : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
-                              }`}
-                            >
-                              {brand}
-                            </button>
+                            <Button key={brand} variant={cardBrand === brand ? "primary" : "outline"} size="lg" onClick={() => setCardBrand(brand)}>{brand}</Button>
                           ))}
                         </div>
                       </div>
                     )}
 
                     {paymentMethod === "PIX" && (
-                      <div className="flex flex-col items-center justify-center text-center gap-2.5 bg-white/5 rounded-2xl border border-white/10 p-5">
-                        <div className="w-12 h-12 bg-[#C9A227]/10 rounded-full flex items-center justify-center animate-pulse">
-                          <QrCode className="w-6 h-6 text-[#C9A227]" />
+                      <div className="flex flex-col items-center justify-center text-center gap-2.5 bg-slate-50 rounded-lg border border-slate-200 p-5">
+                        <div className="w-12 h-12 bg-blue-600/10 rounded-full flex items-center justify-center animate-pulse">
+                          <QrCode className="w-6 h-6 text-blue-600" />
                         </div>
                         <div>
-                          <p className="text-sm font-black uppercase tracking-widest text-white">PIX</p>
-                          <p className="text-[10px] text-white/40 max-w-[200px] mx-auto mt-1">
+                          <p className="text-sm font-semibold text-slate-900">PIX</p>
+                          <p className="text-[11px] text-slate-500 max-w-[200px] mx-auto mt-1">
                             Confirme o recebimento antes de finalizar.
                           </p>
                         </div>
@@ -4480,25 +4207,15 @@ export default function PDVPanel({
                       <div className="space-y-4">
                         {stoneStatus === "idle" && (
                           <>
-                            <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Tipo de pagamento</p>
+                            <p className="text-[11px] font-semibold text-slate-500">Tipo de pagamento</p>
                             <div className="grid grid-cols-3 gap-2">
                               {(["credit", "debit", "pix"] as const).map((t) => (
-                                <button
-                                  key={t}
-                                  onClick={() => setStonePaymentType(t)}
-                                  className={`py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                                    stonePaymentType === t
-                                      ? "bg-[#C9A227] text-black"
-                                      : "bg-white/5 border border-white/10 text-white/60 hover:bg-white/10"
-                                  }`}
-                                >
-                                  {t === "credit" ? "Crédito" : t === "debit" ? "Débito" : "PIX"}
-                                </button>
+                                <Button key={t} variant={stonePaymentType === t ? "primary" : "outline"} size="lg" onClick={() => setStonePaymentType(t)}>{t === "credit" ? "Crédito" : t === "debit" ? "Débito" : "PIX"}</Button>
                               ))}
                             </div>
-                            <div className="bg-white/5 rounded-2xl border border-white/10 p-4 flex items-start gap-3">
-                              <Smartphone className="w-5 h-5 text-[#C9A227] shrink-0 mt-0.5" />
-                              <p className="text-[10px] text-white/50 leading-relaxed">
+                            <div className="bg-slate-50 rounded-lg border border-slate-200 p-4 flex items-start gap-3">
+                              <Smartphone className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                              <p className="text-[11px] text-slate-500 leading-relaxed">
                                 O valor será enviado para a maquininha Stone. O cliente paga na maquinha e o sistema confirma automaticamente.
                               </p>
                             </div>
@@ -4507,54 +4224,53 @@ export default function PDVPanel({
 
                         {stoneStatus === "sending" && (
                           <div className="flex flex-col items-center justify-center gap-4 py-8">
-                            <div className="w-12 h-12 border-2 border-[#C9A227] border-t-transparent rounded-full animate-spin" />
-                            <p className="text-[11px] font-black uppercase tracking-widest text-white/60">Enviando para maquininha...</p>
+                            <div className="w-12 h-12 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                            <p className="text-[11px] font-semibold text-slate-600">Enviando para maquininha...</p>
                           </div>
                         )}
 
                         {stoneStatus === "waiting" && (
                           <div className="flex flex-col items-center justify-center gap-4 py-6 text-center">
-                            <div className="w-16 h-16 bg-[#C9A227]/10 rounded-full flex items-center justify-center">
-                              <Smartphone className="w-8 h-8 text-[#C9A227] animate-pulse" />
+                            <div className="w-16 h-16 bg-blue-600/10 rounded-full flex items-center justify-center">
+                              <Smartphone className="w-8 h-8 text-blue-600 animate-pulse" />
                             </div>
                             <div>
-                              <p className="text-sm font-black uppercase tracking-widest text-white">Aguardando pagamento</p>
-                              <p className="text-[10px] text-white/40 mt-1">O cliente deve pagar na maquininha agora.</p>
+                              <p className="text-sm font-semibold text-slate-900">Aguardando pagamento</p>
+                              <p className="text-[11px] text-slate-500 mt-1">O cliente deve pagar na maquininha agora.</p>
                             </div>
-                            <div className="flex items-center gap-2 text-[10px] text-white/30">
-                              <div className="w-1.5 h-1.5 bg-[#C9A227] rounded-full animate-pulse" />
+                            <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                              <div className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-pulse" />
                               Verificando a cada 5 segundos...
                             </div>
-                            <button
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="mt-2 !text-red-600 hover:!bg-red-50"
                               onClick={() => { setStoneStatus("idle"); if (stonePollRef.current) clearInterval(stonePollRef.current); }}
-                              className="text-[10px] font-black text-red-400/60 hover:text-red-400 uppercase tracking-widest transition-colors mt-2"
                             >
                               Cancelar
-                            </button>
+                            </Button>
                           </div>
                         )}
 
                         {stoneStatus === "paid" && (
                           <div className="flex flex-col items-center justify-center gap-4 py-8 text-center">
                             <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center">
-                              <CheckCircle2 className="w-8 h-8 text-green-400" />
+                              <CheckCircle2 className="w-8 h-8 text-emerald-600" />
                             </div>
-                            <p className="text-sm font-black uppercase tracking-widest text-green-400">Pagamento confirmado!</p>
+                            <p className="text-sm font-semibold text-emerald-600">Pagamento confirmado!</p>
                           </div>
                         )}
 
                         {stoneStatus === "failed" && (
                           <div className="flex flex-col items-center justify-center gap-4 py-6 text-center">
                             <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center">
-                              <AlertCircle className="w-8 h-8 text-red-400" />
+                              <AlertCircle className="w-8 h-8 text-red-600" />
                             </div>
-                            <p className="text-sm font-black uppercase tracking-widest text-red-400">Pagamento falhou</p>
-                            <button
-                              onClick={() => setStoneStatus("idle")}
-                              className="text-[10px] font-black text-white/40 hover:text-white uppercase tracking-widest border border-white/10 px-4 py-2 rounded-xl transition-colors"
-                            >
+                            <p className="text-sm font-semibold text-red-600">Pagamento falhou</p>
+                            <Button variant="outline" onClick={() => setStoneStatus("idle")}>
                               Tentar novamente
-                            </button>
+                            </Button>
                           </div>
                         )}
                       </div>
@@ -4564,25 +4280,15 @@ export default function PDVPanel({
                       <div className="space-y-4">
                         {cieloStatus === "idle" && (
                           <>
-                            <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Tipo de pagamento</p>
+                            <p className="text-[11px] font-semibold text-slate-500">Tipo de pagamento</p>
                             <div className="grid grid-cols-3 gap-2">
                               {(["credit", "debit", "pix"] as const).map((t) => (
-                                <button
-                                  key={t}
-                                  onClick={() => setCieloPaymentType(t)}
-                                  className={`py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                                    cieloPaymentType === t
-                                      ? "bg-[#0072CE] text-white"
-                                      : "bg-white/5 border border-white/10 text-white/60 hover:bg-white/10"
-                                  }`}
-                                >
-                                  {t === "credit" ? "Crédito" : t === "debit" ? "Débito" : "PIX"}
-                                </button>
+                                <Button key={t} variant={cieloPaymentType === t ? "primary" : "outline"} size="lg" onClick={() => setCieloPaymentType(t)}>{t === "credit" ? "Crédito" : t === "debit" ? "Débito" : "PIX"}</Button>
                               ))}
                             </div>
-                            <div className="bg-white/5 rounded-2xl border border-white/10 p-4 flex items-start gap-3">
-                              <Smartphone className="w-5 h-5 text-[#0072CE] shrink-0 mt-0.5" />
-                              <p className="text-[10px] text-white/50 leading-relaxed">
+                            <div className="bg-slate-50 rounded-lg border border-slate-200 p-4 flex items-start gap-3">
+                              <Smartphone className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                              <p className="text-[11px] text-slate-500 leading-relaxed">
                                 O valor será enviado para a maquininha Cielo. O cliente paga na maquinha e o sistema confirma automaticamente.
                               </p>
                             </div>
@@ -4591,54 +4297,53 @@ export default function PDVPanel({
 
                         {cieloStatus === "sending" && (
                           <div className="flex flex-col items-center justify-center gap-4 py-8">
-                            <div className="w-12 h-12 border-2 border-[#0072CE] border-t-transparent rounded-full animate-spin" />
-                            <p className="text-[11px] font-black uppercase tracking-widest text-white/60">Enviando para maquininha...</p>
+                            <div className="w-12 h-12 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                            <p className="text-[11px] font-semibold text-slate-600">Enviando para maquininha...</p>
                           </div>
                         )}
 
                         {cieloStatus === "waiting" && (
                           <div className="flex flex-col items-center justify-center gap-4 py-6 text-center">
-                            <div className="w-16 h-16 bg-[#0072CE]/10 rounded-full flex items-center justify-center">
-                              <Smartphone className="w-8 h-8 text-[#0072CE] animate-pulse" />
+                            <div className="w-16 h-16 bg-blue-600/10 rounded-full flex items-center justify-center">
+                              <Smartphone className="w-8 h-8 text-blue-600 animate-pulse" />
                             </div>
                             <div>
-                              <p className="text-sm font-black uppercase tracking-widest text-white">Aguardando pagamento</p>
-                              <p className="text-[10px] text-white/40 mt-1">O cliente deve pagar na maquininha agora.</p>
+                              <p className="text-sm font-semibold text-slate-900">Aguardando pagamento</p>
+                              <p className="text-[11px] text-slate-500 mt-1">O cliente deve pagar na maquininha agora.</p>
                             </div>
-                            <div className="flex items-center gap-2 text-[10px] text-white/30">
-                              <div className="w-1.5 h-1.5 bg-[#0072CE] rounded-full animate-pulse" />
+                            <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                              <div className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-pulse" />
                               Verificando a cada 5 segundos...
                             </div>
-                            <button
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="mt-2 !text-red-600 hover:!bg-red-50"
                               onClick={() => { setCieloStatus("idle"); if (cieloPollRef.current) clearInterval(cieloPollRef.current); }}
-                              className="text-[10px] font-black text-red-400/60 hover:text-red-400 uppercase tracking-widest transition-colors mt-2"
                             >
                               Cancelar
-                            </button>
+                            </Button>
                           </div>
                         )}
 
                         {cieloStatus === "paid" && (
                           <div className="flex flex-col items-center justify-center gap-4 py-8 text-center">
                             <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center">
-                              <CheckCircle2 className="w-8 h-8 text-green-400" />
+                              <CheckCircle2 className="w-8 h-8 text-emerald-600" />
                             </div>
-                            <p className="text-sm font-black uppercase tracking-widest text-green-400">Pagamento confirmado!</p>
+                            <p className="text-sm font-semibold text-emerald-600">Pagamento confirmado!</p>
                           </div>
                         )}
 
                         {cieloStatus === "failed" && (
                           <div className="flex flex-col items-center justify-center gap-4 py-6 text-center">
                             <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center">
-                              <AlertCircle className="w-8 h-8 text-red-400" />
+                              <AlertCircle className="w-8 h-8 text-red-600" />
                             </div>
-                            <p className="text-sm font-black uppercase tracking-widest text-red-400">Pagamento falhou</p>
-                            <button
-                              onClick={() => setCieloStatus("idle")}
-                              className="text-[10px] font-black text-white/40 hover:text-white uppercase tracking-widest border border-white/10 px-4 py-2 rounded-xl transition-colors"
-                            >
+                            <p className="text-sm font-semibold text-red-600">Pagamento falhou</p>
+                            <Button variant="outline" onClick={() => setCieloStatus("idle")}>
                               Tentar novamente
-                            </button>
+                            </Button>
                           </div>
                         )}
                       </div>
@@ -4650,27 +4355,32 @@ export default function PDVPanel({
 
                 {/* Finalize button — sempre visível, fora da área rolável */}
                 {(paymentMethod !== "STONE" || stoneStatus === "idle") && (paymentMethod !== "CIELO" || cieloStatus === "idle") ? (
-                  <div className="px-3 sm:px-6 py-2 sm:py-3 border-t border-white/5 shrink-0 bg-black/20 space-y-1.5 sm:space-y-2">
+                  <div className="px-3 sm:px-6 py-2 sm:py-3 border-t border-slate-200 shrink-0 bg-slate-50 space-y-1.5 sm:space-y-2">
                     {!isWaiterMode && (
-                      <div className="flex items-center justify-center gap-4 text-[9px] font-bold text-white/30">
+                      <div className="flex items-center justify-center gap-4 text-[10px] font-semibold text-slate-400">
                         <span className="flex items-center gap-1.5">
-                          <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-white/50 font-black">F2</kbd> Finalizar venda
+                          <kbd className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 font-semibold">F2</kbd> Finalizar venda
                         </span>
                         <span className="flex items-center gap-1.5">
-                          <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-white/50 font-black">ESC</kbd> Cancelar
+                          <kbd className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 font-semibold">ESC</kbd> Cancelar
                         </span>
                       </div>
                     )}
                     <div className="flex items-stretch gap-1.5 sm:gap-2">
-                      <button
+                      <Button
+                        variant="outline"
+                        size="lg"
+                        className="shrink-0 basis-1/3 !h-11 !text-red-600 !border-red-200 hover:!bg-red-50"
                         onClick={() => { setShowCheckout(false); setShowCartDrawer(true); }}
                         title="Cancelar pagamento e voltar ao carrinho"
-                        className="shrink-0 basis-1/3 bg-red-500/15 hover:bg-red-500/25 border border-red-500/20 text-red-300 hover:text-red-200 font-black py-2 sm:py-3 rounded-xl transition-all flex items-center justify-center gap-1 sm:gap-2.5 uppercase tracking-widest text-[9px] sm:text-xs"
+                        iconLeft={<X size={14} />}
                       >
-                        <X className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                         Cancelar
-                      </button>
-                      <button
+                      </Button>
+                      <Button
+                        size="lg"
+                        className="flex-1 !h-11"
+                        loading={isProcessing}
                         disabled={
                           isProcessing ||
                           (isSplitMode && !splitCanFinalize) ||
@@ -4685,21 +4395,18 @@ export default function PDVPanel({
                             : undefined
                         }
                         onClick={handleCheckout}
-                        className="flex-1 bg-[#C9A227] hover:bg-[#E8B93A] disabled:opacity-30 text-black font-black py-2 sm:py-3 rounded-xl transition-all shadow-lg shadow-[#C9A227]/25 flex items-center justify-center gap-1 sm:gap-2.5 uppercase tracking-widest text-[9px] sm:text-xs"
+                        iconRight={
+                          isSplitMode && (splitOverpaidAmount > 0 || splitRemaining > 0)
+                            ? undefined
+                            : paymentMethod === "STONE" || paymentMethod === "CIELO" ? <Smartphone size={14} /> : <CheckCircle2 size={14} />
+                        }
                       >
-                        {isProcessing ? (
-                          <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                        ) : isSplitMode && splitOverpaidAmount > 0 ? (
-                          <>Excedente {fmt(splitOverpaidAmount)}</>
-                        ) : isSplitMode && splitRemaining > 0 ? (
-                          <>Falta {fmt(splitRemaining)}</>
-                        ) : (
-                          <>
-                            {paymentMethod === "STONE" || paymentMethod === "CIELO" ? "Enviar para Maquininha" : "Finalizar Venda"}
-                            {paymentMethod === "STONE" || paymentMethod === "CIELO" ? <Smartphone className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> : <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />}
-                          </>
-                        )}
-                      </button>
+                        {isSplitMode && splitOverpaidAmount > 0
+                          ? <>Excedente {fmt(splitOverpaidAmount)}</>
+                          : isSplitMode && splitRemaining > 0
+                          ? <>Falta {fmt(splitRemaining)}</>
+                          : paymentMethod === "STONE" || paymentMethod === "CIELO" ? "Enviar para Maquininha" : "Finalizar Venda"}
+                      </Button>
                     </div>
                   </div>
                 ) : null}
@@ -4710,120 +4417,126 @@ export default function PDVPanel({
       </AnimatePresence>
 
       {/* ── Fechar Caixa Modal ── */}
-      <AnimatePresence>
-        {showCloseCashModal && currentCash && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-center justify-center p-4"
-          >
-            <motion.div
-              initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }}
-              className="bg-[#0D1B3E] w-full max-w-[22rem] rounded-2xl p-5 space-y-4 shadow-2xl border border-white/5 max-h-[90vh] overflow-y-auto"
-            >
-              <div className="text-center space-y-1">
-                <div className="w-10 h-10 rounded-xl bg-red-500/10 text-red-400 flex items-center justify-center mx-auto">
-                  <Lock className="w-5 h-5" />
-                </div>
-                <h3 className="text-sm font-black text-white uppercase tracking-widest">Fechar Caixa</h3>
-                <p className="text-[11px] text-white/40">Confira o dinheiro em caixa antes de confirmar.</p>
+      <Modal
+        open={!!showCloseCashModal && !!currentCash}
+        onClose={() => { setShowCloseCashModal(false); setCashError(""); }}
+        title="Fechar Caixa"
+        subtitle="Confira o dinheiro em caixa antes de confirmar."
+        size="xs"
+        footer={
+          <ModalFooter>
+            <Button variant="outline" onClick={() => { setShowCloseCashModal(false); setCashError(""); }}>Cancelar</Button>
+            <Button variant="danger" loading={cashActionLoading} onClick={handleCloseCash}>Confirmar</Button>
+          </ModalFooter>
+        }
+      >
+        {currentCash && (
+          <div className="space-y-3">
+            {cashError && <Alert variant="error">{cashError}</Alert>}
+            <div className="bg-slate-50 rounded-lg p-3 space-y-1.5 border border-slate-200">
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">Fundo de abertura</span>
+                <span className="font-semibold text-slate-900 tabular-nums">{fmt(currentCash.openingBalance)}</span>
               </div>
-              {cashError && (
-                <div className="bg-red-500/10 border border-red-500/20 text-red-300 text-xs font-bold rounded-xl px-3 py-2 text-center">
-                  {cashError}
-                </div>
-              )}
-              <div className="bg-white/5 rounded-xl p-3 space-y-1.5 border border-white/10">
-                <div className="flex justify-between text-xs">
-                  <span className="text-white/40">Fundo de abertura</span>
-                  <span className="font-bold text-white tabular-nums">{fmt(currentCash.openingBalance)}</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-white/40">Esperado em caixa</span>
-                  <span className="font-black text-emerald-400 tabular-nums">{fmt(currentCash.expectedBalance)}</span>
-                </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">Esperado em caixa</span>
+                <span className="font-semibold text-emerald-600 tabular-nums">{fmt(currentCash.expectedBalance)}</span>
               </div>
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-white/40">Valor Contado</label>
-                  <button
-                    type="button"
-                    onClick={() => setClosingBalanceInput(numberToDigits(currentCash.expectedBalance))}
-                    className="text-[10px] font-black uppercase text-emerald-400 hover:text-emerald-300 transition-colors"
-                  >
-                    Usar esperado
-                  </button>
-                </div>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-black text-white/30">R$</span>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    autoFocus
-                    value={formatCurrencyDigits(closingBalanceInput)}
-                    onChange={(e) => setClosingBalanceInput(maskCurrencyDigits(e.target.value))}
-                    placeholder="0,00"
-                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-11 pr-4 text-xl font-black text-white text-center focus:border-red-400 outline-none [appearance:textfield]"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2.5">
-                <button
-                  onClick={() => { setShowCloseCashModal(false); setCashError(""); }}
-                  className="bg-white/5 hover:bg-white/10 text-white/60 font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all whitespace-nowrap"
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="ds-label">Valor Contado</label>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  className="!text-emerald-600"
+                  onClick={() => setClosingBalanceInput(numberToDigits(currentCash.expectedBalance))}
                 >
-                  Cancelar
-                </button>
-                <button
-                  disabled={cashActionLoading}
-                  onClick={handleCloseCash}
-                  className="bg-red-500 hover:bg-red-400 disabled:opacity-50 text-white font-black py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all whitespace-nowrap"
-                >
-                  {cashActionLoading ? "Fechando..." : "Confirmar"}
-                </button>
+                  Usar esperado
+                </Button>
               </div>
-            </motion.div>
-          </motion.div>
+              <Input
+                type="text"
+                inputMode="numeric"
+                autoFocus
+                value={formatCurrencyDigits(closingBalanceInput)}
+                onChange={(e) => setClosingBalanceInput(maskCurrencyDigits(e.target.value))}
+                placeholder="0,00"
+                addonLeft="R$"
+                className="text-center text-base font-semibold"
+              />
+            </div>
+          </div>
         )}
-      </AnimatePresence>
+      </Modal>
 
       {/* Modal de Variações e Observações do Produto */}
-      <AnimatePresence>
-        {productOptionsModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
-            >
-              <div className="flex items-center justify-between px-6 py-5 bg-slate-50 border-b border-slate-100 shrink-0">
-                <h3 className="text-lg font-black text-slate-800 truncate pr-4">{productOptionsModal.name}</h3>
-                <button
-                  onClick={closeProductOptions}
-                  className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-200/50 hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-colors shrink-0"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              
-              <div className="p-6 overflow-y-auto space-y-6 custom-scrollbar">
+      {productOptionsModal && (
+        <Modal
+          open
+          onClose={closeProductOptions}
+          title={productOptionsModal.name}
+          size="md"
+          zIndex={150}
+          footer={
+            <ModalFooter>
+                  <Button variant="outline" onClick={closeProductOptions}>Cancelar</Button>
+                  <Button
+                    disabled={(() => {
+                      const groups = parseSelectionGroups(productOptionsModal);
+                      return groups.length > 0 && !selectionGroupsComplete(groups, productModalGroupItemIds);
+                    })()}
+                    onClick={() => {
+                      const groups = parseSelectionGroups(productOptionsModal);
+                      const optionsByGroup = groups.map((g) => getSelectionGroupOptions(tenant, g));
+                      const groupLabel = groups.length > 0 ? formatSelectionGroupsNote(groups, productModalGroupItemIds, optionsByGroup) : "";
+                      const notesWithGroup = [groupLabel, productModalNotes.trim()].filter(Boolean).join(" | ");
+                      if (productModalEditIndex !== null && productOptionsModal) {
+                        setCart(prev => {
+                          const newCart = [...prev];
+                          const notes = buildCartNotes(productModalSelectedExtras, notesWithGroup);
+                          const price = getCartItemPrice(productOptionsModal, productModalVariantId || undefined, productModalSelectedExtras);
+                          newCart[productModalEditIndex] = {
+                            ...newCart[productModalEditIndex],
+                            notes,
+                            customNotes: notesWithGroup,
+                            productVariantId: productModalVariantId || undefined,
+                            price,
+                            selectedExtras: productModalSelectedExtras,
+                            selectedGroupItemIds: productModalGroupItemIds,
+                          };
+                          return newCart;
+                        });
+                      } else {
+                        addToCart(productOptionsModal!, productModalVariantId || undefined, notesWithGroup, productModalSelectedExtras);
+                        setCart(prev => {
+                          const newCart = [...prev];
+                          const lastIndex = newCart.length - 1;
+                          if (lastIndex >= 0) newCart[lastIndex] = { ...newCart[lastIndex], selectedGroupItemIds: productModalGroupItemIds };
+                          return newCart;
+                        });
+                      }
+                      closeProductOptions();
+                    }}
+                  >
+                    {productModalEditIndex !== null ? "Salvar" : "Adicionar"}
+                    </Button>
+            </ModalFooter>
+          }
+        >
+              <div className="space-y-6">
                 {productOptionsModal.variants && productOptionsModal.variants.length > 0 && (
                   <div className="space-y-3">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    <label className="text-[11px] font-semibold text-slate-400">
                       Variações (Escolha 1)
                     </label>
                     <div className="space-y-2">
                       {productOptionsModal.variants.map((variant) => (
                         <label
                           key={variant.id}
-                          className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
+                          className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all duration-200 ${
                             productModalVariantId === variant.id
-                              ? "bg-amber-50 border-[#C9A227] text-[#C9A227]"
+                              ? "bg-blue-50 border-blue-600 text-blue-600"
                               : "bg-white border-slate-100 text-slate-600 hover:border-slate-200 hover:bg-slate-50"
                           }`}
                         >
@@ -4836,14 +4549,14 @@ export default function PDVPanel({
                             className="sr-only"
                           />
                           <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
-                            productModalVariantId === variant.id ? "border-[#C9A227]" : "border-slate-300"
+                            productModalVariantId === variant.id ? "border-blue-600" : "border-slate-300"
                           }`}>
-                            {productModalVariantId === variant.id && <div className="w-2.5 h-2.5 rounded-full bg-[#C9A227]" />}
+                            {productModalVariantId === variant.id && <div className="w-2.5 h-2.5 rounded-full bg-blue-600" />}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="font-bold text-sm truncate">{variant.name}</p>
+                            <p className="font-semibold text-sm truncate">{variant.name}</p>
                           </div>
-                          <span className="font-black text-sm shrink-0">{fmt(variant.price)}</span>
+                          <span className="font-semibold text-sm shrink-0">{fmt(variant.price)}</span>
                         </label>
                       ))}
                     </div>
@@ -4853,10 +4566,10 @@ export default function PDVPanel({
                 {parseProductExtras(productOptionsModal).length > 0 && (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between gap-3">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                      <label className="text-[11px] font-semibold text-slate-400">
                         Adicionais
                       </label>
-                      <span className="text-[10px] font-bold text-slate-400">Opcional</span>
+                      <span className="text-[11px] font-semibold text-slate-400">Opcional</span>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {parseProductExtras(productOptionsModal).map((extra) => {
@@ -4868,10 +4581,10 @@ export default function PDVPanel({
                             onClick={() => setProductModalSelectedExtras((prev) =>
                               isSelected ? prev.filter((selected) => selected.id !== extra.id) : [...prev, extra]
                             )}
-                            className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all ${
+                            className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-all ${
                               isSelected
-                                ? "bg-amber-50 text-[#C9A227] border-[#C9A227]"
-                                : "bg-white text-slate-600 border-slate-200 hover:border-[#C9A227]/50 hover:bg-slate-50"
+                                ? "bg-blue-50 text-blue-600 border-blue-600"
+                                : "bg-white text-slate-600 border-slate-200 hover:border-blue-600/50 hover:bg-slate-50"
                             }`}
                           >
                             {extra.label}
@@ -4901,23 +4614,23 @@ export default function PDVPanel({
                   return (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between gap-3">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        <label className="text-[11px] font-semibold text-slate-400">
                           {groups.length > 1 ? "Personalize o pedido" : (groups[0].label || `Escolha ${groups[0].qty} ${groups[0].qty > 1 ? "itens" : "item"}`)}
                         </label>
-                        <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${isComplete ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+                        <Badge color={isComplete ? "success" : "default"}>
                           {doneCount}/{totalCount}
-                        </span>
+                        </Badge>
                       </div>
                       <button
                         type="button"
                         onClick={() => setShowGroupPicker(true)}
-                        className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border text-left transition-all ${
+                        className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border text-left transition-all ${
                           isComplete
-                            ? "bg-amber-50 border-[#C9A227]"
-                            : "bg-white border-slate-200 hover:border-[#C9A227]/50 hover:bg-slate-50"
+                            ? "bg-blue-50 border-blue-600"
+                            : "bg-white border-slate-200 hover:border-blue-600/50 hover:bg-slate-50"
                         }`}
                       >
-                        <span className="text-sm font-bold text-slate-700 truncate">
+                        <span className="text-sm font-semibold text-slate-700 truncate">
                           {isComplete ? summary : "Toque para escolher"}
                         </span>
                         <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
@@ -4927,71 +4640,19 @@ export default function PDVPanel({
                 })()}
 
                 <div className="space-y-3">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  <label className="text-[11px] font-semibold text-slate-400">
                     Observações e Adicionais
                   </label>
-                  <textarea
+                  <Textarea
                     value={productModalNotes}
                     onChange={(e) => setProductModalNotes(e.target.value)}
                     placeholder="Ex: Sem cebola, ponto da carne, etc..."
-                    className="w-full h-24 bg-slate-50 border-2 border-slate-100 rounded-xl p-3.5 text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:border-[#C9A227] focus:bg-white resize-none transition-colors"
                   />
                 </div>
               </div>
 
-              <div className="p-4 px-6 bg-slate-50 border-t border-slate-100 flex gap-3 shrink-0">
-                <button
-                  onClick={closeProductOptions}
-                  className="flex-1 bg-white border-2 border-slate-200 hover:border-slate-300 text-slate-600 font-bold py-2 text-sm rounded-lg transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  disabled={(() => {
-                    const groups = parseSelectionGroups(productOptionsModal);
-                    return groups.length > 0 && !selectionGroupsComplete(groups, productModalGroupItemIds);
-                  })()}
-                  onClick={() => {
-                    const groups = parseSelectionGroups(productOptionsModal);
-                    const optionsByGroup = groups.map((g) => getSelectionGroupOptions(tenant, g));
-                    const groupLabel = groups.length > 0 ? formatSelectionGroupsNote(groups, productModalGroupItemIds, optionsByGroup) : "";
-                    const notesWithGroup = [groupLabel, productModalNotes.trim()].filter(Boolean).join(" | ");
-                    if (productModalEditIndex !== null && productOptionsModal) {
-                      setCart(prev => {
-                        const newCart = [...prev];
-                        const notes = buildCartNotes(productModalSelectedExtras, notesWithGroup);
-                        const price = getCartItemPrice(productOptionsModal, productModalVariantId || undefined, productModalSelectedExtras);
-                        newCart[productModalEditIndex] = {
-                          ...newCart[productModalEditIndex],
-                          notes,
-                          customNotes: notesWithGroup,
-                          productVariantId: productModalVariantId || undefined,
-                          price,
-                          selectedExtras: productModalSelectedExtras,
-                          selectedGroupItemIds: productModalGroupItemIds,
-                        };
-                        return newCart;
-                      });
-                    } else {
-                      addToCart(productOptionsModal!, productModalVariantId || undefined, notesWithGroup, productModalSelectedExtras);
-                      setCart(prev => {
-                        const newCart = [...prev];
-                        const lastIndex = newCart.length - 1;
-                        if (lastIndex >= 0) newCart[lastIndex] = { ...newCart[lastIndex], selectedGroupItemIds: productModalGroupItemIds };
-                        return newCart;
-                      });
-                    }
-                    closeProductOptions();
-                  }}
-                  className="flex-[2] bg-[#C9A227] hover:bg-[#b58f20] text-white font-black py-2 text-sm rounded-lg transition-all active:scale-[0.98] shadow-md shadow-[#C9A227]/20 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {productModalEditIndex !== null ? "Salvar" : "Adicionar"}
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+        </Modal>
+      )}
       {/* Grupos de seleção embutidos — fluxo passo a passo (ex: marmita com Guarnição/Arroz/Feijão) */}
       {showGroupPicker && productOptionsModal && (() => {
         const groups = parseSelectionGroups(productOptionsModal);
@@ -4999,6 +4660,7 @@ export default function PDVPanel({
         const optionsByGroup = groups.map((g) => getSelectionGroupOptions(tenant, g));
         return (
           <SelectionGroupPicker
+            variant="admin"
             groups={groups}
             optionsByGroup={optionsByGroup}
             initialSelections={productModalGroupItemIds.length ? productModalGroupItemIds : undefined}

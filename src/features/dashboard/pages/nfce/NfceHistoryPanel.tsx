@@ -1,8 +1,12 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { FileText, Download, Printer, AlertCircle, FileCode, Ban, Trash2 } from "lucide-react";
+import { FileText, Download, Printer, AlertCircle, FileCode, Ban, Trash2, ListChecks, CheckCircle2, XCircle, Clock, Receipt, Wallet } from "lucide-react";
 import {
   PageWrapper,
   SectionTitle,
+  StatGrid,
+  StatCard,
+  ContentCard,
+  Tabs,
   GridTable,
   EmptyState,
   Badge,
@@ -21,6 +25,7 @@ import {
 import { apiFetch, apiJson } from "../../../../lib/api";
 import { downloadDanfePdf, printDanfePdf } from "../../../../lib/receipt";
 import type { Tenant, DanfeData } from "../../../../types";
+import PendingNfceTab from "./PendingNfceTab";
 
 interface NfceOrderRow {
   id: string;
@@ -33,13 +38,14 @@ interface NfceOrderRow {
   nfceProtocol: string | null;
 }
 
-const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "", label: "Todos os status" },
-  { value: "AUTHORIZED", label: "Autorizada" },
-  { value: "REJECTED", label: "Rejeitada" },
-  { value: "CANCELLED", label: "Cancelada" },
-  { value: "PENDING", label: "Pendente" },
-];
+const STATUS_TABS = [
+  { id: "ALL", label: "Todas", icon: ListChecks },
+  { id: "AUTHORIZED", label: "Autorizadas", icon: CheckCircle2 },
+  { id: "REJECTED", label: "Rejeitadas", icon: XCircle },
+  { id: "CANCELLED", label: "Canceladas", icon: Ban },
+  { id: "PENDING", label: "Pendentes", icon: Clock },
+] as const;
+type StatusTabId = (typeof STATUS_TABS)[number]["id"];
 
 const STATUS_BADGE: Record<string, { label: string; color: "success" | "danger" | "default" | "warning" }> = {
   AUTHORIZED: { label: "Autorizada", color: "success" },
@@ -66,7 +72,45 @@ interface NfceHistoryPanelProps {
   tenant: Tenant;
 }
 
-export default function NfceHistoryPanel({ tenant }: NfceHistoryPanelProps) {
+const VIEW_TABS = [
+  { id: "pending", label: "A emitir", icon: Receipt },
+  { id: "issued", label: "Emitidas", icon: FileText },
+] as const;
+type ViewTabId = (typeof VIEW_TABS)[number]["id"];
+
+export default function NfceHistoryPanel({ slug, tenant }: NfceHistoryPanelProps) {
+  const fiscalEnabled = useMemo(() => {
+    try {
+      return (tenant.fiscalConfig ? JSON.parse(tenant.fiscalConfig as string) : null)?.enabled === true;
+    } catch {
+      return false;
+    }
+  }, [tenant.fiscalConfig]);
+  const [view, setView] = useState<ViewTabId>(fiscalEnabled ? "pending" : "issued");
+  // Chave para recarregar "Emitidas" depois de emitir pela aba "A emitir".
+  const [issuedKey, setIssuedKey] = useState(0);
+
+  return (
+    <PageWrapper>
+      <div className="space-y-4">
+        <SectionTitle
+          title="Notas Fiscais"
+          description="Gere a NFC-e dos pedidos sem nota e consulte, reimprima ou cancele as emitidas"
+          icon={FileText}
+        />
+        <Tabs<ViewTabId> items={VIEW_TABS} value={view} onChange={setView} label="Notas fiscais">
+          {view === "pending" ? (
+            <PendingNfceTab slug={slug} tenant={tenant} fiscalEnabled={fiscalEnabled} onChanged={() => setIssuedKey((k) => k + 1)} />
+          ) : (
+            <IssuedNfceTab key={issuedKey} tenant={tenant} />
+          )}
+        </Tabs>
+      </div>
+    </PageWrapper>
+  );
+}
+
+function IssuedNfceTab({ tenant }: { tenant: Tenant }) {
   const toast = useToast();
   const [orders, setOrders] = useState<NfceOrderRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -272,29 +316,29 @@ export default function NfceHistoryPanel({ tenant }: NfceHistoryPanelProps) {
     {
       header: "Data",
       render: (row) => (
-        <span className="text-zinc-600">{new Date(row.createdAt).toLocaleString("pt-BR")}</span>
+        <span className="text-xs text-slate-600 whitespace-nowrap">{new Date(row.createdAt).toLocaleString("pt-BR")}</span>
       ),
     },
     {
       header: "Número",
-      render: (row) => (row.nfceNumber ? <span className="font-bold text-zinc-800">#{row.nfceNumber}</span> : <span className="text-zinc-300">—</span>),
+      render: (row) => (row.nfceNumber ? <span className="text-xs font-semibold text-slate-800">#{row.nfceNumber}</span> : <span className="text-xs text-slate-300">—</span>),
     },
     {
       header: "Cliente",
       render: (row) => (
-        <span className={row.customerName === "Venda PDV" ? "text-zinc-300" : "text-zinc-700"}>
+        <span className={row.customerName === "Venda PDV" ? "text-xs text-slate-300" : "text-xs text-slate-700"}>
           {row.customerName === "Venda PDV" ? "—" : row.customerName}
         </span>
       ),
     },
     {
       header: "Total",
-      render: (row) => <span className="font-bold text-zinc-800">{fmtMoney(row.total)}</span>,
+      render: (row) => <span className="text-xs font-semibold tabular-nums whitespace-nowrap text-slate-800">{fmtMoney(row.total)}</span>,
     },
     {
       header: "Chave de acesso",
       render: (row) => (
-        <span className="font-mono text-[11px] text-zinc-500">
+        <span className="font-mono text-[11px] text-slate-500">
           {row.nfceKey ? `...${row.nfceKey.slice(-8)}` : "—"}
         </span>
       ),
@@ -313,128 +357,110 @@ export default function NfceHistoryPanel({ tenant }: NfceHistoryPanelProps) {
         if (row.nfceStatus === "AUTHORIZED") {
           return (
             <div className="flex flex-wrap items-center gap-1.5">
-              <button
-                onClick={() => handleDownload(row.id)}
-                disabled={busy}
-                title="Baixar PDF do DANFE"
-                className="flex items-center gap-1 bg-zinc-100 hover:bg-zinc-200 disabled:opacity-50 px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition-colors"
-              >
-                <Download className="w-3 h-3" />
+              <Button size="xs" variant="outline" onClick={() => handleDownload(row.id)} disabled={busy} title="Baixar PDF do DANFE" iconLeft={<Download size={14} />}>
                 PDF
-              </button>
-              <button
-                onClick={() => handlePrint(row.id)}
-                disabled={busy}
-                title="Imprimir DANFE"
-                className="flex items-center gap-1 bg-zinc-100 hover:bg-zinc-200 disabled:opacity-50 px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition-colors"
-              >
-                <Printer className="w-3 h-3" />
+              </Button>
+              <Button size="xs" variant="outline" onClick={() => handlePrint(row.id)} disabled={busy} title="Imprimir DANFE" iconLeft={<Printer size={14} />}>
                 Imprimir
-              </button>
-              <button
-                onClick={() => handleDownloadXml(row.id)}
-                disabled={busy}
-                title="Baixar XML"
-                className="flex items-center gap-1 bg-zinc-100 hover:bg-zinc-200 disabled:opacity-50 px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition-colors"
-              >
-                <FileCode className="w-3 h-3" />
+              </Button>
+              <Button size="xs" variant="outline" onClick={() => handleDownloadXml(row.id)} disabled={busy} title="Baixar XML" iconLeft={<FileCode size={14} />}>
                 XML
-              </button>
-              <button
-                onClick={() => openCancel(row)}
-                title="Cancelar NFC-e"
-                className="flex items-center gap-1 bg-red-50 hover:bg-red-100 text-red-600 px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition-colors"
-              >
-                <Ban className="w-3 h-3" />
+              </Button>
+              <Button size="xs" variant="danger" onClick={() => openCancel(row)} title="Cancelar NFC-e" iconLeft={<Ban size={14} />}>
                 Cancelar
-              </button>
+              </Button>
             </div>
           );
         }
         // Rejeitada / cancelada / pendente — só sobra excluir (tentativa sem valor fiscal).
         return (
-          <button
-            onClick={() => setDeleteTarget(row)}
-            title="Excluir este registro"
-            className="flex items-center gap-1 bg-zinc-100 hover:bg-red-100 hover:text-red-600 px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition-colors"
-          >
-            <Trash2 className="w-3 h-3" />
+          <Button size="xs" variant="outline" onClick={() => setDeleteTarget(row)} title="Excluir este registro" iconLeft={<Trash2 size={14} />}>
             Excluir
-          </button>
+          </Button>
         );
       },
     },
   ];
 
+  const pageTotal = orders.reduce((sum, o) => sum + o.total, 0);
+  const authorizedInPage = orders.filter((o) => o.nfceStatus === "AUTHORIZED").length;
+
+  const filters = (
+    <FilterLine>
+      <FilterLineSection grow>
+        <FilterLineItem minWidth={260}>
+          <FilterLineDateRange from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
+        </FilterLineItem>
+      </FilterLineSection>
+      <FilterLineSection align="right">
+        {selectedAuthorizedCount > 0 && (
+          <FilterLineItem fullOnMobile={false}>
+            <Button size="sm" variant="secondary" onClick={handleDownloadXmlBatch} iconLeft={<FileCode size={14} />}>
+              Baixar {selectedAuthorizedCount} XML{selectedAuthorizedCount > 1 ? "s" : ""}
+            </Button>
+          </FilterLineItem>
+        )}
+        {selectedDeletableCount > 0 && (
+          <FilterLineItem fullOnMobile={false}>
+            <Button size="sm" variant="danger" onClick={() => setDeleteTarget("batch")} iconLeft={<Trash2 size={14} />}>
+              Excluir {selectedDeletableCount}
+            </Button>
+          </FilterLineItem>
+        )}
+      </FilterLineSection>
+    </FilterLine>
+  );
+
   return (
-    <PageWrapper>
-      <SectionTitle
-        title="Notas Fiscais Emitidas"
-        description="Histórico de NFC-e emitidas pelo PDV, com reimpressão do DANFE"
-        icon={FileText}
-      />
+    <>
+      <div className="space-y-4">
+        <StatGrid cols={3}>
+          <StatCard title="Notas no período" value={total} icon={Receipt} color="info" />
+          <StatCard title="Autorizadas na página" value={authorizedInPage} icon={CheckCircle2} color="success" />
+          <StatCard title="Valor na página" value={fmtMoney(pageTotal)} icon={Wallet} color="default" />
+        </StatGrid>
 
-      <FilterLine>
-        <FilterLineSection grow>
-          <FilterLineItem minWidth={260}>
-            <FilterLineDateRange from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
-          </FilterLineItem>
-        </FilterLineSection>
-        <FilterLineSection align="right">
-          <FilterLineItem minWidth={170} fullOnMobile={false}>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="h-10 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-xs font-bold text-zinc-600 outline-none transition-colors focus:border-amber-400 focus:bg-white"
-            >
-              {STATUS_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </FilterLineItem>
-          {selectedAuthorizedCount > 0 && (
-            <FilterLineItem fullOnMobile={false}>
-              <Button size="sm" variant="secondary" onClick={handleDownloadXmlBatch}>
-                <FileCode className="w-3.5 h-3.5" />
-                Baixar {selectedAuthorizedCount} XML{selectedAuthorizedCount > 1 ? "s" : ""}
-              </Button>
-            </FilterLineItem>
-          )}
-          {selectedDeletableCount > 0 && (
-            <FilterLineItem fullOnMobile={false}>
-              <Button size="sm" variant="danger" onClick={() => setDeleteTarget("batch")}>
-                <Trash2 className="w-3.5 h-3.5" />
-                Excluir {selectedDeletableCount}
-              </Button>
-            </FilterLineItem>
-          )}
-        </FilterLineSection>
-      </FilterLine>
+        <Tabs<StatusTabId>
+          items={STATUS_TABS}
+          value={(statusFilter || "ALL") as StatusTabId}
+          onChange={(v) => setStatusFilter(v === "ALL" ? "" : v)}
+          label="Status da nota fiscal"
+        >
+          <div className="space-y-3">
+            {filters}
 
-      {!loading && orders.length === 0 ? (
-        <EmptyState
-          icon={AlertCircle}
-          title="Nenhuma nota fiscal no período selecionado"
-          description="Ajuste o filtro de data/status, ou emita uma NFC-e pelo PDV para ela aparecer aqui."
-        />
-      ) : (
-        <GridTable
-          data={orders}
-          columns={columns}
-          keyExtractor={(row) => row.id}
-          isLoading={loading}
-          selectedIds={selectedIds}
-          onToggleSelect={toggleSelect}
-          onToggleSelectAll={toggleSelectAll}
-          pagination={{
-            total,
-            page,
-            pageSize,
-            onPageChange: setPage,
-            onPageSizeChange: (size) => { setPageSize(size); setPage(1); },
-          }}
-        />
-      )}
+            {!loading && orders.length === 0 ? (
+              <ContentCard>
+                <EmptyState
+                  icon={AlertCircle}
+                  title="Nenhuma nota fiscal no período selecionado"
+                  description="Ajuste o filtro de data/status, ou emita uma NFC-e pelo PDV para ela aparecer aqui."
+                />
+              </ContentCard>
+            ) : (
+              <ContentCard padding="none">
+                <GridTable
+                  noDesktopCard
+                  data={orders}
+                  columns={columns}
+                  keyExtractor={(row) => row.id}
+                  isLoading={loading}
+                  selectedIds={selectedIds}
+                  onToggleSelect={toggleSelect}
+                  onToggleSelectAll={toggleSelectAll}
+                  pagination={{
+                    total,
+                    page,
+                    pageSize,
+                    onPageChange: setPage,
+                    onPageSizeChange: (size) => { setPageSize(size); setPage(1); },
+                  }}
+                />
+              </ContentCard>
+            )}
+          </div>
+        </Tabs>
+      </div>
 
       <Modal
         isOpen={!!cancelTarget}
@@ -454,7 +480,7 @@ export default function NfceHistoryPanel({ tenant }: NfceHistoryPanelProps) {
         }
       >
         <div className="space-y-3">
-          <p className="text-sm text-zinc-600">
+          <p className="text-[13px] text-slate-600">
             NFC-e <strong>#{cancelTarget?.nfceNumber}</strong> será cancelada junto à SEFAZ. A
             justificativa é obrigatória (mínimo 15 caracteres).
           </p>
@@ -465,7 +491,7 @@ export default function NfceHistoryPanel({ tenant }: NfceHistoryPanelProps) {
             rows={3}
             autoFocus
           />
-          <p className="text-xs text-zinc-400">{cancelReason.trim().length}/15 caracteres mínimos</p>
+          <p className="text-[11px] text-slate-500">{cancelReason.trim().length}/15 caracteres mínimos</p>
         </div>
       </Modal>
 
@@ -483,6 +509,6 @@ export default function NfceHistoryPanel({ tenant }: NfceHistoryPanelProps) {
         variant="danger"
         loading={deleting}
       />
-    </PageWrapper>
+    </>
   );
 }

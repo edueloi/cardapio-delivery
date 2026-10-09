@@ -137,7 +137,7 @@ export function PaymentModal({ isOpen, onClose, comanda, onConfirm }: PaymentMod
       title={
         <div>
           <div>Finalizar Pagamento</div>
-          <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest mt-0.5 normal-case">
+          <p className="text-[10px] text-zinc-400 font-bold mt-0.5">
             {comanda.client?.name} • #{comanda.id?.slice(-6).toUpperCase()}
           </p>
         </div>
@@ -168,11 +168,11 @@ export function PaymentModal({ isOpen, onClose, comanda, onConfirm }: PaymentMod
         <div className="space-y-4">
 
           {/* Total box */}
-          <div className="bg-zinc-50 rounded-2xl p-4 border border-zinc-100 text-center">
-            <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-1">
+          <div className="bg-zinc-50 rounded-lg p-4 border border-zinc-100 text-center">
+            <p className="text-[10px] font-semibold text-zinc-400 mb-1">
               {alreadyPaid > 0 ? "Saldo Restante" : "Total da Comanda"}
             </p>
-            <p className="text-3xl font-black text-zinc-900 tracking-tighter">{fmtBRL(remaining)}</p>
+            <p className="text-3xl font-semibold text-zinc-900">{fmtBRL(remaining)}</p>
             {alreadyPaid > 0 && (
               <div className="mt-2 flex items-center justify-center gap-3 text-[10px] font-bold flex-wrap">
                 <span className="text-zinc-400">Total: {fmtBRL(total)}</span>
@@ -184,13 +184,13 @@ export function PaymentModal({ isOpen, onClose, comanda, onConfirm }: PaymentMod
           </div>
 
           {/* Tabs: único / misto */}
-          <div className="flex gap-1 p-1 bg-zinc-100 rounded-xl">
+          <div className="flex gap-1 p-1 bg-zinc-100 rounded-lg">
             {([["single", CheckCircle, "Pagamento Único"], ["mixed", Split, "Misto"]] as const).map(([v, Icon, label]) => (
               <button
                 key={v}
                 onClick={() => setMode(v)}
                 className={cn(
-                  "flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                  "flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[10px] font-semibold transition-all",
                   mode === v ? "bg-white shadow-sm text-zinc-900" : "text-zinc-400 hover:text-zinc-600"
                 )}
               >
@@ -204,7 +204,7 @@ export function PaymentModal({ isOpen, onClose, comanda, onConfirm }: PaymentMod
             <div className="space-y-4">
               {/* Método */}
               <div>
-                <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-2">Forma de Pagamento</p>
+                <p className="text-[10px] font-semibold text-zinc-400 mb-2">Forma de Pagamento</p>
                 <div className="grid grid-cols-3 gap-2">
                   {(["cash", "card", "pix"] as const).map(m => {
                     const cfg  = METHOD_CONFIG[m];
@@ -215,12 +215,12 @@ export function PaymentModal({ isOpen, onClose, comanda, onConfirm }: PaymentMod
                         key={m}
                         onClick={() => setSingleMethod(m)}
                         className={cn(
-                          "flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all",
+                          "flex flex-col items-center gap-2 p-4 rounded-lg border transition-all",
                           active ? `${cfg.activeBg} border-transparent shadow-lg` : `${cfg.bg} hover:opacity-90`
                         )}
                       >
                         <Icon size={22} className={active ? cfg.activeText : cfg.text} />
-                        <span className={cn("text-[10px] font-black uppercase tracking-wider", active ? "text-white" : cfg.text)}>
+                        <span className={cn("text-[10px] font-semibold", active ? "text-white" : cfg.text)}>
                           {cfg.label}
                         </span>
                       </button>
@@ -232,10 +232,10 @@ export function PaymentModal({ isOpen, onClose, comanda, onConfirm }: PaymentMod
               {/* Campo de valor */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Valor a Pagar</p>
+                  <p className="text-[10px] font-semibold text-zinc-400">Valor a Pagar</p>
                   <button
                     onClick={() => setSingleAmount("")}
-                    className="text-[10px] font-black text-amber-600 hover:text-amber-700"
+                    className="text-[10px] font-semibold text-blue-600 hover:text-blue-700"
                   >
                     Pagar tudo ({fmtBRL(remaining)})
                   </button>
@@ -249,12 +249,12 @@ export function PaymentModal({ isOpen, onClose, comanda, onConfirm }: PaymentMod
                     onChange={e => setSingleAmount(formatInput(e.target.value))}
                     placeholder={fmtBRL(remaining).replace("R$ ", "")}
                     className={cn(
-                      "w-full pl-10 pr-4 py-3 border-2 rounded-2xl text-lg font-black text-zinc-900 outline-none transition-all",
+                      "w-full pl-10 pr-4 py-3 border rounded-lg text-lg font-semibold text-zinc-900 outline-none transition-all",
                       singleOverpay
                         ? "border-red-300 bg-red-50 focus:border-red-400"
                         : singleIsPartial && singleAmount
-                        ? "border-amber-300 bg-amber-50 focus:border-amber-400"
-                        : "border-zinc-200 bg-white focus:border-amber-400"
+                        ? "border-blue-300 bg-blue-50 focus:border-blue-400"
+                        : "border-zinc-200 bg-white focus:border-blue-400"
                     )}
                   />
                 </div>
@@ -262,11 +262,11 @@ export function PaymentModal({ isOpen, onClose, comanda, onConfirm }: PaymentMod
                 {/* Feedback de valor */}
                 {singleAmount && (
                   <div className={cn(
-                    "mt-2 flex items-center justify-between p-2.5 rounded-xl text-xs font-black border",
+                    "mt-2 flex items-center justify-between p-2.5 rounded-lg text-xs font-semibold border",
                     singleOverpay
                       ? "bg-red-50 border-red-200 text-red-700"
                       : singleIsPartial
-                      ? "bg-amber-50 border-amber-200 text-amber-700"
+                      ? "bg-blue-50 border-blue-200 text-blue-700"
                       : "bg-emerald-50 border-emerald-200 text-emerald-700"
                   )}>
                     <span>
@@ -283,7 +283,7 @@ export function PaymentModal({ isOpen, onClose, comanda, onConfirm }: PaymentMod
 
                 {/* Info pagamento parcial */}
                 {singleIsPartial && singleAmount && !singleOverpay && (
-                  <div className="flex items-start gap-2 mt-2 p-3 bg-blue-50 border border-blue-100 rounded-xl">
+                  <div className="flex items-start gap-2 mt-2 p-3 bg-blue-50 border border-blue-100 rounded-lg">
                     <AlertTriangle size={13} className="text-blue-500 shrink-0 mt-0.5" />
                     <p className="text-[10px] text-blue-600 font-medium leading-relaxed">
                       Será registrado <strong>{fmtBRL(singleAmountNum)}</strong> agora. O saldo de <strong>{fmtBRL(singleBalance)}</strong> ficará em aberto para cobrança futura.
@@ -295,7 +295,7 @@ export function PaymentModal({ isOpen, onClose, comanda, onConfirm }: PaymentMod
               {/* Parcelamento */}
               {singleMethod === "card" && (
                 <div>
-                  <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-2">Parcelamento</p>
+                  <p className="text-[10px] font-semibold text-zinc-400 mb-2">Parcelamento</p>
                   <div className="grid grid-cols-3 gap-2">
                     {[1, 2, 3, 4, 5, 6].map(n => {
                       const parcela = (singleAmount ? singleAmountNum : remaining) / n;
@@ -304,7 +304,7 @@ export function PaymentModal({ isOpen, onClose, comanda, onConfirm }: PaymentMod
                           key={n}
                           onClick={() => setSingleInstallments(n)}
                           className={cn(
-                            "py-2.5 rounded-xl border text-xs font-black transition-all",
+                            "py-2.5 rounded-lg border text-xs font-semibold transition-all",
                             singleInstallments === n
                               ? "bg-blue-500 text-white border-transparent shadow-sm"
                               : "bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100"
@@ -329,18 +329,18 @@ export function PaymentModal({ isOpen, onClose, comanda, onConfirm }: PaymentMod
           {mode === "mixed" && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Divisão do Pagamento</p>
-                <button onClick={addEntry} className="flex items-center gap-1 text-[10px] font-black text-amber-600 hover:text-amber-700">
+                <p className="text-[10px] font-semibold text-zinc-400">Divisão do Pagamento</p>
+                <button onClick={addEntry} className="flex items-center gap-1 text-[10px] font-semibold text-blue-600 hover:text-blue-700">
                   <Plus size={12} /> Adicionar
                 </button>
               </div>
 
               {entries.map((entry, idx) => (
-                <div key={idx} className="flex items-start gap-2 p-3 bg-zinc-50 rounded-2xl border border-zinc-100">
+                <div key={idx} className="flex items-start gap-2 p-3 bg-zinc-50 rounded-lg border border-zinc-100">
                   <select
                     value={entry.method}
                     onChange={e => updateEntry(idx, "method", e.target.value)}
-                    className="text-xs font-bold bg-white border border-zinc-200 rounded-xl px-2 py-2 outline-none text-zinc-700 cursor-pointer"
+                    className="text-xs font-bold bg-white border border-zinc-200 rounded-lg px-2 py-2 outline-none text-zinc-700 cursor-pointer"
                   >
                     <option value="cash">💵 Dinheiro</option>
                     <option value="card">💳 Cartão</option>
@@ -355,14 +355,14 @@ export function PaymentModal({ isOpen, onClose, comanda, onConfirm }: PaymentMod
                         value={entry.amount}
                         onChange={e => updateEntry(idx, "amount", formatInput(e.target.value))}
                         placeholder="0,00"
-                        className="w-full pl-9 pr-3 py-2 text-sm font-bold bg-white border border-zinc-200 rounded-xl outline-none focus:border-amber-400 text-zinc-900"
+                        className="w-full pl-9 pr-3 py-2 text-sm font-bold bg-white border border-zinc-200 rounded-lg outline-none focus:border-blue-400 text-zinc-900"
                       />
                     </div>
                     {entry.method === "card" && (
                       <select
                         value={entry.installments || 1}
                         onChange={e => updateEntry(idx, "installments", parseInt(e.target.value))}
-                        className="mt-1.5 w-full text-xs font-bold bg-white border border-zinc-200 rounded-xl px-2 py-1.5 outline-none text-blue-600 cursor-pointer"
+                        className="mt-1.5 w-full text-xs font-bold bg-white border border-zinc-200 rounded-lg px-2 py-1.5 outline-none text-blue-600 cursor-pointer"
                       >
                         {[1,2,3,4,5,6].map(n => (
                           <option key={n} value={n}>
@@ -382,11 +382,11 @@ export function PaymentModal({ isOpen, onClose, comanda, onConfirm }: PaymentMod
 
               {/* Saldo misto */}
               <div className={cn(
-                "flex items-center justify-between p-3 rounded-xl text-xs font-black border",
+                "flex items-center justify-between p-3 rounded-lg text-xs font-semibold border",
                 Math.abs(mixedRemaining) < 0.01
                   ? "bg-emerald-50 border-emerald-200 text-emerald-700"
                   : mixedRemaining > 0
-                  ? "bg-amber-50 border-amber-200 text-amber-700"
+                  ? "bg-blue-50 border-blue-200 text-blue-700"
                   : "bg-red-50 border-red-200 text-red-700"
               )}>
                 <span>
@@ -400,7 +400,7 @@ export function PaymentModal({ isOpen, onClose, comanda, onConfirm }: PaymentMod
               </div>
 
               {mixedIsPartial && (
-                <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-100 rounded-xl">
+                <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-100 rounded-lg">
                   <AlertTriangle size={13} className="text-blue-500 shrink-0 mt-0.5" />
                   <p className="text-[10px] text-blue-600 font-medium leading-relaxed">
                     Será registrado <strong>{fmtBRL(mixedTotal)}</strong> agora. O saldo de <strong>{fmtBRL(mixedRemaining)}</strong> ficará em aberto.

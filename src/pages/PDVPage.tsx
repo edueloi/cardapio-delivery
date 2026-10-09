@@ -7,6 +7,7 @@ import { playNotificationSound, playNewOrderSound, playKitchenReadySound } from 
 import type { Order, Tenant } from "../types";
 import { dineInOrderLabel } from "../types";
 import { PDVPanel, WaiterPanel } from "../features/dashboard/pages";
+import { Button, IconButton } from "../components";
 import { ShoppingBag, X, BellRing } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -122,10 +123,10 @@ export default function PDVPage({ mode = "full" }: PDVPageProps) {
 
   if (!isAuthenticated) {
     return (
-      <div className="fixed inset-0 bg-[#0D1B3E] flex items-center justify-center">
-        <div className="text-center text-white space-y-4">
-          <p className="text-lg font-black">Acesso restrito</p>
-          <Link to="/login" className="underline text-[#C9A227]">Fazer login</Link>
+      <div className="fixed inset-0 bg-slate-100 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <p className="text-base sm:text-lg font-medium text-slate-900">Acesso restrito</p>
+          <Link to="/login" className="underline text-blue-600 text-sm">Fazer login</Link>
         </div>
       </div>
     );
@@ -133,18 +134,18 @@ export default function PDVPage({ mode = "full" }: PDVPageProps) {
 
   if (loading) {
     return (
-      <div className="fixed inset-0 bg-[#0D1B3E] flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-[#C9A227] border-t-transparent rounded-full animate-spin" />
+      <div className="fixed inset-0 bg-slate-100 flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   if (!tenant) {
     return (
-      <div className="fixed inset-0 bg-[#0D1B3E] flex items-center justify-center">
+      <div className="fixed inset-0 bg-slate-100 flex items-center justify-center">
         <div className="text-center space-y-4">
-          <p className="text-lg font-bold text-white">PDV não encontrado</p>
-          <Link to={`/dashboard/${slug}`} className="text-[#C9A227] underline text-sm">
+          <p className="text-base sm:text-lg font-medium text-slate-900">PDV não encontrado</p>
+          <Link to={`/dashboard/${slug}`} className="text-blue-600 underline text-sm">
             Voltar ao painel
           </Link>
         </div>
@@ -177,24 +178,24 @@ export default function PDVPage({ mode = "full" }: PDVPageProps) {
   }
 
   return (
-    <div className={`fixed inset-0 flex flex-col bg-[#f1f5f9] overflow-hidden ${isDesktop ? "top-[40px]" : "top-0"}`}>
+    <div className={`fixed inset-0 flex flex-col bg-slate-100 overflow-hidden ${isDesktop ? "top-[40px]" : "top-0"}`}>
       {/* Topbar — hidden inside Electron */}
       {!isDesktop && (
-        <div className="bg-[#0D1B3E] text-white px-4 sm:px-6 py-3 flex items-center justify-between shrink-0">
+        <div className="bg-white border-b border-slate-200 text-slate-900 px-4 sm:px-6 py-3 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-[#C9A227] rounded-lg flex items-center justify-center font-black text-black text-xs">
+            <div className="w-8 h-8 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center font-semibold text-xs">
               {tenant.name.charAt(0)}
             </div>
             <div>
-              <p className="text-sm font-black">{tenant.name}</p>
-              <p className="text-[10px] text-white/40 uppercase tracking-widest font-bold">
+              <p className="text-sm font-medium">{tenant.name}</p>
+              <p className="text-[11px] text-slate-500">
                 PDV — Ponto de Venda
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="hidden sm:flex items-center gap-1.5 text-[10px] text-white/40 font-bold uppercase">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+            <span className="hidden sm:flex items-center gap-1.5 text-[11px] text-slate-500">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               Online
             </span>
           </div>
@@ -224,34 +225,40 @@ export default function PDVPage({ mode = "full" }: PDVPageProps) {
               initial={{ opacity: 0, x: 100, scale: 0.9 }}
               animate={{ opacity: 1, x: 0, scale: 1 }}
               exit={{ opacity: 0, scale: 0.5, transition: { duration: 0.2 } }}
-              className="pointer-events-auto bg-emerald-500 text-white p-5 rounded-3xl shadow-2xl ring-4 ring-emerald-500/20 flex flex-col gap-3"
+              className="pointer-events-auto bg-emerald-500 text-white p-4 rounded-lg shadow-lg flex flex-col gap-3"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-11 h-11 rounded-full bg-white/20 flex items-center justify-center animate-bounce shrink-0">
                     <ShoppingBag className="w-5 h-5" />
                   </div>
-                  <span className="text-sm font-black uppercase tracking-widest">
+                  <span className="text-sm font-medium">
                     Novo Pedido — {alert.orderType === "DELIVERY" ? "Delivery" : alert.orderType === "PICKUP" ? "Retirada" : "Mesa"}
                   </span>
                 </div>
-                <button
+                <IconButton
+                  variant="ghost"
+                  size="md"
+                  aria-label="Fechar aviso"
                   onClick={() => setNewOrderAlerts((prev) => prev.filter((a) => a.timestamp !== alert.timestamp))}
-                  className="p-1.5 hover:bg-white/20 rounded-lg transition-colors shrink-0"
+                  className="!text-white hover:!bg-white/20 shrink-0"
                 >
-                  <X className="w-5 h-5" />
-                </button>
+                  <X size={16} />
+                </IconButton>
               </div>
-              <p className="text-lg font-black leading-tight">{alert.customerName}</p>
-              <p className="text-sm font-bold opacity-80">
+              <p className="text-base font-semibold leading-tight">{alert.customerName}</p>
+              <p className="text-sm font-medium opacity-90">
                 Total: R$ {alert.total.toFixed(2).replace(".", ",")}
               </p>
-              <button
+              <Button
+                variant="secondary"
+                size="lg"
+                fullWidth
+                className="!text-emerald-700"
                 onClick={() => setNewOrderAlerts((prev) => prev.filter((a) => a.timestamp !== alert.timestamp))}
-                className="w-full bg-white text-emerald-600 py-3 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-emerald-50 transition-colors"
               >
                 Ciente
-              </button>
+              </Button>
             </motion.div>
           ))}
           {kitchenReadyAlerts.map((alert) => (
@@ -260,29 +267,35 @@ export default function PDVPage({ mode = "full" }: PDVPageProps) {
               initial={{ opacity: 0, x: 100, scale: 0.9 }}
               animate={{ opacity: 1, x: 0, scale: 1 }}
               exit={{ opacity: 0, scale: 0.5, transition: { duration: 0.2 } }}
-              className="pointer-events-auto bg-sky-500 text-white p-5 rounded-3xl shadow-2xl ring-4 ring-sky-500/20 flex flex-col gap-3"
+              className="pointer-events-auto bg-blue-600 text-white p-4 rounded-lg shadow-lg flex flex-col gap-3"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-11 h-11 rounded-full bg-white/20 flex items-center justify-center animate-bounce shrink-0">
                     <BellRing className="w-5 h-5" />
                   </div>
-                  <span className="text-sm font-black uppercase tracking-widest">Pronto na Cozinha</span>
+                  <span className="text-sm font-medium">Pronto na Cozinha</span>
                 </div>
-                <button
+                <IconButton
+                  variant="ghost"
+                  size="md"
+                  aria-label="Fechar aviso"
                   onClick={() => setKitchenReadyAlerts((prev) => prev.filter((a) => a.timestamp !== alert.timestamp))}
-                  className="p-1.5 hover:bg-white/20 rounded-lg transition-colors shrink-0"
+                  className="!text-white hover:!bg-white/20 shrink-0"
                 >
-                  <X className="w-5 h-5" />
-                </button>
+                  <X size={16} />
+                </IconButton>
               </div>
-              <p className="text-lg font-black leading-tight">{alert.label}</p>
-              <button
+              <p className="text-base font-semibold leading-tight">{alert.label}</p>
+              <Button
+                variant="secondary"
+                size="lg"
+                fullWidth
+                className="!text-blue-700"
                 onClick={() => setKitchenReadyAlerts((prev) => prev.filter((a) => a.timestamp !== alert.timestamp))}
-                className="w-full bg-white text-sky-600 py-3 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-sky-50 transition-colors"
               >
                 Ciente
-              </button>
+              </Button>
             </motion.div>
           ))}
         </AnimatePresence>

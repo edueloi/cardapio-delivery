@@ -7,6 +7,7 @@ import {
   Layers, Wallet, ArrowLeftRight, Monitor, ChefHat, PlayCircle, Truck, Check, X, Download, Users, CheckCircle2, Bell, HelpCircle as HelpIcon
 } from "lucide-react";
 import { type MyMembership, canAccess } from "../../types";
+import { PageWrapper, SectionTitle, Tabs, ContentCard, Input, EmptyState } from "../../../../components";
 
 interface Props {
   membership: MyMembership | null;
@@ -24,7 +25,6 @@ interface ManualSection {
 export default function ManualPanel({ membership }: Props) {
   const [activeSectionId, setActiveSectionId] = useState<string>("primeiros-passos");
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [mobileActive, setMobileActive] = useState<boolean>(false);
 
   const sections: ManualSection[] = [
     {
@@ -34,36 +34,36 @@ export default function ManualPanel({ membership }: Props) {
       keywords: ["inicio", "comecar", "primeiro", "bem vindo", "passos"],
       content: (
         <div className="space-y-6">
-          <div className="bg-gradient-to-r from-[#0D1B3E]/10 to-amber-500/5 p-6 rounded-3xl border border-amber-500/10">
-            <h4 className="text-base font-black text-[#0A1628] mb-2">Bem-vindo ao Manual Operacional Box Sys!</h4>
+          <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+            <h4 className="text-base font-semibold text-slate-900 mb-2">Bem-vindo ao Manual Operacional Box Sys!</h4>
             <p className="text-slate-600 text-sm leading-relaxed">
               Este é o guia completo e detalhado passo a passo de todas as funções do seu painel administrativo. 
-              Utilize o menu à esquerda ou a barra de buscas para navegar pelas seções operacionais autorizadas para o seu perfil.
+              Utilize as abas acima ou a barra de buscas para navegar pelas seções operacionais autorizadas para o seu perfil.
             </p>
           </div>
 
           <div className="space-y-4">
-            <h5 className="text-xs font-black uppercase tracking-widest text-slate-400">Visão Geral da Operação</h5>
+            <h5 className="text-xs font-semibold text-slate-400">Visão Geral da Operação</h5>
             <div className="grid gap-4 sm:grid-cols-3">
-              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden">
-                <span className="absolute right-3 top-3 text-4xl font-black text-slate-100/50">1</span>
-                <h6 className="font-bold text-sm text-slate-800 mb-1 relative z-10">Lançamento de Vendas</h6>
+              <div className="bg-white p-5 rounded-lg border border-slate-100 relative overflow-hidden">
+                <span className="absolute right-3 top-3 text-4xl font-semibold text-slate-100/50">1</span>
+                <h6 className="font-semibold text-sm text-slate-800 mb-1 relative z-10">Lançamento de Vendas</h6>
                 <p className="text-xs text-slate-500 relative z-10 leading-relaxed">
                   Os pedidos são realizados pelo cliente via Cardápio Web/WhatsApp, lançados na mesa pelo Garçom ou registrados diretamente no caixa (PDV).
                 </p>
               </div>
 
-              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden">
-                <span className="absolute right-3 top-3 text-4xl font-black text-slate-100/50">2</span>
-                <h6 className="font-bold text-sm text-slate-800 mb-1 relative z-10">Fila de Produção</h6>
+              <div className="bg-white p-5 rounded-lg border border-slate-100 relative overflow-hidden">
+                <span className="absolute right-3 top-3 text-4xl font-semibold text-slate-100/50">2</span>
+                <h6 className="font-semibold text-sm text-slate-800 mb-1 relative z-10">Fila de Produção</h6>
                 <p className="text-xs text-slate-500 relative z-10 leading-relaxed">
                   A cozinha monitora os pratos através da aba de Produção ou KDS, alterando o status para pronto e acionando o garçom ou motoboy.
                 </p>
               </div>
 
-              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden">
-                <span className="absolute right-3 top-3 text-4xl font-black text-slate-100/50">3</span>
-                <h6 className="font-bold text-sm text-slate-800 mb-1 relative z-10">Fechamento & Financeiro</h6>
+              <div className="bg-white p-5 rounded-lg border border-slate-100 relative overflow-hidden">
+                <span className="absolute right-3 top-3 text-4xl font-semibold text-slate-100/50">3</span>
+                <h6 className="font-semibold text-sm text-slate-800 mb-1 relative z-10">Fechamento & Financeiro</h6>
                 <p className="text-xs text-slate-500 relative z-10 leading-relaxed">
                   O operador encerra o turno declarando os valores em caixa, enquanto o sistema realiza a auditoria do lucro real.
                 </p>
@@ -86,8 +86,8 @@ export default function ManualPanel({ membership }: Props) {
           </p>
 
           <div className="space-y-4">
-            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-3">
-              <h5 className="font-bold text-xs uppercase tracking-widest text-[#0A1628] mb-2">Painel de Indicadores</h5>
+            <div className="bg-slate-50 p-5 rounded-lg border border-slate-100 space-y-3">
+              <h5 className="font-semibold text-xs text-slate-900 mb-2">Painel de Indicadores</h5>
               <div className="space-y-3 text-xs text-slate-500 leading-relaxed">
                 <p>
                   <strong>1. Faturamento do Dia:</strong> Exibe a soma de todas as vendas aprovadas do dia corrente. Não inclui pedidos cancelados ou pendentes de aprovação.
@@ -102,18 +102,18 @@ export default function ManualPanel({ membership }: Props) {
             </div>
 
             <div className="mt-4 border-t border-slate-100 pt-4 space-y-3">
-              <h6 className="text-xs font-black text-slate-800 uppercase tracking-widest text-amber-600">Guia de Boas Práticas (Indicadores)</h6>
+              <h6 className="text-xs font-semibold font-medium text-blue-700">Guia de Boas Práticas (Indicadores)</h6>
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200/50 text-xs text-slate-600 space-y-1">
-                  <span className="font-bold flex items-center gap-1 text-emerald-800">
+                <div className="bg-emerald-50/50 p-4 rounded-lg border border-emerald-200/50 text-xs text-slate-600 space-y-1">
+                  <span className="font-semibold flex items-center gap-1 text-emerald-800">
                     <Check className="w-4 h-4" /> Correto (O que fazer)
                   </span>
                   <p className="leading-relaxed">
                     Acompanhar o **Ticket Médio** semanalmente para medir a eficácia de estratégias de combos, adicionais e bebidas sugeridas aos clientes.
                   </p>
                 </div>
-                <div className="bg-red-50/50 p-4 rounded-xl border border-red-200/50 text-xs text-slate-600 space-y-1">
-                  <span className="font-bold flex items-center gap-1 text-red-800">
+                <div className="bg-red-50/50 p-4 rounded-lg border border-red-200/50 text-xs text-slate-600 space-y-1">
+                  <span className="font-semibold flex items-center gap-1 text-red-800">
                     <X className="w-4 h-4" /> Incorreto (O que evitar)
                   </span>
                   <p className="leading-relaxed">
@@ -141,9 +141,9 @@ export default function ManualPanel({ membership }: Props) {
           <div className="space-y-6">
             
             {/* 1. Abertura e Fechamento de Caixa */}
-            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-              <h5 className="font-black text-xs text-[#0A1628] uppercase tracking-wider mb-2 flex items-center gap-2">
-                <Wallet className="w-4.5 h-4.5 text-amber-500" /> Abertura e Fechamento de Turno (Caixa)
+            <div className="bg-slate-50 p-5 rounded-lg border border-slate-100">
+              <h5 className="font-semibold text-xs text-slate-900 mb-2 flex items-center gap-2">
+                <Wallet className="w-4.5 h-4.5 text-blue-600" /> Abertura e Fechamento de Turno (Caixa)
               </h5>
               <div className="space-y-2 text-xs text-slate-500 leading-relaxed">
                 <p>
@@ -156,9 +156,9 @@ export default function ManualPanel({ membership }: Props) {
             </div>
 
             {/* 2. Lançamento, Variações e Observações */}
-            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-              <h5 className="font-black text-xs text-[#0A1628] uppercase tracking-wider mb-2 flex items-center gap-2">
-                <Utensils className="w-4.5 h-4.5 text-amber-500" /> Lançar Itens, Variações e Observações
+            <div className="bg-slate-50 p-5 rounded-lg border border-slate-100">
+              <h5 className="font-semibold text-xs text-slate-900 mb-2 flex items-center gap-2">
+                <Utensils className="w-4.5 h-4.5 text-blue-600" /> Lançar Itens, Variações e Observações
               </h5>
               <div className="space-y-2 text-xs text-slate-500 leading-relaxed">
                 <p>
@@ -177,9 +177,9 @@ export default function ManualPanel({ membership }: Props) {
             </div>
 
             {/* 3. Comandas e Mesas */}
-            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-              <h5 className="font-black text-xs text-[#0A1628] uppercase tracking-wider mb-2 flex items-center gap-2">
-                <ClipboardList className="w-4.5 h-4.5 text-amber-500" /> Gerenciamento de Mesas e Comandas no PDV
+            <div className="bg-slate-50 p-5 rounded-lg border border-slate-100">
+              <h5 className="font-semibold text-xs text-slate-900 mb-2 flex items-center gap-2">
+                <ClipboardList className="w-4.5 h-4.5 text-blue-600" /> Gerenciamento de Mesas e Comandas no PDV
               </h5>
               <div className="space-y-2 text-xs text-slate-500 leading-relaxed">
                 <p>
@@ -192,9 +192,9 @@ export default function ManualPanel({ membership }: Props) {
             </div>
 
             {/* 4. Lançar Pagamento e Dividir por Grupo/Cartão */}
-            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-              <h5 className="font-black text-xs text-[#0A1628] uppercase tracking-wider mb-2 flex items-center gap-2">
-                <Layers className="w-4.5 h-4.5 text-amber-500" /> Dividir Pagamentos (Splitter de Contas)
+            <div className="bg-slate-50 p-5 rounded-lg border border-slate-100">
+              <h5 className="font-semibold text-xs text-slate-900 mb-2 flex items-center gap-2">
+                <Layers className="w-4.5 h-4.5 text-blue-600" /> Dividir Pagamentos (Splitter de Contas)
               </h5>
               <div className="space-y-2 text-xs text-slate-500 leading-relaxed">
                 <p>
@@ -211,18 +211,18 @@ export default function ManualPanel({ membership }: Props) {
 
             {/* Exemplos de Correto vs Incorreto */}
             <div className="mt-4 border-t border-slate-100 pt-4 space-y-3">
-              <h6 className="text-xs font-black text-slate-800 uppercase tracking-widest text-amber-600">Guia de Boas Práticas (Operação de Caixa)</h6>
+              <h6 className="text-xs font-semibold font-medium text-blue-700">Guia de Boas Práticas (Operação de Caixa)</h6>
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200/50 text-xs text-slate-600 space-y-1">
-                  <span className="font-bold flex items-center gap-1 text-emerald-800">
+                <div className="bg-emerald-50/50 p-4 rounded-lg border border-emerald-200/50 text-xs text-slate-600 space-y-1">
+                  <span className="font-semibold flex items-center gap-1 text-emerald-800">
                     <Check className="w-4 h-4" /> Correto (O que fazer)
                   </span>
                   <p className="leading-relaxed">
                     Lançar exatamente o valor parcial pago por cada cliente na hora de dividir contas, vinculando a forma de pagamento real (Pix, Débito Visa, etc.) de forma individualizada.
                   </p>
                 </div>
-                <div className="bg-red-50/50 p-4 rounded-xl border border-red-200/50 text-xs text-slate-600 space-y-1">
-                  <span className="font-bold flex items-center gap-1 text-red-800">
+                <div className="bg-red-50/50 p-4 rounded-lg border border-red-200/50 text-xs text-slate-600 space-y-1">
+                  <span className="font-semibold flex items-center gap-1 text-red-800">
                     <X className="w-4 h-4" /> Incorreto (O que evitar)
                   </span>
                   <p className="leading-relaxed">
@@ -247,8 +247,8 @@ export default function ManualPanel({ membership }: Props) {
             O módulo <strong>Garçom</strong> foi otimizado para celulares e tablets. Ele permite o lançamento ágil diretamente na mesa do cliente.
           </p>
           
-          <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-3">
-            <h4 className="font-bold text-xs uppercase tracking-widest text-[#0A1628]">Fluxo de Atendimento:</h4>
+          <div className="bg-slate-50 p-5 rounded-lg border border-slate-100 space-y-3">
+            <h4 className="font-semibold text-xs text-slate-900">Fluxo de Atendimento:</h4>
             <ol className="list-decimal list-inside text-xs text-slate-500 space-y-2 leading-relaxed">
               <li>O garçom seleciona a mesa ou comanda aberta, ou cria uma nova inserindo o número correspondente.</li>
               <li>Busca os produtos por nome ou categoria, seleciona as opções obrigatórias (ex: refrigerante de lata ou 600ml).</li>
@@ -257,18 +257,18 @@ export default function ManualPanel({ membership }: Props) {
           </div>
 
           <div className="mt-4 border-t border-slate-100 pt-4 space-y-3">
-            <h6 className="text-xs font-black text-slate-800 uppercase tracking-widest text-amber-600">Guia de Boas Práticas (Garçom)</h6>
+            <h6 className="text-xs font-semibold font-medium text-blue-700">Guia de Boas Práticas (Garçom)</h6>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200/50 text-xs text-slate-600 space-y-1">
-                <span className="font-bold flex items-center gap-1 text-emerald-800">
+              <div className="bg-emerald-50/50 p-4 rounded-lg border border-emerald-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-semibold flex items-center gap-1 text-emerald-800">
                   <Check className="w-4 h-4" /> Correto (O que fazer)
                 </span>
                 <p className="leading-relaxed">
                   Lançar todos os refrigerantes e águas diretamente na comanda digital do cliente no ato da entrega na mesa, garantindo que o consumo acumulado esteja 100% atualizado.
                 </p>
               </div>
-              <div className="bg-red-50/50 p-4 rounded-xl border border-red-200/50 text-xs text-slate-600 space-y-1">
-                <span className="font-bold flex items-center gap-1 text-red-800">
+              <div className="bg-red-50/50 p-4 rounded-lg border border-red-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-semibold flex items-center gap-1 text-red-800">
                   <X className="w-4 h-4" /> Incorreto (O que evitar)
                 </span>
                 <p className="leading-relaxed">
@@ -295,9 +295,9 @@ export default function ManualPanel({ membership }: Props) {
           <div className="space-y-6">
             
             {/* 1. Colunas e Fluxo Kanban com Arraste */}
-            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-              <h5 className="font-black text-xs text-[#0A1628] uppercase tracking-wider mb-2 flex items-center gap-2">
-                <Layers className="w-4.5 h-4.5 text-amber-500" /> Colunas Kanban e Movimentação por Arraste (Drag & Drop)
+            <div className="bg-slate-50 p-5 rounded-lg border border-slate-100">
+              <h5 className="font-semibold text-xs text-slate-900 mb-2 flex items-center gap-2">
+                <Layers className="w-4.5 h-4.5 text-blue-600" /> Colunas Kanban e Movimentação por Arraste (Drag & Drop)
               </h5>
               <div className="text-xs text-slate-500 space-y-2 leading-relaxed">
                 <p>
@@ -315,9 +315,9 @@ export default function ManualPanel({ membership }: Props) {
             </div>
 
             {/* 2. Botões de Ação Rápida */}
-            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-              <h5 className="font-black text-xs text-[#0A1628] uppercase tracking-wider mb-2 flex items-center gap-2">
-                <CheckCircle2 className="w-4.5 h-4.5 text-amber-500" /> Botões de Ações e Transição de Status
+            <div className="bg-slate-50 p-5 rounded-lg border border-slate-100">
+              <h5 className="font-semibold text-xs text-slate-900 mb-2 flex items-center gap-2">
+                <CheckCircle2 className="w-4.5 h-4.5 text-blue-600" /> Botões de Ações e Transição de Status
               </h5>
               <div className="text-xs text-slate-500 space-y-2 leading-relaxed">
                 <p>
@@ -332,9 +332,9 @@ export default function ManualPanel({ membership }: Props) {
             </div>
 
             {/* 3. Indicadores de Tempo e Alerta de Atraso */}
-            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-              <h5 className="font-black text-xs text-[#0A1628] uppercase tracking-wider mb-2 flex items-center gap-2">
-                <Clock className="w-4.5 h-4.5 text-amber-500" /> Monitoramento de Tempo e Alerta de Atrasos Críticos
+            <div className="bg-slate-50 p-5 rounded-lg border border-slate-100">
+              <h5 className="font-semibold text-xs text-slate-900 mb-2 flex items-center gap-2">
+                <Clock className="w-4.5 h-4.5 text-blue-600" /> Monitoramento de Tempo e Alerta de Atrasos Críticos
               </h5>
               <div className="text-xs text-slate-500 space-y-2 leading-relaxed">
                 <p>
@@ -347,9 +347,9 @@ export default function ManualPanel({ membership }: Props) {
             </div>
 
             {/* 4. Alerta de Pedido Retido no Caixa */}
-            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-              <h5 className="font-black text-xs text-[#0A1628] uppercase tracking-wider mb-2 flex items-center gap-2">
-                <Bell className="w-4.5 h-4.5 text-amber-500" /> Lembrete Automático "Já foi entregue?" (Aguardando Caixa)
+            <div className="bg-slate-50 p-5 rounded-lg border border-slate-100">
+              <h5 className="font-semibold text-xs text-slate-900 mb-2 flex items-center gap-2">
+                <Bell className="w-4.5 h-4.5 text-blue-600" /> Lembrete Automático "Já foi entregue?" (Aguardando Caixa)
               </h5>
               <div className="text-xs text-slate-500 space-y-2 leading-relaxed">
                 <p>
@@ -363,18 +363,18 @@ export default function ManualPanel({ membership }: Props) {
 
             {/* Exemplos de Correto vs Incorreto */}
             <div className="mt-4 border-t border-slate-100 pt-4 space-y-3">
-              <h6 className="text-xs font-black text-slate-800 uppercase tracking-widest text-amber-600">Guia de Boas Práticas (Painel de Pedidos)</h6>
+              <h6 className="text-xs font-semibold font-medium text-blue-700">Guia de Boas Práticas (Painel de Pedidos)</h6>
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200/50 text-xs text-slate-600 space-y-1">
-                  <span className="font-bold flex items-center gap-1 text-emerald-800">
+                <div className="bg-emerald-50/50 p-4 rounded-lg border border-emerald-200/50 text-xs text-slate-600 space-y-1">
+                  <span className="font-semibold flex items-center gap-1 text-emerald-800">
                     <Check className="w-4 h-4" /> Correto (O que fazer)
                   </span>
                   <p className="leading-relaxed">
                     Aproveitar o recurso de arrastar e soltar (Drag & Drop) com o mouse ou toques na tela para gerenciar as colunas de produção de forma rápida e dinâmica no balcão.
                   </p>
                 </div>
-                <div className="bg-red-50/50 p-4 rounded-xl border border-red-200/50 text-xs text-slate-600 space-y-1">
-                  <span className="font-bold flex items-center gap-1 text-red-800">
+                <div className="bg-red-50/50 p-4 rounded-lg border border-red-200/50 text-xs text-slate-600 space-y-1">
+                  <span className="font-semibold flex items-center gap-1 text-red-800">
                     <X className="w-4 h-4" /> Incorreto (O que evitar)
                   </span>
                   <p className="leading-relaxed">
@@ -400,18 +400,18 @@ export default function ManualPanel({ membership }: Props) {
           </p>
 
           <div className="mt-4 border-t border-slate-100 pt-4 space-y-3">
-            <h6 className="text-xs font-black text-slate-800 uppercase tracking-widest text-amber-600">Guia de Boas Práticas (Agendamentos)</h6>
+            <h6 className="text-xs font-semibold font-medium text-blue-700">Guia de Boas Práticas (Agendamentos)</h6>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200/50 text-xs text-slate-600 space-y-1">
-                <span className="font-bold flex items-center gap-1 text-emerald-800">
+              <div className="bg-emerald-50/50 p-4 rounded-lg border border-emerald-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-semibold flex items-center gap-1 text-emerald-800">
                   <Check className="w-4 h-4" /> Correto (O que fazer)
                 </span>
                 <p className="leading-relaxed">
                   Conferir os pedidos agendados ao abrir a loja e garantir a preparação antecipada de ingredientes especiais necessários.
                 </p>
               </div>
-              <div className="bg-red-50/50 p-4 rounded-xl border border-red-200/50 text-xs text-slate-600 space-y-1">
-                <span className="font-bold flex items-center gap-1 text-red-800">
+              <div className="bg-red-50/50 p-4 rounded-lg border border-red-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-semibold flex items-center gap-1 text-red-800">
                   <X className="w-4 h-4" /> Incorreto (O que evitar)
                 </span>
                 <p className="leading-relaxed">
@@ -438,9 +438,9 @@ export default function ManualPanel({ membership }: Props) {
           <div className="space-y-6">
             
             {/* 1. Mesas com QR Code Individual */}
-            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-              <h5 className="font-black text-xs text-[#0A1628] uppercase tracking-wider mb-2 flex items-center gap-2">
-                <ClipboardList className="w-4 h-4 text-[#C9A227]" /> Mesas com QR Code Individual (Salão Tradicional)
+            <div className="bg-slate-50 p-5 rounded-lg border border-slate-100">
+              <h5 className="font-semibold text-xs text-slate-900 mb-2 flex items-center gap-2">
+                <ClipboardList className="w-4 h-4 text-blue-600" /> Mesas com QR Code Individual (Salão Tradicional)
               </h5>
               <div className="text-xs text-slate-500 space-y-2 leading-relaxed">
                 <p>
@@ -453,9 +453,9 @@ export default function ManualPanel({ membership }: Props) {
             </div>
 
             {/* 2. QR Code Fixo Geral com Senha Sequencial */}
-            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-              <h5 className="font-black text-xs text-[#0A1628] uppercase tracking-wider mb-2 flex items-center gap-2">
-                <Receipt className="w-4 h-4 text-[#C9A227]" /> QR Code Fixo Geral (Balcão, Retirada ou Eventos)
+            <div className="bg-slate-50 p-5 rounded-lg border border-slate-100">
+              <h5 className="font-semibold text-xs text-slate-900 mb-2 flex items-center gap-2">
+                <Receipt className="w-4 h-4 text-blue-600" /> QR Code Fixo Geral (Balcão, Retirada ou Eventos)
               </h5>
               <div className="text-xs text-slate-500 space-y-2 leading-relaxed">
                 <p>
@@ -472,10 +472,10 @@ export default function ManualPanel({ membership }: Props) {
 
             {/* Exemplos de Correto vs Incorreto */}
             <div className="mt-4 border-t border-slate-100 pt-4 space-y-3">
-              <h6 className="text-xs font-black text-slate-800 uppercase tracking-widest text-[#C9A227]">Guia de Boas Práticas (QR Codes & Mesas)</h6>
+              <h6 className="text-xs font-semibold text-slate-800 text-blue-600">Guia de Boas Práticas (QR Codes & Mesas)</h6>
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200/50 text-xs text-slate-600 space-y-1">
-                  <span className="font-bold flex items-center gap-1 text-emerald-800">
+                <div className="bg-emerald-50/50 p-4 rounded-lg border border-emerald-200/50 text-xs text-slate-600 space-y-1">
+                  <span className="font-semibold flex items-center gap-1 text-emerald-800">
                     <Check className="w-4 h-4" /> Correto (O que fazer)
                   </span>
                   <p className="leading-relaxed">
@@ -485,8 +485,8 @@ export default function ManualPanel({ membership }: Props) {
                     Imprimir e fixar os QR Codes de **Mesa Individual** no tampo de cada mesa do salão para que o cliente realize o autoatendimento e libere o garçom para focar apenas em servir os pratos.
                   </p>
                 </div>
-                <div className="bg-red-50/50 p-4 rounded-xl border border-red-200/50 text-xs text-slate-600 space-y-1">
-                  <span className="font-bold flex items-center gap-1 text-red-800">
+                <div className="bg-red-50/50 p-4 rounded-lg border border-red-200/50 text-xs text-slate-600 space-y-1">
+                  <span className="font-semibold flex items-center gap-1 text-red-800">
                     <X className="w-4 h-4" /> Incorreto (O que evitar)
                   </span>
                   <p className="leading-relaxed">
@@ -515,18 +515,18 @@ export default function ManualPanel({ membership }: Props) {
           </p>
 
           <div className="mt-4 border-t border-slate-100 pt-4 space-y-3">
-            <h6 className="text-xs font-black text-slate-800 uppercase tracking-widest text-amber-600">Guia de Boas Práticas (Histórico)</h6>
+            <h6 className="text-xs font-semibold font-medium text-blue-700">Guia de Boas Práticas (Histórico)</h6>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200/50 text-xs text-slate-600 space-y-1">
-                <span className="font-bold flex items-center gap-1 text-emerald-800">
+              <div className="bg-emerald-50/50 p-4 rounded-lg border border-emerald-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-semibold flex items-center gap-1 text-emerald-800">
                   <Check className="w-4 h-4" /> Correto (O que fazer)
                 </span>
                 <p className="leading-relaxed">
                   Utilizar a barra de buscas por CPF ou Número do Pedido no histórico para localizar a via e efetuar a reimpressão rápida do cupom em caso de perda física.
                 </p>
               </div>
-              <div className="bg-red-50/50 p-4 rounded-xl border border-red-200/50 text-xs text-slate-600 space-y-1">
-                <span className="font-bold flex items-center gap-1 text-red-800">
+              <div className="bg-red-50/50 p-4 rounded-lg border border-red-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-semibold flex items-center gap-1 text-red-800">
                   <X className="w-4 h-4" /> Incorreto (O que evitar)
                 </span>
                 <p className="leading-relaxed">
@@ -553,9 +553,9 @@ export default function ManualPanel({ membership }: Props) {
           <div className="space-y-6">
             
             {/* 1. Categorias e Organização (Arrastar e Soltar) */}
-            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-              <h5 className="font-black text-xs text-[#0A1628] uppercase tracking-wider mb-2 flex items-center gap-2">
-                <Layers className="w-4 h-4 text-amber-500" /> Criar Categorias e Reordenação (Grip)
+            <div className="bg-slate-50 p-5 rounded-lg border border-slate-100">
+              <h5 className="font-semibold text-xs text-slate-900 mb-2 flex items-center gap-2">
+                <Layers className="w-4 h-4 text-blue-600" /> Criar Categorias e Reordenação (Grip)
               </h5>
               <div className="text-xs text-slate-500 space-y-2 leading-relaxed">
                 <p>
@@ -570,9 +570,9 @@ export default function ManualPanel({ membership }: Props) {
             </div>
 
             {/* 2. Modal de Edição de Produto: Parâmetros */}
-            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-              <h5 className="font-black text-xs text-[#0A1628] uppercase tracking-wider mb-2 flex items-center gap-2">
-                <Settings className="w-4 h-4 text-amber-500" /> Parâmetros de Edição do Produto
+            <div className="bg-slate-50 p-5 rounded-lg border border-slate-100">
+              <h5 className="font-semibold text-xs text-slate-900 mb-2 flex items-center gap-2">
+                <Settings className="w-4 h-4 text-blue-600" /> Parâmetros de Edição do Produto
               </h5>
               <div className="text-xs text-slate-500 space-y-2 leading-relaxed">
                 <p>
@@ -591,9 +591,9 @@ export default function ManualPanel({ membership }: Props) {
             </div>
 
             {/* 3. Ações Avançadas de Catálogo */}
-            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-              <h5 className="font-black text-xs text-[#0A1628] uppercase tracking-wider mb-2 flex items-center gap-2">
-                <ArrowLeftRight className="w-4 h-4 text-amber-500" /> Ações Rápidas de Criação e Duplicação
+            <div className="bg-slate-50 p-5 rounded-lg border border-slate-100">
+              <h5 className="font-semibold text-xs text-slate-900 mb-2 flex items-center gap-2">
+                <ArrowLeftRight className="w-4 h-4 text-blue-600" /> Ações Rápidas de Criação e Duplicação
               </h5>
               <div className="text-xs text-slate-500 space-y-2 leading-relaxed">
                 <p>
@@ -610,10 +610,10 @@ export default function ManualPanel({ membership }: Props) {
 
             {/* Exemplos de Correto vs Incorreto */}
             <div className="mt-4 border-t border-slate-100 pt-4 space-y-3">
-              <h6 className="text-xs font-black text-slate-800 uppercase tracking-widest text-amber-600">Guia de Boas Práticas (Cardápio)</h6>
+              <h6 className="text-xs font-semibold font-medium text-blue-700">Guia de Boas Práticas (Cardápio)</h6>
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200/50 text-xs text-slate-600 space-y-1">
-                  <span className="font-bold flex items-center gap-1 text-emerald-800">
+                <div className="bg-emerald-50/50 p-4 rounded-lg border border-emerald-200/50 text-xs text-slate-600 space-y-1">
+                  <span className="font-semibold flex items-center gap-1 text-emerald-800">
                     <Check className="w-4 h-4" /> Correto (O que fazer)
                   </span>
                   <p className="leading-relaxed">
@@ -623,8 +623,8 @@ export default function ManualPanel({ membership }: Props) {
                     Manter o switch **"Vai para a cozinha"** desligado para refrigerantes em lata e bebidas prontas industriais, evitando lotar a fila KDS de pratos de preparo com itens que necessitam apenas de retirada do freezer.
                   </p>
                 </div>
-                <div className="bg-red-50/50 p-4 rounded-xl border border-red-200/50 text-xs text-slate-600 space-y-1">
-                  <span className="font-bold flex items-center gap-1 text-red-800">
+                <div className="bg-red-50/50 p-4 rounded-lg border border-red-200/50 text-xs text-slate-600 space-y-1">
+                  <span className="font-semibold flex items-center gap-1 text-red-800">
                     <X className="w-4 h-4" /> Incorreto (O que evitar)
                   </span>
                   <p className="leading-relaxed">
@@ -653,24 +653,24 @@ export default function ManualPanel({ membership }: Props) {
           </p>
 
           <div className="space-y-4">
-            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 text-xs text-slate-500 space-y-2">
+            <div className="bg-slate-50 p-5 rounded-lg border border-slate-100 text-xs text-slate-500 space-y-2">
               <p><strong>Cadastro de Insumos:</strong> Defina os ingredientes (Kg, g, Litro) e os custos médios.</p>
               <p><strong>Ficha Técnica de Produtos:</strong> Configure o consumo exato de insumos para cada prato para que a baixa automática ocorra a cada faturamento no PDV.</p>
             </div>
 
             <div className="mt-4 border-t border-slate-100 pt-4 space-y-3">
-              <h6 className="text-xs font-black text-slate-800 uppercase tracking-widest text-amber-600">Guia de Boas Práticas (Estoque)</h6>
+              <h6 className="text-xs font-semibold font-medium text-blue-700">Guia de Boas Práticas (Estoque)</h6>
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200/50 text-xs text-slate-600 space-y-1">
-                  <span className="font-bold flex items-center gap-1 text-emerald-800">
+                <div className="bg-emerald-50/50 p-4 rounded-lg border border-emerald-200/50 text-xs text-slate-600 space-y-1">
+                  <span className="font-semibold flex items-center gap-1 text-emerald-800">
                     <Check className="w-4 h-4" /> Correto (O que fazer)
                   </span>
                   <p className="leading-relaxed">
                     Registrar perdas manuais no sistema (ex: descarte de insumos vencidos) para que o balanço geral reflita fielmente o estoque real.
                   </p>
                 </div>
-                <div className="bg-red-50/50 p-4 rounded-xl border border-red-200/50 text-xs text-slate-600 space-y-1">
-                  <span className="font-bold flex items-center gap-1 text-red-800">
+                <div className="bg-red-50/50 p-4 rounded-lg border border-red-200/50 text-xs text-slate-600 space-y-1">
+                  <span className="font-semibold flex items-center gap-1 text-red-800">
                     <X className="w-4 h-4" /> Incorreto (O que evitar)
                   </span>
                   <p className="leading-relaxed">
@@ -696,18 +696,18 @@ export default function ManualPanel({ membership }: Props) {
           </p>
 
           <div className="mt-4 border-t border-slate-100 pt-4 space-y-3">
-            <h6 className="text-xs font-black text-slate-800 uppercase tracking-widest text-amber-600">Guia de Boas Práticas (Produção)</h6>
+            <h6 className="text-xs font-semibold font-medium text-blue-700">Guia de Boas Práticas (Produção)</h6>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200/50 text-xs text-slate-600 space-y-1">
-                <span className="font-bold flex items-center gap-1 text-emerald-800">
+              <div className="bg-emerald-50/50 p-4 rounded-lg border border-emerald-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-semibold flex items-center gap-1 text-emerald-800">
                   <Check className="w-4 h-4" /> Correto (O que fazer)
                 </span>
                 <p className="leading-relaxed">
                   Marcar a via como "Pronta" no painel da cozinha assim que o prato for montado, notificando automaticamente o garçom no salão.
                 </p>
               </div>
-              <div className="bg-red-50/50 p-4 rounded-xl border border-red-200/50 text-xs text-slate-600 space-y-1">
-                <span className="font-bold flex items-center gap-1 text-red-800">
+              <div className="bg-red-50/50 p-4 rounded-lg border border-red-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-semibold flex items-center gap-1 text-red-800">
                   <X className="w-4 h-4" /> Incorreto (O que evitar)
                 </span>
                 <p className="leading-relaxed">
@@ -732,18 +732,18 @@ export default function ManualPanel({ membership }: Props) {
           </p>
 
           <div className="mt-4 border-t border-slate-100 pt-4 space-y-3">
-            <h6 className="text-xs font-black text-slate-800 uppercase tracking-widest text-amber-600">Guia de Boas Práticas (Fornecedores)</h6>
+            <h6 className="text-xs font-semibold font-medium text-blue-700">Guia de Boas Práticas (Fornecedores)</h6>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200/50 text-xs text-slate-600 space-y-1">
-                <span className="font-bold flex items-center gap-1 text-emerald-800">
+              <div className="bg-emerald-50/50 p-4 rounded-lg border border-emerald-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-semibold flex items-center gap-1 text-emerald-800">
                   <Check className="w-4 h-4" /> Correto (O que fazer)
                 </span>
                 <p className="leading-relaxed">
                   Cadastrar dados de contato dos fornecedores no sistema para facilitar cotações rápidas em momentos de baixa crítica de estoque.
                 </p>
               </div>
-              <div className="bg-red-50/50 p-4 rounded-xl border border-red-200/50 text-xs text-slate-600 space-y-1">
-                <span className="font-bold flex items-center gap-1 text-red-800">
+              <div className="bg-red-50/50 p-4 rounded-lg border border-red-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-semibold flex items-center gap-1 text-red-800">
                   <X className="w-4 h-4" /> Incorreto (O que evitar)
                 </span>
                 <p className="leading-relaxed">
@@ -768,26 +768,26 @@ export default function ManualPanel({ membership }: Props) {
           </p>
 
           <div className="space-y-4">
-            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 text-xs text-slate-500 space-y-3">
-              <h5 className="font-bold text-[#0A1628]">Operações Disponíveis no Turno:</h5>
+            <div className="bg-slate-50 p-5 rounded-lg border border-slate-100 text-xs text-slate-500 space-y-3">
+              <h5 className="font-semibold text-slate-900">Operações Disponíveis no Turno:</h5>
               <p><strong>Abertura de Caixa:</strong> Registro do fundo de troco em dinheiro inicial inserido para abertura de turno.</p>
               <p><strong>Suprimento Extra:</strong> Registro de inserções extras de dinheiro físico na gaveta para recomposição de troco no decorrer do dia.</p>
               <p><strong>Sangria de Caixa:</strong> Retirada física de dinheiro acumulado da gaveta (por segurança) ou para pagamento de despesas rápidas na rua.</p>
             </div>
 
             <div className="mt-4 border-t border-slate-100 pt-4 space-y-3">
-              <h6 className="text-xs font-black text-slate-800 uppercase tracking-widest text-amber-600">Guia de Boas Práticas (Fluxo de Caixa)</h6>
+              <h6 className="text-xs font-semibold font-medium text-blue-700">Guia de Boas Práticas (Fluxo de Caixa)</h6>
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200/50 text-xs text-slate-600 space-y-1">
-                  <span className="font-bold flex items-center gap-1 text-emerald-800">
+                <div className="bg-emerald-50/50 p-4 rounded-lg border border-emerald-200/50 text-xs text-slate-600 space-y-1">
+                  <span className="font-semibold flex items-center gap-1 text-emerald-800">
                     <Check className="w-4 h-4" /> Correto (O que fazer)
                   </span>
                   <p className="leading-relaxed">
                     Declarar o valor físico de moedas e cédulas contadas manualmente na gaveta ao fechar o caixa no final do turno (fechamento cego).
                   </p>
                 </div>
-                <div className="bg-red-50/50 p-4 rounded-xl border border-red-200/50 text-xs text-slate-600 space-y-1">
-                  <span className="font-bold flex items-center gap-1 text-red-800">
+                <div className="bg-red-50/50 p-4 rounded-lg border border-red-200/50 text-xs text-slate-600 space-y-1">
+                  <span className="font-semibold flex items-center gap-1 text-red-800">
                     <X className="w-4 h-4" /> Incorreto (O que evitar)
                   </span>
                   <p className="leading-relaxed">
@@ -813,18 +813,18 @@ export default function ManualPanel({ membership }: Props) {
           </p>
 
           <div className="mt-4 border-t border-slate-100 pt-4 space-y-3">
-            <h6 className="text-xs font-black text-slate-800 uppercase tracking-widest text-amber-600">Guia de Boas Práticas (Lançamentos Gerais)</h6>
+            <h6 className="text-xs font-semibold font-medium text-blue-700">Guia de Boas Práticas (Lançamentos Gerais)</h6>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200/50 text-xs text-slate-600 space-y-1">
-                <span className="font-bold flex items-center gap-1 text-emerald-800">
+              <div className="bg-emerald-50/50 p-4 rounded-lg border border-emerald-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-semibold flex items-center gap-1 text-emerald-800">
                   <Check className="w-4 h-4" /> Correto (O que fazer)
                 </span>
                 <p className="leading-relaxed">
                   Lançar até pequenas retiradas da gaveta física (ex: R$ 5,00 para compra de água) indicando a despesa correspondente para fechar o caixa corretamente.
                 </p>
               </div>
-              <div className="bg-red-50/50 p-4 rounded-xl border border-red-200/50 text-xs text-slate-600 space-y-1">
-                <span className="font-bold flex items-center gap-1 text-red-800">
+              <div className="bg-red-50/50 p-4 rounded-lg border border-red-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-semibold flex items-center gap-1 text-red-800">
                   <X className="w-4 h-4" /> Incorreto (O que evitar)
                 </span>
                 <p className="leading-relaxed">
@@ -849,18 +849,18 @@ export default function ManualPanel({ membership }: Props) {
           </p>
 
           <div className="mt-4 border-t border-slate-100 pt-4 space-y-3">
-            <h6 className="text-xs font-black text-slate-800 uppercase tracking-widest text-amber-600">Guia de Boas Práticas (Relatórios)</h6>
+            <h6 className="text-xs font-semibold font-medium text-blue-700">Guia de Boas Práticas (Relatórios)</h6>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200/50 text-xs text-slate-600 space-y-1">
-                <span className="font-bold flex items-center gap-1 text-emerald-800">
+              <div className="bg-emerald-50/50 p-4 rounded-lg border border-emerald-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-semibold flex items-center gap-1 text-emerald-800">
                   <Check className="w-4 h-4" /> Correto (O que fazer)
                 </span>
                 <p className="leading-relaxed">
                   Exportar e analisar os relatórios mensais para avaliar quais produtos possuem as piores margens e readequar a ficha técnica ou preços.
                 </p>
               </div>
-              <div className="bg-red-50/50 p-4 rounded-xl border border-red-200/50 text-xs text-slate-600 space-y-1">
-                <span className="font-bold flex items-center gap-1 text-red-800">
+              <div className="bg-red-50/50 p-4 rounded-lg border border-red-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-semibold flex items-center gap-1 text-red-800">
                   <X className="w-4 h-4" /> Incorreto (O que evitar)
                 </span>
                 <p className="leading-relaxed">
@@ -874,7 +874,7 @@ export default function ManualPanel({ membership }: Props) {
     },
     {
       id: "customers",
-      title: "Clientes — CRM",
+      title: "Clientes",
       tab: "customers",
       icon: Users,
       keywords: ["clientes", "crm", "fidelizar", "contato", "busca"],
@@ -885,18 +885,18 @@ export default function ManualPanel({ membership }: Props) {
           </p>
 
           <div className="mt-4 border-t border-slate-100 pt-4 space-y-3">
-            <h6 className="text-xs font-black text-slate-800 uppercase tracking-widest text-amber-600">Guia de Boas Práticas (CRM)</h6>
+            <h6 className="text-xs font-semibold font-medium text-blue-700">Guia de Boas Práticas (CRM)</h6>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200/50 text-xs text-slate-600 space-y-1">
-                <span className="font-bold flex items-center gap-1 text-emerald-800">
+              <div className="bg-emerald-50/50 p-4 rounded-lg border border-emerald-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-semibold flex items-center gap-1 text-emerald-800">
                   <Check className="w-4 h-4" /> Correto (O que fazer)
                 </span>
                 <p className="leading-relaxed">
                   Identificar no CRM clientes VIPs (com alta frequência de pedidos) ou inativos para criar ações e ofertas de fidelização personalizadas.
                 </p>
               </div>
-              <div className="bg-red-50/50 p-4 rounded-xl border border-red-200/50 text-xs text-slate-600 space-y-1">
-                <span className="font-bold flex items-center gap-1 text-red-800">
+              <div className="bg-red-50/50 p-4 rounded-lg border border-red-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-semibold flex items-center gap-1 text-red-800">
                   <X className="w-4 h-4" /> Incorreto (O que evitar)
                 </span>
                 <p className="leading-relaxed">
@@ -921,18 +921,18 @@ export default function ManualPanel({ membership }: Props) {
           </p>
 
           <div className="mt-4 border-t border-slate-100 pt-4 space-y-3">
-            <h6 className="text-xs font-black text-slate-800 uppercase tracking-widest text-amber-600">Guia de Boas Práticas (Fidelidade)</h6>
+            <h6 className="text-xs font-semibold font-medium text-blue-700">Guia de Boas Práticas (Fidelidade)</h6>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200/50 text-xs text-slate-600 space-y-1">
-                <span className="font-bold flex items-center gap-1 text-emerald-800">
+              <div className="bg-emerald-50/50 p-4 rounded-lg border border-emerald-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-semibold flex items-center gap-1 text-emerald-800">
                   <Check className="w-4 h-4" /> Correto (O que fazer)
                 </span>
                 <p className="leading-relaxed">
                   Definir uma meta clara e alcançável (Ex: 1 ponto a cada R$ 10,00 gasto) e disponibilizar prêmios que interessem o seu público.
                 </p>
               </div>
-              <div className="bg-red-50/50 p-4 rounded-xl border border-red-200/50 text-xs text-slate-600 space-y-1">
-                <span className="font-bold flex items-center gap-1 text-red-800">
+              <div className="bg-red-50/50 p-4 rounded-lg border border-red-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-semibold flex items-center gap-1 text-red-800">
                   <X className="w-4 h-4" /> Incorreto (O que evitar)
                 </span>
                 <p className="leading-relaxed">
@@ -957,24 +957,24 @@ export default function ManualPanel({ membership }: Props) {
           </p>
 
           <div className="space-y-4">
-            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 text-xs text-slate-500 space-y-2">
+            <div className="bg-slate-50 p-5 rounded-lg border border-slate-100 text-xs text-slate-500 space-y-2">
               <p><strong>Upload de Banners:</strong> Faça o upload de banners com imagens horizontais limpas e atrativas (tamanho ideal 1200x500px).</p>
               <p><strong>Agendamento:</strong> Programe a data/hora de vigência. A promoção entra e sai do ar automaticamente.</p>
             </div>
 
             <div className="mt-4 border-t border-slate-100 pt-4 space-y-3">
-              <h6 className="text-xs font-black text-slate-800 uppercase tracking-widest text-amber-600">Guia de Boas Práticas (Promoções)</h6>
+              <h6 className="text-xs font-semibold font-medium text-blue-700">Guia de Boas Práticas (Promoções)</h6>
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200/50 text-xs text-slate-600 space-y-1">
-                  <span className="font-bold flex items-center gap-1 text-emerald-800">
+                <div className="bg-emerald-50/50 p-4 rounded-lg border border-emerald-200/50 text-xs text-slate-600 space-y-1">
+                  <span className="font-semibold flex items-center gap-1 text-emerald-800">
                     <Check className="w-4 h-4" /> Correto (O que fazer)
                   </span>
                   <p className="leading-relaxed">
                     Programar a data/hora exata das promoções (ex: início sexta às 18h e fim às 23:59h) usando fotos de pratos focados e sem textos poluídos por cima.
                   </p>
                 </div>
-                <div className="bg-red-50/50 p-4 rounded-xl border border-red-200/50 text-xs text-slate-600 space-y-1">
-                  <span className="font-bold flex items-center gap-1 text-red-800">
+                <div className="bg-red-50/50 p-4 rounded-lg border border-red-200/50 text-xs text-slate-600 space-y-1">
+                  <span className="font-semibold flex items-center gap-1 text-red-800">
                     <X className="w-4 h-4" /> Incorreto (O que evitar)
                   </span>
                   <p className="leading-relaxed">
@@ -1000,18 +1000,18 @@ export default function ManualPanel({ membership }: Props) {
           </p>
 
           <div className="mt-4 border-t border-slate-100 pt-4 space-y-3">
-            <h6 className="text-xs font-black text-slate-800 uppercase tracking-widest text-amber-600">Guia de Boas Práticas (Combos)</h6>
+            <h6 className="text-xs font-semibold font-medium text-blue-700">Guia de Boas Práticas (Combos)</h6>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200/50 text-xs text-slate-600 space-y-1">
-                <span className="font-bold flex items-center gap-1 text-emerald-800">
+              <div className="bg-emerald-50/50 p-4 rounded-lg border border-emerald-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-semibold flex items-center gap-1 text-emerald-800">
                   <Check className="w-4 h-4" /> Correto (O que fazer)
                 </span>
                 <p className="leading-relaxed">
                   Configurar opções obrigatórias para o cliente selecionar as variações do combo (ex: escolha do sabor do refrigerante).
                 </p>
               </div>
-              <div className="bg-red-50/50 p-4 rounded-xl border border-red-200/50 text-xs text-slate-600 space-y-1">
-                <span className="font-bold flex items-center gap-1 text-red-800">
+              <div className="bg-red-50/50 p-4 rounded-lg border border-red-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-semibold flex items-center gap-1 text-red-800">
                   <X className="w-4 h-4" /> Incorreto (O que evitar)
                 </span>
                 <p className="leading-relaxed">
@@ -1036,18 +1036,18 @@ export default function ManualPanel({ membership }: Props) {
           </p>
 
           <div className="mt-4 border-t border-slate-100 pt-4 space-y-3">
-            <h6 className="text-xs font-black text-slate-800 uppercase tracking-widest text-amber-600">Guia de Boas Práticas (WhatsApp)</h6>
+            <h6 className="text-xs font-semibold font-medium text-blue-700">Guia de Boas Práticas (WhatsApp)</h6>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200/50 text-xs text-slate-600 space-y-1">
-                <span className="font-bold flex items-center gap-1 text-emerald-800">
+              <div className="bg-emerald-50/50 p-4 rounded-lg border border-emerald-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-semibold flex items-center gap-1 text-emerald-800">
                   <Check className="w-4 h-4" /> Correto (O que fazer)
                 </span>
                 <p className="leading-relaxed">
                   Utilizar um chip/número exclusivo para o estabelecimento e manter o celular sempre ligado e conectado à internet para evitar desconexões do robô.
                 </p>
               </div>
-              <div className="bg-red-50/50 p-4 rounded-xl border border-red-200/50 text-xs text-slate-600 space-y-1">
-                <span className="font-bold flex items-center gap-1 text-red-800">
+              <div className="bg-red-50/50 p-4 rounded-lg border border-red-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-semibold flex items-center gap-1 text-red-800">
                   <X className="w-4 h-4" /> Incorreto (O que evitar)
                 </span>
                 <p className="leading-relaxed">
@@ -1073,9 +1073,9 @@ export default function ManualPanel({ membership }: Props) {
 
           <div className="space-y-6">
             
-            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-              <h5 className="font-black text-xs text-[#0A1628] uppercase tracking-wider mb-2 flex items-center gap-2">
-                <Settings className="w-4 h-4 text-[#C9A227]" /> 1. Aba Loja (Identificação, Localização e Regras do PDV)
+            <div className="bg-slate-50 p-5 rounded-lg border border-slate-100">
+              <h5 className="font-semibold text-xs text-slate-900 mb-2 flex items-center gap-2">
+                <Settings className="w-4 h-4 text-blue-600" /> 1. Aba Loja (Identificação, Localização e Regras do PDV)
               </h5>
               <div className="text-xs text-slate-500 space-y-2 leading-relaxed">
                 <p><strong>Identificação Básica:</strong> Altere a logo, o slogan de cabeçalho e o número de WhatsApp de atendimento do restaurante.</p>
@@ -1092,9 +1092,9 @@ export default function ManualPanel({ membership }: Props) {
             </div>
 
             {/* 2. Aba Horários */}
-            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-              <h5 className="font-black text-xs text-[#0A1628] uppercase tracking-wider mb-2 flex items-center gap-2">
-                <Clock className="w-4 h-4 text-[#C9A227]" /> 2. Aba Horários (Grade Semanal e Intervalos)
+            <div className="bg-slate-50 p-5 rounded-lg border border-slate-100">
+              <h5 className="font-semibold text-xs text-slate-900 mb-2 flex items-center gap-2">
+                <Clock className="w-4 h-4 text-blue-600" /> 2. Aba Horários (Grade Semanal e Intervalos)
               </h5>
               <div className="text-xs text-slate-500 space-y-2 leading-relaxed">
                 <p>Ajuste os dias de funcionamento ativo da loja na internet.</p>
@@ -1103,9 +1103,9 @@ export default function ManualPanel({ membership }: Props) {
             </div>
 
             {/* 3. Aba Entrega */}
-            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-              <h5 className="font-black text-xs text-[#0A1628] uppercase tracking-wider mb-2 flex items-center gap-2">
-                <Truck className="w-4 h-4 text-[#C9A227]" /> 3. Aba Entrega (Configurações de Frete)
+            <div className="bg-slate-50 p-5 rounded-lg border border-slate-100">
+              <h5 className="font-semibold text-xs text-slate-900 mb-2 flex items-center gap-2">
+                <Truck className="w-4 h-4 text-blue-600" /> 3. Aba Entrega (Configurações de Frete)
               </h5>
               <div className="text-xs text-slate-500 space-y-2 leading-relaxed">
                 <p>Escolha o método de cobrança de frete para entregas em domicílio:</p>
@@ -1119,9 +1119,9 @@ export default function ManualPanel({ membership }: Props) {
             </div>
 
             {/* 4. Aba Pagamentos */}
-            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-              <h5 className="font-black text-xs text-[#0A1628] uppercase tracking-wider mb-2 flex items-center gap-2">
-                <Wallet className="w-4 h-4 text-[#C9A227]" /> 4. Aba Pagamentos (Meios e Bandeiras)
+            <div className="bg-slate-50 p-5 rounded-lg border border-slate-100">
+              <h5 className="font-semibold text-xs text-slate-900 mb-2 flex items-center gap-2">
+                <Wallet className="w-4 h-4 text-blue-600" /> 4. Aba Pagamentos (Meios e Bandeiras)
               </h5>
               <div className="text-xs text-slate-500 space-y-2 leading-relaxed">
                 <p>Configure quais opções de pagamento estarão disponíveis na finalização da venda (Pix Dinâmico, Cartão de Crédito/Débito, Vales Refeição Sodexo/Alelo/VR, Vale Alimentação ou Dinheiro no Local).</p>
@@ -1130,9 +1130,9 @@ export default function ManualPanel({ membership }: Props) {
             </div>
 
             {/* 5 e 6. Aba Maquinhas e Fiscal */}
-            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-              <h5 className="font-black text-xs text-[#0A1628] uppercase tracking-wider mb-2 flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-[#C9A227]" /> 5 e 6. Abas Maquinhas (Integração TEF) e Fiscal (NFC-e)
+            <div className="bg-slate-50 p-5 rounded-lg border border-slate-100">
+              <h5 className="font-semibold text-xs text-slate-900 mb-2 flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-blue-600" /> 5 e 6. Abas Maquinhas (Integração TEF) e Fiscal (NFC-e)
               </h5>
               <div className="text-xs text-slate-500 space-y-2 leading-relaxed">
                 <p><strong>Maquinhas:</strong> Integração direta com terminais Stone (TEF) informando as credenciais secretas do estabelecimento para captura automática de pagamentos físicos no PDV.</p>
@@ -1142,10 +1142,10 @@ export default function ManualPanel({ membership }: Props) {
 
             {/* Exemplos de Correto vs Incorreto */}
             <div className="mt-4 border-t border-slate-100 pt-4 space-y-3">
-              <h6 className="text-xs font-black text-slate-800 uppercase tracking-widest text-[#C9A227]">Guia de Boas Práticas (Configurações Gerais)</h6>
+              <h6 className="text-xs font-semibold text-slate-800 text-blue-600">Guia de Boas Práticas (Configurações Gerais)</h6>
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200/50 text-xs text-slate-600 space-y-1">
-                  <span className="font-bold flex items-center gap-1 text-emerald-800">
+                <div className="bg-emerald-50/50 p-4 rounded-lg border border-emerald-200/50 text-xs text-slate-600 space-y-1">
+                  <span className="font-semibold flex items-center gap-1 text-emerald-800">
                     <Check className="w-4 h-4" /> Correto (O que fazer)
                   </span>
                   <p className="leading-relaxed">
@@ -1155,8 +1155,8 @@ export default function ManualPanel({ membership }: Props) {
                     Manter o CEP de origem da loja rigorosamente correto ao utilizar a cobrança de frete por **KM**, garantindo precisão nas rotas do motoboy.
                   </p>
                 </div>
-                <div className="bg-red-50/50 p-4 rounded-xl border border-red-200/50 text-xs text-slate-600 space-y-1">
-                  <span className="font-bold flex items-center gap-1 text-red-800">
+                <div className="bg-red-50/50 p-4 rounded-lg border border-red-200/50 text-xs text-slate-600 space-y-1">
+                  <span className="font-semibold flex items-center gap-1 text-red-800">
                     <X className="w-4 h-4" /> Incorreto (O que evitar)
                   </span>
                   <p className="leading-relaxed">
@@ -1185,18 +1185,18 @@ export default function ManualPanel({ membership }: Props) {
           </p>
 
           <div className="mt-4 border-t border-slate-100 pt-4 space-y-3">
-            <h6 className="text-xs font-black text-slate-800 uppercase tracking-widest text-amber-600">Guia de Boas Práticas (Equipe)</h6>
+            <h6 className="text-xs font-semibold font-medium text-blue-700">Guia de Boas Práticas (Equipe)</h6>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200/50 text-xs text-slate-600 space-y-1">
-                <span className="font-bold flex items-center gap-1 text-emerald-800">
+              <div className="bg-emerald-50/50 p-4 rounded-lg border border-emerald-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-semibold flex items-center gap-1 text-emerald-800">
                   <Check className="w-4 h-4" /> Correto (O que fazer)
                 </span>
                 <p className="leading-relaxed">
                   Cadastrar contas individuais exclusivas para cada garçom ou operador de caixa para fins de auditoria no caso de quebras de caixa ou lançamentos incorretos.
                 </p>
               </div>
-              <div className="bg-red-50/50 p-4 rounded-xl border border-red-200/50 text-xs text-slate-600 space-y-1">
-                <span className="font-bold flex items-center gap-1 text-red-800">
+              <div className="bg-red-50/50 p-4 rounded-lg border border-red-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-semibold flex items-center gap-1 text-red-800">
                   <X className="w-4 h-4" /> Incorreto (O que evitar)
                 </span>
                 <p className="leading-relaxed">
@@ -1216,8 +1216,8 @@ export default function ManualPanel({ membership }: Props) {
       keywords: ["tv", "fire stick", "firestick", "android tv", "painel de pedidos", "downloader", "vincular", "parear", "codigo"],
       content: (
         <div className="space-y-6">
-          <div className="bg-gradient-to-r from-[#0D1B3E]/10 to-amber-500/5 p-6 rounded-3xl border border-amber-500/10">
-            <h4 className="text-base font-black text-[#0A1628] mb-2">O que é o Painel TV?</h4>
+          <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+            <h4 className="text-base font-semibold text-slate-900 mb-2">O que é o Painel TV?</h4>
             <p className="text-slate-600 text-sm leading-relaxed">
               É um aplicativo que mostra só o Painel de Pedidos em tela cheia numa TV comum (Android TV) ou com um
               Fire TV Stick da Amazon — ideal pra deixar fixo no balcão ou na cozinha, avisando por som e voz quando
@@ -1227,7 +1227,7 @@ export default function ManualPanel({ membership }: Props) {
           </div>
 
           <div className="space-y-4">
-            <h5 className="text-xs font-black uppercase tracking-widest text-slate-400">Passo a passo — Fire TV Stick</h5>
+            <h5 className="text-xs font-semibold text-slate-400">Passo a passo — Fire TV Stick</h5>
             <div className="space-y-3">
               {[
                 {
@@ -1261,12 +1261,12 @@ export default function ManualPanel({ membership }: Props) {
                   desc: "A TV já troca sozinha para o Painel de Pedidos do seu estabelecimento. Se desligar e ligar a TV de novo (ou faltar luz), o app abre automaticamente sozinho, sem precisar repetir nenhum passo.",
                 },
               ].map((s) => (
-                <div key={s.n} className="flex items-start gap-3 bg-white p-4 rounded-2xl border border-slate-100">
-                  <span className="w-7 h-7 rounded-full bg-[#C9A227] text-black text-xs font-black flex items-center justify-center shrink-0 mt-0.5">
+                <div key={s.n} className="flex items-start gap-3 bg-white p-4 rounded-lg border border-slate-100">
+                  <span className="w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-semibold flex items-center justify-center shrink-0 mt-0.5">
                     {s.n}
                   </span>
                   <div>
-                    <p className="text-sm font-bold text-slate-800">{s.title}</p>
+                    <p className="text-sm font-semibold text-slate-800">{s.title}</p>
                     <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{s.desc}</p>
                   </div>
                 </div>
@@ -1275,10 +1275,10 @@ export default function ManualPanel({ membership }: Props) {
           </div>
 
           <div className="border-t border-slate-100 pt-4 space-y-3">
-            <h6 className="text-xs font-black text-slate-800 uppercase tracking-widest text-amber-600">Perguntas frequentes</h6>
+            <h6 className="text-xs font-semibold font-medium text-blue-700">Perguntas frequentes</h6>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200/50 text-xs text-slate-600 space-y-1">
-                <span className="font-bold flex items-center gap-1 text-emerald-800">
+              <div className="bg-emerald-50/50 p-4 rounded-lg border border-emerald-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-semibold flex items-center gap-1 text-emerald-800">
                   <CheckCircle2 className="w-4 h-4" /> Funciona em Android TV comum também?
                 </span>
                 <p className="leading-relaxed">
@@ -1286,8 +1286,8 @@ export default function ManualPanel({ membership }: Props) {
                   TV com Android TV, não só no Fire Stick.
                 </p>
               </div>
-              <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200/50 text-xs text-slate-600 space-y-1">
-                <span className="font-bold flex items-center gap-1 text-emerald-800">
+              <div className="bg-emerald-50/50 p-4 rounded-lg border border-emerald-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-semibold flex items-center gap-1 text-emerald-800">
                   <Bell className="w-4 h-4" /> Posso desligar o aviso por voz?
                 </span>
                 <p className="leading-relaxed">
@@ -1295,8 +1295,8 @@ export default function ManualPanel({ membership }: Props) {
                   continua tocando o som e mostrando o pedido pronto na tela, só sem falar em voz alta.
                 </p>
               </div>
-              <div className="bg-red-50/50 p-4 rounded-xl border border-red-200/50 text-xs text-slate-600 space-y-1">
-                <span className="font-bold flex items-center gap-1 text-red-800">
+              <div className="bg-red-50/50 p-4 rounded-lg border border-red-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-semibold flex items-center gap-1 text-red-800">
                   <X className="w-4 h-4" /> Quero trocar de TV / vender o aparelho
                 </span>
                 <p className="leading-relaxed">
@@ -1304,8 +1304,8 @@ export default function ManualPanel({ membership }: Props) {
                   código de pareamento novo, sem mais acesso ao seu estabelecimento.
                 </p>
               </div>
-              <div className="bg-red-50/50 p-4 rounded-xl border border-red-200/50 text-xs text-slate-600 space-y-1">
-                <span className="font-bold flex items-center gap-1 text-red-800">
+              <div className="bg-red-50/50 p-4 rounded-lg border border-red-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-semibold flex items-center gap-1 text-red-800">
                   <X className="w-4 h-4" /> O código expirou antes de eu vincular
                 </span>
                 <p className="leading-relaxed">
@@ -1331,18 +1331,18 @@ export default function ManualPanel({ membership }: Props) {
           </p>
 
           <div className="mt-4 border-t border-slate-100 pt-4 space-y-3">
-            <h6 className="text-xs font-black text-slate-800 uppercase tracking-widest text-amber-600">Guia de Boas Práticas (Impressão)</h6>
+            <h6 className="text-xs font-semibold font-medium text-blue-700">Guia de Boas Práticas (Impressão)</h6>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200/50 text-xs text-slate-600 space-y-1">
-                <span className="font-bold flex items-center gap-1 text-emerald-800">
+              <div className="bg-emerald-50/50 p-4 rounded-lg border border-emerald-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-semibold flex items-center gap-1 text-emerald-800">
                   <Check className="w-4 h-4" /> Correto (O que fazer)
                 </span>
                 <p className="leading-relaxed">
                   Instalar o aplicativo utilitário oficial de impressão no computador ligado ao caixa físico para que as vias térmicas saiam automaticamente.
                 </p>
               </div>
-              <div className="bg-red-50/50 p-4 rounded-xl border border-red-200/50 text-xs text-slate-600 space-y-1">
-                <span className="font-bold flex items-center gap-1 text-red-800">
+              <div className="bg-red-50/50 p-4 rounded-lg border border-red-200/50 text-xs text-slate-600 space-y-1">
+                <span className="font-semibold flex items-center gap-1 text-red-800">
                   <X className="w-4 h-4" /> Incorreto (O que evitar)
                 </span>
                 <p className="leading-relaxed">
@@ -1375,16 +1375,18 @@ export default function ManualPanel({ membership }: Props) {
   const activeSection = filteredSections.find(s => s.id === activeSectionId) || filteredSections[0];
 
   return (
-    <div className="bg-white rounded-[28px] border border-slate-200/80 shadow-sm overflow-hidden min-h-[75vh] flex flex-col md:flex-row animate-fade-in">
-      
-      {/* Sidebar de tópicos */}
-      <div className={`w-full md:w-80 border-r border-slate-100 bg-slate-50/50 p-5 flex flex-col shrink-0 ${mobileActive ? 'hidden md:flex' : 'flex'}`}>
-        
-        {/* Search */}
-        <div className="relative mb-5">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-          <input
+    <PageWrapper>
+      <div className="space-y-4">
+        <SectionTitle
+          title="Manual de Operação"
+          description="Guia passo a passo das funções do painel"
+          icon={BookOpen}
+        />
+
+        <div className="w-full sm:max-w-[280px]">
+          <Input
             type="text"
+            iconLeft={<Search className="w-4 h-4" />}
             value={searchQuery}
             onChange={e => {
               setSearchQuery(e.target.value);
@@ -1398,95 +1400,39 @@ export default function ManualPanel({ membership }: Props) {
               }
             }}
             placeholder="Pesquisar manual..."
-            className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-xs font-semibold focus:outline-none focus:border-amber-400 transition-all text-slate-700"
           />
         </div>
 
-        {/* List */}
-        <div className="space-y-1 overflow-y-auto flex-1 max-h-[50vh] md:max-h-[58vh] pr-1 custom-scrollbar">
-          {filteredSections.length === 0 ? (
-            <div className="text-center py-8 text-slate-400 text-xs">
-              Nenhum tópico encontrado.
-            </div>
-          ) : (
-            filteredSections.map(sec => {
-              const Icon = sec.icon;
-              const isActive = activeSection?.id === sec.id;
-              return (
-                <button
-                  key={sec.id}
-                  onClick={() => {
-                    setActiveSectionId(sec.id);
-                    setMobileActive(true);
-                  }}
-                  className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl transition-all text-left group ${
-                    isActive 
-                      ? "bg-[#0D1B3E] text-white shadow-md shadow-[#0D1B3E]/10" 
-                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${isActive ? "bg-white/10 text-[#C9A227]" : "bg-slate-100 text-slate-500 group-hover:bg-slate-200"}`}>
-                      <Icon className="w-4 h-4" />
-                    </div>
-                    <span className="text-xs font-black tracking-wide leading-tight">{sec.title}</span>
-                  </div>
-                  <ChevronRight className={`w-3.5 h-3.5 opacity-60 transition-transform ${isActive ? "translate-x-0.5 text-[#C9A227]" : "group-hover:translate-x-0.5"}`} />
-                </button>
-              );
-            })
-          )}
-        </div>
-
-        {/* Suporte Info */}
-        <div className="mt-6 pt-5 border-t border-slate-100 bg-white/40 p-4 rounded-2xl border">
-          <div className="flex items-start gap-2.5">
-            <HelpIcon className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-            <div>
-              <h6 className="text-xs font-black text-slate-800">Precisa de ajuda extra?</h6>
-              <p className="text-[10px] text-slate-500 leading-relaxed mt-0.5">
-                Contate o proprietário do estabelecimento ou acione o suporte técnico do Box Sys.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Conteúdo do Manual */}
-      <div className={`flex-1 p-6 md:p-8 flex flex-col justify-between ${mobileActive ? 'flex' : 'hidden md:flex'}`}>
         {activeSection ? (
-          <div className="space-y-6 flex-1 flex flex-col min-h-0">
-            
-            {/* Botão voltar no mobile */}
-            <button
-              onClick={() => setMobileActive(false)}
-              className="md:hidden text-xs font-black uppercase text-slate-400 flex items-center gap-1 hover:text-slate-700 transition-colors mb-4 shrink-0"
-            >
-              <ChevronLeft className="w-4 h-4" /> Voltar para os tópicos
-            </button>
-
-            <div className="flex items-center gap-3 pb-4 border-b border-slate-100 shrink-0">
-              <div className="w-10 h-10 rounded-2xl bg-amber-50 text-[#C9A227] flex items-center justify-center">
-                {React.createElement(activeSection.icon, { className: "w-5 h-5" })}
+          // Abas dinâmicas: as seções variam conforme a permissão do membro e a busca.
+          <Tabs<string>
+            items={filteredSections.map(sec => ({ id: sec.id, label: sec.title, icon: sec.icon }))}
+            value={activeSection.id}
+            onChange={setActiveSectionId}
+            label="Tópicos do manual"
+          >
+            <ContentCard padding="lg">
+              <div className="text-slate-600 space-y-6">
+                {activeSection.content}
               </div>
-              <div>
-                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest leading-none">Manual de Operação</span>
-                <h3 className="text-lg font-black text-slate-800 mt-0.5 leading-none">{activeSection.title}</h3>
-              </div>
-            </div>
-
-            <div className="text-slate-600 flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-6">
-              {activeSection.content}
-            </div>
-          </div>
+            </ContentCard>
+          </Tabs>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-slate-400 gap-2">
-            <BookOpen className="w-12 h-12 text-slate-200" />
-            <p className="text-xs">Selecione um tópico para visualizar.</p>
-          </div>
+          <ContentCard>
+            <EmptyState icon={BookOpen} title="Nenhum tópico encontrado." />
+          </ContentCard>
         )}
-      </div>
 
-    </div>
+        <div className="rounded-lg border border-slate-200 bg-white p-3 flex items-start gap-2.5">
+          <HelpIcon className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+          <div>
+            <h6 className="text-xs font-medium text-slate-800">Precisa de ajuda extra?</h6>
+            <p className="text-[11px] text-slate-500 leading-relaxed mt-0.5">
+              Contate o proprietário do estabelecimento ou acione o suporte técnico do Box Sys.
+            </p>
+          </div>
+        </div>
+      </div>
+    </PageWrapper>
   );
 }

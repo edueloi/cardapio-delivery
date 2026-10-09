@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BookOpen,
+  ChevronRight,
   ExternalLink,
   Eye,
   EyeOff,
@@ -298,72 +299,61 @@ export default function DashboardAccountMenu({
   }
 
   function renderMenuView() {
+    const actions = [
+      { icon: UserRound, title: "Meu perfil", description: "Foto, telefone, endereço, usuário de login e senha.", onClick: openProfile },
+      { icon: BookOpen, title: "Manual de ajuda", description: "Passo a passo de como operar o sistema.", onClick: () => { onSelectTab("manual"); onClose(); } },
+      { icon: ExternalLink, title: "Ver cardápio público", description: "Abre a vitrine do estabelecimento em uma nova aba.", onClick: () => window.open(publicMenuUrl, "_blank", "noopener,noreferrer") },
+    ];
     return (
       <div className="space-y-4">
-        <div className="relative overflow-hidden rounded-[28px] bg-[#0A1628] p-5 text-white sm:p-6">
-          <div className="absolute right-0 top-0 h-28 w-28 rounded-full bg-[#C9A227]/10 blur-3xl" />
-          <div className="relative flex items-center gap-4">
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-white/10">
-              {tenantLogoUrl ? (
-                <img src={tenantLogoUrl} alt={tenantName} className="h-full w-full object-cover" />
-              ) : (
-                <span className="text-2xl font-black text-[#C9A227]">{tenantInitial}</span>
-              )}
-            </div>
-            <div className="min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/45">Estabelecimento ativo</p>
-              <h3 className="truncate text-xl font-black">{tenantName}</h3>
-              <p className="mt-1 truncate text-xs text-white/55">/{slug}</p>
-            </div>
+        <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white">
+            {tenantLogoUrl ? (
+              <img src={tenantLogoUrl} alt={tenantName} className="h-full w-full object-cover" />
+            ) : (
+              <span className="text-xl font-semibold text-blue-600">{tenantInitial}</span>
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] text-slate-500">Estabelecimento ativo</p>
+            <h3 className="truncate text-base font-medium text-slate-900">{tenantName}</h3>
+            <p className="truncate text-xs text-slate-500">/{slug}</p>
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <button
-            type="button"
-            onClick={openProfile}
-            className="rounded-2xl border border-slate-200 bg-white p-4 text-left transition-colors hover:border-[#C9A227]/40 hover:bg-[#fdf8e8]/40"
-          >
-            <UserRound className="mb-3 h-5 w-5 text-[#0A1628]" />
-            <p className="text-sm font-black text-slate-900">Meu perfil</p>
-            <p className="mt-1 text-xs text-slate-500">Foto, telefone, endereço, data, usuário de login e senha.</p>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              onSelectTab("manual");
-              onClose();
-            }}
-            className="rounded-2xl border border-slate-200 bg-white p-4 text-left transition-colors hover:border-[#C9A227]/40 hover:bg-[#fdf8e8]/40"
-          >
-            <BookOpen className="mb-3 h-5 w-5 text-[#0A1628]" />
-            <p className="text-sm font-black text-slate-900">Manual de Ajuda</p>
-            <p className="mt-1 text-xs text-slate-500">Veja o passo a passo detalhado de como operar o sistema.</p>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => window.open(publicMenuUrl, "_blank", "noopener,noreferrer")}
-            className="rounded-2xl border border-slate-200 bg-white p-4 text-left transition-colors hover:border-[#C9A227]/40 hover:bg-[#fdf8e8]/40"
-          >
-            <ExternalLink className="mb-3 h-5 w-5 text-[#0A1628]" />
-            <p className="text-sm font-black text-slate-900">Ver cardápio público</p>
-            <p className="mt-1 text-xs text-slate-500">Abra a vitrine do estabelecimento em uma nova aba.</p>
-          </button>
+        <div className="divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200 bg-white">
+          {actions.map(({ icon: Icon, title, description, onClick }) => (
+            <button
+              key={title}
+              type="button"
+              onClick={onClick}
+              className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-slate-50"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-blue-100 bg-blue-50">
+                <Icon className="h-4 w-4 text-blue-600" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[13px] font-medium text-slate-900">{title}</span>
+                <span className="block truncate text-[11px] text-slate-500">{description}</span>
+              </span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
+            </button>
+          ))}
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-          <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-medium text-white">
+              {(account?.name || "C").charAt(0).toUpperCase()}
+            </span>
             <div className="min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Conta conectada</p>
-              <p className="truncate text-sm font-black text-slate-900">{account?.name || "Conta Box Sys"}</p>
-              <p className="truncate text-xs text-slate-500">{account?.email || "Sem e-mail"}</p>
+              <p className="truncate text-[13px] font-medium text-slate-900">{account?.name || "Conta Box Sys"}</p>
+              <p className="truncate text-[11px] text-slate-500">{account?.email || "Sem e-mail"}</p>
             </div>
-            <Button variant="danger" size="sm" iconLeft={<LogOut className="h-3.5 w-3.5" />} onClick={() => void handleLogout()}>
-              Sair
-            </Button>
           </div>
+          <Button variant="outline" size="sm" iconLeft={<LogOut className="h-3.5 w-3.5" />} onClick={() => void handleLogout()} className="shrink-0 text-red-600 hover:border-red-200 hover:bg-red-50 hover:text-red-700">
+            Sair
+          </Button>
         </div>
       </div>
     );
@@ -375,14 +365,14 @@ export default function DashboardAccountMenu({
         <button
           type="button"
           onClick={() => setView("menu")}
-          className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400 transition-colors hover:text-slate-700"
+          className="text-[11px] font-semibold text-slate-400 transition-colors hover:text-slate-700"
         >
           Voltar
         </button>
 
-        <div className="rounded-[28px] border border-slate-200 bg-white p-4 sm:p-5">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-            <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-[22px] border border-slate-200 bg-slate-50">
+            <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
               {profileForm.avatarUrl ? (
                 <img src={profileForm.avatarUrl} alt={profileForm.name || "Perfil"} className="h-full w-full object-cover" />
               ) : (
@@ -391,8 +381,8 @@ export default function DashboardAccountMenu({
             </div>
 
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Foto do perfil</p>
-              <h3 className="mt-1 text-lg font-black text-slate-900">{profileForm.name || "Sua conta"}</h3>
+              <p className="text-[10px] font-semibold text-slate-400">Foto do perfil</p>
+              <h3 className="mt-1 text-lg font-semibold text-slate-900">{profileForm.name || "Sua conta"}</h3>
               <p className="mt-1 text-xs text-slate-500">JPG, PNG ou WEBP de até {AVATAR_MAX_SIZE_MB} MB.</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button
@@ -429,7 +419,7 @@ export default function DashboardAccountMenu({
 
         {profileLoading ? (
           <div className="flex items-center justify-center rounded-3xl border border-slate-200 bg-white py-16">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#C9A227] border-t-transparent" />
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#2563eb] border-t-transparent" />
           </div>
         ) : (
           <>
@@ -500,10 +490,10 @@ export default function DashboardAccountMenu({
               maxLength={250}
             />
 
-            <div className="rounded-[28px] border border-slate-200 bg-white p-4 sm:p-5">
+            <div className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
               <div className="mb-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Segurança</p>
-                <h3 className="mt-1 text-base font-black text-slate-900">Trocar senha</h3>
+                <p className="text-[10px] font-semibold text-slate-400">Segurança</p>
+                <h3 className="mt-1 text-base font-semibold text-slate-900">Trocar senha</h3>
                 <p className="mt-1 text-xs text-slate-500">Confirme a senha atual e defina uma nova senha de acesso.</p>
               </div>
 
@@ -632,19 +622,19 @@ export default function DashboardAccountMenu({
         <button
           type="button"
           onClick={() => setView("menu")}
-          className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400 transition-colors hover:text-slate-700"
+          className="text-[11px] font-semibold text-slate-400 transition-colors hover:text-slate-700"
         >
           Voltar
         </button>
 
-        <div className="rounded-[28px] bg-[#0A1628] p-5 text-white sm:p-6">
+        <div className="rounded-lg bg-[#0f172a] p-5 text-white sm:p-6">
           <div className="flex items-start gap-3">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-[#C9A227]">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-white/10 text-[#2563eb]">
               <ShieldCheck className="h-6 w-6" />
             </div>
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/45">Manual rápido</p>
-              <h3 className="mt-1 text-lg font-black">Atalhos principais do sistema</h3>
+              <p className="text-[10px] font-semibold text-white/45">Manual rápido</p>
+              <h3 className="mt-1 text-lg font-semibold">Atalhos principais do sistema</h3>
               <p className="mt-2 text-sm leading-relaxed text-white/70">
                 Use os acessos abaixo para ir direto ao fluxo que mais se repete no dia a dia da operação.
               </p>
@@ -661,9 +651,9 @@ export default function DashboardAccountMenu({
                 onSelectTab(item.tab);
                 onClose();
               }}
-              className="rounded-2xl border border-slate-200 bg-white p-4 text-left transition-colors hover:border-[#C9A227]/40 hover:bg-[#fdf8e8]/40"
+              className="rounded-lg border border-slate-200 bg-white p-4 text-left transition-colors hover:border-[#2563eb]/40 hover:bg-[#eff6ff]/40"
             >
-              <p className="text-sm font-black text-slate-900">{item.title}</p>
+              <p className="text-sm font-semibold text-slate-900">{item.title}</p>
               <p className="mt-1 text-xs leading-relaxed text-slate-500">{item.description}</p>
             </button>
           ))}
@@ -685,7 +675,7 @@ export default function DashboardAccountMenu({
             ? "Meu Perfil"
             : "Manual Rápido"
       }
-      size={view === "profile" ? "xl" : "lg"}
+      size={view === "profile" ? "xl" : "md"}
       mobileStyle="bottom-sheet"
     >
       {view === "menu" && renderMenuView()}

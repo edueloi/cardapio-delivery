@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./components/styles.css";
 
 /* Fonte nativa do sistema operacional (Segoe UI no Windows, San Francisco no Mac,
    Roboto no Android/ChromeOS) em vez de uma fonte baixada do Google Fonts — o

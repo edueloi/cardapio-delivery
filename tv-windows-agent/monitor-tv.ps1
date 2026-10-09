@@ -137,6 +137,7 @@ while ($true) {
         "--kiosk"
         "`"$url`""
         "--edge-kiosk-type=fullscreen"
+        "--autoplay-policy=no-user-gesture-required"
         "--no-first-run"
         "--user-data-dir=`"$profilePath`""
         "--window-position=$($area.X),$($area.Y)"

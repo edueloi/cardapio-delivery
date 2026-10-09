@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
-import { Monitor, Image as ImageIcon, Volume2, Mic, Palette, Play, Trash2, GripVertical } from "lucide-react";
-import { PageWrapper, SectionTitle, ContentCard, Button, Select, Switch, useToast } from "../../../../components";
+import React, { useEffect, useState } from "react";
+import { Monitor, Image as ImageIcon, Volume2, Mic, Palette, Play, Trash2, GripVertical, ListChecks, LayoutGrid, Tv } from "lucide-react";
+import { PageWrapper, SectionTitle, PanelCard, FormRow, Tabs, Button, IconButton, Input, Select, Switch, useToast } from "../../../../components";
 import { ImageUploader, TvDevicesCard } from "../_shared/ManagementShared";
 import { apiFetch, apiJson } from "../../../../lib/api";
 import { playSoundFile, READY_SOUND_OPTIONS } from "../../../../lib/notificationSound";
@@ -44,6 +44,15 @@ const CARD_STYLE_OPTIONS: { value: NonNullable<DisplayPanelConfig["cardStyle"]>;
   { value: "artesanal", label: "Artesanal", description: "Colunas bicolor com nome e senha juntos (ex: \"Felipe 007\"), fonte arredondada e QR Code do cardápio no rodapé — estilo padaria/lanchonete artesanal." },
 ];
 
+const TABS = [
+  { id: "pedidos", label: "Pedidos exibidos", icon: ListChecks },
+  { id: "aparencia", label: "Aparência", icon: Palette },
+  { id: "som", label: "Som e voz", icon: Volume2 },
+  { id: "propaganda", label: "Propaganda", icon: ImageIcon },
+  { id: "dispositivos", label: "Dispositivos TV", icon: Tv },
+] as const;
+type TabId = (typeof TABS)[number]["id"];
+
 interface DisplayPanelSettingsPanelProps {
   slug: string;
   tenant: Tenant;
@@ -63,6 +72,7 @@ export default function DisplayPanelSettingsPanel({ slug, tenant, refresh }: Dis
       return DEFAULT_DISPLAY_PANEL;
     }
   });
+  const [tab, setTab] = useState<TabId>("pedidos");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
@@ -146,365 +156,331 @@ export default function DisplayPanelSettingsPanel({ slug, tenant, refresh }: Dis
   const previewSound = () => playSoundFile(config.readySoundFile || DEFAULT_DISPLAY_PANEL.readySoundFile!);
   const previewVoice = () => announceOrderReady(42, { voiceName: config.voiceName, text: config.voiceText, customerName: "Felipe" });
 
+  const cardStyle = config.cardStyle ?? "floating";
+  const preparingColor = config.preparingColor ?? "#f97316";
+  const readyColor = config.readyColor ?? "#22c55e";
+
+  const toggleRow = (label: string, desc: string, control: React.ReactNode) => (
+    <div className="flex items-center justify-between gap-4 rounded-lg border border-slate-100 bg-slate-50 p-3">
+      <div className="min-w-0">
+        <p className="text-xs font-medium text-slate-700">{label}</p>
+        <p className="text-[11px] text-slate-500">{desc}</p>
+      </div>
+      {control}
+    </div>
+  );
+
+  const colorField = (label: string, value: string, onChange: (v: string) => void) => (
+    <div className="space-y-1.5">
+      <label className="text-xs font-medium text-slate-600">{label}</label>
+      <div className="flex items-center gap-3">
+        <input
+          type="color"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-9 w-12 cursor-pointer rounded-lg border border-slate-200"
+        />
+        <span className="font-mono text-xs text-slate-500">{value}</span>
+      </div>
+    </div>
+  );
+
   return (
     <PageWrapper>
-      <SectionTitle
-        title="Config. Painel de Pedidos"
-        description="Aparência, sons, voz e propaganda da tela pública que fica exposta pro cliente (TV/Fire Stick/monitor)"
-        icon={Monitor}
-        action={
-          <Button variant="primary" size="sm" loading={saving} onClick={handleSave}>
-            {saved ? "Salvo!" : "Salvar Alterações"}
-          </Button>
-        }
-        className="mb-6"
-      />
+      <div className="space-y-4">
+        <SectionTitle
+          title="Config. Painel de Pedidos"
+          description="Aparência, sons, voz e propaganda da tela pública que fica exposta pro cliente (TV/Fire Stick/monitor)"
+          icon={Monitor}
+        />
 
-      <div className="space-y-6">
-        {/* Tipos de pedido exibidos */}
-        <ContentCard padding="lg">
-          <div className="flex items-center gap-3 mb-1">
-            <Monitor className="w-4 h-4 text-slate-400" />
-            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Pedidos Exibidos</p>
-          </div>
-          <p className="text-[10px] text-slate-400 mb-6">
-            Escolha quais tipos de pedido aparecem no painel. Delivery fica desativado por padrão, já que é entregue
-            no endereço do cliente, não retirado no local.
-          </p>
-          <div className="space-y-3">
-            {([
-              { key: "showDineIn" as const, label: "Mesa / Salão", desc: "Pedidos feitos nas mesas do estabelecimento." },
-              { key: "showPickup" as const, label: "Retirada no Balcão", desc: "Cliente busca o pedido presencialmente." },
-              { key: "showDelivery" as const, label: "Delivery", desc: "Pedido é entregue no endereço do cliente." },
-            ]).map((opt) => (
-              <div key={opt.key} className="flex items-center justify-between gap-4 bg-slate-50 border border-slate-100 rounded-2xl p-4">
-                <div>
-                  <p className="text-xs font-black text-slate-700">{opt.label}</p>
-                  <p className="text-[11px] text-slate-400">{opt.desc}</p>
-                </div>
-                <Switch checked={config[opt.key]} onCheckedChange={(v) => setConfig({ ...config, [opt.key]: v })} />
-              </div>
-            ))}
-          </div>
-        </ContentCard>
-
-        {/* Aparência: tema e cores */}
-        <ContentCard padding="lg">
-          <div className="flex items-center gap-3 mb-1">
-            <Palette className="w-4 h-4 text-slate-400" />
-            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Aparência</p>
-          </div>
-          <p className="text-[10px] text-slate-400 mb-6">
-            Tema de fundo e cores de destaque de cada coluna do painel.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <Select
-              label="Tema"
-              value={config.theme ?? "dark"}
-              onChange={(e) => setConfig({ ...config, theme: e.target.value as "dark" | "light" })}
-              options={[
-                { value: "dark", label: "Escuro (padrão)" },
-                { value: "light", label: "Claro" },
-              ]}
-            />
-            <div className="flex items-center justify-between gap-4 bg-slate-50 border border-slate-100 rounded-2xl px-4">
-              <div>
-                <p className="text-xs font-black text-slate-700">Mostrar logo</p>
-                <p className="text-[11px] text-slate-400">Exibe o logo do estabelecimento no cabeçalho.</p>
-              </div>
-              <Switch checked={config.showLogo !== false} onCheckedChange={(v) => setConfig({ ...config, showLogo: v })} />
-            </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-6">
-            <div className="space-y-1.5">
-              <label className="ds-label">Cor — Em Preparo</label>
-              <div className="flex items-center gap-3">
-                <input
-                  type="color"
-                  value={config.preparingColor ?? "#f97316"}
-                  onChange={(e) => setConfig({ ...config, preparingColor: e.target.value })}
-                  className="w-12 h-10 rounded-lg border border-slate-200 cursor-pointer"
-                />
-                <span className="text-xs font-mono text-slate-500">{config.preparingColor ?? "#f97316"}</span>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <label className="ds-label">Cor — Pronto</label>
-              <div className="flex items-center gap-3">
-                <input
-                  type="color"
-                  value={config.readyColor ?? "#22c55e"}
-                  onChange={(e) => setConfig({ ...config, readyColor: e.target.value })}
-                  className="w-12 h-10 rounded-lg border border-slate-200 cursor-pointer"
-                />
-                <span className="text-xs font-mono text-slate-500">{config.readyColor ?? "#22c55e"}</span>
-              </div>
-            </div>
-          </div>
-        </ContentCard>
-
-        {/* Layout */}
-        <ContentCard padding="lg">
-          <div className="flex items-center gap-3 mb-1">
-            <Monitor className="w-4 h-4 text-slate-400" />
-            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Layout</p>
-          </div>
-          <p className="text-[10px] text-slate-400 mb-6">
-            Estilo visual do cartão de senha, tamanho da senha exibida e opção de tela minimalista, sem cabeçalho
-            nem rodapé.
-          </p>
-
-          <div className="mb-6">
-            <p className="ds-label mb-2">Estilo do cartão</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {CARD_STYLE_OPTIONS.map((opt) => {
-                const active = (config.cardStyle ?? "floating") === opt.value;
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setConfig({ ...config, cardStyle: opt.value })}
-                    className={`text-left rounded-2xl border p-4 transition-colors ${
-                      active ? "border-orange-400 bg-orange-50" : "border-slate-100 bg-slate-50 hover:border-slate-200"
-                    }`}
-                  >
-                    <p className={`text-xs font-black ${active ? "text-orange-600" : "text-slate-700"}`}>{opt.label}</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">{opt.description}</p>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-4 mb-6">
-            <div className="max-w-xs">
-              <Select
-                label="Tamanho da senha"
-                value={config.ticketCardSize ?? "normal"}
-                onChange={(e) => setConfig({ ...config, ticketCardSize: e.target.value as DisplayPanelConfig["ticketCardSize"] })}
-                options={[
-                  { value: "normal", label: "Normal" },
-                  { value: "large", label: "Grande" },
-                  { value: "xlarge", label: "Extra grande" },
-                ]}
-              />
-            </div>
-            <div className="max-w-[180px]">
-              <label className="ds-label block mb-1.5">Tamanho personalizado (px)</label>
-              <input
-                type="number"
-                min={0}
-                placeholder="Ex: 80"
-                value={config.ticketCardSizePx ?? ""}
-                onChange={(e) => setConfig({ ...config, ticketCardSizePx: e.target.value ? Number(e.target.value) : null })}
-                className="ds-input w-full"
-              />
-              <p className="text-[10px] text-slate-400 mt-1">Preenchido, sobrepõe o tamanho acima.</p>
-            </div>
-          </div>
-
-          {(config.cardStyle ?? "floating") === "artesanal" && (
-            <div className="mb-6 p-4 bg-amber-50/60 rounded-2xl border border-amber-100 space-y-4">
-              <p className="text-xs font-black uppercase tracking-widest text-amber-700">Cores do estilo Artesanal</p>
-              <div className="flex flex-wrap items-end gap-4">
-                <div>
-                  <label className="ds-label block mb-1.5">Cor clara (coluna Preparando)</label>
-                  <input
-                    type="color"
-                    value={config.artesanalCreamColor || ARTESANAL_DEFAULT_CREAM}
-                    onChange={(e) => setConfig({ ...config, artesanalCreamColor: e.target.value })}
-                    className="w-16 h-10 rounded-lg border border-slate-200 cursor-pointer"
-                  />
-                </div>
-                <div>
-                  <label className="ds-label block mb-1.5">Cor escura (coluna Prontos)</label>
-                  <input
-                    type="color"
-                    value={config.artesanalBrownColor || ARTESANAL_DEFAULT_BROWN}
-                    onChange={(e) => setConfig({ ...config, artesanalBrownColor: e.target.value })}
-                    className="w-16 h-10 rounded-lg border border-slate-200 cursor-pointer"
-                  />
-                </div>
-                <Button
-                  variant="outline"
-                  onClick={() => setConfig({ ...config, artesanalCreamColor: null, artesanalBrownColor: null })}
-                >
-                  Restaurar cor padrão
-                </Button>
-              </div>
-              <div className="flex items-center justify-between gap-4 bg-white border border-amber-100 rounded-xl p-3.5">
-                <div>
-                  <p className="text-xs font-black text-slate-700">Mostrar QR Code do cardápio no rodapé</p>
-                  <p className="text-[11px] text-slate-400">"Acesse nosso cardápio digital" com o QR Code do balcão.</p>
-                </div>
-                <Switch
-                  checked={config.artesanalShowQrFooter !== false}
-                  onCheckedChange={(v) => setConfig({ ...config, artesanalShowQrFooter: v })}
-                />
-              </div>
-            </div>
-          )}
-
-          <div className="flex items-center justify-between gap-4 bg-slate-50 border border-slate-100 rounded-2xl p-4">
-            <div>
-              <p className="text-xs font-black text-slate-700">Modo minimalista</p>
-              <p className="text-[11px] text-slate-400">
-                Esconde cabeçalho, rodapé, nome do cliente e a etiqueta "Pronto" — mostra só o número da senha,
-                bem grande, ocupando a tela inteira.
-              </p>
-            </div>
-            <Switch
-              checked={config.minimalMode === true}
-              onCheckedChange={(v) =>
-                setConfig({ ...config, minimalMode: v, ticketCardSize: v ? "xlarge" : config.ticketCardSize })
-              }
-            />
-          </div>
-        </ContentCard>
-
-        {/* Som e voz */}
-        <ContentCard padding="lg">
-          <div className="flex items-center gap-3 mb-1">
-            <Volume2 className="w-4 h-4 text-slate-400" />
-            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Som e Voz</p>
-          </div>
-          <p className="text-[10px] text-slate-400 mb-6">
-            Som e fala usados quando uma senha é chamada (pedido fica pronto).
-          </p>
-
-          <div className="flex items-center justify-between gap-4 bg-slate-50 border border-slate-100 rounded-2xl p-4 mb-4">
-            <div>
-              <p className="text-xs font-black text-slate-700">Anúncio por voz</p>
-              <p className="text-[11px] text-slate-400">Fala em voz alta quando o pedido fica pronto. Desligue se preferir só o som.</p>
-            </div>
-            <Switch
-              checked={config.voiceAnnouncement !== false}
-              onCheckedChange={(v) => setConfig({ ...config, voiceAnnouncement: v })}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-end mb-4">
-            <Select
-              label="Som de chamada"
-              value={config.readySoundFile ?? DEFAULT_DISPLAY_PANEL.readySoundFile}
-              onChange={(e) => setConfig({ ...config, readySoundFile: e.target.value })}
-              options={READY_SOUND_OPTIONS.map((s) => ({ value: s.file, label: s.label }))}
-            />
-            <Button type="button" variant="outline" size="md" iconLeft={<Play className="w-3.5 h-3.5" />} onClick={previewSound}>
-              Ouvir
-            </Button>
-          </div>
-
-          {config.voiceAnnouncement !== false && (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-end mb-4">
-                <Select
-                  label="Voz"
-                  value={config.voiceName ?? ""}
-                  onChange={(e) => setConfig({ ...config, voiceName: e.target.value || null })}
-                  placeholder="Automática (recomendado)"
-                  options={voices.map((v) => ({ value: v.name, label: `${v.name} (${v.lang})` }))}
-                />
-                <Button type="button" variant="outline" size="md" iconLeft={<Mic className="w-3.5 h-3.5" />} onClick={previewVoice}>
-                  Ouvir
-                </Button>
-              </div>
-              {voices.length === 0 && (
-                <p className="text-[10px] text-amber-500 -mt-2 mb-4">
-                  Nenhuma voz em português encontrada neste navegador/dispositivo — a fala pode usar uma voz em outro idioma.
-                </p>
-              )}
-
-              <div className="space-y-1.5">
-                <label className="ds-label">Texto falado</label>
-                <input
-                  type="text"
-                  value={config.voiceText ?? DEFAULT_VOICE_TEXT}
-                  onChange={(e) => setConfig({ ...config, voiceText: e.target.value })}
-                  placeholder={DEFAULT_VOICE_TEXT}
-                  className="ds-input w-full"
-                />
-                <p className="text-[10px] text-slate-400">
-                  Use <code className="bg-slate-100 px-1 rounded">{"{numero}"}</code> onde a senha deve ser falada
-                  e <code className="bg-slate-100 px-1 rounded">{"{nome}"}</code> onde o nome do cliente deve ser
-                  falado (some sozinho da frase se o pedido não tiver nome cadastrado).
-                </p>
-              </div>
-            </>
-          )}
-        </ContentCard>
-
-        {/* Carrossel de propaganda */}
-        <ContentCard padding="lg">
-          <div className="flex items-center gap-3 mb-1">
-            <ImageIcon className="w-4 h-4 text-slate-400" />
-            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Propaganda (Carrossel de Imagens)</p>
-          </div>
-          <p className="text-[10px] text-slate-400 mb-6">
-            Imagens (recomendado PNG sem fundo) exibidas numa faixa ao lado das colunas de pedidos, alternando
-            automaticamente. Se não houver nenhuma imagem ativa, as colunas de pedidos ocupam a tela inteira.
-          </p>
-
-          <div className="flex items-center justify-between gap-4 bg-slate-50 border border-slate-100 rounded-2xl p-4 mb-6">
-            <div>
-              <p className="text-xs font-black text-slate-700">Exibir carrossel</p>
-              <p className="text-[11px] text-slate-400">Desligue pra sempre usar a tela inteira só com os pedidos.</p>
-            </div>
-            <Switch
-              checked={config.carouselEnabled !== false}
-              onCheckedChange={(v) => setConfig({ ...config, carouselEnabled: v })}
-            />
-          </div>
-
-          {config.carouselEnabled !== false && (
-            <>
-              <div className="max-w-xs mb-6">
-                <Select
-                  label="Cada imagem fica visível por"
-                  value={String(config.carouselIntervalSeconds ?? 8)}
-                  onChange={(e) => setConfig({ ...config, carouselIntervalSeconds: Number(e.target.value) })}
-                  options={[4, 6, 8, 10, 15, 20, 30].map((s) => ({ value: s, label: `${s} segundos` }))}
-                />
-              </div>
-
-              <ImageUploader
-                label="Adicionar imagem ao carrossel"
-                value=""
-                onChange={handleAddImage}
-                description="PNG com fundo transparente funciona melhor. A imagem entra ativa no carrossel automaticamente."
-              />
-
-              {!imagesLoading && images.length === 0 && (
-                <p className="text-xs text-slate-300 text-center py-6">Nenhuma imagem cadastrada ainda.</p>
-              )}
-
-              {images.length > 0 && (
-                <div className="space-y-2 mt-6">
-                  {images.map((image) => (
-                    <div key={image.id} className="flex items-center gap-3 bg-slate-50 border border-slate-100 rounded-xl px-3 py-2">
-                      <GripVertical className="w-4 h-4 text-slate-300 shrink-0" />
-                      <img src={image.imageUrl} alt="" className="w-12 h-12 object-contain rounded-lg bg-slate-100 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-slate-600 truncate">{image.imageUrl.split("/").pop()}</p>
-                        <p className="text-[10px] text-slate-400">{image.active ? "Ativa no carrossel" : "Desativada"}</p>
-                      </div>
-                      <Switch checked={image.active} onCheckedChange={() => handleToggleImage(image)} />
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveImage(image)}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg text-red-400 hover:bg-red-50 transition-colors shrink-0"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+        <div>
+          <Tabs items={TABS} value={tab} onChange={(v: TabId) => setTab(v)} label="Configurações do Painel TV">
+            {tab === "pedidos" && (
+              <PanelCard
+                title="Pedidos Exibidos"
+                description="Escolha quais tipos de pedido aparecem no painel. Delivery fica desativado por padrão, já que é entregue no endereço do cliente, não retirado no local."
+                icon={ListChecks}
+              >
+                <div className="space-y-2">
+                  {([
+                    { key: "showDineIn" as const, label: "Mesa / Salão", desc: "Pedidos feitos nas mesas do estabelecimento." },
+                    { key: "showPickup" as const, label: "Retirada no Balcão", desc: "Cliente busca o pedido presencialmente." },
+                    { key: "showDelivery" as const, label: "Delivery", desc: "Pedido é entregue no endereço do cliente." },
+                  ]).map((opt) => (
+                    <div key={opt.key}>
+                      {toggleRow(
+                        opt.label,
+                        opt.desc,
+                        <Switch checked={config[opt.key]} onCheckedChange={(v) => setConfig({ ...config, [opt.key]: v })} />,
+                      )}
                     </div>
                   ))}
                 </div>
-              )}
-            </>
-          )}
-        </ContentCard>
+              </PanelCard>
+            )}
 
-        {tenant?.slug && <TvDevicesCard slug={tenant.slug} />}
+            {tab === "aparencia" && (
+              <div className="space-y-4">
+                <PanelCard title="Tema e Cores" description="Tema de fundo e cores de destaque de cada coluna do painel." icon={Palette}>
+                  <div className="space-y-3">
+                    <FormRow cols={2}>
+                      <Select
+                        label="Tema"
+                        value={config.theme ?? "dark"}
+                        onChange={(e) => setConfig({ ...config, theme: e.target.value as "dark" | "light" })}
+                        options={[
+                          { value: "dark", label: "Escuro (padrão)" },
+                          { value: "light", label: "Claro" },
+                        ]}
+                      />
+                      {toggleRow(
+                        "Mostrar logo",
+                        "Exibe o logo do estabelecimento no cabeçalho.",
+                        <Switch checked={config.showLogo !== false} onCheckedChange={(v) => setConfig({ ...config, showLogo: v })} />,
+                      )}
+                    </FormRow>
+                    <FormRow cols={2}>
+                      {colorField("Cor — Em Preparo", preparingColor, (v) => setConfig({ ...config, preparingColor: v }))}
+                      {colorField("Cor — Pronto", readyColor, (v) => setConfig({ ...config, readyColor: v }))}
+                    </FormRow>
+                  </div>
+                </PanelCard>
+
+                <PanelCard
+                  title="Layout"
+                  description="Estilo visual do cartão de senha, tamanho da senha exibida e opção de tela minimalista, sem cabeçalho nem rodapé."
+                  icon={LayoutGrid}
+                >
+                  <div className="space-y-4">
+                    <div>
+                      <p className="mb-2 text-xs font-medium text-slate-600">Estilo do cartão</p>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        {CARD_STYLE_OPTIONS.map((opt) => {
+                          const active = cardStyle === opt.value;
+                          return (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => setConfig({ ...config, cardStyle: opt.value })}
+                              className={`rounded-lg border p-3 text-left transition-colors ${
+                                active ? "border-blue-500 bg-blue-50" : "border-slate-200 bg-slate-50 hover:border-slate-300"
+                              }`}
+                            >
+                              <p className={`text-xs font-semibold ${active ? "text-blue-700" : "text-slate-700"}`}>{opt.label}</p>
+                              <p className="mt-0.5 text-[11px] text-slate-500">{opt.description}</p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <FormRow cols={2}>
+                      <Select
+                        label="Tamanho da senha"
+                        value={config.ticketCardSize ?? "normal"}
+                        onChange={(e) => setConfig({ ...config, ticketCardSize: e.target.value as DisplayPanelConfig["ticketCardSize"] })}
+                        options={[
+                          { value: "normal", label: "Normal" },
+                          { value: "large", label: "Grande" },
+                          { value: "xlarge", label: "Extra grande" },
+                        ]}
+                      />
+                      <div>
+                        <label className="mb-1.5 block text-xs font-medium text-slate-600">Tamanho personalizado (px)</label>
+                        <Input
+                          type="number"
+                          min={0}
+                          placeholder="Ex: 80"
+                          value={config.ticketCardSizePx ?? ""}
+                          onChange={(e) => setConfig({ ...config, ticketCardSizePx: e.target.value ? Number(e.target.value) : null })}
+                        />
+                        <p className="mt-1 text-[11px] text-slate-500">Preenchido, sobrepõe o tamanho acima.</p>
+                      </div>
+                    </FormRow>
+
+                    {toggleRow(
+                      "Modo minimalista",
+                      "Esconde cabeçalho, rodapé, nome do cliente e a etiqueta \"Pronto\" — mostra só o número da senha, bem grande, ocupando a tela inteira.",
+                      <Switch
+                        checked={config.minimalMode === true}
+                        onCheckedChange={(v) =>
+                          setConfig({ ...config, minimalMode: v, ticketCardSize: v ? "xlarge" : config.ticketCardSize })
+                        }
+                      />,
+                    )}
+                  </div>
+                </PanelCard>
+
+                {cardStyle === "artesanal" && (
+                  <PanelCard title="Cores do estilo Artesanal" icon={Palette}>
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-end gap-4">
+                        {colorField("Cor clara (coluna Preparando)", config.artesanalCreamColor || ARTESANAL_DEFAULT_CREAM, (v) =>
+                          setConfig({ ...config, artesanalCreamColor: v }),
+                        )}
+                        {colorField("Cor escura (coluna Prontos)", config.artesanalBrownColor || ARTESANAL_DEFAULT_BROWN, (v) =>
+                          setConfig({ ...config, artesanalBrownColor: v }),
+                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setConfig({ ...config, artesanalCreamColor: null, artesanalBrownColor: null })}
+                        >
+                          Restaurar cor padrão
+                        </Button>
+                      </div>
+                      {toggleRow(
+                        "Mostrar QR Code do cardápio no rodapé",
+                        "\"Acesse nosso cardápio digital\" com o QR Code do balcão.",
+                        <Switch
+                          checked={config.artesanalShowQrFooter !== false}
+                          onCheckedChange={(v) => setConfig({ ...config, artesanalShowQrFooter: v })}
+                        />,
+                      )}
+                    </div>
+                  </PanelCard>
+                )}
+              </div>
+            )}
+
+            {tab === "som" && (
+              <PanelCard title="Som e Voz" description="Som e fala usados quando uma senha é chamada (pedido fica pronto)." icon={Volume2}>
+                <div className="space-y-3">
+                  {toggleRow(
+                    "Anúncio por voz",
+                    "Fala em voz alta quando o pedido fica pronto. Desligue se preferir só o som.",
+                    <Switch
+                      checked={config.voiceAnnouncement !== false}
+                      onCheckedChange={(v) => setConfig({ ...config, voiceAnnouncement: v })}
+                    />,
+                  )}
+
+                  <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[1fr_auto]">
+                    <Select
+                      label="Som de chamada"
+                      value={config.readySoundFile ?? DEFAULT_DISPLAY_PANEL.readySoundFile}
+                      onChange={(e) => setConfig({ ...config, readySoundFile: e.target.value })}
+                      options={READY_SOUND_OPTIONS.map((s) => ({ value: s.file, label: s.label }))}
+                    />
+                    <Button type="button" variant="outline" size="md" iconLeft={<Play className="w-3.5 h-3.5" />} onClick={previewSound}>
+                      Ouvir
+                    </Button>
+                  </div>
+
+                  {config.voiceAnnouncement !== false && (
+                    <>
+                      <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[1fr_auto]">
+                        <Select
+                          label="Voz"
+                          value={config.voiceName ?? ""}
+                          onChange={(e) => setConfig({ ...config, voiceName: e.target.value || null })}
+                          placeholder="Automática (recomendado)"
+                          options={voices.map((v) => ({ value: v.name, label: `${v.name} (${v.lang})` }))}
+                        />
+                        <Button type="button" variant="outline" size="md" iconLeft={<Mic className="w-3.5 h-3.5" />} onClick={previewVoice}>
+                          Ouvir
+                        </Button>
+                      </div>
+                      {voices.length === 0 && (
+                        <p className="text-[11px] text-amber-700">
+                          Nenhuma voz em português encontrada neste navegador/dispositivo — a fala pode usar uma voz em outro idioma.
+                        </p>
+                      )}
+
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-slate-600">Texto falado</label>
+                        <Input
+                          type="text"
+                          value={config.voiceText ?? DEFAULT_VOICE_TEXT}
+                          onChange={(e) => setConfig({ ...config, voiceText: e.target.value })}
+                          placeholder={DEFAULT_VOICE_TEXT}
+                        />
+                        <p className="text-[11px] text-slate-500">
+                          Use <code className="rounded bg-slate-100 px-1">{"{numero}"}</code> onde a senha deve ser falada
+                          e <code className="rounded bg-slate-100 px-1">{"{nome}"}</code> onde o nome do cliente deve ser
+                          falado (some sozinho da frase se o pedido não tiver nome cadastrado).
+                        </p>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </PanelCard>
+            )}
+
+            {tab === "propaganda" && (
+              <PanelCard
+                title="Propaganda (Carrossel de Imagens)"
+                description="Imagens (recomendado PNG sem fundo) exibidas numa faixa ao lado das colunas de pedidos, alternando automaticamente. Se não houver nenhuma imagem ativa, as colunas de pedidos ocupam a tela inteira."
+                icon={ImageIcon}
+              >
+                <div className="space-y-3">
+                  {toggleRow(
+                    "Exibir carrossel",
+                    "Desligue pra sempre usar a tela inteira só com os pedidos.",
+                    <Switch
+                      checked={config.carouselEnabled !== false}
+                      onCheckedChange={(v) => setConfig({ ...config, carouselEnabled: v })}
+                    />,
+                  )}
+
+                  {config.carouselEnabled !== false && (
+                    <>
+                      <FormRow cols={2}>
+                        <Select
+                          label="Cada imagem fica visível por"
+                          value={String(config.carouselIntervalSeconds ?? 8)}
+                          onChange={(e) => setConfig({ ...config, carouselIntervalSeconds: Number(e.target.value) })}
+                          options={[4, 6, 8, 10, 15, 20, 30].map((s) => ({ value: s, label: `${s} segundos` }))}
+                        />
+                      </FormRow>
+
+                      <ImageUploader
+                        label="Adicionar imagem ao carrossel"
+                        value=""
+                        onChange={handleAddImage}
+                        description="PNG com fundo transparente funciona melhor. A imagem entra ativa no carrossel automaticamente."
+                      />
+
+                      {!imagesLoading && images.length === 0 && (
+                        <p className="py-4 text-center text-xs text-slate-500">Nenhuma imagem cadastrada ainda.</p>
+                      )}
+
+                      {images.length > 0 && (
+                        <div className="space-y-2">
+                          {images.map((image) => (
+                            <div key={image.id} className="flex items-center gap-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                              <GripVertical className="h-4 w-4 shrink-0 text-slate-300" />
+                              <img src={image.imageUrl} alt="" className="h-12 w-12 shrink-0 rounded-lg bg-slate-100 object-contain" />
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-xs font-medium text-slate-600">{image.imageUrl.split("/").pop()}</p>
+                                <p className="text-[11px] text-slate-500">{image.active ? "Ativa no carrossel" : "Desativada"}</p>
+                              </div>
+                              <Switch checked={image.active} onCheckedChange={() => handleToggleImage(image)} />
+                              <IconButton variant="danger" size="sm" aria-label="Remover imagem" onClick={() => handleRemoveImage(image)}>
+                                <Trash2 className="h-4 w-4" />
+                              </IconButton>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </PanelCard>
+            )}
+
+            {tab === "dispositivos" && tenant?.slug && <TvDevicesCard slug={tenant.slug} />}
+          </Tabs>
+
+        </div>
+
+        <div className="sticky bottom-0 z-10 flex items-center justify-end gap-3 rounded-lg border border-slate-200 bg-white/95 px-3 py-2 backdrop-blur">
+          <p className="mr-auto text-[11px] text-slate-500">As alterações só valem para o painel depois de salvar.</p>
+          <Button variant="primary" size="sm" loading={saving} onClick={handleSave}>
+            {saved ? "Salvo!" : "Salvar Alterações"}
+          </Button>
+        </div>
       </div>
     </PageWrapper>
   );

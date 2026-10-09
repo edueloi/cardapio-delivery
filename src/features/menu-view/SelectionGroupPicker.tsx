@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { ChevronLeft, X, ShoppingBag } from "lucide-react";
 import type { Product, Tenant } from "../../types";
+import { Button, Modal, ModalFooter } from "../../components";
 
 const BRAND = "#C9A227";
 
@@ -70,6 +71,12 @@ interface SelectionGroupPickerProps {
   initialSelections?: string[][];
   onConfirm: (selectedIdsByGroup: string[][]) => void;
   onCancel: () => void;
+  /** "admin" usa o padrão visual do painel (Modal); o padrão "brand" é o do cardápio público. */
+  variant?: "brand" | "admin";
+  /** Classes extras no Modal do variant "admin" (ex: tema escuro). */
+  className?: string;
+  /** Renderiza o passo a passo dentro da página (sem Modal) — só no variant "admin". */
+  inline?: boolean;
 }
 
 // Fluxo passo a passo pelos grupos de seleção embutidos no produto — ex: numa marmita,
@@ -77,7 +84,7 @@ interface SelectionGroupPickerProps {
 // cada unidade é escolhida em sua própria etapa (avança sozinho ao tocar), igual ao fluxo
 // de combos, terminando numa tela de resumo com TODOS os grupos pra revisar/trocar antes
 // de confirmar. Preço nunca muda aqui — quem chama decide o preço (sempre o fixo do produto pai).
-export default function SelectionGroupPicker({ groups, optionsByGroup, initialSelections, onConfirm, onCancel }: SelectionGroupPickerProps) {
+export default function SelectionGroupPicker({ groups, optionsByGroup, initialSelections, onConfirm, onCancel, variant = "brand", className, inline = false }: SelectionGroupPickerProps) {
   const [groupIdx, setGroupIdx] = useState(0);
   const [unitIdx, setUnitIdx] = useState(0);
   const [selections, setSelections] = useState<string[][]>(
@@ -115,6 +122,103 @@ export default function SelectionGroupPicker({ groups, optionsByGroup, initialSe
   const totalUnits = groups.reduce((acc, g) => acc + g.qty, 0);
   const doneUnits = groups.reduce((acc, g, gi) => acc + (gi < groupIdx ? g.qty : gi === groupIdx ? unitIdx + (selections[gi][unitIdx] ? 1 : 0) : 0), 0);
   const progress = showSummary ? 1 : totalUnits > 0 ? doneUnits / totalUnits : 0;
+
+  if (variant === "admin") {
+    const stepTitle = showSummary
+      ? "Resumo das escolhas"
+      : `${group.label || "Escolha os itens"}${group.qty > 1 ? ` · ${unitIdx + 1}ª unidade` : ""}`;
+    const stepNumber = groups.slice(0, groupIdx).reduce((acc, g) => acc + g.qty, 0) + unitIdx + 1;
+    const adminFooter = (
+          <ModalFooter align="between">
+            <Button variant="outline" iconLeft={<ChevronLeft size={14} />} onClick={goBack}>Voltar</Button>
+            {showSummary && (
+              <Button iconLeft={<ShoppingBag size={14} />} disabled={!allDone} onClick={() => onConfirm(selections)}>
+                Confirmar escolha
+              </Button>
+            )}
+          </ModalFooter>
+    );
+    const adminBody = (
+      <>
+        <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
+          <div className="h-full rounded-full bg-blue-600 transition-all duration-300" style={{ width: `${progress * 100}%` }} />
+        </div>
+        {!showSummary ? (
+          <div className="space-y-2">
+            {options.map((product) => {
+              const selected = selections[groupIdx][unitIdx] === product.id;
+              return (
+                <button
+                  key={product.id}
+                  type="button"
+                  onClick={() => pick(product.id)}
+                  className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                    selected ? "border-blue-500 bg-blue-50" : "border-slate-200 bg-white hover:border-blue-300 hover:bg-slate-50"
+                  }`}
+                >
+                  {product.imageUrl ? (
+                    <img src={product.imageUrl} alt="" className="h-10 w-10 shrink-0 rounded-md object-cover" />
+                  ) : (
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-400">🍽️</div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className={`text-[13px] font-medium leading-snug ${selected ? "text-blue-700" : "text-slate-800"}`}>{product.name}</p>
+                    {product.description && <p className="mt-0.5 line-clamp-1 text-[11px] text-slate-500">{product.description}</p>}
+                  </div>
+                  <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${selected ? "border-blue-600" : "border-slate-300"}`}>
+                    {selected && <span className="h-2 w-2 rounded-full bg-blue-600" />}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {groups.map((g, gi) => (
+              <div key={gi} className="space-y-1.5">
+                <p className="text-xs font-medium text-slate-500">{g.label || `Grupo ${gi + 1}`}</p>
+                {selections[gi].map((id, ui) => {
+                  const product = (optionsByGroup[gi] || []).find((p) => p.id === id);
+                  return (
+                    <div key={ui} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                      <p className="min-w-0 truncate text-[13px] font-medium text-slate-800">{product?.name || "—"}</p>
+                      <Button variant="outline" size="xs" onClick={() => { setShowSummary(false); setGroupIdx(gi); setUnitIdx(ui); }}>Trocar</Button>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        )}
+      </>
+    );
+    if (inline) {
+      return (
+        <div className={className}>
+          <div className="mb-3">
+            <h2 className="text-sm font-medium">{stepTitle}</h2>
+            <p className="mt-0.5 text-xs opacity-70">{showSummary ? "Confira as escolhas antes de confirmar" : `Etapa ${stepNumber} de ${totalUnits}`}</p>
+          </div>
+          {adminBody}
+          <div className="mt-4">{adminFooter}</div>
+        </div>
+      );
+    }
+    return (
+      <Modal
+        isOpen
+        onClose={onCancel}
+        title={stepTitle}
+        subtitle={showSummary ? "Confira as escolhas antes de confirmar" : `Etapa ${stepNumber} de ${totalUnits}`}
+        size="md"
+        zIndex={200}
+        className={className}
+        footer={adminFooter}
+      >
+        {adminBody}
+      </Modal>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center">

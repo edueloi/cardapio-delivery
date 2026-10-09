@@ -13,10 +13,19 @@ import {
   Star,
   PackageX,
   Receipt,
+  Settings,
 } from "lucide-react";
-import { Badge, Button, ContentCard, Input, Switch, Textarea } from "../../../../components";
+import { Alert, Badge, Button, ContentCard, EmptyState, Input, Switch, Tabs, Textarea } from "../../../../components";
 import { apiJson } from "../../../../lib/api";
 import type { Tenant, WppBotConfig, WppInstance, WppSessionInfo, WppMessageLog, WppMessageKind } from "../../../../types";
+
+const WPP_TABS = [
+  { id: "connection", label: "Conexão", icon: Link2 },
+  { id: "config", label: "Configuração", icon: Settings },
+  { id: "test", label: "Teste manual", icon: Send },
+  { id: "history", label: "Histórico", icon: History },
+] as const;
+type WppTab = (typeof WPP_TABS)[number]["id"];
 
 interface WppResponse {
   instance: WppInstance | null;
@@ -102,32 +111,32 @@ export function WhatsAppOverviewCard({
   const botEnabled = tenant.wppBotConfig?.botEnabled;
 
   return (
-    <div className="ds-card-premium bg-[#075E54] text-white p-5 sm:p-6 relative overflow-hidden border-b-4 border-emerald-800 h-full group">
+    <div className="rounded-lg bg-[#075E54] text-white p-4 relative overflow-hidden h-full group">
       <div className="relative z-10 flex h-full flex-col">
         <div className="flex items-center gap-2 mb-4">
-          <div className="w-8 h-8 sm:w-9 sm:h-9 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+          <div className="w-8 h-8 sm:w-9 sm:h-9 bg-emerald-500 rounded-lg flex items-center justify-center ">
             <MessageSquare className="w-4 h-4" />
           </div>
-          <span className="text-[10px] font-black uppercase tracking-[0.15em] opacity-80">
+          <span className="text-[11px] font-semibold opacity-80">
             Inteligência WhatsApp
           </span>
         </div>
 
         <div className="space-y-4 flex-1">
-          <div className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-400/20 backdrop-blur-sm">
-            <div className="text-[9px] text-emerald-300 font-black uppercase tracking-widest mb-1 opacity-70">Status da Sessão</div>
-            <div className="text-sm font-black tracking-tight">{getStatusLabel(status)}</div>
+          <div className="bg-emerald-900/40 p-4 rounded-lg border border-emerald-400/20 backdrop-blur-sm">
+            <div className="text-[10px] text-emerald-300 font-semibold mb-1 opacity-70">Status da Sessão</div>
+            <div className="text-sm font-semibold">{getStatusLabel(status)}</div>
             <div className="text-[11px] text-emerald-100/60 mt-2 font-medium">
               {phone ? `📱 ${phone}` : "Conecte seu número oficial para atendimento."}
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 text-[10px] font-black uppercase tracking-widest">
-            <div className="rounded-2xl bg-white/10 p-3 border border-white/10 flex flex-col justify-center">
+          <div className="grid grid-cols-2 gap-3 text-[11px] font-semibold">
+            <div className="rounded-lg bg-white/10 p-3 border border-white/10 flex flex-col justify-center">
               <div className="opacity-50 mb-1">Status Bot</div>
               <div className="text-xs">{botEnabled ? "ATIVO" : "OFF"}</div>
             </div>
-            <div className="rounded-2xl bg-white/10 p-3 border border-white/10 flex flex-col justify-center">
+            <div className="rounded-lg bg-white/10 p-3 border border-white/10 flex flex-col justify-center">
               <div className="opacity-50 mb-1">Unidade</div>
               <div className="text-xs truncate">/{tenant.slug}</div>
             </div>
@@ -135,7 +144,7 @@ export function WhatsAppOverviewCard({
         </div>
 
         <Button
-          className="mt-6 shadow-xl shadow-emerald-900/20"
+          className="mt-4"
           fullWidth
           variant="outline"
           size="sm"
@@ -145,7 +154,7 @@ export function WhatsAppOverviewCard({
           Configurar Atendimento
         </Button>
       </div>
-      <div className="absolute -right-12 -bottom-12 text-emerald-400/10 text-[140px] font-bold rotate-12 pointer-events-none group-hover:rotate-0 transition-transform duration-700">
+      <div className="absolute -right-12 -bottom-12 text-emerald-400/10 text-[140px] font-semibold rotate-12 pointer-events-none group-hover:rotate-0 transition-transform duration-700">
         💬
       </div>
     </div>
@@ -175,6 +184,7 @@ export function WhatsAppManagementPanel({
   const [success, setSuccess] = useState("");
   const [logs, setLogs] = useState<WppMessageLog[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
+  const [tab, setTab] = useState<WppTab>("connection");
 
   const loadLogs = async () => {
     setLogsLoading(true);
@@ -326,77 +336,83 @@ export function WhatsAppManagementPanel({
 
   if (loading) {
     return (
-      <ContentCard className="p-10">
+      <ContentCard className="p-8">
         <div className="flex items-center justify-center">
-          <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
         </div>
       </ContentCard>
     );
   }
 
   return (
-    <div className="grid grid-cols-12 gap-4 sm:gap-6">
-      <div className="col-span-12 xl:col-span-5 space-y-6">
-        <ContentCard className="border-l-4 border-l-[#25D366]">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-5">
+    <div className="space-y-3">
+      {(error || success) && (
+        <Alert variant={error ? "error" : "success"}>{error || success}</Alert>
+      )}
+      <Tabs<WppTab> items={WPP_TABS} value={tab} onChange={setTab} label="WhatsApp">
+      {tab === "connection" && (
+      <div className="space-y-3">
+        <ContentCard>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-4">
             <div>
-              <div className="text-[11px] font-black uppercase tracking-[0.25em] text-slate-400 mb-2">
+              <div className="text-[11px] text-slate-500 mb-1">
                 Sessão Baileys
               </div>
-              <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+              <h3 className="text-sm font-medium text-slate-900">
                 {instance?.instanceName || `${tenant.name} Bot`}
               </h3>
             </div>
             <Badge color={getStatusTone(status)}>{getStatusLabel(status)}</Badge>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-            <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+            <div className="rounded-lg bg-slate-50 border border-slate-200 p-3">
               <div className="flex items-center gap-2 text-slate-500 mb-2">
                 <Smartphone className="w-4 h-4" />
-                <span className="text-[10px] font-black uppercase tracking-[0.2em]">Número</span>
+                <span className="text-[11px] font-semibold">Número</span>
               </div>
-              <div className="text-sm font-black text-slate-900">
+              <div className="text-[13px] font-medium text-slate-900">
                 {session?.phone || instance?.phone || "Aguardando conexão"}
               </div>
             </div>
-            <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4">
+            <div className="rounded-lg bg-slate-50 border border-slate-200 p-3">
               <div className="flex items-center gap-2 text-slate-500 mb-2">
                 <Link2 className="w-4 h-4" />
-                <span className="text-[10px] font-black uppercase tracking-[0.2em]">Cardápio</span>
+                <span className="text-[11px] font-semibold">Cardápio</span>
               </div>
-              <div className="text-sm font-black text-slate-900 truncate">/{tenant.slug}</div>
+              <div className="text-[13px] font-medium text-slate-900 truncate">/{tenant.slug}</div>
             </div>
           </div>
 
-          <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50 p-5 flex flex-col items-center text-center">
+          <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-5 flex flex-col items-center text-center">
             {qrCode ? (
               <>
                 <img
                   src={qrCode}
                   alt={`QR Code do WhatsApp de ${tenant.name}`}
-                  className="w-full max-w-[260px] rounded-2xl border border-slate-200 bg-white p-3 shadow-sm"
+                  className="w-full max-w-[260px] rounded-lg border border-slate-200 bg-white p-3"
                 />
-                <p className="text-sm font-bold text-slate-700 mt-4">
+                <p className="text-xs font-medium text-slate-700 mt-4">
                   Abra o WhatsApp do estabelecimento e leia este QR Code.
                 </p>
               </>
             ) : (
               <>
-                <div className="w-20 h-20 rounded-[28px] bg-white border border-slate-200 flex items-center justify-center mb-4">
+                <div className="w-20 h-20 rounded-lg bg-white border border-slate-200 flex items-center justify-center mb-4">
                   <QrCode className="w-9 h-9 text-slate-300" />
                 </div>
-                <p className="text-sm font-bold text-slate-700">
+                <p className="text-xs font-medium text-slate-700">
                   O QR Code aparece aqui quando você iniciar a conexão.
                 </p>
               </>
             )}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
             {status !== "connected" && (
               <Button
                 fullWidth
+                size="sm"
                 loading={busyAction === "connect"}
                 iconLeft={<Power className="w-4 h-4" />}
                 onClick={connect}
@@ -406,6 +422,7 @@ export function WhatsAppManagementPanel({
             )}
             <Button
               fullWidth
+              size="sm"
               variant="outline"
               loading={busyAction === "refresh"}
               iconLeft={<RefreshCw className="w-4 h-4" />}
@@ -415,6 +432,7 @@ export function WhatsAppManagementPanel({
             </Button>
             <Button
               fullWidth
+              size="sm"
               variant="danger"
               loading={busyAction === "disconnect"}
               iconLeft={<Unplug className="w-4 h-4" />}
@@ -425,19 +443,21 @@ export function WhatsAppManagementPanel({
           </div>
         </ContentCard>
       </div>
+      )}
 
-      <div className="col-span-12 xl:col-span-7 space-y-6">
+      {tab === "config" && (
+      <div className="space-y-3">
         <ContentCard>
-          <div className="mb-6">
-            <div className="text-[11px] font-black uppercase tracking-[0.25em] text-slate-400 mb-2">
+          <div className="mb-4">
+            <div className="text-[11px] text-slate-500 mb-1">
               Configuração do Bot
             </div>
-              <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+              <h3 className="text-sm font-medium text-slate-900">
                 Atendimento por estabelecimento
               </h3>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-4">
+          <div className="grid md:grid-cols-2 gap-3">
             <Input
               label="Nome da conexão"
               value={form.instanceName}
@@ -477,7 +497,7 @@ export function WhatsAppManagementPanel({
             wrapperClassName="mt-4"
           /> */}
 
-          <div className="grid md:grid-cols-2 gap-4 mt-6">
+          <div className="grid md:grid-cols-2 gap-3 mt-4">
             <ToggleCard
               label="Bot ativo"
               description="Permite respostas automáticas no WhatsApp."
@@ -547,10 +567,10 @@ export function WhatsAppManagementPanel({
             />
           </div>
 
-          <div className="mt-6 p-4 bg-amber-50 border border-amber-100 rounded-2xl">
+          <div className="mt-6 p-3 bg-slate-50 border border-slate-200 rounded-lg">
             <div className="flex items-center gap-2 mb-4">
-              <RefreshCw className="w-4 h-4 text-amber-500" />
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-600">Horário de Funcionamento do Bot</span>
+              <RefreshCw className="w-4 h-4 text-blue-600" />
+              <span className="text-[11px] font-medium text-slate-600">Horário de Funcionamento do Bot</span>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <Input
@@ -566,29 +586,29 @@ export function WhatsAppManagementPanel({
                 onChange={(e) => setForm(f => ({ ...f, endTime: e.target.value }))}
               />
             </div>
-            <p className="text-[10px] text-amber-600/70 mt-3 font-medium italic">
+            <p className="text-[11px] text-slate-500 mt-3">
               * O bot só responderá automaticamente e enviará notificações dentro deste intervalo.
             </p>
           </div>
 
-          <div className="mt-6 p-4 bg-slate-50 border border-slate-200 rounded-2xl">
+          <div className="mt-4 p-3 bg-slate-50 border border-slate-200 rounded-lg">
             <div className="flex items-center gap-2 mb-3">
               <span className="text-sm">📦</span>
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Mensagem para Encomendas</span>
+              <span className="text-[11px] font-semibold text-slate-600">Mensagem para Encomendas</span>
             </div>
             <p className="text-[11px] text-slate-500 mb-2">Mensagem enviada ao cliente quando o pedido é uma encomenda (com data agendada). Deixe em branco para usar o texto padrão.</p>
-            <p className="text-[10px] text-slate-400 mb-2 font-mono">Variáveis: {"{nome}"} {"{data}"} {"{hora}"} {"{total}"}</p>
-            <textarea
+            <p className="text-[11px] text-slate-400 mb-2 font-mono">Variáveis: {"{nome}"} {"{data}"} {"{hora}"} {"{total}"}</p>
+            <Textarea
               value={form.preorderMessage}
               onChange={e => setForm(f => ({ ...f, preorderMessage: e.target.value }))}
               placeholder={`Ex: Olá, {nome}! Sua encomenda foi recebida 📦\nEntrega prevista para {data} às {hora}.\nTotal: {total}`}
               rows={4}
-              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 resize-none font-mono"
             />
           </div>
 
-          <div className="mt-6">
+          <div className="mt-4">
             <Button
+              size="sm"
               loading={busyAction === "save"}
               iconLeft={<Bot className="w-4 h-4" />}
               onClick={saveConfig}
@@ -598,17 +618,22 @@ export function WhatsAppManagementPanel({
           </div>
         </ContentCard>
 
+      </div>
+      )}
+
+      {tab === "test" && (
+      <div className="space-y-3">
         <ContentCard>
-          <div className="mb-6">
-            <div className="text-[11px] font-black uppercase tracking-[0.25em] text-slate-400 mb-2">
+          <div className="mb-4">
+            <div className="text-[11px] text-slate-500 mb-1">
               Teste Manual
             </div>
-              <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+              <h3 className="text-sm font-medium text-slate-900">
                 Validar envio da sessão
               </h3>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-4">
+          <div className="grid md:grid-cols-2 gap-3">
             <Input
               label="Telefone de destino"
               value={testPhone}
@@ -616,12 +641,12 @@ export function WhatsAppManagementPanel({
               placeholder="5511999999999"
               hint="Use DDI e DDD. Ex.: 5511999999999"
             />
-            <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 flex items-center">
+            <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 flex items-center">
               <div>
-                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1">
+                <div className="text-[11px] text-slate-500 mb-1">
                   Situação atual
                 </div>
-                <div className="text-sm font-black text-slate-900">{getStatusLabel(status)}</div>
+                <div className="text-[13px] font-medium text-slate-900">{getStatusLabel(status)}</div>
               </div>
             </div>
           </div>
@@ -634,8 +659,9 @@ export function WhatsAppManagementPanel({
             wrapperClassName="mt-4"
           />
 
-          <div className="mt-6 flex flex-wrap gap-3">
+          <div className="mt-4 flex flex-wrap gap-2">
             <Button
+              size="sm"
               loading={busyAction === "test"}
               iconLeft={<Send className="w-4 h-4" />}
               onClick={sendTest}
@@ -643,6 +669,7 @@ export function WhatsAppManagementPanel({
               Enviar teste
             </Button>
             <Button
+              size="sm"
               variant="outline"
               onClick={() => setTestMessage(`Olá! Esta é uma mensagem de teste do bot de ${tenant.name}.`)}
             >
@@ -651,16 +678,13 @@ export function WhatsAppManagementPanel({
           </div>
         </ContentCard>
 
-        <MessageHistoryCard logs={logs} loading={logsLoading} onRefresh={() => void loadLogs()} />
-
-        {(error || success) && (
-          <ContentCard className={error ? "border-red-200 bg-red-50" : "border-green-200 bg-green-50"}>
-            <div className={`text-sm font-bold ${error ? "text-red-700" : "text-green-700"}`}>
-              {error || success}
-            </div>
-          </ContentCard>
-        )}
       </div>
+      )}
+
+      {tab === "history" && (
+        <MessageHistoryCard logs={logs} loading={logsLoading} onRefresh={() => void loadLogs()} />
+      )}
+      </Tabs>
     </div>
   );
 }
@@ -679,13 +703,13 @@ function ToggleCard({
   icon?: ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 flex items-start justify-between gap-4">
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 flex items-start justify-between gap-3">
       <div>
-        <div className="text-sm font-black text-slate-900 flex items-center gap-1.5">
+        <div className="text-[13px] font-medium text-slate-900 flex items-center gap-1.5">
           {icon}
           {label}
         </div>
-        <div className="text-sm text-slate-500 mt-1">{description}</div>
+        <div className="text-[11px] text-slate-500 mt-1">{description}</div>
       </div>
       <Switch checked={checked} onCheckedChange={onCheckedChange} />
     </div>
@@ -699,25 +723,23 @@ function formatLogTime(iso: string): string {
 function MessageHistoryCard({ logs, loading, onRefresh }: { logs: WppMessageLog[]; loading: boolean; onRefresh: () => void }) {
   return (
     <ContentCard>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
-          <div className="text-[11px] font-black uppercase tracking-[0.25em] text-slate-400 mb-2">
+          <div className="text-[11px] text-slate-500 mb-1">
             Histórico
           </div>
-          <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+          <h3 className="text-sm font-medium text-slate-900">
             Mensagens enviadas
           </h3>
         </div>
-        <Button variant="outline" size="sm" loading={loading} iconLeft={<RefreshCw className="w-4 h-4" />} onClick={onRefresh}>
+        <Button variant="outline" size="sm" loading={loading} iconLeft={<RefreshCw size={14} />} onClick={onRefresh}>
           Atualizar
         </Button>
       </div>
 
       {logs.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-10 text-slate-300 text-center">
-          <History className="w-9 h-9 mb-3" />
-          <p className="text-sm font-medium text-slate-400">Nenhuma mensagem enviada ainda.</p>
-        </div>
+        <EmptyState icon={History} title="Nenhuma mensagem enviada ainda." />
+
       ) : (
         <div className="divide-y divide-slate-100 max-h-96 overflow-y-auto">
           {logs.map((log) => {
@@ -727,12 +749,12 @@ function MessageHistoryCard({ logs, loading, onRefresh }: { logs: WppMessageLog[
                 <span className="text-lg shrink-0">{meta.emoji}</span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs font-black text-slate-800">{meta.label}</span>
-                    <span className="text-[10px] text-slate-400">→ {log.toPhone}</span>
+                    <span className="text-xs font-medium text-slate-800">{meta.label}</span>
+                    <span className="text-[11px] text-slate-400">→ {log.toPhone}</span>
                   </div>
                   <p className="text-xs text-slate-500 mt-0.5 truncate">{log.preview}</p>
                 </div>
-                <span className="text-[10px] text-slate-400 shrink-0 whitespace-nowrap">{formatLogTime(log.sentAt)}</span>
+                <span className="text-[11px] text-slate-500 shrink-0 whitespace-nowrap">{formatLogTime(log.sentAt)}</span>
               </div>
             );
           })}

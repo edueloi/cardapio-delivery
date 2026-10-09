@@ -8,6 +8,7 @@ export { Input, Textarea, Select, CurrencyInput } from './Input';
 export { Switch } from './Switch';
 export { DatePicker } from './DatePicker';
 export { Calendar } from './Calendar';
+export { FilterPopover } from './FilterPopover';
 export { Combobox } from './Combobox';
 export { RichTextEditor } from './RichTextEditor';
 
@@ -15,6 +16,13 @@ export { RichTextEditor } from './RichTextEditor';
 export { Toast, ToastProvider, useToast } from './Toast';
 export type { ToastType } from './Toast';
 export { Badge, StatusBadge, PaymentBadge } from './Badge';
+export { Alert } from './Alert';
+export { FiscalCodeLookup } from './FiscalCodeLookup';
+export type { FiscalCodeItem } from './FiscalCodeLookup';
+
+export { uiTheme } from './theme';
+export { Tabs, TabList, Tab, TabPanel } from './Tabs';
+export { DetailField } from './DetailField';
 
 // ── Layout / Estrutura ─────────────────────────────────────────────────────
 export { PageWrapper, SectionTitle, StatGrid, ContentCard, FormRow, Divider } from './PageWrapper';
