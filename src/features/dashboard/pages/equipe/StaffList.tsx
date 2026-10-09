@@ -365,7 +365,7 @@ export function StaffList({ tenant }: { tenant: Tenant | null }) {
                 </button>
               ))}
             </div>
-            <p className="text-[9px] text-slate-400 mt-2 ml-1">{inviteRole === "ADMIN" ? "Admin pode fazer tudo que o proprietário definir, exceto configurações e equipe." : "Staff tem acesso limitado às telas selecionadas."}</p>
+            <p className="text-[9px] text-slate-400 mt-2 ml-1">{inviteRole === "ADMIN" ? "Admin tem acesso completo à loja, com as mesmas permissões operacionais do proprietário." : "Staff tem acesso limitado às telas selecionadas."}</p>
           </div>
           {inviteRole === "STAFF" && (
             <div>
