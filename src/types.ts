@@ -130,8 +130,9 @@ export interface StoneConfig {
 export interface CieloConfig {
   enabled: boolean;
   merchantId: string;   // merchant-id do estabelecimento do lojista — vincula ao terminal físico Cielo LIO Smart
-  // Client-ID e Access Token são da aplicação (não do tenant) — vêm de env var
-  // no backend (CIELO_CLIENT_ID/CIELO_ACCESS_TOKEN), os mesmos para todos os clientes.
+  clientId?: string;    // credencial própria do cliente; vazio = usa a padrão do sistema (env)
+  accessToken?: string; // SEGREDO: só enviado ao salvar, nunca devolvido pelo servidor
+  accessTokenSet?: boolean; // somente leitura: indica se há token próprio salvo
 }
 
 // ─── Fiscal / NFC-e ──────────────────────────────────────────────────────────

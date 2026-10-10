@@ -10,6 +10,7 @@ import {
   sendMessage,
 } from "../wpp/baileys-manager";
 import { normalizeEmail, sanitizeSlug } from "../shared/utils";
+import { mergeCieloConfigForSave } from "../shared/cielo-secret";
 
 export interface RegisterOwnerRoutesOptions {
   app: Express;
@@ -304,9 +305,7 @@ export function registerOwnerRoutes({
             cieloConfig:
               cieloConfig === null || cieloConfig === "null"
                 ? null
-                : typeof cieloConfig === "string"
-                ? cieloConfig
-                : JSON.stringify(cieloConfig),
+                : mergeCieloConfigForSave(cieloConfig, (tenant as any).cieloConfig),
           }),
           ...(fiscalConfig !== undefined && {
             fiscalConfig:

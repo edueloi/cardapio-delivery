@@ -27,6 +27,7 @@ import { authMiddleware, requireAuth } from "./src/backend/auth";
 import { registerProductionRoutes } from "./src/backend/production-routes";
 import { restoreAllSessions } from "./src/backend/wpp/baileys-manager";
 import { createOrderHelpers } from "./src/backend/shared/order-helpers";
+import { cieloSecretGuard } from "./src/backend/shared/cielo-secret";
 import { injectSeoMeta, resolveSeoMeta } from "./src/backend/shared/seo";
 import { registerAuthRoutes } from "./src/backend/routes/auth-routes";
 import { registerSuperAdminRoutes } from "./src/backend/routes/superadmin-routes";
@@ -73,6 +74,7 @@ const {
 
 app.use(cors() as any);
 app.use(express.json());
+app.use(cieloSecretGuard); // nunca devolve o accessToken da Cielo ao navegador
 app.use("/uploads", express.static(uploadDir));
 app.use(
   "/downloads",

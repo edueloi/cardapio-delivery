@@ -44,6 +44,8 @@ import {
   PanelCard,
   FormRow,
   Alert,
+  Badge,
+  EmptyState,
   Select,
   SectionTitle,
   Switch,
@@ -1013,12 +1015,32 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
             <Tabs<MachineTabId> items={MACHINE_TABS} value={machineTab} onChange={setMachineTab} label="Seções das maquininhas">
               {machineTab === "terminals" && (
                 <div className="space-y-4">
+                  {!stone.enabled && !cielo.enabled && (
+                    <EmptyState
+                      icon={Smartphone}
+                      title="Nenhuma maquininha ativada"
+                      description="Ative uma integração para receber pagamentos no cartão direto pelo PDV."
+                      action={
+                        <Button size="sm" iconLeft={<Plus size={14} />} onClick={() => setStone({ ...stone, enabled: true })}>
+                          Adicionar maquininha
+                        </Button>
+                      }
+                    />
+                  )}
+
                   {/* Stone / Pagar.me */}
                   <PanelCard
                     title="Stone / Pagar.me"
                     description="Maquininha física via API Pagar.me"
                     icon={Smartphone}
-                    action={<Switch checked={stone.enabled} onCheckedChange={v => setStone({ ...stone, enabled: v })} />}
+                    action={
+                      <div className="flex items-center gap-2">
+                        <Badge size="sm" dot color={!stone.enabled ? "default" : stone.secretKey ? "success" : "warning"}>
+                          {!stone.enabled ? "Desativada" : stone.secretKey ? "Configurada" : "Não configurada"}
+                        </Badge>
+                        <Switch checked={stone.enabled} onCheckedChange={v => setStone({ ...stone, enabled: v })} />
+                      </div>
+                    }
                   >
                     {stone.enabled ? (
                       <div className="space-y-3">
@@ -1065,7 +1087,14 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                     title="Cielo LIO Smart"
                     description="Maquininha física via Cielo Order Manager (integração remota)"
                     icon={Smartphone}
-                    action={<Switch checked={cielo.enabled} onCheckedChange={v => setCielo({ ...cielo, enabled: v })} />}
+                    action={
+                      <div className="flex items-center gap-2">
+                        <Badge size="sm" dot color={!cielo.enabled ? "default" : cielo.merchantId ? "success" : "warning"}>
+                          {!cielo.enabled ? "Desativada" : cielo.merchantId ? "Configurada" : "Não configurada"}
+                        </Badge>
+                        <Switch checked={cielo.enabled} onCheckedChange={v => setCielo({ ...cielo, enabled: v })} />
+                      </div>
+                    }
                   >
                     {cielo.enabled ? (
                       <div className="space-y-3">
@@ -1082,9 +1111,28 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                           </ol>
                         </Alert>
 
-                        <FormRow cols={2}>
+                        <Alert variant="info" title="Credencial por cliente">
+                          Cada cliente precisa da própria credencial aprovada na Cielo (Portal de Desenvolvedores &gt; credenciais de produção): informe Client ID, Access Token e Merchant ID do estabelecimento. Se deixar em branco, usa a credencial padrão do sistema.
+                        </Alert>
+
+                        <FormRow cols={3}>
                           <Input
-                            label="Código do estabelecimento na Cielo"
+                            label="Client ID"
+                            value={cielo.clientId || ""}
+                            onChange={e => setCielo({ ...cielo, clientId: e.target.value })}
+                            placeholder="Client ID do estabelecimento"
+                            autoComplete="off"
+                          />
+                          <Input
+                            label="Access Token"
+                            type="password"
+                            value={cielo.accessToken || ""}
+                            onChange={e => setCielo({ ...cielo, accessToken: e.target.value })}
+                            placeholder={cielo.accessTokenSet ? "Token já salvo — preencha só para trocar" : "Access Token do estabelecimento"}
+                            autoComplete="new-password"
+                          />
+                          <Input
+                            label="Merchant ID"
                             value={cielo.merchantId}
                             onChange={e => setCielo({ ...cielo, merchantId: e.target.value })}
                             placeholder="Configurações > Sistema > Sobre a máquina"
@@ -1105,12 +1153,15 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                   </PanelCard>
 
                   {/* Futuras integrações */}
-                  <PanelCard title="Outras maquininhas" description="Em breve" icon={CreditCard}>
-                    <div className="grid grid-cols-2 gap-3 opacity-50 pointer-events-none select-none sm:grid-cols-4">
-                      {["Rede", "GetNet", "PagSeguro", "Mercado Pago"].map(name => (
-                        <div key={name} className="p-3 rounded-lg border border-slate-100 text-center">
-                          <CreditCard className="w-5 h-5 mx-auto mb-1.5 text-slate-300" strokeWidth={1.5} />
-                          <p className="text-xs font-medium text-slate-400">{name}</p>
+                  <PanelCard title="Outras maquininhas" description="Integrações previstas" icon={CreditCard}>
+                    <div className="grid grid-cols-1 gap-x-6 sm:grid-cols-2 xl:grid-cols-3">
+                      {["Rede", "Getnet", "PagBank", "Mercado Pago", "SumUp"].map(name => (
+                        <div key={name} className="flex items-center justify-between gap-3 border-b border-slate-100 py-2">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <CreditCard size={14} className="shrink-0 text-slate-400" />
+                            <span className="truncate text-xs font-medium text-slate-600">{name}</span>
+                          </div>
+                          <Badge size="sm">Em breve</Badge>
                         </div>
                       ))}
                     </div>
@@ -1123,9 +1174,13 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                   {/* Taxas da Maquininha */}
                   <PanelCard title="Taxas da maquininha" description="Percentual cobrado pela adquirente por bandeira. Alimenta o custo no financeiro e, se ativado, o acréscimo no PDV." icon={CircleDollarSign}>
                     <div className="space-y-4">
+                      <Alert variant="info" title="Repasse da taxa ao cliente">
+                        Com "Repassar taxa ao cliente" ativado em um meio de pagamento, o percentual configurado é somado ao total no PDV. Desativado, a taxa fica como custo da loja e só aparece no financeiro.
+                      </Alert>
+
                       {/* PIX — taxa única do provedor, sem bandeira/parcela */}
                       {payments.pix?.enabled && (
-                        <div className="space-y-3">
+                        <div className="space-y-2">
                           <SettingRow title="Pix" description="Taxa única do provedor, sem bandeira/parcela.">
                             <span className="text-[11px] text-slate-500">Repassar taxa ao cliente</span>
                             <Switch
@@ -1133,22 +1188,24 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                               onCheckedChange={(v) => setPayments({ ...payments, pix: { ...payments.pix!, passFeeToCustomer: v } })}
                             />
                           </SettingRow>
-                          <FormRow cols={3}>
-                            <Input
-                              label="Taxa do provedor (%)"
-                              type="text"
-                              inputMode="decimal"
-                              value={payments.pix.brandFees?.["PIX"]?.installmentFees?.["1"] ?? ""}
-                              onChange={(e) => {
-                                const pct = parseFloat(e.target.value.replace(",", ".")) || 0;
-                                setPayments({
-                                  ...payments,
-                                  pix: { ...payments.pix!, brandFees: { PIX: { installmentFees: { "1": pct } } } },
-                                });
-                              }}
-                              placeholder="0,0"
-                            />
-                          </FormRow>
+                          <Input
+                            size="sm"
+                            label="Taxa do provedor"
+                            addonRight="%"
+                            type="text"
+                            inputMode="decimal"
+                            wrapperClassName="w-32"
+                            className="text-center"
+                            value={payments.pix.brandFees?.["PIX"]?.installmentFees?.["1"] ?? ""}
+                            onChange={(e) => {
+                              const pct = parseFloat(e.target.value.replace(",", ".")) || 0;
+                              setPayments({
+                                ...payments,
+                                pix: { ...payments.pix!, brandFees: { PIX: { installmentFees: { "1": pct } } } },
+                              });
+                            }}
+                            placeholder="0,0"
+                          />
                         </div>
                       )}
 
@@ -1195,9 +1252,18 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                           });
                         };
 
+                        // Taxa média: média dos percentuais preenchidos (> 0) de todas as bandeiras/parcelas.
+                        const filled = brands.flatMap((b) =>
+                          installmentsRange.map((n) => Number(brandFees[b]?.installmentFees?.[String(n)] ?? 0)).filter((v) => v > 0)
+                        );
+                        const avgFee = filled.length ? filled.reduce((a, b) => a + b, 0) / filled.length : 0;
+
                         return (
                           <div key={methodKey} className="space-y-3 border-t border-slate-100 pt-3 first:border-0 first:pt-0">
-                            <SettingRow title={methodKey === "credit" ? "Cartão de Crédito" : "Cartão de Débito"}>
+                            <SettingRow
+                              title={methodKey === "credit" ? "Cartão de Crédito" : "Cartão de Débito"}
+                              description={filled.length ? `Taxa média: ${avgFee.toFixed(2).replace(".", ",")}% (${filled.length} ${filled.length === 1 ? "taxa preenchida" : "taxas preenchidas"})` : "Nenhuma taxa preenchida"}
+                            >
                               <span className="text-[11px] text-slate-500">Repassar taxa ao cliente</span>
                               <Switch
                                 checked={!!methodConfig.passFeeToCustomer}
@@ -1208,45 +1274,66 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                               />
                             </SettingRow>
 
-                            {/* Uma bandeira por bloco */}
-                            <div className="space-y-3">
-                              {brands.map((brand) => (
-                                <div key={brand} className="space-y-2">
-                                  <div className="flex items-center justify-between">
-                                    <p className="text-xs font-semibold text-slate-700">{brand}</p>
-                                    <IconButton
-                                      size="xs"
-                                      variant="ghost"
-                                      aria-label="Remover bandeira"
-                                      onClick={() => removeBrand(brand)}
-                                      title="Remover bandeira"
-                                    >
-                                      <X size={14} />
-                                    </IconButton>
-                                  </div>
-                                  <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 xl:grid-cols-6">
+                            {brands.length > 0 && (
+                              <div className="max-h-[440px] overflow-auto rounded-lg border border-slate-200">
+                                <table className="w-full border-collapse text-xs">
+                                  <thead className="sticky top-0 z-10 bg-zinc-50 text-[11px] font-medium text-slate-500">
+                                    <tr>
+                                      <th className="sticky left-0 z-10 whitespace-nowrap bg-zinc-50 px-3 py-2 text-left font-medium">
+                                        {methodKey === "credit" ? "Parcelas" : "Modalidade"}
+                                      </th>
+                                      {brands.map((brand) => (
+                                        <th key={brand} className="whitespace-nowrap px-2 py-1 text-center font-medium">
+                                          <span className="inline-flex items-center gap-1">
+                                            <span className="font-semibold text-slate-700">{brand}</span>
+                                            <IconButton
+                                              size="xs"
+                                              variant="ghost"
+                                              aria-label="Remover bandeira"
+                                              onClick={() => removeBrand(brand)}
+                                              title="Remover bandeira"
+                                            >
+                                              <X size={14} />
+                                            </IconButton>
+                                          </span>
+                                        </th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100">
                                     {installmentsRange.map((n) => (
-                                      <Input
-                                        key={n}
-                                        label={methodKey === "credit" ? `${n}x (%)` : "à vista (%)"}
-                                        type="text"
-                                        inputMode="decimal"
-                                        value={brandFees[brand]?.installmentFees?.[String(n)] ?? ""}
-                                        onChange={(e) => updateFee(brand, n, e.target.value)}
-                                        placeholder="0,0"
-                                        className="text-center"
-                                      />
+                                      <tr key={n}>
+                                        <td className="sticky left-0 whitespace-nowrap bg-white px-3 py-1.5 font-medium text-slate-700">
+                                          {methodKey === "credit" ? (n === 1 ? "Crédito à vista" : `${n}x`) : "Débito"}
+                                        </td>
+                                        {brands.map((brand) => (
+                                          <td key={brand} className="px-2 py-1.5">
+                                            <Input
+                                              size="sm"
+                                              aria-label={`${brand} ${methodKey === "credit" ? `${n}x` : "débito"} (%)`}
+                                              type="text"
+                                              inputMode="decimal"
+                                              addonRight="%"
+                                              wrapperClassName="mx-auto w-24"
+                                              value={brandFees[brand]?.installmentFees?.[String(n)] ?? ""}
+                                              onChange={(e) => updateFee(brand, n, e.target.value)}
+                                              placeholder="0,0"
+                                              className="text-center"
+                                            />
+                                          </td>
+                                        ))}
+                                      </tr>
                                     ))}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
 
                             {/* Adicionar nova bandeira */}
                             <div className="flex gap-2">
                               <Input
                                 type="text"
-                                wrapperClassName="flex-1 min-w-0"
+                                wrapperClassName="flex-1 min-w-0 sm:max-w-sm"
                                 placeholder="Adicionar bandeira (ex: Cabal, Banricompras...)"
                                 onKeyDown={(e) => {
                                   if (e.key === "Enter") {
@@ -1277,11 +1364,11 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                       })}
 
                       {!payments.pix?.enabled && !payments.credit?.enabled && !payments.debit?.enabled && (
-                        <div className="text-center py-6 text-slate-400">
-                          <CreditCard className="w-8 h-8 mx-auto mb-2 opacity-40" strokeWidth={1.5} />
-                          <p className="text-xs font-semibold mb-1">Nenhum meio de pagamento habilitado</p>
-                          <p className="text-[11px]">Ative Pix, Crédito ou Débito na aba "Pagamentos" para configurar as taxas.</p>
-                        </div>
+                        <EmptyState
+                          icon={CreditCard}
+                          title="Nenhum meio de pagamento habilitado"
+                          description='Ative Pix, Crédito ou Débito na aba "Pagamentos" para configurar as taxas.'
+                        />
                       )}
                     </div>
                   </PanelCard>

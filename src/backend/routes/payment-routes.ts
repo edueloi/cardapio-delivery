@@ -312,24 +312,28 @@ export function registerPaymentRoutes({
   // A Cielo confirma via webhook (push), sem precisar de polling na maioria dos
   // casos — o endpoint de poll abaixo é só um fallback, igual ao da Stone.
   //
-  // Client-ID e Access Token são da APLICAÇÃO (Develoi), cadastrada uma única
-  // vez no Portal de Desenvolvedores Cielo — os mesmos para todos os tenants,
-  // por isso vêm de env var (igual STRIPE_SECRET_KEY), não do cadastro de cada
-  // cliente. Só o Merchant-ID muda por tenant (identifica o estabelecimento/
-  // terminal físico dele) — esse sim fica em cieloConfig no banco.
+  // A Cielo exige credencial aprovada POR CLIENTE: Client-ID, Access Token e
+  // Merchant-ID ficam em tenant.cieloConfig. Se o tenant não tiver clientId/
+  // accessToken próprios, cai no fallback global (env CIELO_CLIENT_ID /
+  // CIELO_ACCESS_TOKEN). O resolvedor único é getCieloCfg — nunca ler
+  // process.env.CIELO_* fora dele. Nunca logar clientId/accessToken.
   // ─────────────────────────────────────────────────────────────────────────────
 
   type CieloCfg = {
     enabled: boolean;
     merchantId: string;
+    clientId: string;
+    accessToken: string;
   };
 
   function getCieloCfg(tenant: any): CieloCfg | null {
     try {
       const cfg = tenant.cieloConfig ? JSON.parse(tenant.cieloConfig as string) : null;
       if (!cfg?.enabled || !cfg.merchantId) return null;
-      if (!process.env.CIELO_CLIENT_ID || !process.env.CIELO_ACCESS_TOKEN) return null;
-      return cfg;
+      const clientId = String(cfg.clientId || "").trim() || process.env.CIELO_CLIENT_ID || "";
+      const accessToken = String(cfg.accessToken || "").trim() || process.env.CIELO_ACCESS_TOKEN || "";
+      if (!clientId || !accessToken) return null;
+      return { ...cfg, merchantId: String(cfg.merchantId).trim(), clientId, accessToken };
     } catch {
       return null;
     }
@@ -344,8 +348,8 @@ export function registerPaymentRoutes({
   function cieloHeaders(cfg: CieloCfg) {
     return {
       "Content-Type": "application/json",
-      "client-id": process.env.CIELO_CLIENT_ID!,
-      "access-token": process.env.CIELO_ACCESS_TOKEN!,
+      "client-id": cfg.clientId,
+      "access-token": cfg.accessToken,
       "merchant-id": cfg.merchantId,
     };
   }
