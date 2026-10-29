@@ -285,6 +285,12 @@ export function registerCategoryProductRoutes({
       selectionGroup,
       scheduleRule,
       recipeId,
+      ncm,
+      cfop,
+      csosn,
+      unitCom,
+      origem,
+      aliqIcms,
     } = req.body;
 
     try {
@@ -331,6 +337,17 @@ export function registerCategoryProductRoutes({
             ...(kitchenPrint !== undefined && {
               kitchenPrint: Boolean(kitchenPrint),
             }),
+            // Dados fiscais (NCM/CFOP/CSOSN/unidade/origem/alíquota ICMS) — faltavam
+            // aqui, então salvar pelo formulário normal de produto (diferente da tela
+            // de edição em massa em /api/owner/products/:id/fiscal, que já tratava isso
+            // certo) parecia funcionar na hora mas nunca persistia: a resposta do PATCH
+            // devolvia o produto como estava antes, sem o NCM novo.
+            ...(ncm !== undefined && { ncm: ncm || null }),
+            ...(cfop !== undefined && { cfop: cfop || null }),
+            ...(csosn !== undefined && { csosn: csosn || null }),
+            ...(unitCom !== undefined && { unitCom: unitCom || "UN" }),
+            ...(origem !== undefined && { origem: Number(origem) }),
+            ...(aliqIcms !== undefined && { aliqIcms: Number(aliqIcms) }),
             variants: Array.isArray(variants)
               ? {
                   create: variants.map((variant: any) => ({
