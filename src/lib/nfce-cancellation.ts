@@ -5,6 +5,12 @@ export function formatNfceEventDate(date: Date): string {
   return date.toISOString().replace(/\.\d{3}Z$/, "+00:00");
 }
 
+export function normalizeNfceEventEnvironment(xml: string, appEnvironment: unknown): string {
+  if (appEnvironment !== 1 && appEnvironment !== 2) return xml;
+  const officialEnvironment = appEnvironment === 1 ? 2 : 1;
+  return xml.replace(/<tpAmb>[12]<\/tpAmb>/, `<tpAmb>${officialEnvironment}</tpAmb>`);
+}
+
 export function interpretNfceCancellationResponse(
   response: unknown,
   accessKey: string

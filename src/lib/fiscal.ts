@@ -5,14 +5,18 @@
  */
 
 import { NFeWizard } from "nfewizard-io";
-import { GerarConsulta, Utility } from "@nfewizard/shared";
+import { GerarConsulta, Utility, XmlBuilder } from "@nfewizard/shared";
 import type { FiscalConfig, NfceResult } from "../types.js";
 import path from "path";
 import os from "os";
 import fs from "fs";
 import { randomInt } from "crypto";
 import forge from "node-forge";
-import { formatNfceEventDate, interpretNfceCancellationResponse } from "./nfce-cancellation.js";
+import {
+  formatNfceEventDate,
+  interpretNfceCancellationResponse,
+  normalizeNfceEventEnvironment,
+} from "./nfce-cancellation.js";
 
 // Bug da nfewizard-io@1.1.2: NFEAutorizacaoService.Exec (usado por wizard.NFE_Autorizacao,
 // chamado em emitirNfce) chama gerarConsulta.gerarConsulta(xmlConsulta, this.metodo) com
@@ -79,13 +83,22 @@ const originalGerarConsulta = GerarConsulta.prototype.gerarConsulta;
     }
   }
 
-  if (metodo === "RecepcaoEvento" && mod === "NFCe") {
-    const config = (this as any).environment?.getConfig?.();
-    const tpAmbOficial = config?.nfe?.ambiente === 1 ? 2 : 1;
-    xmlFinal = xmlFinal.replace(/<tpAmb>[12]<\/tpAmb>/g, `<tpAmb>${tpAmbOficial}</tpAmb>`);
-  }
-
   return originalGerarConsulta.call(this, xmlFinal, metodo, ambienteNacional, versao, modReal, ...rest);
+};
+
+const originalAssinarXML = XmlBuilder.prototype.assinarXML;
+(XmlBuilder.prototype as any).assinarXML = function (
+  xml: string,
+  tagAssinar: string,
+  ...rest: any[]
+) {
+  const config = (this as any).environment?.getConfig?.();
+  const modelo = config?.nfe?.modelo;
+  const isNFCeEvent = tagAssinar === "infEvento" && (modelo === 65 || modelo === "65");
+  const xmlToSign = isNFCeEvent
+    ? normalizeNfceEventEnvironment(xml, config?.nfe?.ambiente)
+    : xml;
+  return originalAssinarXML.call(this, xmlToSign, tagAssinar, ...rest);
 };
 
 // Utility.setAmbiente (@nfewizard/shared, usado por getWebServiceUrl no fluxo de
