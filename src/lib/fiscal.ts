@@ -79,6 +79,12 @@ const originalGerarConsulta = GerarConsulta.prototype.gerarConsulta;
     }
   }
 
+  if (metodo === "RecepcaoEvento" && mod === "NFCe") {
+    const config = (this as any).environment?.getConfig?.();
+    const tpAmbOficial = config?.nfe?.ambiente === 1 ? 2 : 1;
+    xmlFinal = xmlFinal.replace(/<tpAmb>[12]<\/tpAmb>/g, `<tpAmb>${tpAmbOficial}</tpAmb>`);
+  }
+
   return originalGerarConsulta.call(this, xmlFinal, metodo, ambienteNacional, versao, modReal, ...rest);
 };
 
@@ -764,10 +770,26 @@ export async function cancelarNfce(
   const wizard = await getWizard(tenantId, fiscal);
 
   try {
-    const response = await (wizard as any).NFE_Cancelamento({
-      chNFe: chave,
-      nProt: protocolo,
-      xJust: justificativa.slice(0, 255).padEnd(15, " "),
+    const response = await wizard.NFE_Cancelamento({
+      idLote: Date.now(),
+      modelo: "65",
+      evento: [
+        {
+          cOrgao: getCUF(fiscal.uf),
+          tpAmb: fiscal.ambiente === "producao" ? 1 : 2,
+          CNPJ: fiscal.cnpj.replace(/\D/g, ""),
+          chNFe: chave,
+          dhEvento: new Date().toISOString(),
+          tpEvento: "110111",
+          nSeqEvento: 1,
+          verEvento: "1.00",
+          detEvento: {
+            descEvento: "Cancelamento",
+            nProt: protocolo,
+            xJust: justificativa.slice(0, 255).padEnd(15, " "),
+          },
+        },
+      ],
     });
     return interpretNfceCancellationResponse(response, chave);
   } catch (err: any) {
