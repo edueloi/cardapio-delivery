@@ -1,3 +1,10 @@
+export function formatNfceEventDate(date: Date): string {
+  if (!Number.isFinite(date.getTime())) {
+    throw new Error("Data inválida para o evento de cancelamento da NFC-e.");
+  }
+  return date.toISOString().replace(/\.\d{3}Z$/, "+00:00");
+}
+
 export function interpretNfceCancellationResponse(
   response: unknown,
   accessKey: string

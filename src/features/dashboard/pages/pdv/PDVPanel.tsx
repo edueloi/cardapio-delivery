@@ -1754,9 +1754,9 @@ export default function PDVPanel({
       // receber um pedido cujo pagamento ainda pode ser recusado/cancelado na maquininha.
       if (!isStone && !isCielo && printingConfig.autoPrintOnOrderCreate && (order as any).id && !globalAutoPrintedOrderIds.has((order as any).id)) {
         globalAutoPrintedOrderIds.add((order as any).id);
-        // Com DANFE automático, reserva o pedido para que o socket não imprima o
-        // cupom comercial antes da autorização da NFC-e.
-        if (!(shouldEmitNfce && autoPrintDanfe)) printOrderAuto(order);
+        // NFC-e automática usa exclusivamente a opção de impressão do DANFE;
+        // não imprime também o cupom comercial quando ela está desativada.
+        if (!shouldEmitNfce) printOrderAuto(order);
       }
 
       if (isStone) {
@@ -1878,7 +1878,7 @@ export default function PDVPanel({
             setStoneStatus("paid");
             if (printingConfig.autoPrintOnOrderCreate && !globalAutoPrintedOrderIds.has(pendingOrderId)) {
               globalAutoPrintedOrderIds.add(pendingOrderId);
-              if (!(shouldEmitNfce && autoPrintDanfe)) printOrderAuto(lastOrderRef.current as any);
+              if (!shouldEmitNfce) printOrderAuto(lastOrderRef.current as any);
             }
             setTimeout(() => {
               clearCart();
@@ -1922,7 +1922,7 @@ export default function PDVPanel({
             setCieloStatus("paid");
             if (printingConfig.autoPrintOnOrderCreate && !globalAutoPrintedOrderIds.has(pendingOrderId)) {
               globalAutoPrintedOrderIds.add(pendingOrderId);
-              if (!(shouldEmitNfce && autoPrintDanfe)) printOrderAuto(lastOrderRef.current as any);
+              if (!shouldEmitNfce) printOrderAuto(lastOrderRef.current as any);
             }
             setTimeout(() => {
               clearCart();

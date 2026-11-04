@@ -12,7 +12,7 @@ import os from "os";
 import fs from "fs";
 import { randomInt } from "crypto";
 import forge from "node-forge";
-import { interpretNfceCancellationResponse } from "./nfce-cancellation.js";
+import { formatNfceEventDate, interpretNfceCancellationResponse } from "./nfce-cancellation.js";
 
 // Bug da nfewizard-io@1.1.2: NFEAutorizacaoService.Exec (usado por wizard.NFE_Autorizacao,
 // chamado em emitirNfce) chama gerarConsulta.gerarConsulta(xmlConsulta, this.metodo) com
@@ -779,7 +779,7 @@ export async function cancelarNfce(
           tpAmb: fiscal.ambiente === "producao" ? 1 : 2,
           CNPJ: fiscal.cnpj.replace(/\D/g, ""),
           chNFe: chave,
-          dhEvento: new Date().toISOString(),
+          dhEvento: formatNfceEventDate(new Date()),
           tpEvento: "110111",
           nSeqEvento: 1,
           verEvento: "1.00",
