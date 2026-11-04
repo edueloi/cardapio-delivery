@@ -606,12 +606,16 @@ export function registerFiscalRoutes({
         const { buildDanfeData } = await import("../../lib/danfe.js");
         const { getUrlChave, getUrlQrCode } = await import("../../lib/fiscal.js");
 
-        // "Venda PDV" é o nome padrão de pedido de balcão sem cliente identificado (não um
-        // cliente real) — não faz sentido exibir "Cliente: Venda PDV" no cupom impresso.
+        const customerPhone = order.customerPhone.replace(/\D/g, "");
+        const customerCpf = order.customerCpf?.replace(/\D/g, "") || "";
+        const hasCustomerIdentity =
+          Boolean(order.customerId) ||
+          (customerPhone.length >= 10 && !/^0+$/.test(customerPhone)) ||
+          [11, 14].includes(customerCpf.length);
         const customerName =
-          order.customerName && order.customerName !== "Venda PDV"
+          hasCustomerIdentity && order.customerName && order.customerName !== "Venda PDV"
             ? order.customerName
-            : undefined;
+            : "Não identificado";
 
         const danfe = buildDanfeData({
           fiscal,
@@ -625,7 +629,7 @@ export function registerFiscalRoutes({
           consultaUrlBase: getUrlChave(fiscal.uf, fiscal.ambiente),
           qrCodeUrlBase: getUrlQrCode(fiscal.uf, fiscal.ambiente),
           customerName,
-          customerCpf: order.customerCpf || undefined,
+          customerCpf: customerCpf || undefined,
           subtotal: order.items.reduce(
             (sum: number, item: any) => sum + Number(item.quantity || 0) * Number(item.price || 0),
             0

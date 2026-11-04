@@ -109,6 +109,13 @@ export function buildDanfeData(opts: {
   qrCodeUrlBase: string; // endpoint específico de QR Code (getUrlQrCode) — usado no cálculo de qrCodeUrl
   customerName?: string;
   customerCpf?: string;
+  subtotal?: number;
+  discountAmount?: number;
+  feeAmount?: number;
+  feePercent?: number;
+  feePassedToCustomer?: boolean;
+  serviceFeeAmount?: number;
+  serviceFeePercent?: number;
   // Nomes reais dos produtos, na mesma ordem dos itens do pedido — usados só pra EXIBIÇÃO
   // no DANFE. Em homologação o xProd do primeiro item no XML fiscal é substituído pelo
   // texto fixo exigido pela SEFAZ ("NOTA FISCAL EMITIDA EM AMBIENTE DE HOMOLOGACAO...",
