@@ -22,7 +22,7 @@ import {
 } from "../../../../components";
 import { apiJson } from "../../../../lib/api";
 import { downloadDanfePdf, printDanfePdf } from "../../../../lib/receipt";
-import type { Tenant, DanfeData } from "../../../../types";
+import { orderCustomerName, type Tenant, type DanfeData } from "../../../../types";
 
 interface PendingItem {
   id: string;
@@ -38,6 +38,8 @@ interface PendingItem {
 interface PendingOrder {
   id: string;
   customerName: string;
+  customerId: string | null;
+  customerPhone: string;
   customerCpf: string | null;
   counterTicketNumber: number | null;
   orderType: string;
@@ -71,7 +73,7 @@ const fmtMoney = (v: number) =>
 const orderLabel = (o: PendingOrder) =>
   o.counterTicketNumber ? `Senha ${o.counterTicketNumber}` : `#${o.id.slice(-6).toUpperCase()}`;
 
-const customerLabel = (o: PendingOrder) => (!o.customerName || o.customerName === "Venda PDV" ? "—" : o.customerName);
+const customerLabel = (o: PendingOrder) => orderCustomerName(o) || "Não identificado";
 
 const itemsQty = (o: PendingOrder) => o.items.reduce((s, i) => s + i.quantity, 0);
 

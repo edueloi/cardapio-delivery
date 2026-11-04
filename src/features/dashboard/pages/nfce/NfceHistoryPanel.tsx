@@ -24,12 +24,16 @@ import {
 } from "../../../../components";
 import { apiFetch, apiJson } from "../../../../lib/api";
 import { downloadDanfePdf, printDanfePdf } from "../../../../lib/receipt";
-import type { Tenant, DanfeData } from "../../../../types";
+import { orderCustomerName, type Tenant, type DanfeData } from "../../../../types";
 import PendingNfceTab from "./PendingNfceTab";
 
 interface NfceOrderRow {
   id: string;
-  customerName: string;
+  customerName: string | null;
+  customerId: string | null;
+  customerPhone: string | null;
+  customerCpf: string | null;
+  items: Array<{ productName: string | null; product: { name: string } | null }>;
   total: number;
   createdAt: string;
   nfceStatus: string;
@@ -326,8 +330,8 @@ function IssuedNfceTab({ tenant }: { tenant: Tenant }) {
     {
       header: "Cliente",
       render: (row) => (
-        <span className={row.customerName === "Venda PDV" ? "text-xs text-slate-300" : "text-xs text-slate-700"}>
-          {row.customerName === "Venda PDV" ? "—" : row.customerName}
+        <span className="text-xs text-slate-700">
+          {orderCustomerName(row) || "Não identificado"}
         </span>
       ),
     },

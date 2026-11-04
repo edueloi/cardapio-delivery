@@ -87,11 +87,58 @@ export function cleanCustomerName(customerName?: string | null): string {
   return (match ? match[1] : customerName).trim();
 }
 
+type OrderCustomerNameSource = {
+  customerName?: string | null;
+  customerId?: string | null;
+  customerPhone?: string | null;
+  customerCpf?: string | null;
+  items?: Array<{
+    productName?: string | null;
+    product?: { name?: string | null } | null;
+  }> | null;
+};
+
+function normalizedName(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase("pt-BR");
+}
+
+export function customerNameIsProductName(order: OrderCustomerNameSource): boolean {
+  const customerName = cleanCustomerName(order.customerName);
+  if (!customerName) return false;
+
+  const phone = order.customerPhone?.replace(/\D/g, "") || "";
+  const cpf = order.customerCpf?.replace(/\D/g, "") || "";
+  if ((phone.length >= 10 && !/^0+$/.test(phone)) || [11, 14].includes(cpf.length)) return false;
+
+  const normalizedCustomerName = normalizedName(customerName);
+  return order.items?.some((item) => {
+    const productName = item.productName || item.product?.name;
+    return productName && normalizedName(productName) === normalizedCustomerName;
+  }) ?? false;
+}
+
+export function orderCustomerName(order: OrderCustomerNameSource): string {
+  const customerName = cleanCustomerName(order.customerName);
+  const normalizedCustomerName = normalizedName(customerName);
+  if (
+    !customerName ||
+    normalizedCustomerName === "venda pdv" ||
+    normalizedCustomerName === "nao identificado" ||
+    customerNameIsProductName(order)
+  ) return "";
+  return customerName;
+}
+
 // Rótulo exibido nos painéis (Cozinha, Pedidos, PDV, Garçom) para um pedido DINE_IN:
 // mesa numerada ("Mesa 5"), balcão com senha ("Senha 12 — João"), ou fallback.
-export function dineInOrderLabel(order: { tableId?: string | null; counterTicketNumber?: number | null; customerName?: string }): string {
+export function dineInOrderLabel(order: OrderCustomerNameSource & { tableId?: string | null; counterTicketNumber?: number | null }): string {
   if (order.counterTicketNumber != null) {
-    const cleanName = cleanCustomerName(order.customerName);
+    const cleanName = orderCustomerName(order);
     const isRedundant = cleanName.toLowerCase().startsWith("senha ") || cleanName.toLowerCase() === "venda pdv" || cleanName.toLowerCase().startsWith("balcão");
     const name = (cleanName && !isRedundant) ? ` — ${cleanName}` : "";
     return `Senha ${String(order.counterTicketNumber).padStart(2, "0")}${name}`;
@@ -99,7 +146,7 @@ export function dineInOrderLabel(order: { tableId?: string | null; counterTicket
   if (order.tableId) return `Mesa ${order.tableId}`;
   // Balcão sem senha (loja desativou a fila em Configurações) — identifica pelo nome do
   // cliente, se tiver; sem forçar nenhum texto quando ninguém digitou nada.
-  const cleanName = cleanCustomerName(order.customerName);
+  const cleanName = orderCustomerName(order);
   return cleanName || "Comanda";
 }
 

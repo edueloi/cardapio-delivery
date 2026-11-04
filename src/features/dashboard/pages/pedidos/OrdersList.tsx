@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import { PaymentBadge, useToast, Modal, ModalFooter, Button, IconButton, Input } from "../../../../components";
 import { apiFetch, apiJson } from "../../../../lib/api";
-import { Order, dineInOrderLabel, type DanfeData } from "../../../../types";
+import { Order, dineInOrderLabel, orderCustomerName, type DanfeData } from "../../../../types";
 import { playOrderDelayedSound } from "../../../../lib/notificationSound";
 import { printReceiptPdf, printDanfePdf, type ReceiptData } from "../../../../lib/receipt";
 import socket from "../../../../lib/socket";
@@ -75,7 +75,7 @@ export function buildReceiptDataFromOrder(order: any, tenant: any, copyLabel?: "
     consumptionType: order.consumptionType || undefined,
     paperWidthMm: (tenant?.receiptPaperWidth === 58 ? 58 : 80) as 58 | 80,
     createdAt: order.createdAt ? new Date(order.createdAt) : new Date(),
-    customerName: (!isNumericName || order.tableId) ? order.customerName : undefined,
+    customerName: (!isNumericName || order.tableId) ? orderCustomerName(order) || undefined : undefined,
     operatorName: order.operatorName || undefined,
     // Pedido ainda não pago (comanda em aberto) tem paymentMethod só como valor padrão
     // do banco, não uma forma de pagamento real — só mostra quando já foi faturado.
@@ -441,7 +441,7 @@ function KanbanCard({ order, categoryMap, updateStatus, isExpanded, toggleOrder,
               )}
             </div>
             <p className="text-[11px] text-slate-400 font-medium mt-0.5 truncate">
-              {order.customerName || (order.orderType === 'DINE_IN' ? dineInOrderLabel(order) : '')}
+              {orderCustomerName(order) || (order.orderType === 'DINE_IN' ? dineInOrderLabel(order) : "")}
             </p>
           </div>
         </div>
@@ -865,7 +865,7 @@ export function OrdersList({
       >
         {billingOrder && (
           <div className="space-y-4">
-            <p className="text-xs text-slate-500">{billingOrder.customerName} · {fmt(billingOrder.total)}</p>
+            <p className="text-xs text-slate-500">{orderCustomerName(billingOrder)}{orderCustomerName(billingOrder) ? " · " : ""}{fmt(billingOrder.total)}</p>
             <div className="space-y-2">
               <label className="text-xs font-medium text-slate-600">Como foi pago?</label>
               <div className="max-h-32 overflow-y-auto rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 space-y-1">
@@ -908,4 +908,3 @@ export function OrdersList({
     </DndContext>
   );
 }
-

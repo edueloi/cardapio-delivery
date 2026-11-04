@@ -7,6 +7,7 @@ import {
   resolveSelectedExtras,
 } from "../shared/order-helpers";
 import { buildPaymentCashMovements, counterTicketSameDayWhere } from "../shared/utils";
+import { customerNameIsProductName } from "../../types.js";
 
 export interface RegisterPdvRoutesOptions {
   app: Express;
@@ -453,10 +454,20 @@ export function registerPdvRoutes({
         }
         if (!comandaGroupId && isCounterComanda) comandaGroupId = randomUUID();
 
+        const orderCustomerName = customerNameIsProductName({
+          customerName,
+          customerId,
+          customerPhone,
+          customerCpf,
+          items: orderItems.map((item) => ({ productName: item.productName })),
+        })
+          ? (isCounterComanda ? "" : "Venda PDV")
+          : customerName || (isCounterComanda ? "" : "Venda PDV");
+
         return tx.order.create({
           data: {
             tenantId: tenant.id,
-            customerName: customerName || (isCounterComanda ? "" : "Venda PDV"),
+            customerName: orderCustomerName,
             customerPhone: customerPhone || "00000000000",
             comandaGroupId,
             orderType: orderType || "TAKEAWAY",

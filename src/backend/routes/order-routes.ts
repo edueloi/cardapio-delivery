@@ -14,6 +14,7 @@ import {
   recalculateOpenOrderAmounts,
   expireStaleComandaOrders,
 } from "../shared/order-helpers";
+import { customerNameIsProductName } from "../../types.js";
 
 export interface RegisterOrderRoutesOptions {
   app: Express;
@@ -231,7 +232,14 @@ export function registerOrderRoutes({
 
         return tx.order.create({
           data: {
-            customerName,
+            customerName: customerNameIsProductName({
+              customerName,
+              customerId,
+              customerPhone,
+              items: orderItemsData.map((item) => ({ productName: item.productName })),
+            })
+              ? ""
+              : customerName,
             customerPhone,
             customerId: customerId || null,
             address,

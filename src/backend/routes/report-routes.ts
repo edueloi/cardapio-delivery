@@ -1,6 +1,7 @@
 import type { Express, Request, RequestHandler, Response } from "express";
 import { hydrateOrderItemNames } from "../shared/order-helpers";
 import { CONCLUDED_SALE_OR, splitPaymentBreakdown } from "../shared/utils";
+import { orderCustomerName } from "../../types.js";
 
 export interface RegisterReportRoutesOptions {
   app: Express;
@@ -182,6 +183,15 @@ export function registerReportRoutes({
         select: {
           id: true,
           customerName: true,
+          customerId: true,
+          customerPhone: true,
+          customerCpf: true,
+          items: {
+            select: {
+              productName: true,
+              product: { select: { name: true } },
+            },
+          },
           counterTicketNumber: true,
           orderType: true,
           createdAt: true,
@@ -225,7 +235,7 @@ export function registerReportRoutes({
       const slowest = orders
         .map((o) => ({
           id: o.id,
-          customerName: o.customerName,
+          customerName: orderCustomerName(o),
           counterTicketNumber: o.counterTicketNumber,
           orderType: o.orderType,
           createdAt: o.createdAt,

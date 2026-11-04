@@ -1,4 +1,5 @@
 import type { Server } from "socket.io";
+import { orderCustomerName } from "../../types.js";
 import {
   convertProductionQuantity,
   getInventoryStockInGranularUnit,
@@ -750,7 +751,7 @@ export function createOrderHelpers({ io, prisma, awardLoyaltyPoints }: OrderHelp
       io.to(`tenant-${updatedOrder.tenantId}`).emit("comanda-ready", {
         orderId: updatedOrder.id,
         tableId: updatedOrder.tableId,
-        customerName: updatedOrder.customerName,
+        customerName: orderCustomerName(updatedOrder),
         operatorName: updatedOrder.operatorName,
       });
     }

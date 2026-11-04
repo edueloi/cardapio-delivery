@@ -11,7 +11,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { AUTO_EMIT_PAYMENT_METHODS } from "../../../../types";
 import type { AutoEmitPaymentMethod, Tenant, Product, ProductExtra, Order, PaymentConfig, PaymentMethodConfig, StoneConfig, CieloConfig, Customer, PrintingConfig } from "../../../../types";
-import { dineInOrderLabel, DEFAULT_PRINTING_CONFIG } from "../../../../types";
+import { dineInOrderLabel, orderCustomerName, DEFAULT_PRINTING_CONFIG } from "../../../../types";
 import { apiJson } from "../../../../lib/api";
 import { useToast, Button, IconButton, Input, Select, Tabs, Badge, Alert, EmptyState, Switch, Modal, ModalFooter, Textarea } from "../../../../components";
 import { downloadReceiptPdf, printReceiptPdf, printCashClosingReportPdf, downloadDanfePdf, printDanfePdf } from "../../../../lib/receipt";
@@ -1494,7 +1494,7 @@ export default function PDVPanel({
     setCart([]);
     setSelectedTableId(comanda.tableId || null);
     setSelectedComandaId(comanda.id);
-    setComandaNumber(comanda.customerName || "");
+    setComandaNumber(orderCustomerName(comanda));
     setConsumptionType(comanda.consumptionType || null);
     // Desconto definido na abertura da comanda (fica salvo só no pedido-base, comanda.discount)
     // "gruda" aqui: sem isso, reabrir uma comanda com desconto voltava ao estado padrão (sem
@@ -1592,7 +1592,7 @@ export default function PDVPanel({
         body: JSON.stringify({
           // Sempre pega uma senha NOVA (fila) — nunca reaproveita a da comanda anterior,
           // senão atropela quem já pediu depois. Só herda o nome do cliente, se tinha um.
-          customerName: customerName || selectedComandaOrder?.customerName || undefined,
+          customerName: customerName || (selectedComandaOrder ? orderCustomerName(selectedComandaOrder) : "") || undefined,
           customerPhone: customerPhone || "00000000000",
           orderType: "DINE_IN",
           consumptionType: !selectedTableId ? consumptionType : undefined,
@@ -1711,7 +1711,7 @@ export default function PDVPanel({
     }
 
     const orderData = {
-      customerName: customerName || currentContextLabel || "Venda PDV",
+      customerName: customerName || "Venda PDV",
       customerPhone: customerPhone || "00000000000",
       customerCpf: [11, 14].includes(customerCpf.replace(/\D/g, "").length) ? customerCpf.replace(/\D/g, "") : undefined,
       orderType: selectedTableId || selectedComandaId ? "DINE_IN" : "TAKEAWAY",
@@ -1991,7 +1991,7 @@ export default function PDVPanel({
       consumptionType: order.consumptionType || undefined,
       paperWidthMm: (tenant.receiptPaperWidth === 58 ? 58 : 80) as 58 | 80,
       createdAt: order.createdAt ? new Date(order.createdAt) : new Date(),
-      customerName: (!isNumericName || order.tableId) ? order.customerName : undefined,
+      customerName: (!isNumericName || order.tableId) ? orderCustomerName(order) || undefined : undefined,
       operatorName: order.operatorName || operatorName || undefined,
       // Comanda recém-aberta/lançamento na cozinha ainda não foi paga — o campo
       // paymentMethod nesse caso é só o valor padrão do banco ("CASH"), não uma forma
@@ -2050,7 +2050,7 @@ export default function PDVPanel({
       tableId: selectedTableId || undefined,
       counterTicketNumber: (isNumericName && !selectedTableId) ? Number(receiptCustomerName) : null,
       consumptionType: isCounterSale ? consumptionType || undefined : undefined,
-      customerName: (!isNumericName || selectedTableId) ? receiptCustomerName : undefined,
+      customerName: (!isNumericName || selectedTableId) ? (customerName || undefined) : undefined,
       items: [...existingContextItems, ...cart.map((item) => ({
         quantity: item.quantity,
         product: item.product,
@@ -2463,7 +2463,7 @@ export default function PDVPanel({
             } else {
               activeTableMap.set(o.tableId, {
                 tableId: o.tableId,
-                customerName: o.customerName,
+                customerName: orderCustomerName(o),
                 total: o.total,
                 orderCount: 1,
                 lastAt: o.createdAt,
@@ -2578,7 +2578,7 @@ export default function PDVPanel({
                     </div>
                     <div className="min-w-0 flex-1">
                       <h4 className="text-sm font-semibold text-slate-800 truncate">
-                        {comanda.customerName || dineInOrderLabel(comanda)}
+                        {orderCustomerName(comanda) || dineInOrderLabel(comanda)}
                       </h4>
                       <p className="text-[11px] font-semibold text-slate-400">
                         {comanda.items.length} {comanda.items.length === 1 ? "item" : "itens"}
@@ -2629,7 +2629,7 @@ export default function PDVPanel({
                     <Truck className="w-5 h-5" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h4 className="text-sm font-semibold text-slate-800 truncate">{order.customerName}</h4>
+                    <h4 className="text-sm font-semibold text-slate-800 truncate">{orderCustomerName(order)}</h4>
                     <p className="text-[11px] font-semibold text-slate-400">
                       {order.items.length} {order.items.length === 1 ? "item" : "itens"} · Entregue
                     </p>
@@ -3447,7 +3447,7 @@ export default function PDVPanel({
         open={!!billingOrder}
         onClose={() => setBillingOrder(null)}
         title="Faturar Delivery"
-        subtitle={billingOrder ? `${billingOrder.customerName} · ${fmt(billingOrder.total)}` : undefined}
+        subtitle={billingOrder ? `${orderCustomerName(billingOrder)} · ${fmt(billingOrder.total)}` : undefined}
         size="sm"
         footer={
           <ModalFooter>

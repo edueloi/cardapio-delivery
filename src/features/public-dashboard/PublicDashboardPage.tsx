@@ -4,7 +4,7 @@ import socket from "../../lib/socket";
 import { isAudioContextRunning, playTvPanelReadySound, primeAudioContext } from "../../lib/notificationSound";
 import { announceOrderReady, primeSpeechSynthesis } from "../../lib/voiceAnnouncement";
 import type { DisplayPanelConfig, DisplayPanelImage, Order, Tenant } from "../../types";
-import { dineInOrderLabel } from "../../types";
+import { dineInOrderLabel, orderCustomerName } from "../../types";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ChefHat,
@@ -25,7 +25,7 @@ function orderCode(order: Order) {
 // Primeiro nome do cliente, pra caber nos cards mais compactos sem estourar largura
 // (ex: "Maria Eduarda Santos" -> "Maria"). Mesa/delivery sem nome cadastrado não mostra nada.
 function orderFirstName(order: Order): string {
-  return (order.customerName || "").trim().split(/\s+/)[0] || "";
+  return orderCustomerName(order).split(/\s+/)[0] || "";
 }
 
 // Três tracinhos decorativos ao lado do número chamado — o mesmo detalhe "raios" da
@@ -136,7 +136,7 @@ function readyAnnouncementSubtitle(order: Order) {
 function announceReadyOrder(order: Order, config: DisplayPanelConfig) {
   if (config.voiceAnnouncement === false) return;
   if (order.counterTicketNumber == null) return;
-  announceOrderReady(order.counterTicketNumber, { voiceName: config.voiceName, text: config.voiceText, customerName: order.customerName });
+  announceOrderReady(order.counterTicketNumber, { voiceName: config.voiceName, text: config.voiceText, customerName: orderCustomerName(order) });
 }
 
 /* ─── theme ───────────────────────────────────────────────── */
@@ -380,7 +380,7 @@ function OrderCard({ order, role, isFirst, theme, accentColor, size, cardStyle, 
           </span>
           <div style={{ flex: 1, marginLeft: 16, borderLeft: `1.5px dashed ${theme.divider}`, paddingLeft: 16 }}>
             <p style={{ fontWeight: 700, fontSize: s.name, color: theme.textPrimary, margin: 0, lineHeight: 1.1 }}>
-              {order.customerName || "—"}
+              {orderCustomerName(order)}
             </p>
             <p style={{ fontWeight: 600, fontSize: s.label, color: theme.textMuted, margin: "3px 0 0", textTransform: "uppercase", letterSpacing: "0.06em" }}>
               {orderLocation(order)}
@@ -425,7 +425,7 @@ function OrderCard({ order, role, isFirst, theme, accentColor, size, cardStyle, 
           </span>
           <div style={{ flex: 1, marginLeft: 16 }}>
             <p style={{ fontWeight: 800, fontSize: s.name, color: "#e5e7eb", margin: 0, lineHeight: 1.1, textTransform: "uppercase" }}>
-              {order.customerName || "—"}
+              {orderCustomerName(order)}
             </p>
             <p style={{ fontWeight: 700, fontSize: s.label, color: `${accentColor}90`, margin: "3px 0 0", textTransform: "uppercase", letterSpacing: "0.1em" }}>
               {orderLocation(order)}
@@ -462,7 +462,7 @@ function OrderCard({ order, role, isFirst, theme, accentColor, size, cardStyle, 
             {orderCode(order)}
           </span>
           <p style={{ flex: 1, marginLeft: 14, fontWeight: 800, fontSize: s.name, color: theme.textPrimary, margin: "0 0 0 14px", textTransform: "uppercase", letterSpacing: "0.02em" }}>
-            {order.customerName || orderLocation(order)}
+            {orderCustomerName(order) || orderLocation(order)}
           </p>
           {isReady && <Bell style={{ width: s.label + 6, height: s.label + 6, color: accentColor, flexShrink: 0 }} />}
         </motion.div>
@@ -503,7 +503,7 @@ function OrderCard({ order, role, isFirst, theme, accentColor, size, cardStyle, 
 
           <div style={{ flex: 1, marginLeft: 16 }}>
             <p style={{ fontWeight: 800, fontSize: s.name, color: theme.textPrimary, margin: 0, lineHeight: 1.1 }}>
-              {order.customerName || "—"}
+              {orderCustomerName(order)}
             </p>
             <p
               style={{

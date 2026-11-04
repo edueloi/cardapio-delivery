@@ -6,7 +6,7 @@ import { useAuth } from "../../lib/auth";
 import socket from "../../lib/socket";
 import { playNotificationSound, playNewOrderSound, playKitchenReadySound } from "../../lib/notificationSound";
 import { printReceiptPdf } from "../../lib/receipt";
-import type { Order, Tenant } from "../../types";
+import { orderCustomerName, type Order, type Tenant } from "../../types";
 import DashboardContent from "./DashboardContent";
 import { buildReceiptDataFromOrder } from "./pages/pedidos/OrdersList";
 import { DASHBOARD_NAVIGATION } from "./config/navigation";
@@ -129,7 +129,7 @@ export default function DashboardPage() {
       setOrders((prev) => (Array.isArray(prev) ? [newOrder, ...prev] : [newOrder]));
       playNewOrderSound();
       setNewOrderAlerts((prev) => [
-        { id: newOrder.id, customerName: newOrder.customerName, orderType: newOrder.orderType, total: newOrder.total, timestamp: Date.now() },
+        { id: newOrder.id, customerName: orderCustomerName(newOrder), orderType: newOrder.orderType, total: newOrder.total, timestamp: Date.now() },
         ...prev,
       ]);
     };
@@ -141,7 +141,7 @@ export default function DashboardPage() {
         if (updatedOrder.kitchenReady && (!oldOrder || !oldOrder.kitchenReady)) {
           const who = updatedOrder.orderType === "DINE_IN"
             ? (updatedOrder.tableId ? `Mesa ${updatedOrder.tableId}` : `Senha ${String(updatedOrder.counterTicketNumber).padStart(2, "0")}`)
-            : updatedOrder.customerName;
+            : orderCustomerName(updatedOrder);
             
           setKitchenReadyAlerts((alerts) => {
             if (alerts.some(a => a.label === who)) return alerts;

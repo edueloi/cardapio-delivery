@@ -1,5 +1,6 @@
 import type { Express, Request, RequestHandler, Response } from "express";
 import { CONCLUDED_SALE_OR } from "../shared/utils";
+import { orderCustomerName } from "../../types.js";
 
 export interface RegisterFiscalRoutesOptions {
   app: Express;
@@ -338,12 +339,21 @@ export function registerFiscalRoutes({
           select: {
             id: true,
             customerName: true,
+            customerId: true,
+            customerPhone: true,
+            customerCpf: true,
             total: true,
             createdAt: true,
             nfceStatus: true,
             nfceKey: true,
             nfceNumber: true,
             nfceProtocol: true,
+            items: {
+              select: {
+                productName: true,
+                product: { select: { name: true } },
+              },
+            },
           },
         }),
       ]);
@@ -402,6 +412,8 @@ export function registerFiscalRoutes({
             select: {
               id: true,
               customerName: true,
+              customerId: true,
+              customerPhone: true,
               customerCpf: true,
               counterTicketNumber: true,
               orderType: true,
@@ -606,16 +618,16 @@ export function registerFiscalRoutes({
         const { buildDanfeData } = await import("../../lib/danfe.js");
         const { getUrlChave, getUrlQrCode } = await import("../../lib/fiscal.js");
 
-        const customerPhone = order.customerPhone.replace(/\D/g, "");
-        const customerCpf = order.customerCpf?.replace(/\D/g, "") || "";
-        const hasCustomerIdentity =
-          Boolean(order.customerId) ||
-          (customerPhone.length >= 10 && !/^0+$/.test(customerPhone)) ||
-          [11, 14].includes(customerCpf.length);
         const customerName =
-          hasCustomerIdentity && order.customerName && order.customerName !== "Venda PDV"
-            ? order.customerName
-            : "Não identificado";
+          orderCustomerName({
+            customerName: order.customerName,
+            customerId: order.customerId,
+            customerPhone: order.customerPhone,
+            customerCpf: order.customerCpf,
+            items: order.items.map((item: any) => ({
+              productName: item.productName ?? item.product?.name,
+            })),
+          }) || "Não identificado";
 
         const danfe = buildDanfeData({
           fiscal,
@@ -629,7 +641,7 @@ export function registerFiscalRoutes({
           consultaUrlBase: getUrlChave(fiscal.uf, fiscal.ambiente),
           qrCodeUrlBase: getUrlQrCode(fiscal.uf, fiscal.ambiente),
           customerName,
-          customerCpf: customerCpf || undefined,
+          customerCpf: order.customerCpf || undefined,
           subtotal: order.items.reduce(
             (sum: number, item: any) => sum + Number(item.quantity || 0) * Number(item.price || 0),
             0

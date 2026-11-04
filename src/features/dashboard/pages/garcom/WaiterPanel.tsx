@@ -406,7 +406,7 @@ function ComandaModal({
       await apiJson(`/api/tenants/${tenant.slug}/pdv/order`, {
         method: "POST",
         body: JSON.stringify({
-          customerName: customerName || `Mesa ${tableId}`,
+          customerName: customerName || undefined,
           customerPhone: customerPhone.replace(/\D/g, "") || "00000000000",
           orderType: "DINE_IN",
           tableId,

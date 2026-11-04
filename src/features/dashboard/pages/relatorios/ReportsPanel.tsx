@@ -13,7 +13,7 @@ import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
 } from "recharts";
 import { apiFetch } from "../../../../lib/api";
-import type { Tenant } from "../../../../types";
+import { orderCustomerName, type Tenant } from "../../../../types";
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
@@ -54,7 +54,11 @@ interface TopInventoryItem {
 
 interface SlowestOrder {
   id: string;
-  customerName: string;
+  customerName: string | null;
+  customerId: string | null;
+  customerPhone: string | null;
+  customerCpf: string | null;
+  items: Array<{ productName: string | null; product?: { name: string } | null }>;
   counterTicketNumber: number | null;
   orderType: string;
   createdAt: string;
@@ -428,7 +432,7 @@ export default function ReportsPanel({ slug, tenant }: ReportsPanelProps) {
                             {timing.slowest.map((o) => (
                               <tr key={o.id} className="border-t border-slate-100">
                                 <td className="px-3 py-2 font-medium text-slate-700">
-                                  {o.counterTicketNumber != null ? `#${String(o.counterTicketNumber).padStart(2, "0")}` : o.customerName}
+                                  {o.counterTicketNumber != null ? `#${String(o.counterTicketNumber).padStart(2, "0")}` : orderCustomerName(o)}
                                 </td>
                                 <td className="px-3 py-2 text-slate-500 whitespace-nowrap">
                                   {new Date(o.createdAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}

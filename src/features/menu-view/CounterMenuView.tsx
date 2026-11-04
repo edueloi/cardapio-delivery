@@ -14,7 +14,7 @@ import { motion, AnimatePresence } from "motion/react";
 import socket from "../../lib/socket";
 import type { Tenant, Product, ProductVariant, Order } from "../../types";
 import SelectionGroupPicker, { parseSelectionGroups, getSelectionGroupOptions, formatSelectionGroupsNote, selectionGroupsComplete } from "./SelectionGroupPicker";
-import { COUNTER_ORDER_TABLE_ID } from "../../types";
+import { COUNTER_ORDER_TABLE_ID, orderCustomerName } from "../../types";
 import { Button, IconButton, Input, Textarea, Modal, Tabs, Badge, EmptyState } from "@/src/components";
 
 const fmt = (n: number) =>
@@ -1110,7 +1110,7 @@ export default function CounterMenuView() {
                           <>
                             <span className="text-[11px] font-medium text-blue-300">Pedido</span>
                             <span className="px-3 text-center text-xl font-semibold text-blue-300">
-                              {order.customerName || "Confirmado"}
+                              {orderCustomerName(order) || "Confirmado"}
                             </span>
                           </>
                         )}

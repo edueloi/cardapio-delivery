@@ -36,7 +36,7 @@ import {
   useToast,
 } from "../../../../components";
 import { apiFetch, apiJson } from "../../../../lib/api";
-import { Order, Tenant, dineInOrderLabel, type DanfeData } from "../../../../types";
+import { Order, Tenant, dineInOrderLabel, orderCustomerName, type DanfeData } from "../../../../types";
 import { printReceiptPdf, printDanfePdf, type ReceiptData } from "../../../../lib/receipt";
 
 // selectedExtras (JSON de ProductExtra[]) inclui tanto os adicionais escolhidos manualmente
@@ -81,7 +81,7 @@ function buildReceiptDataFromOrder(order: Order, tenant: Tenant): ReceiptData {
     consumptionType: order.consumptionType || undefined,
     paperWidthMm: ((tenant as any)?.receiptPaperWidth === 58 ? 58 : 80) as 58 | 80,
     createdAt: order.createdAt ? new Date(order.createdAt) : new Date(),
-    customerName: (!isNumericName || order.tableId) ? order.customerName : undefined,
+    customerName: (!isNumericName || order.tableId) ? orderCustomerName(order) || undefined : undefined,
     operatorName: order.operatorName || undefined,
     isPreCheckout: !(order.billed === true || order.status === "DELIVERED"),
     items,
@@ -148,7 +148,7 @@ function exportOrdersCSV(orders: Order[]) {
     `#${o.id.slice(-6).toUpperCase()}`,
     new Date(o.createdAt).toLocaleDateString('pt-BR'),
     new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    o.customerName,
+    orderCustomerName(o),
     o.customerPhone || '',
     o.orderType === 'DELIVERY' ? 'Delivery' : o.orderType === 'DINE_IN' ? 'Mesa' : 'Retirada',
     o.tableId || '',
@@ -280,7 +280,7 @@ export function OrderHistoryPanel({
         }
 
         const q = searchTerm.toLowerCase();
-        const matchSearch = !q || o.id.toLowerCase().includes(q) || o.customerName.toLowerCase().includes(q);
+        const matchSearch = !q || o.id.toLowerCase().includes(q) || orderCustomerName(o).toLowerCase().includes(q);
         const matchType = typeFilter === 'all' || o.orderType === typeFilter;
         const matchPayment = paymentFilter === 'all' || o.paymentMethod === paymentFilter;
         const matchStatus = statusFilter === 'all'
@@ -347,7 +347,7 @@ export function OrderHistoryPanel({
     {
       header: 'Cliente',
       render: (o: Order) => (
-        <p className="text-xs font-medium text-slate-700 truncate max-w-[130px]">{o.customerName}</p>
+        <p className="text-xs font-medium text-slate-700 truncate max-w-[130px]">{orderCustomerName(o)}</p>
       ),
     },
     {
@@ -568,7 +568,7 @@ export function OrderHistoryPanel({
             </div>
 
             <div className="space-y-1">
-              <p className="text-sm font-medium text-slate-800">{detailsOrder.customerName}</p>
+              <p className="text-sm font-medium text-slate-800">{orderCustomerName(detailsOrder)}</p>
               <p className="text-[11px] text-slate-500">
                 {detailsOrder.orderType === 'DELIVERY' ? 'Delivery' : detailsOrder.orderType === 'DINE_IN' ? dineInOrderLabel(detailsOrder) : 'Retirada'}
               </p>
@@ -666,4 +666,3 @@ export function OrderHistoryPanel({
     </PageWrapper>
   );
 }
-

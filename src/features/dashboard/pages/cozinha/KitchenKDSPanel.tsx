@@ -2,7 +2,7 @@
 import { motion } from "motion/react";
 import { Bell, Clock, LayoutGrid, ListChecks, Timer, Utensils } from "lucide-react";
 import { Badge, Button, ContentCard, PageWrapper, SectionTitle, Tabs } from "../../../../components";
-import { Order, dineInOrderLabel } from "../../../../types";
+import { Order, dineInOrderLabel, orderCustomerName } from "../../../../types";
 
 const VIEW_TABS = [
   { id: "grid", label: "Cards", icon: LayoutGrid },
@@ -194,7 +194,7 @@ function KDSTicket({ order, onComplete, actionLabel = "Concluir Pedido", highlig
               {order.orderType === 'DELIVERY' ? 'Delivery' : order.orderType === 'DINE_IN' ? dineInOrderLabel(order) : 'Retirada'}
             </Badge>
           </div>
-          <p className="text-xs text-slate-500 mt-1">{order.customerName}</p>
+          <p className="text-xs text-slate-500 mt-1">{orderCustomerName(order)}</p>
         </div>
         <div className="flex flex-col items-end">
           <div className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1 rounded-full ${
@@ -232,4 +232,3 @@ function KDSTicket({ order, onComplete, actionLabel = "Concluir Pedido", highlig
     </motion.div>
   );
 }
-
