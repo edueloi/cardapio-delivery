@@ -156,12 +156,13 @@ export default function PendingNfceTab({ slug, tenant, fiscalEnabled, onChanged 
       if (dateFrom) params.set("from", dateFrom);
       if (dateTo) params.set("to", dateTo);
       if (debouncedSearch) params.set("search", debouncedSearch);
-      const data = await apiJson<{ orders: PendingOrder[]; total: number }>(
+      const data = await apiJson<{ orders?: unknown; total?: number }>(
         `/api/owner/tenants/${tenant.id}/nfce/pending-orders?${params}`
       );
       if (seq !== reqSeq.current) return;
-      setOrders(data.orders);
-      setTotal(data.total);
+      if (!Array.isArray(data.orders)) throw new Error("A resposta de pedidos sem nota é inválida.");
+      setOrders(data.orders as PendingOrder[]);
+      setTotal(typeof data.total === "number" ? data.total : 0);
     } catch (e: any) {
       if (seq !== reqSeq.current) return;
       setLoadError(e?.message ?? "Erro ao carregar pedidos sem nota.");

@@ -121,6 +121,7 @@ function IssuedNfceTab({ tenant }: { tenant: Tenant }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -138,19 +139,22 @@ function IssuedNfceTab({ tenant }: { tenant: Tenant }) {
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
+    setLoadError("");
     try {
       const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
       if (statusFilter) params.set("status", statusFilter);
       if (dateFrom) params.set("from", dateFrom);
       if (dateTo) params.set("to", dateTo);
-      const res = await apiFetch(`/api/owner/tenants/${tenant.id}/nfce/list?${params}`);
-      if (res.ok) {
-        const data = await res.json();
-        setOrders(data.orders);
-        setTotal(data.total);
-      }
-    } catch (e) {
-      console.error(e);
+      const data = await apiJson<{ orders?: unknown; total?: number }>(
+        `/api/owner/tenants/${tenant.id}/nfce/list?${params}`
+      );
+      if (!Array.isArray(data.orders)) throw new Error("A resposta do histórico de notas fiscais é inválida.");
+      setOrders(data.orders as NfceOrderRow[]);
+      setTotal(typeof data.total === "number" ? data.total : 0);
+    } catch (e: any) {
+      setLoadError(e?.message ?? "Erro ao carregar notas fiscais.");
+      setOrders([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
@@ -433,7 +437,11 @@ function IssuedNfceTab({ tenant }: { tenant: Tenant }) {
           <div className="space-y-3">
             {filters}
 
-            {!loading && orders.length === 0 ? (
+            {loadError ? (
+              <ContentCard>
+                <EmptyState icon={AlertCircle} title="Não foi possível carregar as notas" description={loadError} />
+              </ContentCard>
+            ) : !loading && orders.length === 0 ? (
               <ContentCard>
                 <EmptyState
                   icon={AlertCircle}
@@ -477,7 +485,7 @@ function IssuedNfceTab({ tenant }: { tenant: Tenant }) {
             <Button variant="ghost" onClick={() => setCancelTarget(null)} disabled={cancelling}>
               Voltar
             </Button>
-            <Button variant="danger" onClick={confirmCancel} disabled={cancelling}>
+            <Button variant="danger" onClick={confirmCancel} disabled={cancelling || cancelReason.trim().length < 15}>
               {cancelling ? "Cancelando..." : "Confirmar cancelamento"}
             </Button>
           </ModalFooter>

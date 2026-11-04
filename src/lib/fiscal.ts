@@ -12,6 +12,7 @@ import os from "os";
 import fs from "fs";
 import { randomInt } from "crypto";
 import forge from "node-forge";
+import { interpretNfceCancellationResponse } from "./nfce-cancellation.js";
 
 // Bug da nfewizard-io@1.1.2: NFEAutorizacaoService.Exec (usado por wizard.NFE_Autorizacao,
 // chamado em emitirNfce) chama gerarConsulta.gerarConsulta(xmlConsulta, this.metodo) com
@@ -763,12 +764,12 @@ export async function cancelarNfce(
   const wizard = await getWizard(tenantId, fiscal);
 
   try {
-    await (wizard as any).NFE_Cancelamento({
+    const response = await (wizard as any).NFE_Cancelamento({
       chNFe: chave,
       nProt: protocolo,
       xJust: justificativa.slice(0, 255).padEnd(15, " "),
     });
-    return { success: true };
+    return interpretNfceCancellationResponse(response, chave);
   } catch (err: any) {
     return { success: false, motivo: err?.message };
   }
