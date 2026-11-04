@@ -9,7 +9,8 @@ import {
   MoreHorizontal, DoorClosed, Maximize2, Minimize2, Split, Truck, MessageSquarePlus, Pencil
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import type { Tenant, Product, ProductExtra, Order, PaymentConfig, PaymentMethodConfig, StoneConfig, CieloConfig, Customer, PrintingConfig } from "../../../../types";
+import { AUTO_EMIT_PAYMENT_METHODS } from "../../../../types";
+import type { AutoEmitPaymentMethod, Tenant, Product, ProductExtra, Order, PaymentConfig, PaymentMethodConfig, StoneConfig, CieloConfig, Customer, PrintingConfig } from "../../../../types";
 import { dineInOrderLabel, DEFAULT_PRINTING_CONFIG } from "../../../../types";
 import { apiJson } from "../../../../lib/api";
 import { useToast, Button, IconButton, Input, Select, Tabs, Badge, Alert, EmptyState, Switch, Modal, ModalFooter, Textarea } from "../../../../components";
@@ -570,7 +571,23 @@ export default function PDVPanel({
   }, [showSuccess, fiscalEnabled, successPaused]);
   const autoEmitNfce = fiscalConfig?.autoEmitNfce === true;
   const autoPrintDanfe = autoEmitNfce && fiscalConfig?.autoPrintDanfe === true;
-  const shouldEmitNfce = fiscalEnabled && (requestNfce || autoEmitNfce);
+  const selectedAutoEmitMethod: AutoEmitPaymentMethod | null = isSplitMode
+    ? null
+    : paymentMethod === "STONE"
+      ? stonePaymentType === "credit" ? "CREDIT" : stonePaymentType === "debit" ? "DEBIT" : "PIX"
+      : paymentMethod === "CIELO"
+        ? cieloPaymentType === "credit" ? "CREDIT" : cieloPaymentType === "debit" ? "DEBIT" : "PIX"
+        : paymentMethod === "CREDIT" || paymentMethod === "DEBIT" || paymentMethod === "PIX" || paymentMethod === "CASH" || paymentMethod === "VR"
+          ? paymentMethod
+          : null;
+  const autoEmitPaymentMethods: readonly AutoEmitPaymentMethod[] = Array.isArray(fiscalConfig?.autoEmitPaymentMethods)
+    ? fiscalConfig.autoEmitPaymentMethods
+    : AUTO_EMIT_PAYMENT_METHODS;
+  const shouldAutoEmitNfce =
+    autoEmitNfce &&
+    selectedAutoEmitMethod !== null &&
+    autoEmitPaymentMethods.includes(selectedAutoEmitMethod);
+  const shouldEmitNfce = fiscalEnabled && (requestNfce || shouldAutoEmitNfce);
 
   // CNPJ do estabelecimento pro cabeçalho da notinha — vem da config fiscal mesmo
   // quando o fiscal não está habilitado (é só informação do cabeçalho, não emissão de nota).
@@ -1739,7 +1756,7 @@ export default function PDVPanel({
         globalAutoPrintedOrderIds.add((order as any).id);
         // Com DANFE automático, reserva o pedido para que o socket não imprima o
         // cupom comercial antes da autorização da NFC-e.
-        if (!autoPrintDanfe) printOrderAuto(order);
+        if (!(shouldEmitNfce && autoPrintDanfe)) printOrderAuto(order);
       }
 
       if (isStone) {
@@ -1861,7 +1878,7 @@ export default function PDVPanel({
             setStoneStatus("paid");
             if (printingConfig.autoPrintOnOrderCreate && !globalAutoPrintedOrderIds.has(pendingOrderId)) {
               globalAutoPrintedOrderIds.add(pendingOrderId);
-              if (!autoPrintDanfe) printOrderAuto(lastOrderRef.current as any);
+              if (!(shouldEmitNfce && autoPrintDanfe)) printOrderAuto(lastOrderRef.current as any);
             }
             setTimeout(() => {
               clearCart();
@@ -1905,7 +1922,7 @@ export default function PDVPanel({
             setCieloStatus("paid");
             if (printingConfig.autoPrintOnOrderCreate && !globalAutoPrintedOrderIds.has(pendingOrderId)) {
               globalAutoPrintedOrderIds.add(pendingOrderId);
-              if (!autoPrintDanfe) printOrderAuto(lastOrderRef.current as any);
+              if (!(shouldEmitNfce && autoPrintDanfe)) printOrderAuto(lastOrderRef.current as any);
             }
             setTimeout(() => {
               clearCart();

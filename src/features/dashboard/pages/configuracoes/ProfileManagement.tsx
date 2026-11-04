@@ -54,6 +54,7 @@ import {
 } from "../../../../components";
 import { apiJson } from "../../../../lib/api";
 import {
+  AUTO_EMIT_PAYMENT_METHODS,
   DeliveryConfig,
   DEFAULT_PRINTING_CONFIG,
   FiscalConfig,
@@ -122,6 +123,14 @@ const UF_OPTIONS = [
   { value: "SE", label: "SE — Sergipe" },
   { value: "TO", label: "TO — Tocantins" },
 ];
+
+const AUTO_EMIT_PAYMENT_METHOD_OPTIONS = [
+  { value: "CREDIT", label: "Crédito", description: "Inclui cartão de crédito pela Stone e Cielo." },
+  { value: "DEBIT", label: "Débito", description: "Inclui cartão de débito pela Stone e Cielo." },
+  { value: "PIX", label: "PIX", description: "Inclui PIX pela Stone e Cielo." },
+  { value: "CASH", label: "Dinheiro", description: "Inclui vendas pagas em dinheiro." },
+  { value: "VR", label: "Vale-refeição", description: "Inclui vendas pagas com vale-refeição." },
+] as const;
 
 const SETTINGS_TABS = [
   { id: "general", label: "Loja", icon: Store },
@@ -246,7 +255,7 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
 
   const DEFAULT_FISCAL: FiscalConfig = {
     enabled: false, ambiente: "homologacao", cnpj: "", ie: "", crt: "1",
-    serie: 1, proximoNumero: 1, autoEmitNfce: false, autoPrintDanfe: false, uf: "SP", cMun: "3550308", xMun: "São Paulo",
+    serie: 1, proximoNumero: 1, autoEmitNfce: false, autoEmitPaymentMethods: [...AUTO_EMIT_PAYMENT_METHODS], autoPrintDanfe: false, uf: "SP", cMun: "3550308", xMun: "São Paulo",
   };
   // Migração transparente: configs salvas antes da separação de CSC por ambiente tinham
   // só "csc"/"cscId" (implicitamente do ambiente configurado na época) — copia esse valor
@@ -257,12 +266,15 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
   // campos novos com "undefined" de volta, aparentando "sumir" o CSC de homologação na tela
   // (o valor legado no banco nunca foi apagado, só a exibição ficava errada).
   function migrarFiscal(parsed: FiscalConfig): FiscalConfig {
+    const autoEmitPaymentMethods = Array.isArray(parsed.autoEmitPaymentMethods)
+      ? parsed.autoEmitPaymentMethods
+      : [...AUTO_EMIT_PAYMENT_METHODS];
     if (parsed.csc && !parsed.cscHomologacao && !parsed.cscProducao) {
       const key = parsed.ambiente === "producao" ? "cscProducao" : "cscHomologacao";
       const keyId = parsed.ambiente === "producao" ? "cscIdProducao" : "cscIdHomologacao";
-      return { ...parsed, autoEmitNfce: parsed.autoEmitNfce ?? false, autoPrintDanfe: parsed.autoPrintDanfe ?? false, [key]: parsed.csc, [keyId]: parsed.cscId };
+      return { ...parsed, autoEmitNfce: parsed.autoEmitNfce ?? false, autoEmitPaymentMethods, autoPrintDanfe: parsed.autoPrintDanfe ?? false, [key]: parsed.csc, [keyId]: parsed.cscId };
     }
-    return { ...parsed, autoEmitNfce: parsed.autoEmitNfce ?? false, autoPrintDanfe: parsed.autoPrintDanfe ?? false };
+    return { ...parsed, autoEmitNfce: parsed.autoEmitNfce ?? false, autoEmitPaymentMethods, autoPrintDanfe: parsed.autoPrintDanfe ?? false };
   }
   const [fiscal, setFiscal] = useState<FiscalConfig>(() => {
     try { return migrarFiscal(tenant?.fiscalConfig ? JSON.parse(tenant.fiscalConfig) : DEFAULT_FISCAL); }
@@ -1500,15 +1512,33 @@ export function ProfileManagement({ tenant, refresh }: { tenant: Tenant | null, 
                 )}
 
                 {fiscalTab === "emission" && (
-                  <PanelCard title="Emissão automática" description="O que acontece sozinho ao concluir uma venda no PDV." icon={Rocket}>
+                  <PanelCard title="Emissão automática" description="Escolha quando emitir a NFC-e ao concluir uma venda no PDV." icon={Rocket}>
                     <div className="divide-y divide-slate-100">
-                      <SettingRow title="Emitir NFC-e automaticamente no PDV" description="Ao concluir a venda, envia a NFC-e na hora à SEFAZ. Use só depois de conferir certificado, CSC e dados fiscais dos produtos.">
+                      <SettingRow title="Ativar emissão automática no PDV" description="A NFC-e será enviada à SEFAZ somente para as formas de pagamento selecionadas abaixo. Confira certificado, CSC e dados fiscais dos produtos antes de ativar.">
                         <Switch checked={fiscal.autoEmitNfce === true} onCheckedChange={value => setFiscal(current => ({ ...current, autoEmitNfce: value, ...(!value ? { autoPrintDanfe: false } : {}) }))} />
                       </SettingRow>
+                      {AUTO_EMIT_PAYMENT_METHOD_OPTIONS.map(({ value, label, description }) => (
+                        <SettingRow key={value} title={`Emitir automaticamente para ${label}`} description={description}>
+                          <Switch
+                            checked={fiscal.autoEmitPaymentMethods?.includes(value) ?? true}
+                            disabled={!fiscal.autoEmitNfce}
+                            onCheckedChange={checked => setFiscal(current => {
+                              const methods = current.autoEmitPaymentMethods ?? [...AUTO_EMIT_PAYMENT_METHODS];
+                              return {
+                                ...current,
+                                autoEmitPaymentMethods: checked
+                                  ? [...new Set([...methods, value])]
+                                  : methods.filter(method => method !== value),
+                              };
+                            })}
+                          />
+                        </SettingRow>
+                      ))}
                       <SettingRow title="Imprimir DANFE NFC-e automaticamente" description="Após a autorização, imprime o DANFE na impressora do PDV. O cupom comercial automático não será impresso nessa venda.">
                         <Switch checked={fiscal.autoPrintDanfe === true} disabled={!fiscal.autoEmitNfce} onCheckedChange={value => setFiscal(current => ({ ...current, autoPrintDanfe: value }))} />
                       </SettingRow>
                     </div>
+                    <p className="mt-3 text-xs text-slate-500">Vendas com pagamento dividido não emitem NFC-e automaticamente. A emissão manual continua disponível no PDV.</p>
                     {fiscal.ambiente === "homologacao" && (
                       <Alert variant="warning" className="mt-3">Em homologação, a emissão automática gera somente notas de teste, sem valor fiscal.</Alert>
                     )}

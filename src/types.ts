@@ -142,6 +142,9 @@ export type FiscalRegime =
   | "2"  // Simples Nacional — excesso de sublimite
   | "3"; // Regime Normal (Lucro Presumido / Real)
 
+export const AUTO_EMIT_PAYMENT_METHODS = ["CREDIT", "DEBIT", "PIX", "CASH", "VR"] as const;
+export type AutoEmitPaymentMethod = (typeof AUTO_EMIT_PAYMENT_METHODS)[number];
+
 export interface FiscalConfig {
   enabled: boolean;
   ambiente: "homologacao" | "producao";
@@ -158,6 +161,8 @@ export interface FiscalConfig {
   proximoNumero: number;     // Próximo número sequencial
   /** Emite a NFC-e assim que a venda do PDV for concluída. */
   autoEmitNfce?: boolean;
+  /** Formas de pagamento que disparam a emissão automática; pagamento dividido não é elegível. */
+  autoEmitPaymentMethods?: AutoEmitPaymentMethod[];
   /** Imprime o DANFE NFC-e após a autorização automática pela SEFAZ. */
   autoPrintDanfe?: boolean;
   // CSC/idCSC são registros SEPARADOS por ambiente na SEFAZ (o credenciamento e o CSC de

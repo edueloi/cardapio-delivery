@@ -161,7 +161,7 @@ export function registerFiscalRoutes({
           origem: item.origem ?? item.product?.origem ?? 0,
           aliqIcms: item.aliqIcms ?? item.product?.aliqIcms ?? 0,
           quantity: item.quantity,
-          unitPrice: item.price,
+          unitPrice: item.unitPrice,
         }));
 
         let emitAddress = { street: "", number: "", neighborhood: "", cep: "" };
