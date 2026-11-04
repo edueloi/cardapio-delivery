@@ -1,6 +1,10 @@
 import type { Express, Request, RequestHandler, Response } from "express";
 import { CONCLUDED_SALE_OR } from "../shared/utils";
 import { orderCustomerName } from "../../types.js";
+import {
+  getNfceAuthorizationTime,
+  isNfceCancellationWindowOpen,
+} from "../../lib/nfce-cancellation.js";
 
 export interface RegisterFiscalRoutesOptions {
   app: Express;
@@ -268,6 +272,17 @@ export function registerFiscalRoutes({
           return res
             .status(400)
             .json({ error: "Chave ou protocolo da NFC-e não encontrados." });
+        const authorizedAt = getNfceAuthorizationTime(order.nfceXml);
+        if (!authorizedAt)
+          return res.status(409).json({
+            error:
+              "Não foi possível confirmar o horário de autorização da NFC-e. O cancelamento online foi bloqueado; consulte seu contador ou a SEFAZ.",
+          });
+        if (!isNfceCancellationWindowOpen(authorizedAt))
+          return res.status(409).json({
+            error:
+              "O prazo normal de 30 minutos para cancelamento da NFC-e expirou. Consulte seu contador ou a SEFAZ sobre as opções disponíveis.",
+          });
 
         const fiscal = JSON.parse(
           tenant.fiscalConfig as string
@@ -348,6 +363,7 @@ export function registerFiscalRoutes({
             nfceKey: true,
             nfceNumber: true,
             nfceProtocol: true,
+            nfceXml: true,
             items: {
               select: {
                 productName: true,
@@ -358,7 +374,19 @@ export function registerFiscalRoutes({
         }),
       ]);
 
-      res.json({ orders, total, page, pageSize });
+      res.json({
+        orders: orders.map((order: { nfceXml?: string | null; [key: string]: unknown }) => {
+          const { nfceXml, ...publicOrder } = order;
+          return {
+            ...publicOrder,
+            nfceAuthorizedAt:
+              getNfceAuthorizationTime(nfceXml)?.toISOString() ?? null,
+          };
+        }),
+        total,
+        page,
+        pageSize,
+      });
     }
   );
 

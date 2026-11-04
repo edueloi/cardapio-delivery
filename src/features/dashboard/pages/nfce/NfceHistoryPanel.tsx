@@ -24,6 +24,7 @@ import {
 } from "../../../../components";
 import { apiFetch, apiJson } from "../../../../lib/api";
 import { downloadDanfePdf, printDanfePdf } from "../../../../lib/receipt";
+import { isNfceCancellationWindowOpen } from "../../../../lib/nfce-cancellation";
 import { orderCustomerName, type Tenant, type DanfeData } from "../../../../types";
 import PendingNfceTab from "./PendingNfceTab";
 
@@ -40,6 +41,7 @@ interface NfceOrderRow {
   nfceKey: string | null;
   nfceNumber: number | null;
   nfceProtocol: string | null;
+  nfceAuthorizedAt: string | null;
 }
 
 const STATUS_TABS = [
@@ -124,6 +126,7 @@ function IssuedNfceTab({ tenant }: { tenant: Tenant }) {
   const [loadError, setLoadError] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [now, setNow] = useState(() => Date.now());
 
   const defaultRange = useMemo(currentMonthRange, []);
   const [dateFrom, setDateFrom] = useState<string | null>(defaultRange.from);
@@ -136,6 +139,11 @@ function IssuedNfceTab({ tenant }: { tenant: Tenant }) {
 
   const [deleteTarget, setDeleteTarget] = useState<NfceOrderRow | "batch" | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setNow(Date.now()), 15_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
@@ -363,6 +371,22 @@ function IssuedNfceTab({ tenant }: { tenant: Tenant }) {
       render: (row) => {
         const busy = busyId === row.id;
         if (row.nfceStatus === "AUTHORIZED") {
+          const authorizedAt = row.nfceAuthorizedAt
+            ? new Date(row.nfceAuthorizedAt)
+            : null;
+          const hasValidAuthorizedAt =
+            authorizedAt !== null && Number.isFinite(authorizedAt.getTime());
+          const cancelWindowOpen =
+            hasValidAuthorizedAt &&
+            isNfceCancellationWindowOpen(authorizedAt, new Date(now));
+          const cancellationDeadline = hasValidAuthorizedAt
+            ? new Date(authorizedAt.getTime() + 30 * 60 * 1000)
+            : null;
+          const cancelUnavailableReason = !authorizedAt
+            ? "Horário de autorização indisponível; consulte seu contador ou a SEFAZ."
+            : !Number.isFinite(authorizedAt.getTime())
+              ? "Horário de autorização inválido; consulte seu contador ou a SEFAZ."
+              : "Prazo normal de 30 minutos expirado; consulte seu contador ou a SEFAZ.";
           return (
             <div className="flex flex-wrap items-center gap-1.5">
               <Button size="xs" variant="outline" onClick={() => handleDownload(row.id)} disabled={busy} title="Baixar PDF do DANFE" iconLeft={<Download size={14} />}>
@@ -374,9 +398,14 @@ function IssuedNfceTab({ tenant }: { tenant: Tenant }) {
               <Button size="xs" variant="outline" onClick={() => handleDownloadXml(row.id)} disabled={busy} title="Baixar XML" iconLeft={<FileCode size={14} />}>
                 XML
               </Button>
-              <Button size="xs" variant="danger" onClick={() => openCancel(row)} title="Cancelar NFC-e" iconLeft={<Ban size={14} />}>
-                Cancelar
+              <Button size="xs" variant="danger" onClick={() => openCancel(row)} disabled={busy || !cancelWindowOpen} title={cancelWindowOpen ? `Cancelar NFC-e até ${cancellationDeadline?.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` : cancelUnavailableReason} iconLeft={<Ban size={14} />}>
+                {cancelWindowOpen ? "Cancelar" : hasValidAuthorizedAt ? "Prazo encerrado" : "Prazo indisponível"}
               </Button>
+              {cancelWindowOpen && cancellationDeadline && (
+                <span className="text-[10px] text-slate-500">
+                  Até {cancellationDeadline.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                </span>
+              )}
             </div>
           );
         }
@@ -495,6 +524,11 @@ function IssuedNfceTab({ tenant }: { tenant: Tenant }) {
           <p className="text-[13px] text-slate-600">
             NFC-e <strong>#{cancelTarget?.nfceNumber}</strong> será cancelada junto à SEFAZ. A
             justificativa é obrigatória (mínimo 15 caracteres).
+          </p>
+          <p className="text-[12px] text-amber-700">
+            O cancelamento normal deve ser solicitado em até 30 minutos da autorização. Uma
+            NFC-e autorizada não pode ser editada; se o prazo expirou, consulte seu contador ou
+            a SEFAZ sobre as opções disponíveis.
           </p>
           <Textarea
             value={cancelReason}

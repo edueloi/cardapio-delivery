@@ -1,3 +1,32 @@
+export const NFCE_CANCELLATION_WINDOW_MS = 30 * 60 * 1000;
+
+export function getNfceAuthorizationTime(nfceXml: unknown): Date | null {
+  if (typeof nfceXml !== "string") return null;
+
+  try {
+    const stored = JSON.parse(nfceXml) as { xml?: unknown } | null;
+    if (!stored || typeof stored.xml !== "string") return null;
+
+    const match = stored.xml.match(
+      /<(?:[\w.-]+:)?dhRecbto\b[^>]*>([^<]+)<\/(?:[\w.-]+:)?dhRecbto\s*>/
+    );
+    if (!match) return null;
+
+    const timestamp = Date.parse(match[1].trim());
+    return Number.isFinite(timestamp) ? new Date(timestamp) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function isNfceCancellationWindowOpen(
+  authorizedAt: Date | null,
+  now: Date = new Date()
+): boolean {
+  return authorizedAt !== null &&
+    now.getTime() <= authorizedAt.getTime() + NFCE_CANCELLATION_WINDOW_MS;
+}
+
 export function formatNfceEventDate(date: Date): string {
   if (!Number.isFinite(date.getTime())) {
     throw new Error("Data inválida para o evento de cancelamento da NFC-e.");
