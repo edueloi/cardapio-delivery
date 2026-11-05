@@ -414,6 +414,7 @@ export async function emitirNfce(
   let vBCIBSCBSTotal = 0;
   let vIBSUFTotal = 0;
   let vCBSTotal = 0;
+  let vProdTotal = 0;
 
   const det = order.items.map((item, i) => {
     // Pedidos antigos ou integrações externas podem trazer valores serializados
@@ -425,6 +426,7 @@ export async function emitirNfce(
       throw new Error(`Item fiscal inválido: ${item.productName || `item ${i + 1}`}. Confira quantidade e preço do pedido.`);
     }
     const vProd = parseFloat((quantity * unitPrice).toFixed(2));
+    vProdTotal = parseFloat((vProdTotal + vProd).toFixed(2));
     // nItem NÃO deve ser propriedade do objeto aqui — nItem é um ATRIBUTO XML de <det>
     // (<det nItem="1">), não um elemento filho. A lib (nfewizard-io, gerarXmlNFeAutorizacao)
     // já injeta { $: { nItem: index + 1 } } automaticamente ao montar cada item via
@@ -446,12 +448,12 @@ export async function emitirNfce(
         CFOP: item.cfop || "5102",
         uCom: item.unitCom || "UN",
         qCom: quantity,
-        vUnCom: parseFloat(unitPrice.toFixed(2)),
-        vProd,
+        vUnCom: unitPrice.toFixed(2),
+        vProd: vProd.toFixed(2),
         cEANTrib: "SEM GTIN",
         uTrib: item.unitCom || "UN",
         qTrib: quantity,
-        vUnTrib: parseFloat(unitPrice.toFixed(2)),
+        vUnTrib: unitPrice.toFixed(2),
         indTot: 1,
       },
       imposto: {
@@ -505,11 +507,11 @@ export async function emitirNfce(
               CST: "000",
               cClassTrib: "000001",
               gIBSCBS: {
-                vBC: vProd,
-                gIBSUF: { pIBSUF: pIBSUF.toFixed(2), vIBSUF },
+                vBC: vProd.toFixed(2),
+                gIBSUF: { pIBSUF: pIBSUF.toFixed(2), vIBSUF: vIBSUF.toFixed(2) },
                 gIBSMun: { pIBSMun: (0).toFixed(2), vIBSMun: 0 },
-                vIBS: vIBSUF,
-                gCBS: { pCBS: pCBS.toFixed(2), vCBS },
+                vIBS: vIBSUF.toFixed(2),
+                gCBS: { pCBS: pCBS.toFixed(2), vCBS: vCBS.toFixed(2) },
               },
             },
           };
@@ -518,7 +520,14 @@ export async function emitirNfce(
     };
   });
 
-  const vNF = parseFloat(order.total.toFixed(2));
+  // vProd do total TEM que ser a soma dos itens (SEFAZ rejeita divergência). O total do
+  // pedido pode incluir taxa de entrega (vOutro) ou desconto (vDesc) — a diferença é
+  // lançada nesses campos para que vNF = vProd - vDesc + vOutro continue fechando.
+  const totalPedido = parseFloat(Number(order.total).toFixed(2));
+  const diferenca = parseFloat((totalPedido - vProdTotal).toFixed(2));
+  const vDescTotal = diferenca < 0 ? -diferenca : 0;
+  const vOutroTotal = diferenca > 0 ? diferenca : 0;
+  const vNF = parseFloat((vProdTotal - vDescTotal + vOutroTotal).toFixed(2));
 
   const cUF = getCUF(fiscal.uf);
   const cNF = gerarCNF();
@@ -629,17 +638,17 @@ export async function emitirNfce(
             vST: 0,
             vFCPST: 0,
             vFCPSTRet: 0,
-            vProd: vNF,
+            vProd: vProdTotal.toFixed(2),
             vFrete: 0,
             vSeg: 0,
-            vDesc: 0,
+            vDesc: vDescTotal.toFixed(2),
             vII: 0,
             vIPI: 0,
             vIPIDevol: 0,
             vPIS: 0,
             vCOFINS: 0,
-            vOutro: 0,
-            vNF,
+            vOutro: vOutroTotal.toFixed(2),
+            vNF: vNF.toFixed(2),
           },
           // Totalizador do grupo IBS/CBS (Reforma Tributária) — irmão de ICMSTot dentro
           // de <total>, exigido pela SEFAZ além do grupo já preenchido em cada item
@@ -647,18 +656,18 @@ export async function emitirNfce(
           // únicos campos obrigatórios de TIBSCBSMonoTot fora do minOccurs="0" — dentro de
           // gIBS/gCBS, porém, vDif/vDevTrib são obrigatórios assim que o bloco existe.
           IBSCBSTot: {
-            vBCIBSCBS: vBCIBSCBSTotal,
+            vBCIBSCBS: vBCIBSCBSTotal.toFixed(2),
             gIBS: {
-              gIBSUF: { vDif: 0, vDevTrib: 0, vIBSUF: vIBSUFTotal },
+              gIBSUF: { vDif: 0, vDevTrib: 0, vIBSUF: vIBSUFTotal.toFixed(2) },
               gIBSMun: { vDif: 0, vDevTrib: 0, vIBSMun: 0 },
-              vIBS: vIBSUFTotal,
+              vIBS: vIBSUFTotal.toFixed(2),
               vCredPres: 0,
               vCredPresCondSus: 0,
             },
             gCBS: {
               vDif: 0,
               vDevTrib: 0,
-              vCBS: vCBSTotal,
+              vCBS: vCBSTotal.toFixed(2),
               vCredPres: 0,
               vCredPresCondSus: 0,
             },
@@ -681,7 +690,7 @@ export async function emitirNfce(
             {
               tPag,
               ...(xPag ? { xPag } : {}),
-              vPag: vNF,
+              vPag: vNF.toFixed(2),
               ...(["03", "04", "17"].includes(tPag) ? { card: { tpIntegra: "2" } } : {}),
             },
           ],
@@ -692,7 +701,7 @@ export async function emitirNfce(
           // (pode não ter sido persistido/enviado em vendas antigas).
           ...(() => {
             const troco = order.amountPaid ? parseFloat((order.amountPaid - vNF).toFixed(2)) : 0;
-            return troco > 0 ? { vTroco: troco } : {};
+            return troco > 0 ? { vTroco: troco.toFixed(2) } : {};
           })(),
         },
       },
@@ -769,8 +778,22 @@ export async function emitirNfce(
     };
   } catch (err: any) {
     console.error("[Fiscal] NFE_Autorizacao rejeitada/falhou:", err?.message ?? err);
-    return { status: "REJECTED", motivo: err?.message ?? "Erro desconhecido" };
+    return { status: "REJECTED", motivo: humanizarErroNfce(err?.message ?? "Erro desconhecido") };
   }
+}
+
+// Traduz erros de validação do XSD (texto técnico em inglês da lib) em mensagem
+// compreensível, mantendo o texto original ao final para diagnóstico.
+function humanizarErroNfce(raw: string): string {
+  const msg = String(raw);
+  const m = msg.match(/Element '\{[^}]*\}(\w+)': \[facet 'pattern'\] The value '([^']*)'/);
+  if (m) {
+    return `Valor inválido no campo "${m[1]}" do XML da nota (${m[2]}). Confira os valores/preços do pedido. Detalhe técnico: ${msg}`;
+  }
+  if (/Erro Não Identificado na Validação do XML/i.test(msg)) {
+    return `A nota não passou na validação do XML antes do envio à SEFAZ. Detalhe técnico: ${msg}`;
+  }
+  return msg;
 }
 
 export async function cancelarNfce(
